@@ -35,7 +35,7 @@ spec:
       #   - name: ghcr.io/cogni-dao/cogni-template           (primary app)
       #   - name: ghcr.io/cogni-dao/cogni-template-migrate   (per-node migrator)
       # They resolve to DISTINCT GHCR packages. The split is load-bearing:
-      # ACIU's ContainsImage matcher (pkg/image/image.go:148) keys by
+      # the image updater's ContainsImage matcher (pkg/image/image.go:148) keys by
       # RegistryURL+ImageName, so two aliases pointing at the same package
       # would collapse to a single Status.Summary.Images entry and only one
       # of {app, migrator} would update per poll in steady state (silently

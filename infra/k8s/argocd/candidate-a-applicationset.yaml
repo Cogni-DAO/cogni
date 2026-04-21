@@ -38,8 +38,8 @@ spec:
       # "last accepted code" semantic candidate-a's seed should track.
       #
       # candidate-flight.yml continues to overwrite deploy/candidate-a with
-      # the specific pr-<N>-<sha> digest on slot acquisition. ACIU's writes
-      # only land on main's candidate-a overlay seed; deploy/candidate-a
+      # the specific pr-<N>-<sha> digest on slot acquisition. The image
+      # updater's writes only land on main's candidate-a overlay seed; deploy/candidate-a
       # is untouched between flights. The next unrelated flight rsyncs
       # main → deploy/candidate-a and inherits the current seed — exactly
       # mirroring the preview mechanism.

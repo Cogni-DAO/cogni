@@ -7,7 +7,7 @@ priority: 1
 rank: 1
 estimate: 0
 summary: "`.github/workflows/candidate-flight-infra.yml` hardcodes `ref: main` in its scripts-checkout step and defaults `inputs.ref` to `main`. That makes pre-merge validation of `scripts/ci/deploy-infra.sh` changes impossible — the workflow always runs main's scripts against main's infra. Default both to the dispatch ref (`github.ref` / `github.ref_name`) so `gh workflow run --ref=<branch>` DTRT and unchanged dispatches from main behave identically."
-outcome: "`gh workflow run candidate-flight-infra.yml --ref=<PR-branch>` runs that branch's `scripts/ci/deploy-infra.sh` and rsyncs that branch's `infra/compose/**`. Default dispatches from `main` remain a no-op change (`github.ref_name == main`). Unblocks pre-merge validation of bug.0344's ACIU bootstrap integration in deploy-infra.sh (PR #974), and any future script-layer change to the infra lever."
+outcome: "`gh workflow run candidate-flight-infra.yml --ref=<PR-branch>` runs that branch's `scripts/ci/deploy-infra.sh` and rsyncs that branch's `infra/compose/**`. Default dispatches from `main` remain a no-op change (`github.ref_name == main`). Unblocks pre-merge validation of bug.0344's image updater bootstrap integration in deploy-infra.sh (PR #974), and any future script-layer change to the infra lever."
 spec_refs:
   - docs/spec/ci-cd.md
   - .claude/skills/pr-coordinator-v0/SKILL.md
@@ -65,7 +65,7 @@ The app lever (`candidate-flight.yml`) already does this — it checks out `app-
 ## Validation
 
 - exercise:
-  - After merge, pre-merge re-validate PR #974 via `gh workflow run candidate-flight-infra.yml --repo Cogni-DAO/node-template --ref design/bug-0344-digest-updater`. Observe the run's "Checkout (for scripts)" step logs show the SHA of the `design/bug-0344-digest-updater` branch, and the "Deploy Compose infra" step runs that branch's `scripts/ci/deploy-infra.sh` (including the new Step 7b ACIU bootstrap block).
+  - After merge, pre-merge re-validate PR #974 via `gh workflow run candidate-flight-infra.yml --repo Cogni-DAO/node-template --ref design/bug-0344-digest-updater`. Observe the run's "Checkout (for scripts)" step logs show the SHA of the `design/bug-0344-digest-updater` branch, and the "Deploy Compose infra" step runs that branch's `scripts/ci/deploy-infra.sh` (including the new Step 7b image updater bootstrap block).
 - observability:
   - GitHub Actions run log, "Checkout (for scripts)" step: the resolved ref SHA matches the tip of the dispatched branch (not main's).
   - GitHub Actions run log, "Deploy Compose infra to candidate-a VM" step: `bash scripts/ci/deploy-infra.sh --ref <branch>` runs to completion or fails with an error class sourced from that branch's `deploy-infra.sh`, not main's.
@@ -77,5 +77,5 @@ The app lever (`candidate-flight.yml`) already does this — it checks out `app-
 
 - `candidate-flight.yml` (app lever) — already checks out from the PR's head SHA; no change.
 - `promote-and-deploy.yml` (preview/prod merge-triggered path) — push-to-main only; no dispatch ref to parameterize.
-- `deploy-infra.sh` Step 7b (ACIU bootstrap integration) — tracked in bug.0344 / PR #974.
+- `deploy-infra.sh` Step 7b (Argo CD Image Updater bootstrap integration) — tracked in bug.0344 / PR #974.
 - Per-PR fine-grained ref passthrough for non-dispatch triggers — YAGNI; `gh workflow run --ref=<branch>` is the full contract.

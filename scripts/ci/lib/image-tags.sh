@@ -70,8 +70,8 @@ ALL_TARGETS=(
 NODE_TARGETS=(operator poly resy)
 
 # Map a target to its GHCR package. bug.0344: split migrator images into
-# a distinct package so ACIU's needsUpdate can track app + migrator
-# independently in the same Application's Status.Summary.Images.
+# a distinct package so the Argo CD Image Updater's needsUpdate can track
+# app + migrator independently in the same Application's Status.Summary.Images.
 image_name_for_target() {
   local target="$1"
   case "$target" in

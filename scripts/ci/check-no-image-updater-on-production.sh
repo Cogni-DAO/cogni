@@ -8,11 +8,11 @@
 # Why this is a hard CI gate, not a style preference:
 #   Production overlays are intentionally human-gated — promote-to-production.yml
 #   is the only path that pins digests on main's infra/k8s/overlays/production/.
-#   The MVP GHCR-split + preview/candidate-a ACIU wiring (bug.0344) deliberately
-#   stops at the preview/candidate-a scope. If anyone later annotates the
-#   production AppSet and auto-merges, the controller will happily commit fresh
-#   preview-* digests onto production overlays — bypassing the promote gate
-#   completely, with no PR, no review, no changelog.
+#   The MVP GHCR-split + preview/candidate-a image updater wiring (bug.0344)
+#   deliberately stops at the preview/candidate-a scope. If anyone later
+#   annotates the production AppSet and auto-merges, the controller will happily
+#   commit fresh preview-* digests onto production overlays — bypassing the
+#   promote gate completely, with no PR, no review, no changelog.
 #
 # This check is the structural invariant that backstops the "production is
 # follow-up" language in the design doc. Invariants without automated
@@ -37,4 +37,4 @@ if matches=$(grep -n 'argocd-image-updater.argoproj.io' "$TARGET"); then
   exit 1
 fi
 
-echo "bug.0344 B12(c) check: production-applicationset.yaml is clean (no ACIU annotations)."
+echo "bug.0344 B12(c) check: production-applicationset.yaml is clean (no argocd-image-updater annotations)."

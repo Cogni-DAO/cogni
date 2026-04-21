@@ -173,8 +173,8 @@ jobs:
           # node is a one-line edit in scripts/ci/lib/image-tags.sh — no
           # inline list to drift here (root cause of PR #923). image_name_for_target
           # picks the APP vs MIGRATOR GHCR package per target (bug.0344
-          # GHCR split — gives ACIU app/migrator aliases independent
-          # Status.Summary.Images entries).
+          # GHCR split — gives the image updater's app/migrator aliases
+          # independent Status.Summary.Images entries).
           # shellcheck source=../../scripts/ci/lib/image-tags.sh
           . scripts/ci/lib/image-tags.sh
 

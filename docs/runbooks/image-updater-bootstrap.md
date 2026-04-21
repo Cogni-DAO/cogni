@@ -2,7 +2,7 @@
 
 > Installed by bug.0344 to retire hand-curated overlay-digest maintenance on `main`.
 > Manifests: `infra/k8s/argocd/image-updater/`
-> Watches: preview + candidate-a ApplicationSets' Applications → writes to `main`'s `infra/k8s/overlays/{preview,candidate-a}/<app>/kustomization.yaml` (MVP scope). Production is human-gated via `promote-to-production.yml` and enforced by `scripts/ci/check-no-aciu-on-production.sh`.
+> Watches: preview + candidate-a ApplicationSets' Applications → writes to `main`'s `infra/k8s/overlays/{preview,candidate-a}/<app>/kustomization.yaml` (MVP scope). Production is human-gated via `promote-to-production.yml` and enforced by `scripts/ci/check-no-image-updater-on-production.sh`.
 
 ## What it does
 
@@ -13,7 +13,7 @@ Argo CD Image Updater runs as a Deployment in the `argocd` namespace. Every 2 mi
 3. Picks the newest tag by image-manifest creation timestamp (`update-strategy: latest` — v0.15.2's name for build-time-ordered selection, filtered by the `allow-tags` regex).
 4. If the newest tag's digest differs from the one currently rendered in the Application's Kustomize overlay, clones `main`, rewrites the `digest:` field in `infra/k8s/overlays/preview/<app>/kustomization.yaml`, and pushes the commit back to `main` under PAT `ACTIONS_AUTOMATION_BOT_PAT` (pusher = `Cogni-1729`, authored as `github-actions[bot]` — matching `scripts/ci/promote-k8s-image.sh`, the script whose job this automates).
 
-Every Application carries two image aliases pointing at **distinct GHCR packages** (bug.0344 B8 split) — `app=ghcr.io/cogni-dao/cogni-template` and `migrator=ghcr.io/cogni-dao/cogni-template-migrate` — so ACIU keeps both the primary app digest and the per-node migrator digest fresh on `main`. The split is load-bearing: ACIU's `ContainsImage` matcher (`pkg/image/image.go:148`) keys by `RegistryURL+ImageName`, so two aliases pointing at the same package would collapse to a single `Status.Summary.Images` entry and only one of {app, migrator} would update per poll in steady state — re-exposing bug #970. Distinct ImageNames give the two aliases independent Status entries. `scheduler-worker` has no migrator (single `images:` entry in its overlay); its migrator regex matches zero tags in the migrate package so ACIU silently no-ops.
+Every Application carries two image aliases pointing at **distinct GHCR packages** (bug.0344 B8 split) — `app=ghcr.io/cogni-dao/cogni-template` and `migrator=ghcr.io/cogni-dao/cogni-template-migrate` — so the image updater keeps both the primary app digest and the per-node migrator digest fresh on `main`. The split is load-bearing: the image updater's `ContainsImage` matcher (`pkg/image/image.go:148`) keys by `RegistryURL+ImageName`, so two aliases pointing at the same package would collapse to a single `Status.Summary.Images` entry and only one of {app, migrator} would update per poll in steady state — re-exposing bug #970. Distinct ImageNames give the two aliases independent Status entries. `scheduler-worker` has no migrator (single `images:` entry in its overlay); its migrator regex matches zero tags in the migrate package so the image updater silently no-ops.
 
 Every commit is prefixed `chore(deps): argocd-image-updater` so `git log --grep='argocd-image-updater' -- infra/k8s/overlays/` is the controller-specific audit filter, and `git log --author='github-actions\[bot\]' -- infra/k8s/overlays/` is the broader CI-bot audit filter.
 
@@ -71,14 +71,14 @@ Within one poll cycle (≤2 minutes) you should see `considering image` lines fo
 
 ### Pre-flight: confirm the main-branch carve-out is still in place
 
-ACIU's write-back path relies on the existing admin + `enforce_admins: false` carve-out on `main` that PR merges already use. If that protection ever flips, ACIU will silently 403 every commit into a log no one reads. Run once per bootstrap:
+The image updater's write-back path relies on the existing admin + `enforce_admins: false` carve-out on `main` that PR merges already use. If that protection ever flips, the image updater will silently 403 every commit into a log no one reads. Run once per bootstrap:
 
 ```bash
 gh api repos/cogni-dao/cogni-template/branches/main/protection \
   | jq -e '.enforce_admins.enabled == false'
 ```
 
-If this returns `false` (the jq assertion fails), stop. Either restore the carve-out or decline to enable ACIU until there's an explicit decision about how writes to `main` will authenticate.
+If this returns `false` (the jq assertion fails), stop. Either restore the carve-out or decline to enable the image updater until there's an explicit decision about how writes to `main` will authenticate.
 
 ## Smoke test (end-to-end)
 
@@ -107,9 +107,9 @@ Exercise the loop on poly — this is the most frequent flight path and the case
 
 The smoke test above passes by timing luck during the pre-sync transient window. Run this **once** after the first successful smoke test to confirm the B8 GHCR-split is holding in steady state, not just in the transient:
 
-1. Wait 10 minutes after the first ACIU commit lands on `main` — long enough for `deploy/preview` to sync + Argo to reconcile + `Status.Summary.Images` to catch up.
-2. `git revert <first-ACIU-commit-sha>` on `main`, `git push origin main`. This restores the stale seed for one poll cycle.
-3. Watch the next 2–3 ACIU polls:
+1. Wait 10 minutes after the first image updater commit lands on `main` — long enough for `deploy/preview` to sync + Argo to reconcile + `Status.Summary.Images` to catch up.
+2. `git revert <first-image-updater-commit-sha>` on `main`, `git push origin main`. This restores the stale seed for one poll cycle.
+3. Watch the next 2–3 image updater polls:
 
    ```bash
    kubectl logs -n argocd deployment/argocd-image-updater -f \
@@ -130,8 +130,8 @@ If step 4 shows no commit after 10 minutes:
 
 | Environment                               | Who writes the digest                                                                                                  |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `main:infra/k8s/overlays/preview/`        | ACIU — preview AppSet annotations                                                                                      |
-| `main:infra/k8s/overlays/candidate-a/`    | ACIU — candidate-a AppSet annotations (same `^preview-*` regex as preview, per bug.0344 B9 Path A)                     |
+| `main:infra/k8s/overlays/preview/`        | Image updater — preview AppSet annotations                                                                             |
+| `main:infra/k8s/overlays/candidate-a/`    | Image updater — candidate-a AppSet annotations (same `^preview-*` regex as preview, per bug.0344 B9 Path A)            |
 | `main:infra/k8s/overlays/production/`     | Human-gated only. `promote-to-production.yml` reads from `deploy/preview` and opens a review PR to `deploy/production` |
 | `deploy/{preview,candidate-a,production}` | Flight workflows (`flight-preview.yml`, `candidate-flight.yml`, `promote-and-deploy.yml`) via `promote-k8s-image.sh`   |
 
@@ -139,7 +139,7 @@ Per-node migrator digests (`-operator-migrate`, `-poly-migrate`, `-resy-migrate`
 
 ### Production invariant (enforced)
 
-`infra/k8s/argocd/production-applicationset.yaml` must carry **zero** `argocd-image-updater.argoproj.io/*` annotations. Enforced by `scripts/ci/check-no-aciu-on-production.sh` in the CI `unit` job — every PR is blocked if this invariant is violated. See bug.0344 § B12(c).
+`infra/k8s/argocd/production-applicationset.yaml` must carry **zero** `argocd-image-updater.argoproj.io/*` annotations. Enforced by `scripts/ci/check-no-image-updater-on-production.sh` in the CI `unit` job — every PR is blocked if this invariant is violated. See bug.0344 § B12(c).
 
 ## Rollback
 
