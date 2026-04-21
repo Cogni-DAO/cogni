@@ -124,6 +124,14 @@ jobs:
       - name: Architecture check
         run: pnpm arch:check
 
+      # bug.0344 B12(c) — hard gate: production-applicationset.yaml must
+      # never carry argocd-image-updater annotations. Production overlay
+      # digests are human-gated via promote-to-production.yml; the MVP
+      # GHCR-split + preview/candidate-a ACIU wiring deliberately stops
+      # there. This check is the structural backstop for that invariant.
+      - name: No ACIU annotations on production AppSet (bug.0344 B12c)
+        run: bash scripts/ci/check-no-aciu-on-production.sh
+
       - name: Unit + contract coverage tests
         run: pnpm test:ci
 

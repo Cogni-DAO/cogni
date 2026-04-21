@@ -2,7 +2,7 @@
 
 > Installed by bug.0344 to retire hand-curated overlay-digest maintenance on `main`.
 > Manifests: `infra/k8s/argocd/image-updater/`
-> Watches: preview ApplicationSet's Applications → writes to `main`'s `infra/k8s/overlays/preview/<app>/kustomization.yaml` only (MVP scope).
+> Watches: preview + candidate-a ApplicationSets' Applications → writes to `main`'s `infra/k8s/overlays/{preview,candidate-a}/<app>/kustomization.yaml` (MVP scope). Production is human-gated via `promote-to-production.yml` and enforced by `scripts/ci/check-no-aciu-on-production.sh`.
 
 ## What it does
 
@@ -13,7 +13,7 @@ Argo CD Image Updater runs as a Deployment in the `argocd` namespace. Every 2 mi
 3. Picks the newest tag by image-manifest creation timestamp (`update-strategy: latest` — v0.15.2's name for build-time-ordered selection, filtered by the `allow-tags` regex).
 4. If the newest tag's digest differs from the one currently rendered in the Application's Kustomize overlay, clones `main`, rewrites the `digest:` field in `infra/k8s/overlays/preview/<app>/kustomization.yaml`, and pushes the commit back to `main` under PAT `ACTIONS_AUTOMATION_BOT_PAT` (pusher = `Cogni-1729`, authored as `github-actions[bot]` — matching `scripts/ci/promote-k8s-image.sh`, the script whose job this automates).
 
-Every Application carries two image aliases — `app=ghcr.io/cogni-dao/cogni-template` and `migrator=ghcr.io/cogni-dao/cogni-template` — so ACIU keeps both the primary app digest and the per-node migrator digest fresh on `main`. Without the second alias, the migrator seed would rot and recurse bug #970 on every unrelated flight. `scheduler-worker` has no migrator (single `images:` entry in its overlay); its migrator regex matches zero GHCR tags so ACIU silently no-ops.
+Every Application carries two image aliases pointing at **distinct GHCR packages** (bug.0344 B8 split) — `app=ghcr.io/cogni-dao/cogni-template` and `migrator=ghcr.io/cogni-dao/cogni-template-migrate` — so ACIU keeps both the primary app digest and the per-node migrator digest fresh on `main`. The split is load-bearing: ACIU's `ContainsImage` matcher (`pkg/image/image.go:148`) keys by `RegistryURL+ImageName`, so two aliases pointing at the same package would collapse to a single `Status.Summary.Images` entry and only one of {app, migrator} would update per poll in steady state — re-exposing bug #970. Distinct ImageNames give the two aliases independent Status entries. `scheduler-worker` has no migrator (single `images:` entry in its overlay); its migrator regex matches zero tags in the migrate package so ACIU silently no-ops.
 
 Every commit is prefixed `chore(deps): argocd-image-updater` so `git log --grep='argocd-image-updater' -- infra/k8s/overlays/` is the controller-specific audit filter, and `git log --author='github-actions\[bot\]' -- infra/k8s/overlays/` is the broader CI-bot audit filter.
 
@@ -67,7 +67,18 @@ kubectl rollout status deployment/argocd-image-updater -n argocd --timeout=2m
 kubectl logs -n argocd deployment/argocd-image-updater --tail=50 | grep -i 'considering\|updated image'
 ```
 
-Within one poll cycle (≤2 minutes) you should see `considering image` lines for each annotated preview Application (`preview-operator`, `preview-poly`, `preview-resy`, `preview-scheduler-worker`).
+Within one poll cycle (≤2 minutes) you should see `considering image` lines for each annotated Application across **both** environments: `preview-{operator,poly,resy,scheduler-worker}` and `candidate-a-{operator,poly,resy,scheduler-worker}`.
+
+### Pre-flight: confirm the main-branch carve-out is still in place
+
+ACIU's write-back path relies on the existing admin + `enforce_admins: false` carve-out on `main` that PR merges already use. If that protection ever flips, ACIU will silently 403 every commit into a log no one reads. Run once per bootstrap:
+
+```bash
+gh api repos/cogni-dao/cogni-template/branches/main/protection \
+  | jq -e '.enforce_admins.enabled == false'
+```
+
+If this returns `false` (the jq assertion fails), stop. Either restore the carve-out or decline to enable ACIU until there's an explicit decision about how writes to `main` will authenticate.
 
 ## Smoke test (end-to-end)
 
@@ -90,7 +101,23 @@ Exercise the loop on poly — this is the most frequent flight path and the case
    ```
 
 4. Both the `cogni-template` entry AND the `cogni-template-migrate` entry in `infra/k8s/overlays/preview/poly/kustomization.yaml` should show the new `sha256:...` values. If only the app digest refreshes and migrator stays stale, stop — that's bug #970's mechanism still live; investigate the `migrator` alias annotations first.
-5. Unrelated-flight regression check: trigger a flight for a PR touching only `nodes/operator/**`. After the flight rsyncs `main → deploy/preview`, inspect `deploy/preview:infra/k8s/overlays/preview/poly/kustomization.yaml`. Both poly digests must match main's fresh seeds from step 4 — not the pre-Image-Updater values from step 1.
+5. Unrelated-flight regression check: trigger a flight for a PR touching only `nodes/operator/**`. After the flight rsyncs `main → deploy/preview`, inspect `deploy/preview:infra/k8s/overlays/preview/poly/kustomization.yaml`. Both poly digests must match main's fresh seeds from step 4 — not the pre-Image-Updater values from step 1. Same check applies to `deploy/candidate-a` after a candidate flight.
+
+### Steady-state confirmation (B11 post-rollout)
+
+The smoke test above passes by timing luck during the pre-sync transient window. Run this **once** after the first successful smoke test to confirm the B8 GHCR-split is holding in steady state, not just in the transient:
+
+1. Wait 10 minutes after the first ACIU commit lands on `main` — long enough for `deploy/preview` to sync + Argo to reconcile + `Status.Summary.Images` to catch up.
+2. `git revert <first-ACIU-commit-sha>` on `main`, `git push origin main`. This restores the stale seed for one poll cycle.
+3. Watch the next 2–3 ACIU polls:
+
+   ```bash
+   kubectl logs -n argocd deployment/argocd-image-updater -f \
+     | grep -E 'Considering|Successfully updated image'
+   ```
+
+4. **Expected (split is healthy):** both aliases (`app` and `migrator`) fire per poll because their ImageNames (`cogni-template` vs `cogni-template-migrate`) are distinct; both digests restored to main in both overlays within one cycle.
+5. **Failure mode (split is incomplete):** only one alias ever fires (or always the same one) across 3 consecutive cycles. Stop. Inspect `kubectl get application -n argocd preview-poly -o jsonpath='{.status.summary.images}'` — if `cogni-template` and `cogni-template-migrate` are not both present as distinct entries, one of build-and-push/flight-preview-retag/overlay-`newName:`/registries-conf did not fully land on both packages. Re-audit bug.0344 § B8 checklist. Do **not** paper over with `force-update: "true"`.
 
 If step 4 shows no commit after 10 minutes:
 
@@ -99,14 +126,20 @@ If step 4 shows no commit after 10 minutes:
 - Look for `error writing back to git` (GitHub 403 → git-creds PAT expired/revoked **or** branch protection on main rejected the push — verify `enforce_admins: false` still holds via `gh api repos/:owner/:repo/branches/main/protection`).
 - Look for `no newer version found` for the `migrator` alias on scheduler-worker — that's expected (no migrator image exists for it) and safe to ignore.
 
-## MVP scope — what is NOT covered yet
+## MVP scope
 
-| Gap                              | Current owner                                | Follow-up                                                      |
-| -------------------------------- | -------------------------------------------- | -------------------------------------------------------------- |
-| `main`'s `candidate-a/` overlays | Manual — still hand-bumped                   | Annotate `candidate-a-applicationset.yaml` with the same shape |
-| `main`'s `production/` overlays  | Manual — `promote-to-production.yml` mirrors | Needs careful scoping — production is explicitly human-gated   |
+| Environment                               | Who writes the digest                                                                                                  |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `main:infra/k8s/overlays/preview/`        | ACIU — preview AppSet annotations                                                                                      |
+| `main:infra/k8s/overlays/candidate-a/`    | ACIU — candidate-a AppSet annotations (same `^preview-*` regex as preview, per bug.0344 B9 Path A)                     |
+| `main:infra/k8s/overlays/production/`     | Human-gated only. `promote-to-production.yml` reads from `deploy/preview` and opens a review PR to `deploy/production` |
+| `deploy/{preview,candidate-a,production}` | Flight workflows (`flight-preview.yml`, `candidate-flight.yml`, `promote-and-deploy.yml`) via `promote-k8s-image.sh`   |
 
-Per-node migrator digests (`-operator-migrate`, `-poly-migrate`, `-resy-migrate`) **are** covered in MVP via the `migrator` image alias — see bug.0344 revision-2 review for why deferring them would have left the poly case (bug #970) unsolved.
+Per-node migrator digests (`-operator-migrate`, `-poly-migrate`, `-resy-migrate`) are covered via the `migrator` image alias pointing at the split `cogni-template-migrate` GHCR package (bug.0344 B8). `scheduler-worker` has no migrator and silently no-ops.
+
+### Production invariant (enforced)
+
+`infra/k8s/argocd/production-applicationset.yaml` must carry **zero** `argocd-image-updater.argoproj.io/*` annotations. Enforced by `scripts/ci/check-no-aciu-on-production.sh` in the CI `unit` job — every PR is blocked if this invariant is violated. See bug.0344 § B12(c).
 
 ## Rollback
 
@@ -123,7 +156,7 @@ git revert <bad-sha> && git push origin main
 To disable permanently:
 
 - Remove `image-updater` from `infra/k8s/argocd/kustomization.yaml` resources.
-- Remove the `argocd-image-updater.argoproj.io/*` annotations from `infra/k8s/argocd/preview-applicationset.yaml`.
+- Remove the `argocd-image-updater.argoproj.io/*` annotations from both `infra/k8s/argocd/preview-applicationset.yaml` and `infra/k8s/argocd/candidate-a-applicationset.yaml`.
 - Delete the controller: `kubectl delete deployment argocd-image-updater -n argocd`.
 
 The bespoke anti-pattern `promote-k8s-image.sh` still works for every environment, so rolling back does not break flights — it just means you're back to hand-maintained `main` seeds (bug.0344 is reopened).
