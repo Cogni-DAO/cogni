@@ -40,7 +40,10 @@ import {
   WalletQuickJump,
 } from "@/features/wallet-analysis";
 
-import { COPY_TARGETS_QUERY_KEY, fetchCopyTargets } from "@/features/wallet-analysis/client/copy-trade-targets";
+import {
+  COPY_TARGETS_QUERY_KEY,
+  fetchCopyTargets,
+} from "@/features/wallet-analysis/client/copy-trade-targets";
 import { fetchTopWallets } from "../dashboard/_api/fetchTopWallets";
 
 import { FacetedFilter } from "../work/_components/FacetedFilter";
