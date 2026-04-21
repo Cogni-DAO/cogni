@@ -535,6 +535,14 @@ interface ClobOrderResponseLike {
   status?: string;
   success?: boolean;
   errorMsg?: string;
+  /**
+   * Rejection payloads observed live on candidate-a 2026-04-21 carry `{error, status}`
+   * rather than the documented `{success, errorMsg, orderID}` shape. `classifyClobFailure`
+   * reads `errorMsg` then falls back to `error` / `message`. Keep both typed so new call
+   * paths don't regress on the discovered shape.
+   */
+  error?: string;
+  message?: string;
   makingAmount?: string;
   takingAmount?: string;
   transactionsHashes?: string[];
@@ -551,6 +559,13 @@ export const POLY_CLOB_ERROR_CODES = {
   staleApiKey: "stale_api_key",
   invalidSignature: "invalid_signature",
   invalidPriceOrTick: "invalid_price_or_tick",
+  /**
+   * Order size below the market's minimum (per-market, dynamic). CLOB returns
+   * messages like `"Size (1.58) lower than the minimum: 5"` or `"invalid
+   * amount for a marketable BUY order ($0.9996), min size: $1"`. Pair with
+   * bug.0342 (dynamic scale-up-to-min).
+   */
+  belowMinOrderSize: "below_min_order_size",
   emptyResponse: "empty_response",
   httpError: "http_error",
   unknown: "unknown",
@@ -595,6 +610,15 @@ function classifyRejectionMessage(msg: string): PolyClobErrorCode {
     return POLY_CLOB_ERROR_CODES.staleApiKey;
   if (lowered.includes("signature"))
     return POLY_CLOB_ERROR_CODES.invalidSignature;
+  // Min-order-size signatures observed live on candidate-a (bug.0342):
+  //   "Size (1.58) lower than the minimum: 5"
+  //   "invalid amount for a marketable BUY order ($0.9996), min size: $1"
+  if (
+    lowered.includes("minimum") ||
+    lowered.includes("min size") ||
+    lowered.includes("invalid amount")
+  )
+    return POLY_CLOB_ERROR_CODES.belowMinOrderSize;
   if (lowered.includes("tick") || lowered.includes("price"))
     return POLY_CLOB_ERROR_CODES.invalidPriceOrTick;
   return POLY_CLOB_ERROR_CODES.unknown;

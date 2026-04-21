@@ -187,6 +187,26 @@ describe("classifyClobFailure (bug.0335 diagnostics)", () => {
     });
     expect(details.reason?.length).toBe(128);
   });
+
+  // Live signatures from candidate-a 2026-04-21 — bug.0342 surface.
+  // Before the classifier extension these landed as error_code: "unknown".
+  it("maps share-min signature → below_min_order_size", () => {
+    const details = classifyClobFailure({
+      error: "order 0xabc is invalid. Size (1.58) lower than the minimum: 5",
+      status: "error",
+    });
+    expect(details.error_code).toBe(POLY_CLOB_ERROR_CODES.belowMinOrderSize);
+    expect(details.response_keys).toEqual(["error", "status"]);
+  });
+
+  it("maps USDC-amount-min signature → below_min_order_size", () => {
+    const details = classifyClobFailure({
+      error:
+        "invalid amount for a marketable BUY order ($0.9996), min size: $1",
+      status: "error",
+    });
+    expect(details.error_code).toBe(POLY_CLOB_ERROR_CODES.belowMinOrderSize);
+  });
 });
 
 describe("classifyClientError (axios / network)", () => {
