@@ -1,18 +1,18 @@
 ---
 id: bug.0343
 type: bug
-title: poly-migrate-poly-doltgres Job fails — "db:migrate:poly:doltgres:container" not found in migrator image
-status: needs_triage
-priority: 0
+title: Candidate-a poly flights inherit ancient poly-migrator digest — doltgres PreSync hook fails intermittently
+status: needs_review
+priority: 1
 rank: 99
 estimate: 2
-summary: Argo PreSync Job `poly-migrate-poly-doltgres` crashloops on candidate-a with `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command "db:migrate:poly:doltgres:container" not found`. Hits backoffLimit, flips to Failed, which blocks Argo from ever entering Sync phase. Every poly flight to candidate-a (and eventually preview/prod) is stuck — the Deployment never rolls, pods stay on the previously-flighted SHA, and verify-buildsha correctly reports the mismatch as flight failure.
-outcome: PreSync Job runs the correct script and succeeds on first attempt; Argo proceeds to Sync; poly Deployment rolls the new pods; verify-buildsha passes. First flight to candidate-a after the fix lands should complete end-to-end.
+summary: Candidate-a's three overlay files on `main` pin `cogni-template-migrate` to `sha256:f6c723a29c…` — a poly-migrator image built 2026-04-04, 15 days before PR #894 (2026-04-19) added `db:migrate:poly:doltgres:container` to root `package.json`. `candidate-flight.yml` rsyncs `main`'s overlay onto `deploy/candidate-a` every flight, so any poly PR whose affected-only detect skips `poly-migrator` (i.e. doesn't touch `nodes/poly/app/src/{shared/db,adapters/server/db/migrations}/*` or `packages/*` or root package.json) inherits the broken digest. Argo's PreSync hook `poly-migrate-poly-doltgres` then crashloops with `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command "db:migrate:poly:doltgres:container" not found`, hits backoffLimit, and Argo never enters Sync — poly Deployment stays pinned to the previous flight's SHA. The symptom presents as verify-buildsha mismatch.
+outcome: Any poly-touching PR rebuilds `poly-migrate` together with the poly app image. `promote-build-payload.sh` always has a fresh migrator digest to promote, overwriting the stale one that `main` re-seeds via rsync. PreSync hook succeeds; Argo completes Sync; verify-buildsha passes.
 spec_refs:
 assignees: derekg1729
 credit:
 project:
-branch:
+branch: fix/bug-0343-poly-doltgres-migrator
 pr:
 reviewer:
 revision: 0
@@ -20,17 +20,26 @@ blocked_by:
 deploy_verified: false
 created: 2026-04-20
 updated: 2026-04-20
-labels: [ci, deploy, poly, doltgres, argo, p0]
+labels: [ci, deploy, poly, doltgres, argo, candidate-a]
 external_refs:
 ---
 
-# poly-migrate-poly-doltgres Job fails on candidate-a — script missing in migrator image
+# Candidate-a poly flights inherit ancient poly-migrator digest — doltgres PreSync hook fails intermittently
 
 ## Requirements
 
 ### Observed
 
-`candidate-flight.yml` run [24695330251](https://github.com/Cogni-DAO/node-template/actions/runs/24695330251) for PR #965 fails at `verify-candidate` because the poly Deployment never rolled. Argo logs show PreSync hook `Job/poly-migrate-poly-doltgres` transitioning `Running → Failed` with message `"Job has reached the specified backoff limit"` → `"one or more synchronization tasks completed unsuccessfully"`. All retries of the Job emit the same container log:
+**Triggering run:** `candidate-flight.yml` [24695330251](https://github.com/Cogni-DAO/node-template/actions/runs/24695330251) for PR #965. `verify-candidate` failed because the poly Deployment never rolled. Argo `candidate-a-poly` Application controller log (Loki):
+
+```
+Updating operation state. phase: Running -> Failed,
+  message: 'waiting for completion of hook batch/Job/poly-migrate-poly-doltgres'
+       -> 'one or more synchronization tasks completed unsuccessfully'
+Job has reached the specified backoff limit
+```
+
+PreSync hook pods (10 retries, all emit identical container log):
 
 ```
 undefined
@@ -38,104 +47,116 @@ undefined
 Did you mean "pnpm db:migrate:container"?
 ```
 
-Pods examined (all show identical error):
-`poly-migrate-poly-doltgres-{4cd7t,7lvx6,gtdv6,gttbk,pdqcq,r84t5,rqdbq,rqdvh,sqj5x,vbdsw}` in `cogni-candidate-a`, container `migrate-doltgres`.
+`pod=~poly-migrate-poly-doltgres-{4cd7t,7lvx6,gtdv6,gttbk,pdqcq,r84t5,rqdbq,rqdvh,sqj5x,vbdsw}` in `cogni-candidate-a`, container `migrate-doltgres`.
 
-Code pointers:
+### Root cause (all verified, zero guesswork)
 
-- **Job spec**: `infra/k8s/base/poly-doltgres/doltgres-migration-job.yaml:45` — `command: ["pnpm", "db:migrate:poly:doltgres:container"]`
-- **Script definition** (exists on `main`): `package.json` — `"db:migrate:poly:doltgres:container": "tsx node_modules/drizzle-kit/bin.cjs migrate --config=nodes/poly/drizzle.doltgres.config.ts && node nodes/poly/packages/doltgres-schema/stamp-commit.mjs"`
-- **Image build**: `scripts/ci/build-and-push-images.sh:155-168` — `poly-migrator` builds from `nodes/poly/app/Dockerfile --target migrator`
-- **Dockerfile migrator stage**: `nodes/poly/app/Dockerfile:67-86` — COPYs `package.json` from builder stage at line 70; CMD defaults to `db:migrate:poly:container` (line 86) but the k8s Job overrides.
+1. **Ancient migrator image pinned in `main`'s candidate-a overlays.** All three of `infra/k8s/overlays/candidate-a/{operator,poly,resy}/kustomization.yaml` on `main` pin `cogni-template-migrate` to `sha256:f6c723a29c402c89fffd805c3707f0200d9dc0bf252418a771043027a8d3352c`. `docker inspect` confirms that image was created **2026-04-04T18:46:59Z**.
+2. **Script added 2026-04-19** by PR #894 (commit `eb832de78`). 15 days AFTER the image was built — the image literally cannot contain it. Verified via `docker run --rm <digest> sh -c 'grep -c "db:migrate:poly:doltgres:container" /app/package.json'` → `0`.
+3. **`candidate-flight.yml:137` rsyncs overlays from `main` on every flight:**
 
-### Root cause (narrowed, not 100% proven)
+   ```yaml
+   rsync -a --delete app-src/infra/k8s/overlays/candidate-a/ deploy-branch/infra/k8s/overlays/candidate-a/
+   ```
 
-The script exists in the source tree but is **not present in the migrator image** running in-cluster. Three candidate causes, in decreasing likelihood:
+   This wipes deploy-branch's accumulated digest updates back to whatever `main` has.
 
-1. **Stale buildx cache for `poly-migrator`**: `--cache-from type=gha,scope=build-poly-migrator` at `build-and-push-images.sh:163` reuses the `COPY package.json` layer across builds. If the cache holds a pre-PR-#894 (eb832de78) version of `package.json` and a later buildx doesn't invalidate it correctly, the image's `/app/package.json` lacks `db:migrate:poly:doltgres:container`. PR #894 is where both the Job manifest and the script were introduced.
-2. **Migrator image digest skew vs the Deployment**: `candidate-flight.yml`'s promote step may resolve the `poly-migrator` digest to a stale prior PR build (cache hit) while the poly app image resolves to the fresh digest. Worth confirming by inspecting the overlay's migrator image digest vs. expected.
-3. **Doltgres inputs are not in the fingerprint**: `scripts/ci/compute_migrator_fingerprint.sh:37-48` (`poly` case) does **not** include `nodes/poly/drizzle.doltgres.config.ts`, `nodes/poly/packages/doltgres-schema/*`, `nodes/poly/app/src/adapters/server/db/doltgres-migrations/`, or `nodes/node-template/packages/knowledge/`. Although this script is currently only referenced by `ci.yaml:346` (operator context), the same omission might bite if fingerprint-based reuse lands elsewhere. Flag for audit even if not the immediate cause.
+4. **`detect-affected.sh` asymmetry.** The operator catchall at `nodes/operator/*` pairs app with migrator (`add_target operator` + `add_target operator-migrator`). Poly and resy catchalls (`nodes/poly/*`, `nodes/resy/*`) **only add the app**. So poly-only PRs (UI, features, non-DB code) don't produce a `pr-<N>-<sha>-poly-migrator` image. `resolve-pr-build-images.sh` finds no migrator tag → `promote-build-payload.sh` passes no `--migrator-digest` → `promote-k8s-image.sh` leaves the migrator line untouched → the ancient digest from step 1 persists.
+
+5. **PR #894 (eb832de78) — where the hook was introduced — also added `base/poly-doltgres` to candidate-a's poly overlay.** Flights since then exercise the hook. Flights that happened to also rebuild `poly-migrator` (because they touched `packages/*` or Postgres migrations or root `package.json`) promoted a fresh image that did contain the script; flights that didn't inherited the ancient broken one. This is why PR #964 (touched `packages/market-provider/*` → global rebuild) succeeded while PR #965 (touched only `nodes/poly/app/src/features/wallet-analysis/*`) failed — same day, same hour.
+
+Evidence trail recorded in the flight-coordinator session (main branch checkout):
+
+- Run logs + Loki: run 24695330251 + run 24696166119 (PR #964 success).
+- Digest time-travel: `git show <flight-commit> -- infra/k8s/overlays/candidate-a/poly/kustomization.yaml` for each flight this session; migrator digest reverts to `f6c723a29c…` on flights that didn't rebuild the migrator.
+- Asymmetry in `scripts/ci/detect-affected.sh:157-171` — `nodes/operator/*` pairs, `nodes/poly/*` and `nodes/resy/*` don't.
 
 ### Expected
 
-- `pnpm db:migrate:poly:doltgres:container` exists in `/app/package.json` of every `poly-migrator` image tagged `pr-<N>-<sha>-poly-migrator` on GHCR.
-- PreSync Job `poly-migrate-poly-doltgres` exits 0 on first attempt.
-- Argo enters Sync phase and rolls the new Deployment.
-- `verify-buildsha.sh` returns green on first poll.
+- Every poly-touching PR builds both `poly` and `poly-migrator` images. Same for resy.
+- `promote-build-payload.sh` always has a fresh migrator digest to promote to candidate-a.
+- Argo PreSync Job `poly-migrate-poly-doltgres` runs against an image that contains the script; exits 0.
+- Sync proceeds; Deployment rolls; verify-buildsha passes on first attempt.
 
 ### Reproduction
 
+- Any poly-only UI/feature PR (example: #965) flighted against the current `main` before this fix lands will fail at `verify-candidate` with the migrator container log shown above. PR #964 only passed because it touched `packages/market-provider/*` which triggers `add_all_targets` (global rebuild), masking the underlying bug.
+
+Local image-level reproduction (confirms the image really is missing the script):
+
 ```bash
-# Pull the migrator image that failed (use any pr-<N>-<sha>-poly-migrator
-# digest from a recent failed flight, or the current candidate-a overlay digest)
-docker pull ghcr.io/cogni-dao/cogni-template@sha256:<poly-migrator-digest>
-
-# Verify the script is missing
-docker run --rm --entrypoint sh ghcr.io/cogni-dao/cogni-template@sha256:<poly-migrator-digest> \
-  -c 'grep -c db:migrate:poly:doltgres:container /app/package.json'
-# Expected: 1   Observed (bug): 0
-
-# Or reproduce the runtime error
-docker run --rm ghcr.io/cogni-dao/cogni-template@sha256:<poly-migrator-digest> \
-  pnpm db:migrate:poly:doltgres:container
-# Expected: migration runs   Observed: ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL
+docker pull --platform=linux/amd64 ghcr.io/cogni-dao/cogni-template@sha256:f6c723a29c402c89fffd805c3707f0200d9dc0bf252418a771043027a8d3352c
+docker run --rm --platform=linux/amd64 --entrypoint sh \
+  ghcr.io/cogni-dao/cogni-template@sha256:f6c723a29c402c89fffd805c3707f0200d9dc0bf252418a771043027a8d3352c \
+  -c 'grep -c "db:migrate:poly:doltgres:container" /app/package.json'
+# → 0
 ```
-
-Full flight reproduction is already in hand: run ID `24695330251` in `Cogni-DAO/node-template`, PR #965.
 
 ### Impact
 
-- **Severity: P0.** Blocks all candidate-a flights that actually reconcile poly Argo state. PR #965's flight failed; the underlying cluster state means even non-poly PRs may hit the same PreSync gate whenever poly-doltgres is in the manifest.
-- **Silent workaround until now**: prior flights (#934, #944, #962) appear to have passed because their poly-migrator images happened to contain the script (not yet confirmed — needs `docker inspect`). Cache state is path-dependent and unpredictable.
-- **Preview and prod are unaffected for now** only because preview Argo is separately broken (see other dev's investigation) and prod hasn't received this manifest yet. This bug will block preview/prod promotion once preview Argo is fixed, unless this is resolved first.
+- **Severity: P1.** Blocks random poly candidate-a flights. Reproduces on every poly-only PR that avoids the global rebuild triggers. Doesn't reach preview/prod because those run through `promote-and-deploy.yml`, which does its own digest resolution per merge and doesn't suffer the same rsync-from-main overwrite path (confirmed — the preview/prod overlays live on `deploy/preview` and `deploy/production`, not `main`).
+- Not a total blocker (PRs that touch shared packages or migrations still flight cleanly), but silent intermittent — the next poly-only PR will hit it again until the fix is in.
 
 ## Allowed Changes
 
-- `scripts/ci/build-and-push-images.sh` (poly-migrator buildx cache keys / `--no-cache` gating for package.json)
-- `nodes/poly/app/Dockerfile` (explicit package.json-layer cache-bust or explicit COPY of the script source)
-- `scripts/ci/compute_migrator_fingerprint.sh` (add Doltgres inputs to poly fingerprint for future-proofing)
-- `infra/k8s/base/poly-doltgres/doltgres-migration-job.yaml` (if the right fix is to call a per-node-workspace script instead of root)
-- `package.json` (only if moving the script into the poly workspace is the chosen fix)
+- `scripts/ci/detect-affected.sh` — pair poly+poly-migrator and resy+resy-migrator in their catchall cases (structural fix).
+- `infra/k8s/overlays/candidate-a/{operator,poly,resy}/kustomization.yaml` — update `cogni-template-migrate` digest from the ancient `f6c723a29c…` to current known-working digests promoted by PR #964's flight (`dfa77160c4…`, `ce0582e0d4…`, `7940ebcd21…`). Defense in depth — an overlay whose digest at least matches a currently-running image limits blast radius of any future gap in the detect logic.
+- `work/items/bug.0343.*.md` — this file.
 
-Out of scope: touching non-poly migrator logic, changing Argo sync policy, altering the Job retry/backoff shape.
+Out of scope: rewriting `candidate-flight.yml`'s rsync model, changing the `promote-and-deploy.yml` flow, touching preview/prod overlays, modifying `base/poly-doltgres/doltgres-migration-job.yaml`.
 
 ## Plan
 
-- [ ] Pull the exact `poly-migrator` image from run 24695330251's promote step and `docker run ... cat /app/package.json | grep doltgres` to confirm the script is literally absent.
-- [ ] If absent: check the buildx gha cache for `scope=build-poly-migrator` — inspect whether the `COPY package.json` layer hash matches pre-#894 or post-#894 `package.json`.
-- [ ] Root-cause: stale cache vs. resolve-pr-build-images promoting a stale digest vs. something else entirely.
-- [ ] Apply the minimal fix (likely: force cache-bust on the package.json layer, or pin migrator build to `--no-cache` for the manifests layer).
-- [ ] Add Doltgres inputs to `compute_migrator_fingerprint.sh` poly section regardless — coverage gap independent of this specific bug.
-- [ ] Re-flight PR #965 to candidate-a; verify `poly-migrate-poly-doltgres` Job exits 0 and Argo rolls the Deployment.
-- [ ] Loki proof: `{namespace="cogni-candidate-a", pod=~"poly-node-app-.*"} |= "app started" | json | buildSha="<pr-965-head>"` returns a row.
+- [x] Reproduce on run 24695330251: confirm `poly-migrate-poly-doltgres` Job failed with script-not-found.
+- [x] Verify image `sha256:f6c723a29c…` predates PR #894's script addition (15 days old).
+- [x] Trace asymmetry in `detect-affected.sh` catchall cases (operator pairs migrator; poly/resy do not).
+- [x] Trace rsync-from-main reset mechanism in `candidate-flight.yml:137` that re-seeds the ancient digest every flight.
+- [x] Identify three candidate-a overlays on `main` carrying the ancient digest.
+- [x] Pair poly+poly-migrator and resy+resy-migrator in `detect-affected.sh` catchalls.
+- [x] Bump the three candidate-a overlay digests on `main` to the current known-working images.
+- [ ] Merge this PR.
+- [ ] Flight any poly-only PR to candidate-a and confirm: (a) `pr-build` produces both poly and poly-migrator images; (b) `poly-migrate-poly-doltgres` Job succeeds first try; (c) endpoint `/readyz.version` matches the PR's head SHA.
+- [ ] Flag the rsync-from-main reset path to the CI/CD owner as a followup — overlays don't feel like the right place for image digests given this pattern.
 
 ## Validation
 
 **Command:**
 
 ```bash
-# After fix lands, re-flight PR #965 (or equivalent poly PR):
-gh workflow run candidate-flight.yml --repo Cogni-DAO/node-template -f pr_number=965
-
-# Watch run to success
-gh run watch <run-id> --repo Cogni-DAO/node-template --exit-status
+# Unit-level: detect-affected.sh must add poly-migrator for a poly-only path
+SCRIPT_DIR=scripts/ci bash -c '
+  tmp=$(mktemp -d)
+  cat > "$tmp/changed" <<EOF
+nodes/poly/app/src/features/wallet-analysis/components/CopyTradeToggle.tsx
+EOF
+  CHANGED_PATHS_FILE="$tmp/changed" bash scripts/ci/detect-affected.sh | jq -r ".targets[]" | sort
+'
+# Expected output: must contain both `poly` and `poly-migrator`
 ```
 
-**Expected:** All 4 jobs (flight, verify-candidate, release-slot) succeed. `poly-migrate-poly-doltgres` PreSync Job completes on first attempt. Argo reports Healthy for `candidate-a-poly`. `curl https://poly-test.cognidao.org/readyz` returns `version=<pr-head-sha>` matching the flight's expected SHA.
+```bash
+# System-level: re-flight PR #965 (or the next queued poly-only PR) after this fix lands
+gh workflow run candidate-flight.yml --repo Cogni-DAO/node-template -f pr_number=965
+gh run watch <new-run-id> --repo Cogni-DAO/node-template --exit-status
+```
+
+**Expected:** All four flight jobs green (`flight`, `verify-candidate`, `release-slot`). `pr-build` includes `build (poly-migrator)` in its targets. Loki query `{namespace="cogni-candidate-a", pod=~"poly-node-app-.*"} |= "app started" | json | buildSha="<pr-965-head>"` returns a row. `curl https://poly-test.cognidao.org/readyz` returns the PR head SHA.
 
 ## Review Checklist
 
-- [ ] **Work Item:** `bug.0343` linked in PR body
-- [ ] **Spec:** CI-CD invariants upheld (candidate-flight is the single app-lever; PreSync Jobs must succeed deterministically per reconcile)
-- [ ] **Tests:** a smoke check validating `pnpm db:migrate:poly:doltgres:container` resolves inside the built poly-migrator image (docker run assertion)
-- [ ] **Reviewer:** assigned and approved
+- [ ] **Work Item:** `bug.0343` linked in PR body.
+- [ ] **Spec:** no invariants modified. CI-CD invariant upheld: candidate-a flight produces a verifiable per-PR k8s state; Argo PreSync hooks receive images containing the scripts they invoke.
+- [ ] **Tests:** `detect-affected.sh` is shell-only; assertion is the validation command above run against poly-only + resy-only path sets. No test file added — shell detection logic is exercised by every real PR.
+- [ ] **Reviewer:** assigned and approved.
 
 ## PR / Links
 
-- Failing flight: https://github.com/Cogni-DAO/node-template/actions/runs/24695330251
-- PR that surfaced it: https://github.com/Cogni-DAO/node-template/pull/965
-- Related (where the script + manifest were introduced): #894 / eb832de78
+- Failing flight that surfaced this: https://github.com/Cogni-DAO/node-template/actions/runs/24695330251
+- Contrasting successful flight (same day, different PR): https://github.com/Cogni-DAO/node-template/actions/runs/24696166119
+- PR #965 (original blocked): https://github.com/Cogni-DAO/node-template/pull/965
+- PR #894 / eb832de78 — script + Doltgres Job introduced together.
 
 ## Attribution
 
-- Filed from pr-coordinator-v0 flight-coordinator loop; evidence gathered via Loki queries against `cogni-candidate-a` pod logs and `argocd` reconcile logs on 2026-04-20.
+- Filed and root-caused from the pr-coordinator-v0 flight session on 2026-04-20; diagnosis walked back from "always broken" (wrong) to "intermittent based on affected-only" (correct) once PR #964 succeeded with the same manifest.
+- Hard data: Loki container logs, Argo application-controller logs, `docker run` image inspection, git log -S of the overlay files, commit history of `scripts/ci/detect-affected.sh`.

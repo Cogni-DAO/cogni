@@ -161,6 +161,11 @@ else
         ;;
       nodes/poly/*)
         add_target poly
+        # bug.0343: app and migrator share one Dockerfile + package.json, so
+        # rebuild them together. Skipping the migrator lets stale digests
+        # (e.g. the pre-#894 image missing `db:migrate:poly:doltgres:container`)
+        # ride through on main's overlay and break the Doltgres PreSync hook.
+        add_target poly-migrator
         ;;
       nodes/resy/app/src/shared/db/* | \
       nodes/resy/app/src/adapters/server/db/migrations/*)
@@ -169,6 +174,8 @@ else
         ;;
       nodes/resy/*)
         add_target resy
+        # bug.0343: pair app+migrator — see poly case above.
+        add_target resy-migrator
         ;;
       services/scheduler-worker/*)
         add_target scheduler-worker
