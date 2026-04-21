@@ -184,6 +184,7 @@
 | 2 | 5 | 4 | needs_review | task.0329 | Wallet analysis — reusable component + live data plane (any wallet) + Monitored drawer | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 5 | 5 | needs_design | task.0333 | Wallet analyst agent — AI qualitative judgments, Dolt-stored, DAO-funded | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 5 | 1 | needs_implement | task.0335 | Wallet analysis — clickable Monitored Wallets rows + paste-any-wallet search | Cogni Poly | proj.poly-prediction-bot |
+| 2 | 5 | 1 | needs_implement | task.0342 | Wallet analysis — per-wallet copy-trade status pill + toggle | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 5 | 2 | needs_implement | task.0343 | Research page → wallets browse dashboard (replaces static dossier) | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 5 | 1 | needs_implement | task.0344 | Wallet row → side drawer (skeleton-first, no page jump) | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 6 | 5 | needs_design | task.0334 | Poly niche-research engine — skill-creator + research graph + Dolt store + EDO evidence | Cogni Poly | proj.poly-prediction-bot |

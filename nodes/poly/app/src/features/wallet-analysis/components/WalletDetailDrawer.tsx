@@ -19,6 +19,7 @@ import type { ReactElement } from "react";
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components";
 import { useWalletAnalysis } from "../client/use-wallet-analysis";
+import { CopyTradeToggle } from "./CopyTradeToggle";
 import { WalletAnalysisView } from "./WalletAnalysisView";
 
 export type WalletDetailDrawerProps = {
@@ -77,6 +78,7 @@ export function WalletDetailDrawer({
                 .toISOString()
                 .slice(0, 16)
                 .replace("T", " ")}
+              headerActions={addr && <CopyTradeToggle addr={addr} />}
             />
           ) : null}
         </div>

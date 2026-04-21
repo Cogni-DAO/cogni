@@ -15,7 +15,7 @@
 
 "use client";
 
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 import { Card, CardContent, CardHeader } from "@/components";
 import type {
@@ -44,6 +44,12 @@ export type WalletAnalysisViewProps = {
   isLoading?: WalletAnalysisLoadingState | undefined;
   capturedAt?: string | undefined;
   rankBadge?: string | undefined;
+  /**
+   * Top-right action slot rendered beside the identity header. Use for
+   * client-only controls the organism shouldn't own directly — e.g. the
+   * copy-trade toggle pulled in by the per-wallet page.
+   */
+  headerActions?: ReactNode | undefined;
 };
 
 export function WalletAnalysisView({
@@ -53,6 +59,7 @@ export function WalletAnalysisView({
   isLoading,
   capturedAt,
   rankBadge,
+  headerActions,
 }: WalletAnalysisViewProps): ReactElement {
   // variant fallback while drawer/compact land in later checkpoints
   if (variant !== "page") {
@@ -62,6 +69,7 @@ export function WalletAnalysisView({
         size="default"
         isLoading={isLoading}
         capturedAt={capturedAt}
+        headerActions={headerActions}
       />
     );
   }
@@ -72,6 +80,7 @@ export function WalletAnalysisView({
       isLoading={isLoading}
       capturedAt={capturedAt}
       rankBadge={rankBadge}
+      headerActions={headerActions}
     />
   );
 }
@@ -82,12 +91,14 @@ function PageVariant({
   isLoading,
   capturedAt,
   rankBadge,
+  headerActions,
 }: {
   data: WalletAnalysisData;
   size: WalletAnalysisSize;
   isLoading?: WalletAnalysisLoadingState | undefined;
   capturedAt?: string | undefined;
   rankBadge?: string | undefined;
+  headerActions?: ReactNode | undefined;
 }): ReactElement {
   const isHero = size === "hero";
   return (
@@ -108,12 +119,19 @@ function PageVariant({
       )}
 
       <CardHeader className="gap-3">
-        <WalletIdentityHeader
-          address={data.address}
-          identity={data.identity}
-          size={size}
-          resolvedCount={data.snapshot?.n}
-        />
+        <div className="flex items-start justify-between gap-3">
+          <WalletIdentityHeader
+            address={data.address}
+            identity={data.identity}
+            size={size}
+            resolvedCount={data.snapshot?.n}
+          />
+          {headerActions && (
+            <div className="relative z-10 flex shrink-0 items-center gap-2">
+              {headerActions}
+            </div>
+          )}
+        </div>
       </CardHeader>
 
       <CardContent className="flex flex-col gap-6 pt-0">

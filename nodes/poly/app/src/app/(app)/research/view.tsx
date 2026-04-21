@@ -40,13 +40,11 @@ import {
   WalletQuickJump,
 } from "@/features/wallet-analysis";
 
-import { fetchCopyTargets } from "../dashboard/_api/fetchCopyTargets";
+import {
+  COPY_TARGETS_QUERY_KEY,
+  fetchCopyTargets,
+} from "@/features/wallet-analysis/client/copy-trade-targets";
 import { fetchTopWallets } from "../dashboard/_api/fetchTopWallets";
-
-// NOTE: when PR #965 (copy-trade toggle) merges, both the helper and the
-// shared query key will move into `@/features/wallet-analysis/client/
-// copy-trade-targets`. Rebase swaps these two imports for one.
-const COPY_TARGETS_QUERY_KEY = ["dashboard-copy-targets"] as const;
 
 import { FacetedFilter } from "../work/_components/FacetedFilter";
 import {
