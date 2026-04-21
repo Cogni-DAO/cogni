@@ -414,6 +414,8 @@ volumes:
 
 **Verify locally:** Touch a file under `services/<name>/` and run `scripts/ci/detect-affected.sh` with `TURBO_SCM_BASE=origin/main TURBO_SCM_HEAD=HEAD`. Your service should appear in the `targets` CSV and `targets_json` array.
 
+> **⚠️ Known drift class — do not hand-bump digests as procedure.** Main's overlay `digest:` is currently a hand-curated seed; flights rsync it onto deploy branches and only bump _affected_ apps. Services not touched by a given PR inherit stale seeds, which is how #970 (migrators) and #971 (scheduler-worker) hung chat. The proper fix is adopting a digest-update controller (Argo CD Image Updater / Flux / Renovate) — tracked as bug.0344. If you hit a stale-seed outage before that lands, file it as an incident, not routine maintenance. See `docs/spec/ci-cd.md` § Deploy Branch Rules for the full anti-pattern description.
+
 #### 9b. Wire into the Argo catalog
 
 Argo CD ApplicationSets are catalog-driven (task.0247). The catalog is the single declaration; each environment (candidate-a, preview, production) templates from it.
