@@ -2,10 +2,16 @@ name: Candidate Flight — Infra
 
 # Infra-only reconciliation of the candidate-a VM's Compose stack.
 # This workflow is the INFRA LEVER (task.0314): it rsyncs infra/compose/** from
-# a named git ref (default: main) to the candidate-a VM, runs compose up, and
-# waits for healthchecks. It does NOT promote any app digests and does NOT
-# commit to deploy/candidate-a — that's the job of candidate-flight.yml (the
-# APP LEVER).
+# a named git ref to the candidate-a VM, runs compose up, and waits for
+# healthchecks. It does NOT promote any app digests and does NOT commit to
+# deploy/candidate-a — that's the job of candidate-flight.yml (the APP LEVER).
+#
+# Ref resolution (task.0345): both the scripts checkout and `inputs.ref` default
+# to the workflow's dispatch ref (github.ref / github.ref_name). Dispatch from
+# main is a no-op vs. the original `ref: main` hardcode; dispatch from a PR
+# branch via `gh workflow run candidate-flight-infra.yml --ref=<branch>` flows
+# that branch's scripts/ci/deploy-infra.sh and infra/compose/** onto the VM —
+# enabling pre-merge validation of the infra lever itself.
 #
 # The two levers are orthogonal: dispatch either without blocking the other.
 # See docs/spec/ci-cd.md "Argo owns reconciliation" axiom.
@@ -14,9 +20,9 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Git ref to source infra/compose/** from (default: main)"
+        description: "Git ref to source infra/compose/** from (default: the dispatch ref, typically main)"
         required: false
-        default: main
+        default: ${{ github.ref_name }}
         type: string
 
 permissions:
@@ -106,7 +112,7 @@ jobs:
       - name: Checkout (for scripts)
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
-          ref: main
+          ref: ${{ github.ref }}
           fetch-depth: 0
 
       - name: Setup SSH

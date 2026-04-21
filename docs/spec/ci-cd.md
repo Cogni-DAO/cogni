@@ -207,9 +207,10 @@ Candidate-a deploy has two orthogonal levers; either can be dispatched independe
 | `candidate-flight.yml`       | App lever   | Yes                     | No                 |
 | `candidate-flight-infra.yml` | Infra lever | No                      | Yes                |
 
-- **App lever** writes image digests to `deploy/candidate-a`; Argo CD reconciles pods. No VM SSH for compose. This upholds the `Argo owns reconciliation` axiom.
-- **Infra lever** rsyncs `infra/compose/**` from a named git ref (default `main`) to the candidate-a VM and runs `compose up`. It never writes to a `deploy/*` branch.
+- **App lever** writes image digests to `deploy/candidate-a`; Argo CD reconciles pods. No VM SSH for compose. This upholds the `Argo owns reconciliation` axiom. The app lever checks out its own scripts from the PR head SHA, so script-layer changes (e.g. `scripts/ci/promote-build-payload.sh`) are exercised pre-merge on every PR flight.
+- **Infra lever** rsyncs `infra/compose/**` from a named git ref to the candidate-a VM and runs `compose up`. It never writes to a `deploy/*` branch.
 - `scripts/ci/deploy-infra.sh` accepts `--ref <git-ref>` (default `main`) and `--dry-run`. The rsync source is a detached `git worktree add` of the ref, NOT the caller workflow's checkout — app PRs branched before an infra change can be flown without rebasing.
+- The infra lever's own `actions/checkout` ref and `inputs.ref` default to the workflow's dispatch ref (`github.ref` / `github.ref_name`) (task.0345). Dispatching from `main` is a no-op vs. the old hardcoded `ref: main`. Dispatching with `gh workflow run candidate-flight-infra.yml --ref=<branch>` sources **both** `scripts/ci/deploy-infra.sh` and the rsynced `infra/compose/**` from that branch — the channel for pre-merge validation of the infra lever's reconciliation logic itself.
 
 For `promote-and-deploy.yml` (preview/prod merge path), the job graph is:
 
