@@ -71,7 +71,7 @@ nodes/poly/app/src/bootstrap/                   ← Factory + env wiring
 1. Sign in at <https://dashboard.privy.io> (Cogni-DAO account).
 2. "Create app" → name it `cogni-user-wallets-candidate-a` (or similar).
 3. Enable **server wallets** for the app.
-4. Mint an **authorization key** (base64-encoded PKCS8 EC private key) — needed for `POST /v1/wallets` signed requests.
+4. Mint an **authorization key** (format: `wallet-auth:<base64-pkcs8-der>`) — needed for `POST /v1/wallets` signed requests.
 5. Record `appId`, `appSecret`, `signingKey`.
 
 ### 2. Generate the AEAD key

@@ -146,7 +146,14 @@ pnpm setup github --env production
      - **Privy — Operator Wallet (optional — skipped if missing):**
        - `PRIVY_APP_ID` (from privy.io → App Settings)
        - `PRIVY_APP_SECRET` (from privy.io → App Settings)
-       - `PRIVY_SIGNING_KEY` (PKCS8 PEM, multi-line — from privy.io → App Settings → Signing Key)
+       - `PRIVY_SIGNING_KEY` (`wallet-auth:...` authorization key — from privy.io → Settings → Authorization)
+     - **Privy — Poly per-tenant trading wallets (optional for now; required to exercise task.0318 Phase B on candidate/preview/prod):**
+       - `PRIVY_USER_WALLETS_APP_ID` (dedicated Privy app for user trading wallets)
+       - `PRIVY_USER_WALLETS_APP_SECRET` (from the user-wallets Privy app)
+       - `PRIVY_USER_WALLETS_SIGNING_KEY` (`wallet-auth:...` authorization key — from the user-wallets app)
+       - `POLY_WALLET_AEAD_KEY_HEX` (64 hex chars / 32 bytes — generate with `openssl rand -hex 32`)
+       - `POLY_WALLET_AEAD_KEY_ID` (key-ring label, e.g. `v1`)
+       - `POLY_WALLET_ALLOW_STUB_CREDS` (`1` temporarily for B2 plumbing until the real CLOB creds factory ships)
      - **BYO-AI — Connection Encryption (optional — BYO-AI disabled when unset):**
        - `CONNECTIONS_ENCRYPTION_KEY` (64 hex chars / 32 bytes — generate with `openssl rand -hex 32`)
    - **Deployment secrets:** From previous steps

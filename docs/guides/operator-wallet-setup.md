@@ -87,6 +87,73 @@ For recovery or manual control, the underlying primitives are available:
 | `SPLIT_CONTROLLER_ADDRESS` | No       | Split admin (defaults to deployer with warning) |
 | `OPERATOR_WALLET_ADDRESS`  | No       | Disambiguate when multiple Privy wallets exist  |
 
+## Addendum: task.0318 Poly User-Wallet Privy App
+
+Phase B of the poly wallet work introduces a **second Privy app** for per-user Polymarket trading wallets. For v0 this is only needed to exercise the wallet-provisioning path on `candidate-a` and later preview/production.
+
+These are **not** the same values as `PRIVY_APP_ID` / `PRIVY_APP_SECRET` / `PRIVY_SIGNING_KEY` above. Those belong to the operator-wallet/payment path.
+
+### What to create in Privy
+
+In the Privy dashboard for the new user-wallets app:
+
+1. **Settings → Basics** — copy the **App ID**
+2. **Settings → Basics** — click **New secret**, copy the app secret
+3. **Settings → Authorization** — click **New key**, copy the signing key (format: `wallet-auth:MIGHAgEA...`)
+
+This produces:
+
+```bash
+PRIVY_USER_WALLETS_APP_ID=<app-id>
+PRIVY_USER_WALLETS_APP_SECRET=<app-secret>
+PRIVY_USER_WALLETS_SIGNING_KEY=<wallet-auth:...>
+```
+
+The signing key is a separate authorization key for signed wallet requests. It is not the app secret.
+
+### Additional non-Privy envs for this path
+
+```bash
+# 32-byte AES-256-GCM key used to encrypt per-tenant Polymarket CLOB creds at rest
+POLY_WALLET_AEAD_KEY_HEX=<64-hex-chars>
+
+# Key-ring label stored on rows for future key rotation
+POLY_WALLET_AEAD_KEY_ID=v1
+
+# Temporary plumbing flag: Phase B can provision per-tenant wallets, but the
+# real Polymarket CLOB creds factory is not wired yet, so candidate/local uses
+# a stub creds path gated behind this value.
+POLY_WALLET_ALLOW_STUB_CREDS=1
+```
+
+Generate the AEAD key with:
+
+```bash
+openssl rand -hex 32
+```
+
+### Where these values go
+
+- Local development: `.env.local`
+- Candidate deploy: GitHub Environment Secrets for `candidate-a`
+- Preview/production deploys: GitHub Environment Secrets for `preview` / `production`
+
+The local example block lives in [.env.local.example](../../.env.local.example).
+
+### Recommended setup command
+
+Use the poly-only secrets flow instead of the full shared/operator inventory:
+
+```bash
+pnpm setup:secrets:poly --env candidate-a
+```
+
+That scopes the prompt flow to:
+
+- `POLYGON_RPC_URL`
+- `PRIVY_USER_WALLETS_*`
+- `POLY_WALLET_*`
+
 ## Troubleshooting
 
 **Privy SDK connection timeout:** IPv6 issue with Cloudflare. Run with `node --dns-result-order=ipv4first`.

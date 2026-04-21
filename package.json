@@ -84,6 +84,7 @@
     "db:setup": "pnpm db:provision && pnpm db:migrate && pnpm db:seed && pnpm db:seed:doltgres",
     "dev:setup": "pnpm db:setup && pnpm db:setup:test && pnpm governance:schedules:sync",
     "setup:secrets": "tsx scripts/setup-secrets.ts",
+    "setup:secrets:poly": "tsx scripts/setup-secrets.ts --poly",
     "db:migrate:test:poly": "dotenv -e .env.test -- bash -c 'DATABASE_URL=$DATABASE_URL_POLY tsx node_modules/drizzle-kit/bin.cjs migrate --config=nodes/poly/drizzle.config.ts'",
     "db:migrate:test:resy": "dotenv -e .env.test -- bash -c 'DATABASE_URL=$DATABASE_URL_RESY tsx node_modules/drizzle-kit/bin.cjs migrate --config=nodes/resy/drizzle.config.ts'",
     "db:migrate:test:nodes": "pnpm db:migrate:test && pnpm db:migrate:test:poly && pnpm db:migrate:test:resy",

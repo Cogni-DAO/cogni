@@ -62,7 +62,7 @@ export interface PrivyOperatorWalletConfig {
   appId: string;
   /** Privy application secret */
   appSecret: string;
-  /** Privy signing key for signed requests (base64-encoded PKCS8) */
+  /** Privy signing key for signed requests (wallet-auth:... token) */
   signingKey: string;
   /** Expected operator wallet address from repo-spec (checksummed) */
   expectedAddress: string;

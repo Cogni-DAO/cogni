@@ -11,9 +11,12 @@
  *
  * Usage:
  *   pnpm setup:secrets                        # walk through missing secrets (all envs)
- *   pnpm setup:secrets --env canary           # only canary environment
- *   pnpm setup:secrets --env canary --all     # canary, including already-set
- *   pnpm setup:secrets --env canary --auto    # auto-generate missing agent secrets, only prompt for human ones
+ *   pnpm setup:secrets --env candidate-a      # only candidate-a environment
+ *   pnpm setup:secrets --env candidate-a --all # candidate-a, including already-set
+ *   pnpm setup:secrets --env candidate-a --auto # auto-generate missing agent secrets, only prompt for human ones
+ *   pnpm setup:secrets --poly                 # only poly-related secrets (all envs)
+ *   pnpm setup:secrets --poly --env candidate-a # only poly secrets for candidate-a
+ *   pnpm setup:secrets:poly --env candidate-a # same poly-only flow via package.json alias
  *   pnpm setup:secrets --required             # only required secrets
  *   pnpm setup:secrets --all                  # walk through everything (including already-set)
  *   pnpm setup:secrets --only DISCORD         # just secrets matching "DISCORD"
@@ -205,6 +208,19 @@ const SECRETS: Secret[] = [
     steps: [
       "Create a new app (chain: Base mainnet)",
       "Copy the full HTTPS URL including API key",
+    ],
+  },
+  {
+    name: "POLYGON_RPC_URL",
+    required: false,
+    category: "Polymarket / RPC",
+    source: "human",
+    description: "Polygon mainnet RPC endpoint for poly runtime reads",
+    url: "https://dashboard.alchemy.com/",
+    steps: [
+      "Create a new app (chain: Polygon mainnet)",
+      "Copy the full HTTPS URL including API key",
+      "Used by poly-node for Polygon balances / allowance reads",
     ],
   },
   {
@@ -666,13 +682,91 @@ const SECRETS: Secret[] = [
     required: false,
     category: "Operator Wallet (Privy)",
     source: "human",
-    description: "Privy EC signing key (PEM)",
+    description: "Privy wallet auth signing key (wallet-auth:...)",
     url: "https://dashboard.privy.io",
     steps: [
-      "App Settings",
-      "Copy Signing Key",
-      "Paste full PEM including newlines",
+      "Settings -> Authorization",
+      "Generate or copy signing key",
+      "Paste the full wallet-auth:... value",
     ],
+  },
+
+  // ── Optional: Poly Wallets (Privy, per-tenant) ─────────────────────────
+  {
+    name: "PRIVY_USER_WALLETS_APP_ID",
+    required: false,
+    category: "Poly Wallets (Privy)",
+    source: "human",
+    description: "Privy app ID for per-tenant Poly trading wallets",
+    url: "https://dashboard.privy.io",
+    steps: [
+      "Open the dedicated user-wallets Privy app",
+      "Settings -> Basics",
+      "Copy App ID",
+    ],
+  },
+  {
+    name: "PRIVY_USER_WALLETS_APP_SECRET",
+    required: false,
+    category: "Poly Wallets (Privy)",
+    source: "human",
+    description: "Privy app secret for per-tenant Poly trading wallets",
+    url: "https://dashboard.privy.io",
+    steps: [
+      "Open the dedicated user-wallets Privy app",
+      "Settings -> Basics",
+      "Create or copy App Secret",
+    ],
+  },
+  {
+    name: "PRIVY_USER_WALLETS_SIGNING_KEY",
+    required: false,
+    category: "Poly Wallets (Privy)",
+    source: "human",
+    description: "Privy wallet auth key for per-tenant Poly trading wallets",
+    url: "https://dashboard.privy.io",
+    steps: [
+      "Open the dedicated user-wallets Privy app",
+      "Settings -> Authorization",
+      "Generate or copy signing key",
+      "Paste the full wallet-auth:... value",
+    ],
+  },
+  {
+    name: "POLY_WALLET_AEAD_KEY_HEX",
+    required: false,
+    category: "Poly Wallets (Privy)",
+    source: "agent",
+    description: "AES-256-GCM key for encrypting tenant Poly wallet CLOB creds",
+    steps: [
+      "Auto-generated 32-byte hex key",
+      "Stored as the at-rest encryption key for poly_wallet_connections ciphertext",
+    ],
+    generate: () => randHex(32),
+  },
+  {
+    name: "POLY_WALLET_AEAD_KEY_ID",
+    required: false,
+    category: "Poly Wallets (Privy)",
+    source: "agent",
+    description: "Key-ring label for POLY_WALLET_AEAD_KEY_HEX",
+    steps: [
+      'Convention: "v1"',
+      "Bump only when rotating POLY_WALLET_AEAD_KEY_HEX",
+    ],
+    generate: () => "v1",
+  },
+  {
+    name: "POLY_WALLET_ALLOW_STUB_CREDS",
+    required: false,
+    category: "Poly Wallets (Privy)",
+    source: "agent",
+    description: "Temporary B2 plumbing gate for stub Polymarket CLOB creds",
+    steps: [
+      'Set to "1" while the real createOrDeriveApiKey factory is not wired',
+      "Remove or stop using once the real per-tenant CLOB creds path ships",
+    ],
+    generate: () => "1",
   },
 
   // ── Optional: Polymarket CLOB (L2 API creds derived from Privy wallet) ──
@@ -797,14 +891,16 @@ const SECRETS: Secret[] = [
 
 const REPO = "Cogni-DAO/node-template";
 /** Deploy environments. Secrets are set per-env, not repo-level. */
-const ENVIRONMENTS = ["preview", "canary", "production"] as const;
+const ENVIRONMENTS = ["candidate-a", "preview", "production"] as const;
+const LEGACY_ENV_ALIASES: Record<string, (typeof ENVIRONMENTS)[number]> = {
+  canary: "candidate-a",
+};
 
 /** Track secret values per environment for .env file generation */
-const envSecretValues: Record<string, Record<string, string>> = {
-  preview: {},
-  canary: {},
-  production: {},
-};
+const envSecretValues: Record<
+  string,
+  Record<string, string>
+> = Object.fromEntries(ENVIRONMENTS.map((env) => [env, {}]));
 
 const DIM = "\x1b[2m";
 const RESET = "\x1b[0m";
@@ -913,6 +1009,14 @@ function applyTransform(secret: Secret, value: string): string {
   return secret.transform ? secret.transform(v) : v;
 }
 
+function isPolySecret(secret: Secret): boolean {
+  return (
+    secret.name === "POLYGON_RPC_URL" ||
+    secret.name.startsWith("POLY_") ||
+    secret.name.startsWith("PRIVY_USER_WALLETS_")
+  );
+}
+
 // ── Database DSN helpers ─────────────────────────────────────────────────────
 
 const dbPasswords: Record<string, string> = {};
@@ -976,6 +1080,7 @@ function printSecretHeader(
 async function main() {
   const args = process.argv.slice(2);
   const showAll = args.includes("--all");
+  const polyOnly = args.includes("--poly");
   const filterRequired = args.includes("--required");
   const autoGenerate = args.includes("--auto");
   // --only DISCORD,SONAR  or  --only DISCORD_OAUTH_CLIENT_ID
@@ -988,9 +1093,12 @@ async function main() {
     .filter(Boolean);
 
   // --env canary  or  --env=canary  (target a single environment)
-  const envArg =
+  const rawEnvArg =
     args.find((a) => a.startsWith("--env="))?.slice(6) ||
     (args.includes("--env") ? args[args.indexOf("--env") + 1] : undefined);
+  const envArg = rawEnvArg
+    ? (LEGACY_ENV_ALIASES[rawEnvArg] ?? rawEnvArg)
+    : undefined;
   const targetEnvs: (typeof ENVIRONMENTS)[number][] = envArg
     ? [envArg as (typeof ENVIRONMENTS)[number]]
     : [...ENVIRONMENTS];
@@ -1005,8 +1113,17 @@ async function main() {
     process.exit(1);
   }
 
+  if (rawEnvArg === "canary") {
+    console.log(
+      `  ${YELLOW}Legacy alias detected:${RESET} canary -> candidate-a\n`
+    );
+  }
+
   if (envArg) {
     console.log(`  ${CYAN}Targeting environment: ${envArg}${RESET}\n`);
+  }
+  if (polyOnly) {
+    console.log(`  ${CYAN}Poly mode:${RESET} only poly-related secrets\n`);
   }
 
   // Fetch current secret status for target environments
@@ -1015,10 +1132,11 @@ async function main() {
     envSecretSets[env] = getSetSecrets(env);
   }
   const repoSecrets = getRepoSecrets();
+  const inventorySecrets = polyOnly ? SECRETS.filter(isPolySecret) : SECRETS;
 
   // Print inventory for target environments only
   console.log(
-    `\n${BOLD}  Secret Inventory — ${REPO} (${targetEnvs.join(", ")})${RESET}\n`
+    `\n${BOLD}  Secret Inventory${polyOnly ? " (poly)" : ""} — ${REPO} (${targetEnvs.join(", ")})${RESET}\n`
   );
   console.log(
     `  ${"SECRET".padEnd(42)} ${"LEVEL".padEnd(8)} ${"STATUS".padEnd(22)} ${"SOURCE"}`
@@ -1027,7 +1145,7 @@ async function main() {
     `  ${"─".repeat(42)} ${"─".repeat(8)} ${"─".repeat(22)} ${"─".repeat(8)}`
   );
   let lastCat = "";
-  for (const s of SECRETS) {
+  for (const s of inventorySecrets) {
     if (s.category !== lastCat) {
       console.log(`\n  ${DIM}${s.category}${RESET}`);
       lastCat = s.category;
@@ -1051,7 +1169,7 @@ async function main() {
   }
   console.log("");
 
-  let filtered = SECRETS;
+  let filtered = inventorySecrets;
   if (onlyPatterns) {
     filtered = filtered.filter((s) =>
       onlyPatterns.some((p) => s.name.includes(p))

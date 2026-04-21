@@ -156,7 +156,7 @@ Expect non-zero USDC.e balance, three `MaxUint256` USDC.e allowances, and two CT
 ```bash
 # Polymarket Prototype Wallet (custody-isolated from OPERATOR_WALLET_ADDRESS)
 POLY_PROTO_WALLET_ADDRESS=0x...                  # from step 2
-POLY_PROTO_PRIVY_SIGNING_KEY="-----BEGIN EC PRIVATE KEY-----\n…"  # generated in dashboard
+POLY_PROTO_PRIVY_SIGNING_KEY=wallet-auth:MIGHAgEA...              # generated in dashboard
 POLY_CLOB_API_KEY=<uuid>                          # from step 5
 POLY_CLOB_API_SECRET=<base64>
 POLY_CLOB_PASSPHRASE=<hex>
