@@ -414,6 +414,8 @@ volumes:
 
 **Verify locally:** Touch a file under `services/<name>/` and run `scripts/ci/detect-affected.sh` with `TURBO_SCM_BASE=origin/main TURBO_SCM_HEAD=HEAD`. Your service should appear in the `targets` CSV and `targets_json` array.
 
+> **Stale-seed gotcha:** Main's overlay `digest:` field is a _seed_, bumped only when a flight's PR explicitly affects your service. On every unrelated flight, the deploy branch is rsynced from main's seed and then `promote-k8s-image.sh` bumps affected apps only — so if your service's source hasn't changed in weeks, deploy branches silently revert to whatever digest was last hand-bumped on main. Root cause class behind #970 (migrators) and #971 (scheduler-worker chat hang). Until auto-refresh-on-merge lands (see `docs/spec/ci-cd.md` Known Unknowns), maintainers must periodically bump their service's main-overlay digest — find the latest `preview-<main-sha>-<service>` tag on GHCR and copy its digest into `infra/k8s/overlays/{preview,candidate-a}/<service>/kustomization.yaml`.
+
 #### 9b. Wire into the Argo catalog
 
 Argo CD ApplicationSets are catalog-driven (task.0247). The catalog is the single declaration; each environment (candidate-a, preview, production) templates from it.

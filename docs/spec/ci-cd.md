@@ -252,6 +252,7 @@ Every deploy branch carries `.promote-state/source-sha-by-app.json` — a merge-
 
 - Deploy branches are long-lived, machine-written environment-state refs.
 - `infra/k8s/` tracks `main` under invariant `INFRA_K8S_MAIN_DERIVED` (Axiom 17). Only image digests (mutated by `promote-k8s-image.sh`) and `env-state.yaml` files (written by provision) are allowed to differ from main. All other overlay content — ConfigMap patches, Service patches, resource lists, `replacements:` blocks — is rsynced from main every promote.
+- **Main's overlay image digests are a _seed_, not placeholders.** Every flight runs `rsync -a --delete app-src/infra/k8s/overlays/<env>/ deploy-branch/...`, which copies main's current digests onto the deploy branch. `promote-k8s-image.sh` then bumps only the _affected_ apps (those whose source changed in the flight's PR, per `scripts/ci/detect-affected.sh`). Services not affected by a given flight's PR inherit main's seed. **If the seed is stale, those services revert to the stale digest on every unrelated flight** — the root cause class behind #970 (migrator stale image) and #971 (scheduler-worker multi-queue). Today no automation refreshes main's overlay digests on merge; maintainers of a long-lived service that isn't touched by every PR must periodically bump its main-overlay digest manually, or accept silent regression. Closing this properly (auto-bump on merge) is tracked under Known Unknowns.
 - They are never merged back into app branches.
 - PRs are not required for routine automated deploy-state updates; git history is the audit trail.
 - Push access on `deploy/*` should be restricted to the CI app or bot, with incident-only human bypass if needed.
@@ -267,6 +268,8 @@ Track these explicitly during the spec rewrite, following the CI/CD scorecard st
       Decide what stays in the authoritative v0 gate versus what remains advisory, and define how smoke tests, richer black-box E2E, and post-merge validation divide across the PR lane and main lane.
 - [ ] **Git-manager agent as a first-class control-plane actor**
       Define whether a git-manager style agent owns PR build tracking, candidate slot coordination, deploy-branch promotion, and status reporting, or whether those responsibilities stay in plain workflows with agent assistance around them.
+- [ ] **Auto-refresh main's overlay digests on merge**
+      Today main's `infra/k8s/overlays/*/{service}/kustomization.yaml` digest fields are manually-maintained seeds. Flights rsync main's values into deploy branches, then bump only affected apps. Services unchanged by a given PR inherit stale seeds (#970 migrators, #971 scheduler-worker). Design needed: on PR merge to main, if any `services/<name>/` or `nodes/<name>/` path changed, commit the built image digest back to main's overlay for that service in preview + candidate-a. Closes the silent-regression class permanently.
 - [ ] **OpenFeature flags**
       Decide how feature flags reduce PR scope, shrink risky surface area, and let code merge when safe without requiring every incomplete capability to be fully user-exposed.
 - [ ] **Merge queue integration later**
