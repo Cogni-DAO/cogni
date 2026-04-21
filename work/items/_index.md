@@ -168,6 +168,7 @@
 | 1 | 99 | 2 | needs_triage | story.0193 | Lobster Racing: competitive OpenClaw agents funded by web3 wallets |  |  |
 | 1 | 99 | 2 | needs_triage | spike.0194 | Spike: Lobster Racing infrastructure and provisioning research |  |  |
 | 1 | 99 | 3 | needs_research | spike.0263 | Spike: agent contributor protocol — communication mechanism + workflow design | Development Workflows | proj.development-workflows |
+| 1 | 99 | 2 | needs_review | bug.0343 | Candidate-a poly flights inherit ancient poly-migrator digest — doltgres PreSync hook fails intermittently |  |  |
 | 2 | 0 | 2 | needs_triage | task.0109 | Expand GitHub adapter — PR comments, review comments, issue creation | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 2 | 2 | 3 | needs_design | task.0238 | Agent avatars — Rive/Lottie animated characters on run cards and chat | Premium Frontend UX | proj.premium-frontend-ux |
 | 2 | 3 | 1 | needs_triage | bug.0012 | pre-commit check:docs validates all files, not just staged — blocks unrelated commits |  |  |
