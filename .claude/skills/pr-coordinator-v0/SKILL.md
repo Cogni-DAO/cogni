@@ -220,14 +220,17 @@ Candidate-a deploy has two orthogonal workflows. Pick the right one for the PR:
 Dispatch:
 
 ```bash
-# App lever
+# App lever — always flights the PR's head SHA, no ref needed
 gh workflow run candidate-flight.yml --repo Cogni-DAO/node-template -f pr_number=<N>
 
-# Infra lever (after infra PR merges to main)
+# Infra lever — default dispatch sources scripts + infra/compose from main
 gh workflow run candidate-flight-infra.yml --repo Cogni-DAO/node-template
+
+# Infra lever — pre-merge validation of a PR branch's deploy-infra.sh / infra/compose changes
+gh workflow run candidate-flight-infra.yml --repo Cogni-DAO/node-template --ref <branch>
 ```
 
-**Infra PRs are merge-then-deploy in v0.** The infra lever sources from `main` only — infra changes must merge first and then be dispatched to candidate-a. This is the documented tradeoff in task.0314; v1 may add per-PR ref passthrough.
+**Infra PRs can flight pre-merge via `--ref` (task.0345).** Both the workflow's scripts checkout and `inputs.ref` default to the dispatch ref, so `gh workflow run candidate-flight-infra.yml --ref <branch>` runs that branch's `scripts/ci/deploy-infra.sh` and rsyncs that branch's `infra/compose/**`. Use this when the PR touches the infra lever's reconciliation logic itself. Compose-config-only changes can still merge-first-then-dispatch — smaller blast radius, same outcome.
 
 **Drift rule.** An agent or human who merges an `infra/compose/**` change to `main` is responsible for dispatching `candidate-flight-infra.yml` in the same turn. Preview/prod handles this automatically via `promote-and-deploy.yml`'s sequential jobs on every merge.
 
