@@ -168,6 +168,12 @@ Root cause turned out to be orderMinSize × price (tracked as bug.0342 by parall
 
 When bug.0342 ships and the next silent reject appears, the Loki line will read `error_code: invalid_price_or_tick` (or similar) instead of the opaque empty-string signature.
 
+## Followups (2026-04-22)
+
+The single-operator wallet is purged as of task.0318 Phase B3 (PR #990); this bug's surface is now dormant on the old path. The **same root-cause class** (EOA with no approvals → CLOB empty-reject) applies identically to every fresh per-tenant Privy wallet, so we are productizing the approvals flow instead of leaning on the raw-PK experiment script:
+
+- See [task.0355 — Poly trading wallet: Enable Trading (token approvals + readiness gate)](./task.0355.poly-trading-wallet-enable-trading.md). Port method, HTTP route, Money-page button, `APPROVALS_BEFORE_PLACE` invariant on `authorizeIntent` so every future placement fails loudly (`trading_not_ready`) instead of silently empty-rejecting at the CLOB.
+
 ## Pointers
 
 - `packages/market-provider/src/adapters/polymarket/polymarket.clob.adapter.ts` — adapter that builds the empty-error string

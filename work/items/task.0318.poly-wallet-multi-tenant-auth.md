@@ -208,7 +208,7 @@ In CP3.1.5 we deleted `PolymarketOrderSigner` + `OperatorWalletPort.signPolymark
   - Reconciler stays single, operator-wide (BYPASSRLS via `serviceDb`).
 
 - [x] **A7 — Delete `COPY_TRADE_TARGET_WALLETS` env var (and its CI plumbing)**
-  - Remove from `nodes/poly/app/src/shared/env/server-env.ts`, `.env.local.example`, and any remaining skill references (`.claude/skills/poly-copy-trading/SKILL.md` covers the `envTargetSource` local-dev-only caveat). Update `MOCK_SERVER_ENV` test fixture.
+  - Remove from `nodes/poly/app/src/shared/env/server-env.ts`, `.env.local.example`, `.claude/skills/poly-dev-expert/SKILL.md`. Update `MOCK_SERVER_ENV` test fixture.
   - **CI plumbing added by PR #932 commit `3e61f45f1`** (must be removed in the same A7 commit so nothing orphans):
     - `.github/workflows/candidate-flight-infra.yml` — drop the `COPY_TRADE_TARGET_WALLETS: ${{ secrets.COPY_TRADE_TARGET_WALLETS }}` env line
     - `scripts/ci/deploy-infra.sh` — drop the `COPY_TRADE_TARGET_WALLETS=${COPY_TRADE_TARGET_WALLETS:-}` declaration and the forwarded env var on the SSH command
@@ -362,6 +362,8 @@ See [docs/spec/poly-multi-tenant-auth.md § Decisions](../../docs/spec/poly-mult
 
 - `exercise:` On `candidate-a`, (1) sign into the poly app and call `POST /api/v1/poly/wallet/connect` on a tenant that has never provisioned before — verify the response carries a `defaultGrant` block (`{ id, scopes: ["poly:place_intent", "poly:close_position"], max_per_trade_usdc, max_per_day_usdc, expires_at }`) alongside the connection fields. (2) Visit `/profile` and confirm the two horizontal sliders for **Max per trade** and **Max per day** render against real data and round-trip edits through `PATCH /api/v1/poly/wallet/grants/default`. (3) From the same tenant, fund the Privy wallet with ~$5 USDC.e + ~$0.1 MATIC and wait for the autonomous mirror pipeline tick (≤30 s). The place-intent path MUST go through `PolyTradeExecutorFactory.getPolyTradeExecutorFor(billing_account_id)` — no more shared operator wallet. Validate by calling `GET /api/v1/poly/copy-trade/orders` and confirming a new row exists with a Polymarket `order_id`.
 - `observability:` Query Loki at the deployed SHA with `{job="poly-node-app",sha="<sha>"} |= "mirror_pipeline.placed"` and confirm each placement log line carries `billing_account_id=<your tenant>`, `executor_source="per_tenant"`, and a non-null `order_id`. Secondary gate: `{job="poly-node-app",sha="<sha>"} |= "poly.wallet.authorize_intent"` shows the grant-id + scope check fired **before** the Polymarket CLOB call. Negative signal: zero occurrences of `polyTradeBundle` or `POLY_PROTO_WALLET_ADDRESS` in any log line at the deployed SHA — the prototype is fully purged.
+
+> **Blocker for `deploy_verified: true`:** exercise step (3) requires the tenant wallet to have Polymarket token approvals set (3× USDC.e `approve` + 2× CTF `setApprovalForAll`). Today these are only available as a raw-PK experiment script, so the exercise above is not executable by an onboarded user. Productizing this is [task.0355](./task.0355.poly-trading-wallet-enable-trading.md); it lands the port method, route, Money-page button, and the `APPROVALS_BEFORE_PLACE` invariant on `authorizeIntent`. Phase B3's code gate (`status: done`) is independent — the flight gate is what's blocked.
 
 ## Review Feedback (revision 1 — 2026-04-19)
 

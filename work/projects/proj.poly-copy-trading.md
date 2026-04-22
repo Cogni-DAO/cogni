@@ -49,17 +49,18 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 
 > **Active.** Phase A shipped tenant-scoped copy-trade rows + RLS. Phase B (PR #968) shipped the port + schema + adapter + connect route + env plumbing. Phase B3 (this branch) ships the per-tenant trade executor, grants table, `authorizeIntent` cap/scope enforcement, and a full cutover of the single-operator prototype — `PolyTradeExecutorFactory` is now the only placement path. Remaining gate: `deploy_verified: true` via candidate-a e2e.
 
-| Deliverable                                                                                            | Status         | Est | Work Item                                                                 |
-| ------------------------------------------------------------------------------------------------------ | -------------- | --- | ------------------------------------------------------------------------- |
-| Per-user operator wallet binding + durable `WalletGrant` (RLS on copy-trade tables shipped in Phase A) | In Review (B3) | 5   | [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md) Phase B  |
-| Per-tenant trade executor + `authorizeIntent` cap/scope gate + prototype purge (full cutover)          | In Review      | 3   | [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md) Phase B3 |
-| Signing-backend decision (Safe+4337 vs Privy-per-user vs Turnkey) — resolved to Privy-per-user for v0  | Done           | 2   | (inline in task.0318)                                                     |
-| User-wallet orphan sweep for the dedicated Privy app (ops hygiene, not v0 trading path)                | Needs Design   | 2   | [task.0348](../items/task.0348.poly-wallet-orphan-sweep.md)               |
-| Per-tenant wallet preferences + copy-trade sizing config (retire hardcoded funding + caps)             | Needs Design   | 3   | [task.0347](../items/task.0347.poly-wallet-preferences-sizing-config.md)  |
-| Trading wallet withdrawal — `withdrawUsdc` adapter + route + dialog (replaces stubbed button on Money) | Needs Triage   | 3   | [task.0351](../items/task.0351.poly-trading-wallet-withdrawal.md)         |
-| Trading wallet one-click fund flow — Polygon in wagmi + `trading_wallet_funding` repo-spec + dialog    | Needs Design   | 3   | [task.0352](../items/task.0352.poly-trading-wallet-fund-flow.md)          |
-| Money page v0 — hybrid AI-credits + trading-wallet panel; nav label Money, route `/credits`            | Done           | 2   | [task.0353](../items/task.0353.poly-money-page-v0.md)                     |
-| Trading hardening — executor cache, cap-source column, prototype residue, agent tool re-enable         | Needs Triage   | 3   | [task.0354](../items/task.0354.poly-trading-hardening-followups.md)       |
+| Deliverable                                                                                                 | Status         | Est | Work Item                                                                 |
+| ----------------------------------------------------------------------------------------------------------- | -------------- | --- | ------------------------------------------------------------------------- |
+| Per-user operator wallet binding + durable `WalletGrant` (RLS on copy-trade tables shipped in Phase A)      | In Review (B3) | 5   | [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md) Phase B  |
+| Per-tenant trade executor + `authorizeIntent` cap/scope gate + prototype purge (full cutover)               | In Review      | 3   | [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md) Phase B3 |
+| Signing-backend decision (Safe+4337 vs Privy-per-user vs Turnkey) — resolved to Privy-per-user for v0       | Done           | 2   | (inline in task.0318)                                                     |
+| User-wallet orphan sweep for the dedicated Privy app (ops hygiene, not v0 trading path)                     | Needs Design   | 2   | [task.0348](../items/task.0348.poly-wallet-orphan-sweep.md)               |
+| Per-tenant wallet preferences + copy-trade sizing config (retire hardcoded funding + caps)                  | Needs Design   | 3   | [task.0347](../items/task.0347.poly-wallet-preferences-sizing-config.md)  |
+| Trading wallet withdrawal — `withdrawUsdc` adapter + route + dialog (replaces stubbed button on Money)      | Needs Triage   | 3   | [task.0351](../items/task.0351.poly-trading-wallet-withdrawal.md)         |
+| Trading wallet one-click fund flow — Polygon in wagmi + `trading_wallet_funding` repo-spec + dialog         | Needs Design   | 3   | [task.0352](../items/task.0352.poly-trading-wallet-fund-flow.md)          |
+| Money page v0 — hybrid AI-credits + trading-wallet panel; nav label Money, route `/credits`                 | Done           | 2   | [task.0353](../items/task.0353.poly-money-page-v0.md)                     |
+| Enable Trading — 3×USDC.e approve + 2×CTF setApprovalForAll port + Money-page flow (blocks deploy_verified) | Needs Design   | 5   | [task.0355](../items/task.0355.poly-trading-wallet-enable-trading.md)     |
+| Trading hardening — executor cache, cap-source column, prototype residue, agent tool re-enable              | Needs Triage   | 3   | [task.0354](../items/task.0354.poly-trading-hardening-followups.md)       |
 
 ### Phase 4 (P4) — Streaming + adversarial-robust ranking
 
@@ -94,6 +95,7 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 - [x] `poly_copy_trade_fills.synced_at` column — task.0328 migration 0028
 - [ ] Target wallet must be onboarded with USDC.e + CTF approvals — per `scripts/experiments/onboard-raw-pk-wallet.ts`
 - [ ] Operator wallet must maintain USDC.e balance + allowances — **currently broken on candidate-a, see bug.0335**
+- [ ] Per-tenant wallet must complete Polymarket approvals (3× USDC.e approve + 2× CTF setApprovalForAll) before first trade — productized in [task.0355](../items/task.0355.poly-trading-wallet-enable-trading.md); blocks task.0318 Phase B3 `deploy_verified: true`
 
 ## As-Built Specs
 
