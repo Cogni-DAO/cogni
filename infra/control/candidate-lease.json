@@ -1,10 +1,5 @@
 {
   "slot": "candidate-a",
-  "state": "failed",
-  "released_at": "2026-04-22T02:45:02.349733Z",
-  "last_owner": {
-    "pr_number": 978,
-    "head_sha": "d148b783ed14f1d784adca5db79015775d44db3f",
-    "run_id": "24757175059"
-  }
+  "state": "free",
+  "released_at": "2026-04-22T04:15:00.000000Z"
 }
