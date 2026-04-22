@@ -16,7 +16,7 @@ images:
     newName: ghcr.io/cogni-dao/cogni-template
     newTag: "prod-placeholder-operator"
   - name: ghcr.io/cogni-dao/cogni-template-migrate
-    newName: ghcr.io/cogni-dao/cogni-template-migrate
+    newName: ghcr.io/cogni-dao/cogni-template
     newTag: "prod-placeholder-operator"
 
 patches:

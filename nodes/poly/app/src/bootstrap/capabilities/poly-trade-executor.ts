@@ -111,6 +111,20 @@ export interface ClosePositionParams {
   client_order_id: `0x${string}`;
 }
 
+export interface OpenOrderSummary {
+  orderId: string;
+  marketId: string | null;
+  tokenId: string | null;
+  outcome: string | null;
+  side: "BUY" | "SELL" | null;
+  price: number | null;
+  originalShares: number | null;
+  matchedShares: number | null;
+  remainingUsdc: number | null;
+  submittedAt: string;
+  status: string;
+}
+
 /** Thrown when `closePosition` finds no open position for the given tokenId. */
 export class PolyTradeExecutorError extends Error {
   constructor(
@@ -155,6 +169,8 @@ export interface PolyTradeExecutor {
   getMarketConstraints: (
     tokenId: string
   ) => Promise<{ minShares: number; minUsdcNotional?: number }>;
+  /** Per-tenant live open orders from the CLOB. */
+  listOpenOrders: () => Promise<OpenOrderSummary[]>;
   /** The tenant's current EOA address (used for profile URLs + position queries). */
   readonly funderAddress: `0x${string}`;
 }
@@ -373,10 +389,64 @@ async function buildExecutor(
     listPositions: () => dataApiClient.listUserPositions(funderAddress),
     getOrder: adapter.getOrder.bind(adapter),
     getMarketConstraints: adapter.getMarketConstraints.bind(adapter),
+    listOpenOrders: async () =>
+      (await adapter.listOpenOrders()).map(mapOpenOrderSummary),
     funderAddress,
   };
 
   return { executor, funderAddress };
+}
+
+function mapOpenOrderSummary(
+  order: Awaited<
+    ReturnType<
+      import("@cogni/market-provider/adapters/polymarket").PolymarketClobAdapter["listOpenOrders"]
+    >
+  >[number]
+): OpenOrderSummary {
+  const attrs = (order.attributes ?? {}) as Record<string, unknown>;
+  const price = readFinite(attrs.price);
+  const originalShares = readFinite(attrs.originalSize);
+  const matchedShares = readFinite(attrs.sizeMatched) ?? 0;
+  const side =
+    attrs.side === "BUY" || attrs.side === "SELL" ? attrs.side : null;
+  const remainingShares =
+    originalShares !== null
+      ? Math.max(0, originalShares - matchedShares)
+      : null;
+  const remainingUsdc =
+    price !== null && remainingShares !== null
+      ? roundToCents(price * remainingShares)
+      : null;
+
+  return {
+    orderId: order.order_id,
+    marketId: typeof attrs.market === "string" ? attrs.market : null,
+    tokenId: typeof attrs.tokenId === "string" ? attrs.tokenId : null,
+    outcome: typeof attrs.outcome === "string" ? attrs.outcome : null,
+    side,
+    price,
+    originalShares,
+    matchedShares,
+    remainingUsdc,
+    submittedAt: order.submitted_at,
+    status: order.status,
+  };
+}
+
+function readFinite(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function roundToCents(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function adaptLogger(pinoLogger: Logger): LoggerPort {

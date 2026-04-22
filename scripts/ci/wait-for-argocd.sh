@@ -233,7 +233,19 @@ wait_for_app() {
     HEALTH=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "Unknown")
     SYNC_PHASE=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.phase}' 2>/dev/null || echo "")
 
-    if [ "$REV" = "$EXPECTED_SHA" ] && [ "$HEALTH" = "Healthy" ]; then
+    # Decide whether to proceed to the authoritative kubectl rollout check.
+    # Only accept: Healthy, OR Progressing when sync operation completed.
+    # The kubectl rollout check is the real gate — health is just the preliminary filter.
+    can_proceed_to_rollout_check() {
+      local health="$1"
+      local phase="$2"
+      [ "$health" = "Healthy" ] && return 0
+      [ "$health" = "Progressing" ] && [ "$phase" = "Succeeded" ] && return 0
+      return 1
+    }
+
+    # First verify revision matches, then check if we can proceed to rollout
+    if [ "$REV" = "$EXPECTED_SHA" ] && can_proceed_to_rollout_check "$HEALTH" "$SYNC_PHASE"; then
       # bug.0326: sync.revision + health.status are Argo-Application-level
       # signals. During a rolling update, "Healthy" fires as soon as enough
       # pods are Ready — which includes the OLD ReplicaSet's pods. /version
@@ -264,7 +276,7 @@ wait_for_app() {
     sleep 10
   done
 
-  echo "  ❌ ${app_name} timed out (rev=${REV:0:8} expected=${EXPECTED_SHA:0:8} health=${HEALTH})"
+  echo "  ❌ ${app_name} timed out (rev=${REV:0:8} health=${HEALTH} phase=${SYNC_PHASE})"
   kubectl -n argocd get application "$app_name" -o jsonpath='{.status.sync.status} {.status.health.status} phase={.status.operationState.phase} msg={.status.operationState.message}{"\n"}' 2>/dev/null || true
   return 1
 }
@@ -282,7 +294,11 @@ done
 if [ $FAILED -ne 0 ]; then
   echo ""
   echo "❌ ArgoCD reconcile failed for one or more apps"
-  kubectl -n argocd get applications -o wide 2>/dev/null || true
+  # Only dump apps we're waiting for, not all argocd apps
+  for app in "${APPS[@]}"; do
+    APP_NAME="${DEPLOY_ENVIRONMENT}-${app}"
+    kubectl -n argocd get application "$APP_NAME" -o jsonpath='{.metadata.name} {.status.sync.status} {.status.health.status} phase={.status.operationState.phase}{"\n"}' 2>/dev/null || true
+  done
   exit 1
 fi
 

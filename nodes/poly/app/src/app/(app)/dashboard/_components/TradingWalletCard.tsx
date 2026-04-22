@@ -3,27 +3,24 @@
 
 /**
  * Module: `@app/(app)/dashboard/_components/TradingWalletCard`
- * Purpose: Dashboard tile — caller's own per-tenant Polymarket trading-wallet
- *          snapshot (funder address + USDC.e + POL gas). Replaces the
- *          purged single-operator `OperatorWalletCard`.
- * Scope: Client component. React Query poll against `/api/v1/poly/wallet/balances`
- *        (plural). Read-only.
+ * Purpose: Dashboard tile — caller's own per-tenant trading-wallet summary:
+ *          address, gas, and one coherent live balance model across
+ *          available cash, locked open orders, and live positions.
+ * Scope: Client component. React Query poll against `/api/v1/poly/wallet/overview`.
+ *        Read-only.
  * Invariants:
- *   - TENANT_SCOPED: the backing route resolves the caller's own
- *     `funder_address` from the session — no address plumbing at the UI
- *     boundary.
- *   - PARTIAL_FAILURE_VISIBLE: USDC.e / POL render as "—" when the RPC
- *     read errored for just that field; the card stays up.
- *   - NO_RAW_ERRORS: adapter error strings are never rendered directly —
- *     only a compact pill / "retry shortly" copy.
+ *   - TENANT_SCOPED: the backing route resolves the caller's own wallet from
+ *     the session — no address plumbing at the UI boundary.
+ *   - NO_TOMBSTONE_ROUTE: never reads the legacy `/api/v1/poly/wallet/balance`
+ *     route.
+ *   - NO_FAKE_HISTORY: this card renders current wallet truth only.
  * Side-effects: IO (via React Query).
- * Links: packages/node-contracts/src/poly.wallet.balances.v1.contract.ts,
- *        nodes/poly/app/src/app/(app)/credits/TradingWalletPanel.tsx
  * @public
  */
 
 "use client";
 
+import type { PolyWalletOverviewOutput } from "@cogni/node-contracts";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import type { ReactElement } from "react";
@@ -34,6 +31,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components";
+import { BalanceBar } from "@/features/wallet-analysis";
 import { cn } from "@/shared/util/cn";
 import { fetchTradingWallet } from "../_api/fetchTradingWallet";
 
@@ -43,6 +41,14 @@ function formatDecimal(n: number | null, fractionDigits: number): string {
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
   });
+}
+
+function formatUsd(n: number | null): string {
+  if (n === null) return "—";
+  return `$${n.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 export function TradingWalletCard(): ReactElement {
@@ -55,21 +61,29 @@ export function TradingWalletCard(): ReactElement {
     retry: 1,
   });
 
-  const lowGas = data?.connected === true && (data.pol ?? 0) <= 0.1;
-  const noGas = data?.connected === true && (data.pol ?? 0) <= 0;
+  const lowGas = data?.connected === true && (data.pol_gas ?? 0) <= 0.1;
+  const noGas = data?.connected === true && (data.pol_gas ?? 0) <= 0;
+  const fullBreakdown = hasOverviewBreakdown(data)
+    ? {
+        available: data.usdc_available,
+        locked: data.usdc_locked,
+        positions: data.usdc_positions_mtm,
+        total: data.usdc_total,
+      }
+    : null;
 
   return (
     <Card>
       <CardHeader className="px-5 py-3">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
             Trading Wallet
           </CardTitle>
-          <div className="flex items-center gap-2 text-xs">
-            {data?.errors?.length ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {data?.warnings?.length ? (
               <span
                 className="rounded bg-warning/15 px-1.5 py-0.5 text-warning"
-                title="Some on-chain reads failed. Values may be partial."
+                title="Some wallet reads are partial. Values may be incomplete."
               >
                 stale
               </span>
@@ -85,7 +99,7 @@ export function TradingWalletCard(): ReactElement {
                 title={
                   noGas
                     ? "No POL balance — this wallet cannot pay gas."
-                    : `Low POL — ${formatDecimal(data?.pol ?? null, 4)}`
+                    : `Low POL — ${formatDecimal(data?.pol_gas ?? null, 4)}`
                 }
               >
                 {noGas ? "no gas" : "low gas"}
@@ -99,10 +113,13 @@ export function TradingWalletCard(): ReactElement {
       </CardHeader>
       <CardContent className="px-5 pt-1 pb-4">
         {isLoading ? (
-          <div className="h-10 animate-pulse rounded bg-muted" />
+          <div className="flex animate-pulse flex-col gap-3">
+            <div className="h-4 w-2/3 rounded bg-muted" />
+            <div className="h-2 w-full rounded-full bg-muted" />
+          </div>
         ) : isError || !data ? (
           <p className="py-2 text-muted-foreground text-sm">
-            Couldn't load trading wallet. Will retry shortly.
+            Couldn&apos;t load trading wallet. Will retry shortly.
           </p>
         ) : !data.configured ? (
           <p className="py-2 text-muted-foreground text-sm">
@@ -120,27 +137,63 @@ export function TradingWalletCard(): ReactElement {
               Connect →
             </Link>
           </div>
+        ) : fullBreakdown ? (
+          <div className="space-y-3">
+            <BalanceBar balance={fullBreakdown ?? undefined} />
+            <div className="flex flex-wrap items-center justify-between gap-3 text-muted-foreground text-xs">
+              <span>
+                {data.open_orders ?? 0} open order
+                {(data.open_orders ?? 0) === 1 ? "" : "s"}
+              </span>
+              <span>POL gas {formatDecimal(data.pol_gas, 4)}</span>
+            </div>
+          </div>
         ) : (
-          <div className="flex items-baseline justify-between gap-4 py-1">
-            <div>
-              <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
-                USDC.e
-              </div>
-              <div className="font-semibold text-2xl tabular-nums">
-                {formatDecimal(data.usdc_e, 2)}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
-                POL gas
-              </div>
-              <div className="font-semibold text-xl tabular-nums">
-                {formatDecimal(data.pol, 4)}
-              </div>
-            </div>
+          <div className="grid gap-3 md:grid-cols-4">
+            <Metric label="Available" value={formatUsd(data.usdc_available)} />
+            <Metric label="Locked" value={formatUsd(data.usdc_locked)} />
+            <Metric
+              label="Positions"
+              value={formatUsd(data.usdc_positions_mtm)}
+            />
+            <Metric label="Total" value={formatUsd(data.usdc_total)} />
           </div>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function hasOverviewBreakdown(
+  data: PolyWalletOverviewOutput | undefined
+): data is PolyWalletOverviewOutput & {
+  usdc_available: number;
+  usdc_locked: number;
+  usdc_positions_mtm: number;
+  usdc_total: number;
+} {
+  return (
+    data !== undefined &&
+    data.usdc_available !== null &&
+    data.usdc_locked !== null &&
+    data.usdc_positions_mtm !== null &&
+    data.usdc_total !== null
+  );
+}
+
+function Metric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}): ReactElement {
+  return (
+    <div className="rounded-md bg-muted/40 px-3 py-2">
+      <div className="text-muted-foreground text-xs uppercase tracking-wide">
+        {label}
+      </div>
+      <div className="font-semibold text-lg tabular-nums">{value}</div>
+    </div>
   );
 }
