@@ -585,7 +585,7 @@ services:
   # =============================================================================
 
   poly-mcp:
-    image: ghcr.io/caiovicentino/polymarket-mcp-server:latest
+    image: ghcr.io/caiovicentino/polymarket-mcp-server:v0.1.0
     container_name: poly-mcp
     restart: unless-stopped
     profiles: [poly]

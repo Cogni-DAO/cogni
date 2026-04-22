@@ -43,6 +43,9 @@ patches:
       - op: add
         path: /data/NEXTAUTH_URL
         value: "https://poly-test.cognidao.org"
+      - op: add
+        path: /data/POLY_MCP_URL
+        value: "http://poly-mcp:8080"
   - target:
       kind: Service
       name: node-app
