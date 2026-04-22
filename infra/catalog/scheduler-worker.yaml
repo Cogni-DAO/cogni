@@ -2,3 +2,11 @@ name: scheduler-worker
 type: service
 port: 9000
 dockerfile: services/scheduler-worker/Dockerfile
+# bug.0344 — see infra/catalog/operator.yaml for why these fields exist.
+# scheduler-worker has no per-node migrator (NODE_TARGETS excludes it in
+# scripts/ci/lib/image-tags.sh:52), so the migrator alias is a no-op —
+# its allow-tags regex matches zero GHCR tags, argocd-image-updater logs
+# "no newer version" and never touches this overlay's images block
+# (which has no cogni-template-migrate entry anyway).
+image_tag_suffix: "-scheduler-worker"
+migrator_tag_suffix: "-scheduler-worker-migrate"

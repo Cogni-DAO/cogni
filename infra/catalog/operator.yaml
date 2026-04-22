@@ -3,3 +3,16 @@ type: node
 port: 3000
 node_id: "4ff8eac1-4eba-4ed0-931b-b1fe4f64713d"
 dockerfile: nodes/operator/app/Dockerfile
+# bug.0344 — tag suffix pushed to GHCR for this target's image, used by
+# argocd-image-updater to distinguish this app's tags from siblings' in the
+# shared ghcr.io/cogni-dao/cogni-template repo. Canonical suffix table is
+# scripts/ci/lib/image-tags.sh:tag_suffix_for_target (operator is unsuffixed
+# for historical reasons).
+image_tag_suffix: ""
+# bug.0344 — migrator tag suffix for the node's per-node migrator image
+# (see task.0324 / NODE_TARGETS in scripts/ci/lib/image-tags.sh).
+# Empty means "this catalog entry has no migrator" — the migrator alias
+# in preview-applicationset.yaml will still be emitted but its
+# allow-tags regex won't match anything, so argocd-image-updater
+# silently skips.
+migrator_tag_suffix: "-operator-migrate"

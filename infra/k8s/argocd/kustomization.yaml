@@ -20,6 +20,12 @@ resources:
   - https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.4/manifests/install.yaml
   # ksops CMP plugin ConfigMap
   - ksops-cmp.yaml
+  # Argo CD Image Updater (bug.0344): keeps main's preview-overlay digest
+  # seeds eventually-consistent with GHCR's preview-* tag class. Requires
+  # two imperatively-created Secrets in the argocd namespace
+  # (`argocd-image-updater-ghcr`, `argocd-image-updater-git-creds`) —
+  # see docs/runbooks/image-updater-bootstrap.md §1.
+  - image-updater
   # ApplicationSets — one per environment.
   # canary was retired in bug.0312; candidate-a replaces it as the pre-merge slot.
   - candidate-a-applicationset.yaml

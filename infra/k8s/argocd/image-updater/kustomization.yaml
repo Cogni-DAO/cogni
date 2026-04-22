@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Argo CD Image Updater — continuous reconciler that keeps main's overlay
+# digest seeds eventually-consistent with the preview-* tag class in GHCR.
+# See bug.0344 and docs/runbooks/image-updater-bootstrap.md.
+#
+# Pin: v0.15.2 — last upstream release explicitly tested against Argo CD v2.13.x
+# (which is the version pinned in ../kustomization.yaml). Moving to v0.18+ or
+# v1.x is a follow-up tied to the Argo CD server upgrade, not a prerequisite.
+#
+# Secrets note: `argocd-image-updater-ghcr` and `argocd-image-updater-git-creds`
+# are NOT GitOps-managed — ksops was retired (see infra/provision/cherry/base/
+# bootstrap.yaml, task.0284). They are created imperatively via
+# `kubectl create secret generic --dry-run=client -o yaml | kubectl apply -f -`.
+# See docs/runbooks/image-updater-bootstrap.md §1.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: argocd
+
+resources:
+  # Upstream install manifest — same shape as Argo CD itself is installed in
+  # ../kustomization.yaml. No fork, no vendor.
+  - https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/v0.15.2/manifests/install.yaml
+
+patches:
+  # Registry config (GHCR credentials source), Git authorship (Cogni-1729), and
+  # commit-message template (grep-filterable provenance:
+  # `chore(deps): argocd-image-updater`).
+  - path: config-patch.yaml

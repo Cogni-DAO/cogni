@@ -22,6 +22,40 @@ spec:
       namespace: argocd
       finalizers:
         - resources-finalizer.argocd.argoproj.io
+      # bug.0344 — Argo CD Image Updater annotations.
+      # Keeps main's infra/k8s/overlays/preview/{{name}}/kustomization.yaml
+      # digest seed eventually-consistent with GHCR. GHCR credentials are
+      # configured at the registry level (see ../argocd/image-updater/
+      # config-patch.yaml → registries.conf); git push credentials come from
+      # the imperatively-created argocd-image-updater-git-creds Secret (see
+      # docs/runbooks/image-updater-bootstrap.md §1).
+      #
+      # Two image aliases per Application because every kustomize overlay
+      # for a node (operator/poly/resy) declares TWO images blocks:
+      #   - name: ghcr.io/cogni-dao/cogni-template           (primary app)
+      #   - name: ghcr.io/cogni-dao/cogni-template-migrate   (per-node migrator)
+      # They resolve to DISTINCT GHCR packages. The split is load-bearing:
+      # the image updater's ContainsImage matcher (pkg/image/image.go:148) keys by
+      # RegistryURL+ImageName, so two aliases pointing at the same package
+      # would collapse to a single Status.Summary.Images entry and only one
+      # of {app, migrator} would update per poll in steady state (silently
+      # re-exposing bug #970). Distinct ImageNames give the two aliases
+      # independent Status entries. scheduler-worker has no migrator entry;
+      # its migrator-suffix regex matches zero tags, so the controller
+      # no-ops for it.
+      #
+      # update-strategy: latest = pick the tag with the newest image-manifest
+      # creation timestamp among those matching allow-tags (v0.15.2 terminology
+      # — `newest-build` is not a valid strategy name).
+      annotations:
+        argocd-image-updater.argoproj.io/image-list: "app=ghcr.io/cogni-dao/cogni-template,migrator=ghcr.io/cogni-dao/cogni-template-migrate"
+        argocd-image-updater.argoproj.io/app.update-strategy: latest
+        argocd-image-updater.argoproj.io/app.allow-tags: "regexp:^preview-[0-9a-f]{40}{{image_tag_suffix}}$"
+        argocd-image-updater.argoproj.io/migrator.update-strategy: latest
+        argocd-image-updater.argoproj.io/migrator.allow-tags: "regexp:^preview-[0-9a-f]{40}{{migrator_tag_suffix}}$"
+        argocd-image-updater.argoproj.io/write-back-method: "git:secret:argocd/argocd-image-updater-git-creds"
+        argocd-image-updater.argoproj.io/git-branch: main
+        argocd-image-updater.argoproj.io/write-back-target: kustomization
     spec:
       project: default
       source:

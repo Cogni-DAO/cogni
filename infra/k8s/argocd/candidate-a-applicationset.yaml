@@ -21,6 +21,40 @@ spec:
       namespace: argocd
       finalizers:
         - resources-finalizer.argocd.argoproj.io
+      # bug.0344 B9 — Argo CD Image Updater annotations (Path A).
+      # Keeps main's infra/k8s/overlays/candidate-a/{{name}}/kustomization.yaml
+      # digest seed eventually-consistent with the last KNOWN-GOOD merged
+      # state — not with the latest PR build.
+      #
+      # Why `preview-*` regex and not `pr-*`: candidate-flight.yml does not
+      # re-tag PR images into a `candidate-*` tag class (see lines 74 + 137:
+      # it consumes pr-<N>-<sha>{suffix} directly). Watching `pr-*` here
+      # would float main's candidate-a seed to the newest PR build by
+      # manifest creation time — which is trivially a rejected or abandoned
+      # PR, strictly worse than the stale-seed bug this annotation exists
+      # to close. The `preview-*` tag class only exists for MERGED PRs
+      # (flight-preview.yml re-tags pr-<N>-<sha>{suffix} →
+      # preview-<mainSHA>{suffix} after merge), so it encodes exactly the
+      # "last accepted code" semantic candidate-a's seed should track.
+      #
+      # candidate-flight.yml continues to overwrite deploy/candidate-a with
+      # the specific pr-<N>-<sha> digest on slot acquisition. The image
+      # updater's writes only land on main's candidate-a overlay seed; deploy/candidate-a
+      # is untouched between flights. The next unrelated flight rsyncs
+      # main → deploy/candidate-a and inherits the current seed — exactly
+      # mirroring the preview mechanism.
+      #
+      # Shape is identical to preview-applicationset.yaml (two aliases,
+      # GHCR split, same regex). Keep these in lockstep when editing.
+      annotations:
+        argocd-image-updater.argoproj.io/image-list: "app=ghcr.io/cogni-dao/cogni-template,migrator=ghcr.io/cogni-dao/cogni-template-migrate"
+        argocd-image-updater.argoproj.io/app.update-strategy: latest
+        argocd-image-updater.argoproj.io/app.allow-tags: "regexp:^preview-[0-9a-f]{40}{{image_tag_suffix}}$"
+        argocd-image-updater.argoproj.io/migrator.update-strategy: latest
+        argocd-image-updater.argoproj.io/migrator.allow-tags: "regexp:^preview-[0-9a-f]{40}{{migrator_tag_suffix}}$"
+        argocd-image-updater.argoproj.io/write-back-method: "git:secret:argocd/argocd-image-updater-git-creds"
+        argocd-image-updater.argoproj.io/git-branch: main
+        argocd-image-updater.argoproj.io/write-back-target: kustomization
     spec:
       project: default
       source:

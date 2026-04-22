@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Patches argocd-image-updater-config (ConfigMap, bundled in upstream install)
+# with:
+#   1. registries: — how the controller authenticates to ghcr.io to scan tags
+#      and resolve digests. Credentials live in the `argocd-image-updater-ghcr`
+#      Opaque Secret (created imperatively — see
+#      docs/runbooks/image-updater-bootstrap.md §1).
+#   2. git.user / git.email — commit authorship for the write-back. Match the
+#      canonical pattern used by every other automated commit in this repo:
+#      scripts/ci/promote-k8s-image.sh:114-115 (the very script whose logic
+#      we're automating), promote-and-deploy.yml:273-274,
+#      candidate-flight.yml:130-131. Authentication still flows through
+#      ACTIONS_AUTOMATION_BOT_PAT via the git-creds Secret (Cogni-1729 is the
+#      pusher — PR merges, release-branch cuts, etc.); authorship is the
+#      GitHub Actions bot so `git log --author='github-actions\[bot\]' --
+#      infra/k8s/overlays/` is a single consistent audit filter.
+#   3. git.commit-message-template — stable `chore(deps): argocd-image-updater`
+#      prefix so `git log --grep='argocd-image-updater'` is the narrower audit
+#      filter specifically for controller-authored commits.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  # No `namespace:` here on purpose. Strategic-merge patches match against the
+  # upstream resource's *pre-transform* identity; upstream install.yaml omits
+  # `namespace:`, so specifying it here would mismatch (kustomize looks for
+  # `argocd-image-updater-config.argocd` but upstream is `argocd-image-updater-config.`).
+  # The top-level `namespace: argocd` in kustomization.yaml applies to both.
+  name: argocd-image-updater-config
+data:
+  registries.conf: |
+    # prefix: ghcr.io is deliberately registry-wide, not per-package. It
+    # covers BOTH cogni-template (app) and cogni-template-migrate (migrator)
+    # from the bug.0344 GHCR split via the same credentials — the PAT has
+    # admin access to every package under the cogni-dao org.
+    registries:
+      - name: GitHub Container Registry
+        api_url: https://ghcr.io
+        prefix: ghcr.io
+        ping: yes
+        credentials: secret:argocd/argocd-image-updater-ghcr#token
+  # Git commit authorship. Per v0.15.2 update-methods docs, the HTTPS creds
+  # Secret only controls authentication — authorship comes from these keys
+  # (or CLI flags). Without them, commits land as `argocd-image-updater
+  # <noreply@argoproj.io>`. Use the canonical CI-bot identity used by every
+  # other PAT-backed automated commit in this repo (see header comment above).
+  git.user: github-actions[bot]
+  git.email: github-actions[bot]@users.noreply.github.com
+  git.commit-message-template: |
+    chore(deps): argocd-image-updater update {{ range .AppChanges -}}
+    - {{ .Image }}: {{ .OldTag }} -> {{ .NewTag }}
+    {{ end }}
+
+    Automated digest refresh by argocd-image-updater (bug.0344).
+    See docs/runbooks/image-updater-bootstrap.md for rollback.
