@@ -47,20 +47,14 @@ env:
 jobs:
   flight:
     runs-on: ubuntu-latest
-    # Skip flights triggered by the Argo CD Image Updater's own write-back
-    # commits to main. Post-#974 (bug.0344), the updater commits directly
-    # to main:infra/k8s/overlays/preview/**/kustomization.yaml after a
-    # successful preview deploy to keep the seed eventually-consistent.
-    # Those commits carry no merged PR — the PR-resolution step below
-    # would exhaust its fallbacks and fail loudly, polluting the Actions
-    # UI with red X's while the underlying preview is healthy. Keyed on
-    # the commit-message prefix set by config-patch.yaml's
-    # `git.commit-message-template` (COMMIT_PROVENANCE_VIA_MESSAGE_PREFIX
-    # invariant in bug.0344). Author-based keying is weaker: many bots
-    # commit as `github-actions[bot]`.
+    # Skip flights for maintenance commits on main that carry no merged PR
+    # (PR-resolution below would fail loudly). Prefix-keyed, not author-keyed:
+    # - chore(deps): argocd-image-updater — bug.0344 Image Updater write-back
+    # - chore(preview): — task.0349 digest-seed on main after Flight Preview
     if: |
       github.event_name != 'push' ||
-      !startsWith(github.event.head_commit.message, 'chore(deps): argocd-image-updater')
+      (!startsWith(github.event.head_commit.message, 'chore(deps): argocd-image-updater') &&
+       !startsWith(github.event.head_commit.message, 'chore(preview):'))
     outputs:
       # Emitted by scripts/ci/flight-preview.sh into $GITHUB_OUTPUT.
       # Values: dispatched | queued | (empty when the flight step was
@@ -232,6 +226,32 @@ jobs:
         run: |
           echo "::error::flight-preview.sh exited non-zero without emitting a status — check the Flight step log."
           exit 1
+
+      # Consumed by promote-preview-digest-seed.yml (workflow_run). Only
+      # `dispatched` may trigger a chore(preview): commit on main — queued
+      # merges must not (task.0349 follow-up).
+      - name: Record preview flight outcome artifact
+        if: always() && steps.pr.outputs.skip != 'true'
+        run: |
+          status="${{ steps.flight.outputs.status }}"
+          printf '%s\n' "${status:-unknown}" > preview-flight-outcome.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always() && steps.pr.outputs.skip != 'true'
+        with:
+          name: preview-flight-outcome
+          path: preview-flight-outcome.txt
+
+  # Visible check: green only when promote-and-deploy was actually dispatched
+  # (lease unlocked). Skipped (grey) when preview was queue-only — distinct
+  # from a green "Flight Preview" job alone.
+  preview-dispatched-marker:
+    needs: flight
+    if: success() && needs.flight.outputs.status == 'dispatched'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preview flight dispatched
+        run: |
+          echo "✅ Preview lease was unlocked; promote-and-deploy was dispatched for this merge."
 
   # Deploy-preview is gated on the flight script's `status` output, not on
   # step conclusions. A queued run emits `status=queued`, leaving this job

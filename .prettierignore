@@ -10,20 +10,9 @@ package-lock.json
 yarn.lock
 docs/research/fixtures/*.json
 
-# bug.0344 — machine-written kustomize overlays.
-# These files are rewritten by two non-prettier writers:
-#   1. Argo CD Image Updater (main:infra/k8s/overlays/preview/**/kustomization.yaml,
-#      via the annotations on preview-applicationset.yaml — see
-#      scripts/ci/check-image-updater-scope.sh for the current allowlist).
-#   2. scripts/ci/promote-k8s-image.sh (deploy/* branches' overlays), invoked by
-#      flight-preview.yml, candidate-flight.yml, and promote-and-deploy.yml.
-# Both writers use YAML libraries whose output (unindented list items, compact
-# flow-mappings) disagrees with prettier's YAML style. Running prettier against
-# these files in CI creates a permanent fight: prettier fixes indent, image-updater
-# re-flattens on the next merge, the next PR's format:check fails. These overlays
-# carry 3 structural authors (humans, image-updater, promote-k8s-image.sh);
-# prettier is simply not one of them. Humans who edit these by hand are free to
-# run prettier manually — we just don't gate CI on a format the machines won't
-# preserve. See work/items/bug.0344.adopt-digest-update-controller.md § Post-merge
-# amendment for the full context.
+# Machine-written kustomize overlays (bug.0344 / task.0349).
+# Rewritten by scripts/ci/promote-k8s-image.sh on deploy/* branches (flight-preview,
+# candidate-flight, promote-and-deploy) and by CI digest seeding on main
+# (promote-preview-digest-seed.yml). Their YAML style disagrees with Prettier;
+# gating format:check on these paths creates churn. Humans may run Prettier by hand.
 infra/k8s/overlays/**/kustomization.yaml

@@ -4,10 +4,11 @@
 #
 # scripts/ci/tests/verify-buildsha.test.sh
 #
-# Regression harness for task.0341 + task.0345. Covers the polling loop that
-# replaces the single-shot curl-per-node (task.0341, false-failed during rollout
-# cutover) AND the pivot from `/readyz.version` → `/version.buildSha` as the
-# authoritative build-identity probe (task.0345 / PR #978).
+# Regression harness for task.0341 + task.0345 + task.0349. Covers the polling
+# loop that replaces the single-shot curl-per-node (task.0341, false-failed
+# during rollout cutover) AND the pivot from `/readyz.version` →
+# `/version.buildSha` as the authoritative build-identity probe (task.0345 /
+# PR #978) AND map-mode NODES restriction (task.0349 / affected-only verify).
 #
 # Cases:
 #   1. Converges after N failed attempts  → exits 0 (polling succeeds).
@@ -15,6 +16,9 @@
 #   3. Expected SHA matches on first try  → exits 0 fast (no regression on happy path).
 #   4. Response carries `.version` (pkg ver) but no `.buildSha` → fails (we do
 #      NOT silently accept the pkg-version field; only `.buildSha` is the SHA).
+#   5. Map lists multiple apps but NODES restricts verify to one → only that
+#      app is probed (poly-only path; operator map entry must not force a curl).
+#   6. NODES lists an app missing from the map → exits 1 with a clear error.
 #
 # The verify-buildsha.sh under test is shelled via a CURL_CMD injection
 # pointing to a fixture script under /tmp, so no real HTTPS endpoint is needed.
@@ -113,6 +117,55 @@ run_case "matches-first-try" "$DIR3" 0 10 1 || exit 1
 DIR4=$(mktemp -d --tmpdir="$TMPROOT" case4.XXXX)
 printf '{"version":"%s","buildTime":"t"}' "$EXPECTED" >"${DIR4}/1.json"
 run_case "no-buildSha-field-fails" "$DIR4" 1 3 1 || exit 1
+
+# --- Case 5: map has operator + poly; NODES=poly → operator must not be probed ---
+# If verify ignored NODES, it would expect operator=STALE while fake curl always
+# returns EXPECTED → timeout failure.
+DIR5=$(mktemp -d --tmpdir="$TMPROOT" case5.XXXX)
+printf '{"version":"0.1.0","buildSha":"%s","buildTime":"t"}' "$EXPECTED" >"${DIR5}/1.json"
+fake5=$(make_fake_curl "$DIR5")
+map5="${TMPROOT}/map5.json"
+cat >"$map5" <<EOF
+{ "operator": "${STALE}", "poly": "${EXPECTED}" }
+EOF
+set +e
+CURL_CMD="$fake5" CUTOVER_TIMEOUT=10 CUTOVER_SLEEP=1 \
+  DOMAIN="example.test" SOURCE_SHA_MAP="$map5" NODES="poly" \
+  bash "$VERIFY_SCRIPT" >"${TMPROOT}/out-case5.log" 2>&1
+ex5=$?
+set -e
+if [ "$ex5" -ne 0 ]; then
+  echo "[FAIL] map+NODES=poly: expected exit 0, got ${ex5}"
+  cat "${TMPROOT}/out-case5.log"
+  exit 1
+fi
+echo "[PASS] map-restricted-to-NODES-poly-only"
+
+# --- Case 6: NODES lists app absent from map → fail fast ---
+DIR6=$(mktemp -d --tmpdir="$TMPROOT" case6.XXXX)
+printf '{"version":"0.1.0","buildSha":"%s","buildTime":"t"}' "$EXPECTED" >"${DIR6}/1.json"
+fake6=$(make_fake_curl "$DIR6")
+map6="${TMPROOT}/map6.json"
+cat >"$map6" <<EOF
+{ "poly": "${EXPECTED}" }
+EOF
+set +e
+CURL_CMD="$fake6" CUTOVER_TIMEOUT=3 CUTOVER_SLEEP=1 \
+  DOMAIN="example.test" SOURCE_SHA_MAP="$map6" NODES="ghostapp" \
+  bash "$VERIFY_SCRIPT" >"${TMPROOT}/out-case6.log" 2>&1
+ex6=$?
+set -e
+if [ "$ex6" -eq 0 ]; then
+  echo "[FAIL] NODES-not-in-map: expected non-zero exit"
+  cat "${TMPROOT}/out-case6.log"
+  exit 1
+fi
+if ! grep -q 'SOURCE_SHA_MAP has no entry' "${TMPROOT}/out-case6.log"; then
+  echo "[FAIL] NODES-not-in-map: expected error text about map entry"
+  cat "${TMPROOT}/out-case6.log"
+  exit 1
+fi
+echo "[PASS] NODES-missing-from-map-fails"
 
 echo ""
 echo "✅ verify-buildsha.test.sh — all cases passed"
