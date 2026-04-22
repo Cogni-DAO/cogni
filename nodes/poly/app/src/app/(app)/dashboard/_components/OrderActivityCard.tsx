@@ -10,7 +10,7 @@
  *   - COPY_PAYLOAD_IS_AGENT_INPUT: per-row copy emits a JSON block shaped for an AI agent prompt.
  *   - LEDGER_STATUS_IS_RECONCILED: status is reconciled from CLOB every reconciler tick; synced_at + staleness_ms render a staleness dot when synced_at IS NULL or staleness > 60s. (task.0328)
  *   - VISUAL_RESTRAINT: only BUY (green) / SELL (red) carry color. Status uses a tiny dot + muted text.
- *   - NO_EOA_PROFILE_LINKS: row click points at the target's Polygon tx (authoritative on-chain proof), never at polymarket.com/profile/<operator> — that redirects to an empty Safe-proxy for EOA-direct operators. See `.claude/skills/poly-dev-expert/SKILL.md`.
+ *   - NO_EOA_PROFILE_LINKS: row click points at the target's Polygon tx (authoritative on-chain proof), never at polymarket.com/profile/<operator> — that redirects to an empty Safe-proxy for EOA-direct operators. See `.claude/skills/poly-market-data/SKILL.md` (EOA-vs-Safe-proxy gotcha).
  *   - NO_EXTERNAL_PROXY: market title + tx hash are read directly from the row (denormalized at write time in `decide.ts` + `order-ledger.ts`). We do NOT proxy Polymarket Gamma from the client.
  * Side-effects: IO (via React Query), clipboard (user-triggered).
  * Links: [fetchOrders](../_api/fetchOrders.ts), packages/node-contracts/src/poly.copy-trade.orders.v1.contract.ts

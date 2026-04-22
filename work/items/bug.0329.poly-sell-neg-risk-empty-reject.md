@@ -92,5 +92,5 @@ Fixed when the reproducer command in §Reproducer returns a normal orderID recei
 - [task.0315 handoff](../handoffs/task.0315.handoff.md) — where this surfaced
 - `packages/market-provider/src/adapters/polymarket/polymarket.clob.adapter.ts` — adapter file
 - `scripts/experiments/privy-polymarket-order.ts` — CLI reproducer
-- `.claude/skills/poly-dev-expert/SKILL.md` — wallet roles + approvals runbook
+- `.claude/skills/poly-auth-wallets/SKILL.md` — wallet roles + approvals runbook (CTF standard + neg-risk `setApprovalForAll`)
 - [poly-copy-trade-candidates research](../../docs/research/polymarket-copy-trade-candidates.md) — neg-risk vs regular market distribution

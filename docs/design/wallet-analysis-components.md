@@ -62,7 +62,7 @@ Three slices, three independent fetches.
 
 - Module-scoped `Map<string, { value, expiresAt }>` at the handler, 30 s TTL keyed `(slice, addr)`. Ten simultaneous requests for the same key → one upstream call.
 - `p-limit(4)` shared across all upstream client calls caps in-flight requests when prefetching many wallets at once (e.g. a Monitored-Wallets hover sweep).
-- Single-replica assert at boot (`instrumentation.ts`) throws if `POLY_REPLICA_INDEX != 0` or pod-name suffix is not `-0`. The module-Map cache silently corrupts with >1 replica — hard-fail, not a comment. Single-replica deployment is enforced by the SINGLE_WRITER invariant (see `poly-dev-expert` skill).
+- Single-replica assert at boot (`instrumentation.ts`) throws if `POLY_REPLICA_INDEX != 0` or pod-name suffix is not `-0`. The module-Map cache silently corrupts with >1 replica — hard-fail, not a comment. Single-replica deployment is enforced by the SINGLE_WRITER invariant (see `poly-copy-trading` skill).
 
 **Per-slice fetching.** `useWalletAnalysis(addr)` fans out to three React Query calls, one per slice. Each call hits `/api/v1/poly/wallets/[addr]?include=<slice>`. Three keys, three independent loading states, three skeletons render independently.
 

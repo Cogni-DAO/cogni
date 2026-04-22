@@ -98,7 +98,7 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 
 ## Design Notes
 
-- **Operator / target / test wallet roles**: three disjoint jobs. Operator places all autonomous mirror trades via Privy HSM. Target is the wallet being monitored (its trades flow through the mirror). Test is a raw-PK wallet in `.env.test` used for scripted validation — it doubles as a target in some flows. See `.claude/skills/poly-dev-expert/SKILL.md` for the full runbook.
+- **Operator / target / test wallet roles**: three disjoint jobs. Operator places all autonomous mirror trades via Privy HSM. Target is the wallet being monitored (its trades flow through the mirror). Test is a raw-PK wallet in `.env.test` used for scripted validation — it doubles as a target in some flows. See `.claude/skills/poly-dev-manager/SKILL.md` for the poly-node overview and routing to the specialty runbooks (copy-trading, market-data, auth/wallets).
 
 - **Two-approval onboarding**: a wallet that can BUY but not SELL is useless for copy-trading. USDC.e allowance on {Exchange, Neg-Risk Exchange, Neg-Risk Adapter} enables BUY. CTF `setApprovalForAll(operator, true)` on {Exchange, Neg-Risk Exchange} enables SELL. Skipping either is a latent bug that only surfaces on close-position.
 

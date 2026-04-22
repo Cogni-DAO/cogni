@@ -92,7 +92,7 @@ Also reproducible via `scripts/experiments/probe-polymarket-account.ts` to captu
 
 ## Diagnostic checklist — collect before triaging
 
-Per `.claude/skills/poly-dev-expert/SKILL.md` wallet-onboarding runbook, silent rejects on BUY point at one of these. Walk this list IN ORDER with the probe script:
+Per `.claude/skills/poly-auth-wallets/SKILL.md` wallet-onboarding runbook (CTF + USDC.e + CLOB creds), silent rejects on BUY point at one of these. Walk this list IN ORDER with the probe script:
 
 - [ ] **USDC.e balance** on `0x7A3347D25A69e735f6E3a793ecbdca08F97A0aEB`: polygon mainnet USDC.e `0x2791Bca1…`. Zero balance → CLOB silent-rejects BUYs. Most-likely cause.
 - [ ] **USDC.e allowance** for:
@@ -175,5 +175,5 @@ When bug.0342 ships and the next silent reject appears, the Loki line will read 
 - `scripts/experiments/probe-polymarket-account.ts` — balance + allowance probe
 - `scripts/experiments/derive-polymarket-api-keys.ts` — regenerate CLOB L2 creds from Privy signer
 - `scripts/experiments/approve-polymarket-allowances.ts` — re-set USDC.e allowances
-- `.claude/skills/poly-dev-expert/SKILL.md` — wallet roles + approvals runbook
+- `.claude/skills/poly-auth-wallets/SKILL.md` — wallet roles + approvals runbook
 - Loki query (flight window): `{service_name="app"} |= "poly.clob.place" |= "rejected"` between `2026-04-19T23:50:00Z` and `2026-04-19T23:55:00Z`
