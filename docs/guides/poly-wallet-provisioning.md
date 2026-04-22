@@ -29,7 +29,7 @@ tags: [poly, polymarket, wallets, multi-tenant, privy, runbook]
 | `GET /api/v1/poly/wallet/status` + `/profile` create-wallet control             | ✅ shipped                                                               |
 | Agent-actor auth path                                                           | ⛔ explicit 501 until agent-API-key auth lands                           |
 | CI secret plumbing (`candidate-flight-infra.yml` + `deploy-infra.sh`)           | ✅ wired for all 5 new secrets                                           |
-| Orphan-wallet reconciler (`scripts/ops/sweep-orphan-poly-wallets.ts`)           | ⛔ deferred to follow-up task.0346                                       |
+| Orphan-wallet reconciler (`scripts/ops/sweep-orphan-poly-wallets.ts`)           | ⛔ deferred to follow-up task.0348                                       |
 | Component / concurrency / defense-in-depth tests                                | ✅ B2.10 landed: two-tenant adapter round-trip component test            |
 | `pnpm check:fast` on branch                                                     | ✅ green (2026-04-21)                                                    |
 
@@ -171,7 +171,7 @@ Ordered by blocking priority:
 1. **`authorizeIntent` implementation** — requires `poly_wallet_grants` table (B4) + windowed fills-cap queries.
 2. **`withdrawUsdc` implementation** — ERC-20 transfer via Privy HSM; requires `WITHDRAW_BEFORE_REVOKE` UX in the dashboard (B3).
 3. **Agent-API-key auth path** — unlock `custodialConsentActorKind: "agent"` in the route (currently 501).
-4. **Orphan reconciler** — tracked separately in [task.0346](../../work/items/task.0346.poly-wallet-orphan-sweep.md). Keep it out of the v0 trading path.
+4. **Orphan reconciler** — tracked separately in [task.0348](../../work/items/task.0348.poly-wallet-orphan-sweep.md). Keep it out of the v0 trading path.
 5. **viem version unification** — drop the two `noExplicitAny` ignores in the adapter once `@privy-io/node`'s peer viem matches the app's.
 6. **`UUID round-trip`** — replace `tx.execute("SELECT gen_random_uuid()::text")` with `crypto.randomUUID()`.
 7. **Move adapter + port into a single package** once per-node DB schemas are available as shared packages.

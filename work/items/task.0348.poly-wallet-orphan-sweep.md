@@ -1,5 +1,5 @@
 ---
-id: task.0346
+id: task.0348
 type: task
 title: "Poly wallet — orphan sweep for user-wallets Privy app"
 status: needs_design
@@ -23,7 +23,7 @@ external_refs:
   - docs/guides/poly-wallet-provisioning.md
 ---
 
-# task.0346 — Poly wallet orphan sweep
+# task.0348 — Poly wallet orphan sweep
 
 > Split out of [task.0318](task.0318.poly-wallet-multi-tenant-auth.md) on 2026-04-21. Useful hygiene, but not a v0 trading blocker.
 

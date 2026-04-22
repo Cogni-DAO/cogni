@@ -37,14 +37,14 @@ last_commit: 921413314
 - [Branded `AuthorizedSigningContext` for compile-time scope/cap bypass protection](../../packages/poly-wallet/src/port/poly-trader-wallet.port.ts) — `placeOrder` will accept only the branded type
 - [Advisory-locked `provision` + halt-future-only `revoke` + WITHDRAW_BEFORE_REVOKE UX contract](../../docs/spec/poly-trader-wallet-port.md#invariants)
 - [Custodial consent persisted on row; agent-actor path requires follow-up API-key auth](../../docs/spec/poly-trader-wallet-port.md#onboarding)
-- [B2.11 orphan sweep deferred to follow-up task.0346](../items/task.0346.poly-wallet-orphan-sweep.md)
+- [B2.11 orphan sweep deferred to follow-up task.0348](../items/task.0348.poly-wallet-orphan-sweep.md)
 - [Review feedback r3/r4 truth-sync — B2.10 fixed and B2.12 completed](../items/task.0318.poly-wallet-multi-tenant-auth.md#review-feedback-revision-3--2026-04-20-phase-b-slice-on-pr-968)
 
 ## Next Actions
 
 - [x] **B2.10 — component test.** Testcontainers PG; two-tenant round-trip `provision → resolve → getAddress → revoke → resolve=null` exercising RLS + tenant defense-in-depth + AEAD round-trip. Landed locally in `nodes/poly/app/tests/component/wallet/privy-poly-trader-wallet.adapter.int.test.ts`.
 - [x] **B2.12 — real CLOB L2 creds factory.** Shipped in bootstrap: `poly-trader-wallet.ts` now delegates to `createOrDerivePolymarketApiKeyForSigner()` at the existing `bootstrap/capabilities/poly-trade.ts` dynamic-import boundary, derives live CLOB L2 creds during `provision`, and no longer uses any stub-credential flag.
-- [ ] **Post-v0 follow-up — orphan reconciler.** `scripts/ops/sweep-orphan-poly-wallets.ts` moved to [task.0346](../items/task.0346.poly-wallet-orphan-sweep.md). Useful hygiene, but not required to prove tenant-safe provisioning or real trading.
+- [ ] **Post-v0 follow-up — orphan reconciler.** `scripts/ops/sweep-orphan-poly-wallets.ts` moved to [task.0348](../items/task.0348.poly-wallet-orphan-sweep.md). Useful hygiene, but not required to prove tenant-safe provisioning or real trading.
 - [ ] Candidate-a secrets are now created for the dedicated user-wallets app. After merge, preview / production still need the same env rollout pattern before broader promotion.
 - [ ] After merge → flight `candidate-flight-infra.yml` → exercise `POST /api/v1/poly/wallet/connect` per runbook § 5 → confirm Loki `poly.wallet.connect` line at the deployed SHA → post `deploy_verified` on PR.
 - [ ] **Non-blocking cleanup** (follow-up PR): `crypto.randomUUID()` instead of PG roundtrip, delete dead `brandAuthorized`, move route Zod schemas to `packages/node-contracts/`, add `created_at` index, viem version unification to remove both `biome-ignore noExplicitAny`.

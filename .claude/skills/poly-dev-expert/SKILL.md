@@ -28,7 +28,7 @@ The system is mid-migration: v0 was a single shared operator wallet (`POLY_PROTO
 - [task.0318](../../../work/items/task.0318.poly-wallet-multi-tenant-auth.md) — multi-tenant auth, Phase A + B
 - [task.0323](../../../work/items/task.0323.poly-copy-trade-v1-hardening.md) — v1 hardening (CTF SELL, cursor persistence, status-sync)
 - [task.0347](../../../work/items/task.0347.poly-wallet-preferences-sizing-config.md) — retire hardcoded caps + funding suggestions
-- [task.0346](../../../work/items/task.0346.poly-wallet-orphan-sweep.md) — Privy orphan cleanup (ops)
+- [task.0348](../../../work/items/task.0348.poly-wallet-orphan-sweep.md) — Privy orphan cleanup (ops)
 - [bug.0335](../../../work/items/bug.0335.poly-clob-buy-empty-reject-candidate-a.md) — **active** — shared operator BUY empty-reject on candidate-a
 
 **Code landmarks:**

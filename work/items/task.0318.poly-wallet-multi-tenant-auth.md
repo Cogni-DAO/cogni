@@ -294,7 +294,7 @@ Open within B2 (blocking before merge):
 
 Deferred out of this PR / v0 path:
 
-- [ ] B2.11 — Orphan reconciler `scripts/ops/sweep-orphan-poly-wallets.ts` moved to [task.0346](task.0346.poly-wallet-orphan-sweep.md). Useful ops hygiene, but not required to prove per-tenant wallet provisioning or real CLOB trading in v0.
+- [ ] B2.11 — Orphan reconciler `scripts/ops/sweep-orphan-poly-wallets.ts` moved to [task.0348](task.0348.poly-wallet-orphan-sweep.md). Useful ops hygiene, but not required to prove per-tenant wallet provisioning or real CLOB trading in v0.
 
 Following slices:
 
@@ -314,7 +314,7 @@ Following slices:
 - `poly_wallet_connections.backend` CHECK constraint (`privy|safe_4337|turnkey`) — Phase B is single-backend (Privy). The column lands when a second adapter lands.
 - Safe + 4337 + self-hosted bundler (`SafePolyTraderWalletAdapter`) — filed as a separate OSS-hardening task that spans the repo. The port is designed to accept it without caller churn.
 - Hardware / BYO-imported EOA support — user asked for Privy-reuse.
-- [task.0346](task.0346.poly-wallet-orphan-sweep.md) — Privy user-wallet orphan sweep. Kept separate from v0 wallet provisioning / real-creds work so Phase B can ship the trading path first.
+- [task.0348](task.0348.poly-wallet-orphan-sweep.md) — Privy user-wallet orphan sweep. Kept separate from v0 wallet provisioning / real-creds work so Phase B can ship the trading path first.
 - Renaming `OperatorWalletPort` → `WalletPort`: rejected at /design per [poly-trader-wallet-port § Why a new port](../../docs/spec/poly-trader-wallet-port.md#why-a-new-port). Operator wallet is a system-role intent-only actuator; merging it with the per-tenant signing port would weaken the security model.
 
 ## Invariants
@@ -380,7 +380,7 @@ See [docs/spec/poly-multi-tenant-auth.md § Decisions](../../docs/spec/poly-mult
 
 ## Review Feedback (revision 3 — 2026-04-20, Phase B slice on PR #968)
 
-`/review-implementation` on commits `6224cec8c..32a58aa19` found blocking gaps. r3/r4 follow-up truth-sync on 2026-04-21 resolved the test gap, and the final v0 blocker (B2.12 real CLOB creds) is now implemented. The orphan sweep is deferred to [task.0346](task.0346.poly-wallet-orphan-sweep.md) instead of quietly inflating the Phase B merge bar.
+`/review-implementation` on commits `6224cec8c..32a58aa19` found blocking gaps. r3/r4 follow-up truth-sync on 2026-04-21 resolved the test gap, and the final v0 blocker (B2.12 real CLOB creds) is now implemented. The orphan sweep is deferred to [task.0348](task.0348.poly-wallet-orphan-sweep.md) instead of quietly inflating the Phase B merge bar.
 
 ### Blocking status
 
@@ -446,7 +446,7 @@ because this is the security-sensitive slice the rest of Phase B rides on.
       single attempt always get the same wallet, (b) a new attempt after revoke increments
       generation and gets a fresh wallet. `createOrDeriveApiKey()` is already idempotent per
       signer. With both external calls idempotent, crash-mid-provision self-heals on retry and
-      no new orphans can be created. `task.0346` sweep remains defense-in-depth, not a load-bearing
+      no new orphans can be created. `task.0348` sweep remains defense-in-depth, not a load-bearing
       dependency.
 
 - [x] **B-2 — `/connect` has no per-tenant rate limit.** `app/api/v1/poly/wallet/connect/route.ts:86-118`
@@ -577,7 +577,7 @@ non-blocking.
 
 - [ ] **S-8 — `/connect` output hardcodes `requires_funding: true` + fixed suggestions.**
       `route.ts:137-143` returns `{ requires_funding: true, suggested_usdc: 5,
-suggested_matic: 0.1 }` on every call — including idempotent re-hits where the wallet
+    suggested_matic: 0.1 }` on every call — including idempotent re-hits where the wallet
       already has balance. Same gap on `/status` (no balance field). UI will say "fund me with 5
       USDC" even when the wallet has 50. Real fix requires a Polygon RPC balance read; belongs
       with the withdraw-UX work (B3) or its own micro-task. Note, not blocking.
@@ -604,7 +604,7 @@ suggested_matic: 0.1 }` on every call — including idempotent re-hits where the
   the unique index rejects the second insert.
 
 - **G-4 — AEAD AAD binding verified end-to-end.** `(billing_account_id, connection_id,
-provider)` pinned into the AAD envelope; component test
+    provider)` pinned into the AAD envelope; component test
   `adapter.int.test.ts:282-292` explicitly proves that re-binding ciphertext to a different
   `billing_account_id` causes `aeadDecrypt` to throw.
 
