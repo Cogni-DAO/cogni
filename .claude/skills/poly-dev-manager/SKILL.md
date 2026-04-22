@@ -13,11 +13,11 @@ Takes a Polymarket wallet that demonstrably trades with edge and mirrors its fil
 
 ## Which skill to load
 
-| If you're doing…                                                                                     | Load                                                                                                       |
-| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Mirror pipeline, coordinator, wallet-watch, `poly_copy_trade_*` tables, v0 caps, poll cadence, shared-poller, Phase-4 streaming prep | [`poly-copy-trading`](../poly-copy-trading/SKILL.md)                                                       |
-| CLOB order placement, Data-API reads, fill-id semantics, EOA-vs-Safe-proxy gotchas, target-wallet screening / ranking research      | [`poly-market-data`](../poly-market-data/SKILL.md)                                                         |
-| Per-tenant `/api/v1/poly/wallet/connect`, Privy provisioning, `poly_wallet_connections`, CTF + USDC.e approvals, AEAD at rest, CustodialConsent, validating `deploy_verified` | [`poly-auth-wallets`](../poly-auth-wallets/SKILL.md)                                                       |
+| If you're doing…                                                                                                                                                              | Load                                                 |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Mirror pipeline, coordinator, wallet-watch, `poly_copy_trade_*` tables, v0 caps, poll cadence, shared-poller, Phase-4 streaming prep                                          | [`poly-copy-trading`](../poly-copy-trading/SKILL.md) |
+| CLOB order placement, Data-API reads, fill-id semantics, EOA-vs-Safe-proxy gotchas, target-wallet screening / ranking research                                                | [`poly-market-data`](../poly-market-data/SKILL.md)   |
+| Per-tenant `/api/v1/poly/wallet/connect`, Privy provisioning, `poly_wallet_connections`, CTF + USDC.e approvals, AEAD at rest, CustodialConsent, validating `deploy_verified` | [`poly-auth-wallets`](../poly-auth-wallets/SKILL.md) |
 
 Load all three if you're reviewing a PR that cuts across them (the `/connect` → mirror path on a real tenant, for example). Each specialty skill is self-contained; there is no "base" you have to load first.
 

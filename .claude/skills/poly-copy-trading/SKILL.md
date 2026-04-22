@@ -42,12 +42,12 @@ ledger updated + decision row written (placed | skipped | error)
 
 ## Tables (RLS-scoped, per-tenant)
 
-| Table                        | Purpose                                                                                         |
-| ---------------------------- | ----------------------------------------------------------------------------------------------- |
-| `poly_copy_trade_targets`    | Per-tenant tracked target wallets. RLS via `created_by_user_id`.                                |
-| `poly_copy_trade_config`     | Per-tenant kill-switch (`enabled`). task.0347 will add sizing + caps here or adjacent.          |
-| `poly_copy_trade_fills`      | The ledger. Row per decision. `idempotency_key = keccak256(target_id + ':' + fill_id)`.         |
-| `poly_copy_trade_decisions`  | Append-only audit log of every `decide()` outcome. Never updated or deleted.                    |
+| Table                       | Purpose                                                                                 |
+| --------------------------- | --------------------------------------------------------------------------------------- |
+| `poly_copy_trade_targets`   | Per-tenant tracked target wallets. RLS via `created_by_user_id`.                        |
+| `poly_copy_trade_config`    | Per-tenant kill-switch (`enabled`). task.0347 will add sizing + caps here or adjacent.  |
+| `poly_copy_trade_fills`     | The ledger. Row per decision. `idempotency_key = keccak256(target_id + ':' + fill_id)`. |
+| `poly_copy_trade_decisions` | Append-only audit log of every `decide()` outcome. Never updated or deleted.            |
 
 `dbTargetSource.listForActor(actorId)` — RLS-clamped via `appDb`, used by per-user routes.
 `dbTargetSource.listAllActive()` — under `serviceDb`, the **ONE sanctioned BYPASSRLS read** across tenants. Only called by the mirror-poll enumerator in `container.ts`. If you find a second caller, that is a bug.
@@ -70,15 +70,15 @@ Flipping one tenant's row has zero effect on others. The system tenant (`COGNI_S
 
 ## Observability — mirror signals
 
-| Signal                                                       | Where          | Good state                                              |
-| ------------------------------------------------------------ | -------------- | ------------------------------------------------------- |
-| `poly.mirror.poll.singleton_claim`                           | Loki           | Fires exactly once per pod start                        |
-| `poly.wallet_watch.fetch`                                    | Loki, every 30s| `raw=N, fills=N, phase=ok`                              |
-| `poly.mirror.decision outcome=placed`                        | Loki           | Emitted when mirror fires                               |
-| `poly.mirror.decision outcome=skipped reason=already_placed` | Loki           | Dedup. Noisy — reducing noise is in task.0323 §1.       |
-| `poly.mirror.decision outcome=skipped reason=cap_exceeded_*` | Loki           | Hitting caps. Expected under load; investigate if spiking. |
-| `poly.mirror.poll.tick_error`                                | Loki           | **ZERO**. Any hit = bug.                                |
-| `poly_copy_trade_fills`                                      | poly DB        | Row per mirror decision                                 |
+| Signal                                                       | Where           | Good state                                                 |
+| ------------------------------------------------------------ | --------------- | ---------------------------------------------------------- |
+| `poly.mirror.poll.singleton_claim`                           | Loki            | Fires exactly once per pod start                           |
+| `poly.wallet_watch.fetch`                                    | Loki, every 30s | `raw=N, fills=N, phase=ok`                                 |
+| `poly.mirror.decision outcome=placed`                        | Loki            | Emitted when mirror fires                                  |
+| `poly.mirror.decision outcome=skipped reason=already_placed` | Loki            | Dedup. Noisy — reducing noise is in task.0323 §1.          |
+| `poly.mirror.decision outcome=skipped reason=cap_exceeded_*` | Loki            | Hitting caps. Expected under load; investigate if spiking. |
+| `poly.mirror.poll.tick_error`                                | Loki            | **ZERO**. Any hit = bug.                                   |
+| `poly_copy_trade_fills`                                      | poly DB         | Row per mirror decision                                    |
 
 **Status-sync gotcha (task.0323 §2 / task.0328):** `poly_copy_trade_fills.status=open` is written at INSERT time and **never re-read from CLOB**. Actual CLOB state may be filled, canceled, or partial. Don't trust the ledger's `status` column alone — cross-check Data-API `/positions?user=<addr>` or the `synced_at` staleness window exposed via `/api/v1/poly/sync-health`.
 

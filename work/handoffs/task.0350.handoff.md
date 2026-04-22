@@ -12,7 +12,7 @@ updated: 2026-04-22
 
 ## Context
 
-- `/version` endpoint returns `"version": "unknown"` 
+- `/version` endpoint returns `"version": "unknown"`
 - No changelog generation exists — just commitlint + squash merge to main
 - PR #978 flight revealed we don't actually produce version strings
 

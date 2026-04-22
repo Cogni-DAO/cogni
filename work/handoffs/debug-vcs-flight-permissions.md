@@ -1,8 +1,9 @@
-# Debug: core__vcs_flight_candidate GitHub App Permission Issue
+# Debug: core\_\_vcs_flight_candidate GitHub App Permission Issue
 
 ## Problem
 
 The `core__vcs_flight_candidate` tool is failing with:
+
 ```
 "Resource not accessible by integration"
 https://docs.github.com/rest/actions/workflows#create-a-workflow-dispatch-event
@@ -32,11 +33,13 @@ This happens when running on **poly-test** (the test Cogni app/node) when trying
    - Whether it's the right GitHub App (cogni-test vs cogni-prod)
 
 3. **Get Grafana logs from poly-test** - Query Loki:
+
    ```
    {namespace="cogni-candidate-a", pod=~"poly-node-app-.*"} |= "vcs_flight" or |= "workflow_dispatch" or |= "Resource not accessible"
    ```
-   
+
    Or from candidate-a logs around the time PR #976 was attempted:
+
    ```
    {namespace="cogni-candidate-a"} |= "core__vcs_flight_candidate" | json
    ```

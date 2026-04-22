@@ -9,11 +9,11 @@ You are the expert for every seam that **gets a wallet into a signing-ready stat
 
 ## Three wallet roles (canonical)
 
-| Role              | Signer                      | Lives in                                              | Used for                                                                                            |
-| ----------------- | --------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| **Per-tenant** (Phase B, **primary**) | Privy per-user HSM          | `poly_wallet_connections` (encrypted via AEAD)        | Real production — every tenant gets their own trading wallet at `/connect`. This is the line going forward. |
-| **Shared operator** (legacy fallback) | Privy app-wallet HSM        | `POLY_PROTO_*` env + `poly-node-app-secrets`          | v0 candidate-a flight before Phase B. Still live for `COGNI_SYSTEM_BILLING_ACCOUNT_ID`. Retiring.    |
-| **Target / test** (raw PK, experiments only) | local `.env.local` PK       | `scripts/experiments/`                                | On-chain proofs, dress-rehearsal $1 post-only orders, wallet research. **Never** in production code. |
+| Role                                         | Signer                | Lives in                                       | Used for                                                                                                    |
+| -------------------------------------------- | --------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Per-tenant** (Phase B, **primary**)        | Privy per-user HSM    | `poly_wallet_connections` (encrypted via AEAD) | Real production — every tenant gets their own trading wallet at `/connect`. This is the line going forward. |
+| **Shared operator** (legacy fallback)        | Privy app-wallet HSM  | `POLY_PROTO_*` env + `poly-node-app-secrets`   | v0 candidate-a flight before Phase B. Still live for `COGNI_SYSTEM_BILLING_ACCOUNT_ID`. Retiring.           |
+| **Target / test** (raw PK, experiments only) | local `.env.local` PK | `scripts/experiments/`                         | On-chain proofs, dress-rehearsal $1 post-only orders, wallet research. **Never** in production code.        |
 
 ## Per-tenant provisioning (Phase B, shipped)
 
@@ -35,10 +35,10 @@ You are the expert for every seam that **gets a wallet into a signing-ready stat
 
 ### Invariants (from `docs/spec/poly-trader-wallet-port.md`)
 
-- **`CUSTODIAL_CONSENT`** — enforced at *two* layers:
+- **`CUSTODIAL_CONSENT`** — enforced at _two_ layers:
   1. Zod (HTTP boundary): the `poly.wallet.connect.request.v1` schema requires both consent fields.
   2. TypeScript (port boundary): `PolyTraderWalletPort.provision`'s `input.custodialConsent: CustodialConsent` is non-optional. The adapter **cannot** be called without consent because the type system rejects it.
-  The runtime `if (!consent) throw` check was removed because the type-system enforcement is strictly stronger. If you re-introduce it, you've accidentally weakened the invariant.
+     The runtime `if (!consent) throw` check was removed because the type-system enforcement is strictly stronger. If you re-introduce it, you've accidentally weakened the invariant.
 - **`CREDS_AT_REST`** — all CLOB API keys AEAD-encrypted at rest; AAD binds ciphertext to `(billing_account_id, connection_id, provider)`. Swapping AAD shape is a **cross-node breaking change** (tracked as `D-5` on task.0318 review) — every existing ciphertext in prod uses the current shape. Don't "standardize" without a migration plan.
 - **`ORPHAN_FREE`** — every successful Privy wallet creation is traceable to a `poly_wallet_connections` row. The `idempotencyKey` + advisory-lock pair guarantees retries of a failed provision converge rather than creating new Privy wallets. [task.0346](../../../work/items/task.0346.poly-wallet-orphan-sweep.md) is the cleanup for any pre-Phase-B orphans.
 - **`RLS_ENFORCED`** — `poly_wallet_connections` reads under `appDb` must filter by the policy. Only the rate-limit helper and the mirror-poll enumerator may use `serviceDb` / `BYPASSRLS`, and both are audited seams.
@@ -93,14 +93,14 @@ Raw-PK experiments (`.env.local` only — never production):
 
 Route-level:
 
-| Signal                                                       | Good state                                                     |
-| ------------------------------------------------------------ | -------------------------------------------------------------- |
-| `poly.wallet.connect status=200 reqId=<uuid>`                | New tenant provisioned; `funder_address` in payload            |
-| `poly.wallet.connect status=200 idempotent=true`             | Retry / re-hit converged — same wallet, no new Privy row       |
-| `poly.wallet.connect status=429 reason=rate_limit`           | Abuse bound hit. Investigate attacker pattern if spiking.      |
-| `poly.wallet.connect status=5xx`                             | **Zero in steady state.** Any hit = Privy outage / adapter bug.|
-| `poly.wallet.status`                                         | Per-request, surfaces `connected` (auth gate only, not balance)|
-| `poly.wallet.balance`                                        | Polygon RPC read (USDC.e + MATIC)                              |
+| Signal                                             | Good state                                                      |
+| -------------------------------------------------- | --------------------------------------------------------------- |
+| `poly.wallet.connect status=200 reqId=<uuid>`      | New tenant provisioned; `funder_address` in payload             |
+| `poly.wallet.connect status=200 idempotent=true`   | Retry / re-hit converged — same wallet, no new Privy row        |
+| `poly.wallet.connect status=429 reason=rate_limit` | Abuse bound hit. Investigate attacker pattern if spiking.       |
+| `poly.wallet.connect status=5xx`                   | **Zero in steady state.** Any hit = Privy outage / adapter bug. |
+| `poly.wallet.status`                               | Per-request, surfaces `connected` (auth gate only, not balance) |
+| `poly.wallet.balance`                              | Polygon RPC read (USDC.e + MATIC)                               |
 
 State:
 
