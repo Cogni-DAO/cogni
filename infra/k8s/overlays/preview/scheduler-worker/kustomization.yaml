@@ -9,7 +9,7 @@ resources:
 # Argo CD ApplicationSet points here; digest change → auto-sync.
 images:
 - name: ghcr.io/cogni-dao/cogni-template
-  newTag: preview-94642315131183c5d7293cb7acb9c79edee8fd14-scheduler-worker
+  newTag: preview-5bd402afc56c363d1bc2730085d12435b362bbde-scheduler-worker
 patches:
 # Patch ConfigMap with staging-specific values
 - target:
