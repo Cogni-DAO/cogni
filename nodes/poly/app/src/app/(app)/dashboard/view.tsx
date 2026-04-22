@@ -57,8 +57,8 @@ import { StatusPill, TypeIcon } from "../work/_components/work-item-icons";
 import { fetchRuns } from "./_api/fetchRuns";
 import { CopyTradedWalletsCard } from "./_components/CopyTradedWalletsCard";
 import { ExecutionActivityCard } from "./_components/ExecutionActivityCard";
-import { OperatorWalletCard } from "./_components/OperatorWalletCard";
 import { OperatorWalletChartsRow } from "./_components/OperatorWalletChartsRow";
+import { TradingWalletCard } from "./_components/TradingWalletCard";
 
 type Tab = "user" | "system";
 
@@ -287,7 +287,7 @@ export function DashboardView(): ReactElement {
       </div>
 
       {/* Polymarket primary section (top of fold) */}
-      <OperatorWalletCard />
+      <TradingWalletCard />
       <OperatorWalletChartsRow />
       <ExecutionActivityCard />
       <div className="flex flex-col gap-2">
