@@ -295,8 +295,11 @@ jobs:
       # On success wait-for-argocd.sh writes ARGOCD_SYNC_VERIFIED=true to
       # $GITHUB_ENV — wait-for-candidate-ready refuses to run without it
       # (gate-ordering invariant, bug.0321 Fix 4).
+      # bug.0335: PROMOTED_APPS must not be empty. Empty means no new images were promoted
+      # (all apps used existing overlay digests), so there's nothing for Argo to sync —
+      # wait-for-argocd would incorrectly see stale revisions as "failed". Skip entirely.
       - name: Wait for ArgoCD sync on candidate-a
-        if: steps.ssh-setup.outputs.has_vm == 'true'
+        if: steps.ssh-setup.outputs.has_vm == 'true' && needs.flight.outputs.promoted_apps != ''
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           SSH_OPTS: "-i /home/runner/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"

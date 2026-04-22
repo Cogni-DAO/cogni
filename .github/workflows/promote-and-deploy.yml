@@ -547,8 +547,10 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
+      # bug.0335: Guard on promoted_apps to prevent waiting for empty set.
+      # When empty (no new images), Argo has nothing to sync.
       - name: Wait for ArgoCD sync
-        if: env.VM_HOST != ''
+        if: env.VM_HOST != '' && needs.promote-k8s.outputs.promoted_apps != ''
         env:
           SSH_OPTS: "-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
           # Argo tracks the deploy branch, not main. EXPECTED_SHA must be the

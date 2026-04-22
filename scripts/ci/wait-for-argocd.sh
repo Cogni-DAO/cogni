@@ -282,7 +282,11 @@ done
 if [ $FAILED -ne 0 ]; then
   echo ""
   echo "❌ ArgoCD reconcile failed for one or more apps"
-  kubectl -n argocd get applications -o wide 2>/dev/null || true
+  # bug.0335: Only dump apps we're waiting for, not all argocd apps
+  for app in "${APPS[@]}"; do
+    APP_NAME="${DEPLOY_ENVIRONMENT}-${app}"
+    kubectl -n argocd get application "$APP_NAME" -o jsonpath='{.metadata.name} {.status.sync.status} {.status.health.status} {.status.operationState.phase}{"\n"}' 2>/dev/null || true
+  done
   exit 1
 fi
 
