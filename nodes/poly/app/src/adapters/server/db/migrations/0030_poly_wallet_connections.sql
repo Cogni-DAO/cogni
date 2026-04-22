@@ -7,8 +7,11 @@
 -- Stores one per-tenant `poly_wallet_connections` row binding a billing
 -- account to a Privy server-wallet (in the DEDICATED user-wallets Privy app,
 -- NOT the operator-wallet system app — SEPARATE_PRIVY_APP invariant) plus
--- AEAD-encrypted Polymarket CLOB L2 creds. RLS scopes reads to the owning
--- user; partial unique index enforces one active wallet per tenant.
+-- AEAD-encrypted Polymarket CLOB L2 creds. RLS scopes reads through
+-- billing-account ownership (matching `llm_charge_details`) — principal-agnostic:
+-- whoever the app resolves for `app.current_user_id` gets access iff they own
+-- the referenced billing_account. Partial unique index enforces one active
+-- wallet per tenant.
 --
 -- PINNED INVARIANTS (source: docs/spec/poly-trader-wallet-port.md)
 --
@@ -70,11 +73,25 @@ CREATE INDEX "poly_wallet_connections_created_by_user_idx"
 ALTER TABLE "poly_wallet_connections" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "poly_wallet_connections" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 
--- Known-limitation (v0): policy keyed on `created_by_user_id`, NOT `billing_account_id`.
--- Correct today because every billing account has exactly one owner, so the two keys
--- identify the same principal. When multi-user billing accounts land, swap this policy
--- to key on billing-account membership — see `docs/spec/poly-trader-wallet-port.md §
--- Known-limitation: RLS policy keyed on created_by_user_id`.
+-- Tenant isolation via billing-account ownership (mirrors the `llm_charge_details`
+-- pattern). `created_by_user_id` is audit metadata only — NOT an RLS key. The app
+-- layer decides what `app.current_user_id` resolves to (today: the authenticated
+-- end-user; future: any actor — agent API key, service principal — whose session
+-- resolves to a user_id that owns the billing_account). When multi-user billing
+-- accounts land, swap the EXISTS clause below to a membership check; no column
+-- change required.
 CREATE POLICY "tenant_isolation" ON "poly_wallet_connections"
-  USING ("created_by_user_id" = current_setting('app.current_user_id', true))
-  WITH CHECK ("created_by_user_id" = current_setting('app.current_user_id', true));--> statement-breakpoint
+  USING (
+    EXISTS (
+      SELECT 1 FROM "billing_accounts" ba
+      WHERE ba."id" = "poly_wallet_connections"."billing_account_id"
+        AND ba."owner_user_id" = current_setting('app.current_user_id', true)
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM "billing_accounts" ba
+      WHERE ba."id" = "poly_wallet_connections"."billing_account_id"
+        AND ba."owner_user_id" = current_setting('app.current_user_id', true)
+    )
+  );--> statement-breakpoint

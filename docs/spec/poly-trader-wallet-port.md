@@ -371,28 +371,26 @@ Relevant columns:
 - `privy_wallet_id` — backend reference (Privy server-wallet id)
 - `address` — checksummed EOA (funder)
 - `clob_api_key_ciphertext` + `encryption_key_id` — encrypted L2 creds
-- `created_by_user_id`, `revoked_at`, `revoked_by_user_id`
+- `created_by_user_id`, `revoked_at`, `revoked_by_user_id` — audit metadata (not RLS keys)
 - Unique: one un-revoked row per `billing_account_id`
 
-### Known-limitation: RLS policy keyed on `created_by_user_id`
+### RLS policy — pivot through billing-account ownership
 
-Migration `0030_poly_wallet_connections.sql` keys the `tenant_isolation` policy on
-`created_by_user_id` rather than `billing_account_id`. This is correct in v0 (every billing
-account today has exactly one owner, so `created_by_user_id` and the billing account owner
-are the same principal), but it is a latent limitation: when multi-user billing accounts land,
-co-owners will not be able to read each other's wallet rows through the app role. The fix at
-that time is a policy swap:
+Migration `0030_poly_wallet_connections.sql` keys `tenant_isolation` on an `EXISTS`
+join through `billing_accounts.owner_user_id` (same shape as `llm_charge_details`), so
+the policy is principal-agnostic: whoever the app resolves for `app.current_user_id`
+gets access iff they own the referenced `billing_account`. `created_by_user_id` is
+pure audit metadata — it records who provisioned the row but is not load-bearing for
+isolation.
 
-```sql
-USING (billing_account_id IN (
-  SELECT id FROM billing_accounts
-  WHERE owner_user_id = current_setting('app.current_user_id', true)
-     OR id IN (SELECT billing_account_id FROM billing_account_members
-                WHERE user_id = current_setting('app.current_user_id', true))
-))
-```
+This is forward-compatible with:
 
-Tracked under the multi-user-billing follow-up; not in the v0 Phase B scope.
+- **Agent / service principals** — when an agent API key authenticates, the app sets
+  `app.current_user_id` to the user whose billing account the agent is acting on
+  behalf of; the existing EXISTS clause grants access without any migration.
+- **Multi-user billing accounts** — swap the EXISTS clause to join through a
+  membership table (`billing_account_members`) when it lands. No column change,
+  no data backfill.
 
 ## Env — separation of system and user-wallet Privy apps
 

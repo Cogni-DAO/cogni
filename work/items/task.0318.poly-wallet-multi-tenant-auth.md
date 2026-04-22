@@ -467,12 +467,13 @@ because this is the security-sensitive slice the rest of Phase B rides on.
       safe revoke semantics.
 
 - [x] **B-4 — RLS policy is keyed on `created_by_user_id`, not `billing_account_id`.**
-      `migrations/0030_poly_wallet_connections.sql:73-75`. If/when multi-user billing accounts
-      land, co-owners won't be able to access the wallet rows through the app role. Not a v0
-      bug (every billing account today has one owner), but it's a latent correctness trap.
-      **Fix (v0)**: document in the spec + migration comment as a known limitation with a
-      pointer to how to swap the policy when multi-user accounts ship. No schema rewrite now —
-      that belongs to the multi-user billing task.
+      **Fixed in-branch.** Rewrote `migrations/0030_poly_wallet_connections.sql` RLS policy to
+      `EXISTS`-join through `billing_accounts.owner_user_id` (same shape as `llm_charge_details`).
+      `created_by_user_id` becomes pure audit metadata. The policy is now principal-agnostic —
+      whoever the app resolves for `app.current_user_id` (today: authenticated user; future:
+      agent API key → user pivot) gets access iff they own the billing_account. Extends cleanly
+      to multi-user billing later by swapping the EXISTS clause for a membership check (no column
+      change, no data backfill).
 
 ### Suggestions (cheap wins, land in this PR)
 
