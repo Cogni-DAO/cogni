@@ -17,6 +17,18 @@ Ask the user which environment to investigate, or infer from context:
 - Local: Use MCP tools for `graphana-local`
 - Preview/Production: Use MCP tools for `graphana` (cloud)
 
+**MCP fallback — curl helper when MCP is down:** use
+[`scripts/loki-query.sh`](../../scripts/loki-query.sh). It reads
+`GRAFANA_URL` + `GRAFANA_SERVICE_ACCOUNT_TOKEN` from your env (or auto-sources
+`.env.canary`/`.env.local`) and hits the Loki `query_range` API directly.
+Example:
+
+```bash
+scripts/loki-query.sh '{env="candidate-a",service="app",pod=~"poly-node-app-.*"} | json | route="poly.wallet.connect"' 30 100 | jq
+```
+
+The LogQL syntax is identical to the MCP path; output is the raw Loki JSON.
+
 **Important:** `dev:stack` does NOT collect app logs, only other services (app runs outside Docker). Only `docker:stack` collects all logs locally.
 
 ### CI Logs (GitHub Actions)
