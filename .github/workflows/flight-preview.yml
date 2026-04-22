@@ -47,6 +47,20 @@ env:
 jobs:
   flight:
     runs-on: ubuntu-latest
+    # Skip flights triggered by the Argo CD Image Updater's own write-back
+    # commits to main. Post-#974 (bug.0344), the updater commits directly
+    # to main:infra/k8s/overlays/preview/**/kustomization.yaml after a
+    # successful preview deploy to keep the seed eventually-consistent.
+    # Those commits carry no merged PR — the PR-resolution step below
+    # would exhaust its fallbacks and fail loudly, polluting the Actions
+    # UI with red X's while the underlying preview is healthy. Keyed on
+    # the commit-message prefix set by config-patch.yaml's
+    # `git.commit-message-template` (COMMIT_PROVENANCE_VIA_MESSAGE_PREFIX
+    # invariant in bug.0344). Author-based keying is weaker: many bots
+    # commit as `github-actions[bot]`.
+    if: |
+      github.event_name != 'push' ||
+      !startsWith(github.event.head_commit.message, 'chore(deps): argocd-image-updater')
     outputs:
       # Emitted by scripts/ci/flight-preview.sh into $GITHUB_OUTPUT.
       # Values: dispatched | queued | (empty when the flight step was
