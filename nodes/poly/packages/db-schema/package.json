@@ -15,6 +15,16 @@
       "types": "./dist/copy-trade.d.ts",
       "import": "./dist/copy-trade.js",
       "default": "./dist/copy-trade.js"
+    },
+    "./wallet-connections": {
+      "types": "./dist/wallet-connections.d.ts",
+      "import": "./dist/wallet-connections.js",
+      "default": "./dist/wallet-connections.js"
+    },
+    "./wallet-grants": {
+      "types": "./dist/wallet-grants.d.ts",
+      "import": "./dist/wallet-grants.js",
+      "default": "./dist/wallet-grants.js"
     }
   },
   "files": [
@@ -22,7 +32,7 @@
   ],
   "scripts": {
     "build": "tsup",
-    "postbuild": "node -e \"const fs=require('fs'); for(const f of ['dist/index.js','dist/copy-trade.js']){if(!fs.existsSync(f)){console.error('ERROR: '+f+' missing'); process.exit(1)}}\"",
+    "postbuild": "node -e \"const fs=require('fs'); for(const f of ['dist/index.js','dist/copy-trade.js','dist/wallet-connections.js','dist/wallet-grants.js']){if(!fs.existsSync(f)){console.error('ERROR: '+f+' missing'); process.exit(1)}}\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

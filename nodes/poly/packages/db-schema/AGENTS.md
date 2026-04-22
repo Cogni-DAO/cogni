@@ -45,7 +45,9 @@ Cross-process importers (scheduler-worker, Temporal worker, `@cogni/poly-graphs`
 
 - **Subpath exports (mirrors `@cogni/db-schema` shape):**
   - `@cogni/poly-db-schema` — root barrel re-exports every slice
-  - `@cogni/poly-db-schema/copy-trade` — `polyCopyTradeTargets` (tenant-scoped tracked-wallet records, born in migration 0029), `polyCopyTradeFills` (`billingAccountId` + `createdByUserId` + `syncedAt` columns), `polyCopyTradeConfig` (per-tenant PK on `billingAccountId`, default `enabled=false` fail-closed), `polyCopyTradeDecisions` (tenant-scoped). All four tables enforce RLS via `tenant_isolation` policy keyed on `created_by_user_id` per docs/spec/poly-multi-tenant-auth.md.
+  - `@cogni/poly-db-schema/copy-trade` — `polyCopyTradeTargets` (tenant-scoped tracked-wallet records, born in migration 0029), `polyCopyTradeFills` (`billingAccountId` + `createdByUserId` + `syncedAt`), `polyCopyTradeConfig` (per-tenant PK, default `enabled=false` fail-closed), `polyCopyTradeDecisions` (tenant-scoped). RLS via `tenant_isolation` policy — see [docs/spec/poly-multi-tenant-auth.md](../../../../docs/spec/poly-multi-tenant-auth.md).
+  - `@cogni/poly-db-schema/wallet-connections` — `polyWalletConnections` (one active row per tenant; carries `custodial_consent_accepted_at` + `clob_connection_id` → `connections.id`; born in migration 0030). RLS keyed on `billing_accounts.owner_user_id` via EXISTS.
+  - `@cogni/poly-db-schema/wallet-grants` — `polyWalletGrants` (per-tenant trade-authorization grant; CHECK-enforced caps with `daily_usdc_cap >= per_order_usdc_cap`; scopes `text[]`; born in migration 0031). Consumed by `PrivyPolyTraderWalletAdapter.authorizeIntent`. See [docs/spec/poly-trader-wallet-port.md](../../../../docs/spec/poly-trader-wallet-port.md).
 - **Files considered API:** all `src/*.ts` via package.json exports
 
 ## Ports

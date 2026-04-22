@@ -2,10 +2,10 @@
 id: poly-trader-wallet-port
 type: spec
 title: "Poly Trader Wallet Port: per-tenant signing + credential broker for Polymarket CLOB"
-status: draft
-spec_state: proposed
-trust: draft
-summary: Port/adapter contract for per-tenant Polymarket trading wallets. `PolyTraderWalletPort` resolves `(billing_account_id) → { signer, clob_creds, funder_address }` for the CLOB adapter. Phase B ships `PrivyPolyTraderWalletAdapter` using a Privy app dedicated to user wallets (separate from the system / operator-wallet Privy app). Future adapters (Safe+4337, Turnkey) plug into the same port.
+status: active
+spec_state: active
+trust: reviewed
+summary: Port/adapter contract for per-tenant Polymarket trading wallets. `PolyTraderWalletPort` exposes `provisionWithGrant`, `authorizeIntent`, `revoke`, and `getAddress`; `authorizeIntent` is the only producer of the branded `AuthorizedSigningContext` that `PolymarketClobAdapter.placeOrder` requires. Phase B3 shipped `PrivyPolyTraderWalletAdapter` using a Privy app dedicated to user wallets (separate from the system / operator-wallet Privy app). Future adapters (Safe+4337, Turnkey) plug into the same port.
 read_when: Wiring per-user Polymarket trading, adding a new signing backend, provisioning per-tenant wallets, or reviewing the separation between system and user Privy credentials.
 implements: proj.poly-copy-trading
 owner: derekg1729

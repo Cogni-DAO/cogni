@@ -181,7 +181,7 @@
 | 2 | 5 | 2 | needs_design | task.0310 | Rename k8s staging namespace and overlays to preview | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 5 | 5 | needs_implement | task.0315 | Poly copy-trade prototype — v0 top-wallet scoreboard, v0.1 shadow 1-wallet mirror | Cogni Poly | proj.poly-copy-trading |
 | 2 | 5 | 3 | needs_design | task.0317 | Per-node LangGraph catalogs — factory library + node-owned catalog registry |  |  |
-| 2 | 5 | 5 | needs_implement | task.0318 | Poly wallet multi-tenant auth — per-user operator-wallet binding + RLS on copy-trade tables | Cogni Poly | proj.poly-copy-trading |
+| 2 | 5 | 5 | needs_merge | task.0318 | Poly wallet multi-tenant auth — per-user operator-wallet binding + RLS on copy-trade tables | Cogni Poly | proj.poly-copy-trading |
 | 2 | 5 | 4 | needs_review | task.0329 | Wallet analysis — reusable component + live data plane (any wallet) + Monitored drawer | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 5 | 5 | needs_design | task.0333 | Wallet analyst agent — AI qualitative judgments, Dolt-stored, DAO-funded | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 5 | 1 | needs_implement | task.0335 | Wallet analysis — clickable Monitored Wallets rows + paste-any-wallet search | Cogni Poly | proj.poly-prediction-bot |

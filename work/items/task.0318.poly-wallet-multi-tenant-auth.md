@@ -2,8 +2,8 @@
 id: task.0318
 type: task
 title: "Poly wallet multi-tenant auth — per-user operator-wallet binding + RLS on copy-trade tables"
-status: needs_implement
-revision: 7
+status: needs_merge
+revision: 8
 pr_b: https://github.com/Cogni-DAO/node-template/pull/968
 pr_b3: TBD
 priority: 2

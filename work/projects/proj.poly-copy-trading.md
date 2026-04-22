@@ -47,17 +47,18 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 
 ### Phase 3 (P3) — Multi-tenant: per-user operator wallets + RLS
 
-> **Active.** Phase A already shipped tenant-scoped copy-trade rows + RLS. Phase B pivots to Privy-per-user and is partially landed in PR #968: port, schema, adapter, route, env plumbing, and B2.10 component coverage are in. The remaining v0-critical step is real CLOB creds (B2.12). Orphan cleanup is now tracked separately as follow-up ops work.
+> **Active.** Phase A shipped tenant-scoped copy-trade rows + RLS. Phase B (PR #968) shipped the port + schema + adapter + connect route + env plumbing. Phase B3 (this branch) ships the per-tenant trade executor, grants table, `authorizeIntent` cap/scope enforcement, and a full cutover of the single-operator prototype — `PolyTradeExecutorFactory` is now the only placement path. Remaining gate: `deploy_verified: true` via candidate-a e2e.
 
-| Deliverable                                                                                            | Status       | Est | Work Item                                                                |
-| ------------------------------------------------------------------------------------------------------ | ------------ | --- | ------------------------------------------------------------------------ |
-| Per-user operator wallet binding + durable `WalletGrant` (RLS on copy-trade tables shipped in Phase A) | In Review    | 5   | [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md) Phase B |
-| Signing-backend decision (Safe+4337 vs Privy-per-user vs Turnkey) — resolved to Privy-per-user for v0  | Done         | 2   | (inline in task.0318)                                                    |
-| User-wallet orphan sweep for the dedicated Privy app (ops hygiene, not v0 trading path)                | Needs Design | 2   | [task.0348](../items/task.0348.poly-wallet-orphan-sweep.md)              |
-| Per-tenant wallet preferences + copy-trade sizing config (retire hardcoded funding + caps)             | Needs Design | 3   | [task.0347](../items/task.0347.poly-wallet-preferences-sizing-config.md) |
-| Trading wallet withdrawal — `withdrawUsdc` adapter + route + dialog (replaces stubbed button on Money) | Needs Triage | 3   | [task.0351](../items/task.0351.poly-trading-wallet-withdrawal.md)        |
-| Trading wallet one-click fund flow — Polygon in wagmi + `trading_wallet_funding` repo-spec + dialog    | Needs Design | 3   | [task.0352](../items/task.0352.poly-trading-wallet-fund-flow.md)         |
-| Money page v0 — hybrid AI-credits + trading-wallet panel; nav label Money, route `/credits`            | Done         | 2   | [task.0353](../items/task.0353.poly-money-page-v0.md)                    |
+| Deliverable                                                                                            | Status         | Est | Work Item                                                                 |
+| ------------------------------------------------------------------------------------------------------ | -------------- | --- | ------------------------------------------------------------------------- |
+| Per-user operator wallet binding + durable `WalletGrant` (RLS on copy-trade tables shipped in Phase A) | In Review (B3) | 5   | [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md) Phase B  |
+| Per-tenant trade executor + `authorizeIntent` cap/scope gate + prototype purge (full cutover)          | In Review      | 3   | [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md) Phase B3 |
+| Signing-backend decision (Safe+4337 vs Privy-per-user vs Turnkey) — resolved to Privy-per-user for v0  | Done           | 2   | (inline in task.0318)                                                     |
+| User-wallet orphan sweep for the dedicated Privy app (ops hygiene, not v0 trading path)                | Needs Design   | 2   | [task.0348](../items/task.0348.poly-wallet-orphan-sweep.md)               |
+| Per-tenant wallet preferences + copy-trade sizing config (retire hardcoded funding + caps)             | Needs Design   | 3   | [task.0347](../items/task.0347.poly-wallet-preferences-sizing-config.md)  |
+| Trading wallet withdrawal — `withdrawUsdc` adapter + route + dialog (replaces stubbed button on Money) | Needs Triage   | 3   | [task.0351](../items/task.0351.poly-trading-wallet-withdrawal.md)         |
+| Trading wallet one-click fund flow — Polygon in wagmi + `trading_wallet_funding` repo-spec + dialog    | Needs Design   | 3   | [task.0352](../items/task.0352.poly-trading-wallet-fund-flow.md)          |
+| Money page v0 — hybrid AI-credits + trading-wallet panel; nav label Money, route `/credits`            | Done           | 2   | [task.0353](../items/task.0353.poly-money-page-v0.md)                     |
 
 ### Phase 4 (P4) — Streaming + adversarial-robust ranking
 
@@ -96,8 +97,8 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 ## As-Built Specs
 
 - [Poly Copy-Trade Phase 1](../../docs/spec/poly-copy-trade-phase1.md) — layer boundaries, invariants, fill_id shape (as-built v0)
-- [Poly Trader Wallet Port](../../docs/spec/poly-trader-wallet-port.md) — `PolyTraderWalletPort` including read-only `getBalances` + HTTP `poly.wallet.balances.v1` (Money page surface)
-- [Poly Multi-Tenant Auth](../../docs/spec/poly-multi-tenant-auth.md) — tenant-scoped copy-trade tables, `CopyTradeTargetSource` port, Phase A implemented; `WalletSignerPort` + `poly_wallet_{connections,grants}` pending Phase B
+- [Poly Multi-Tenant Auth](../../docs/spec/poly-multi-tenant-auth.md) — tenant-scoped copy-trade tables, `CopyTradeTargetSource` port (Phase A); `PolyTraderWalletPort` + `poly_wallet_{connections,grants}` + `PolyTradeExecutorFactory` (Phase B3, as-built)
+- [Poly Trader Wallet Port](../../docs/spec/poly-trader-wallet-port.md) — port contract, `authorizeIntent` + branded `AuthorizedSigningContext`, read-only `getBalances` + HTTP `poly.wallet.balances.v1` (Money page surface), Privy-app isolation, adapter lifecycle (Phase B3, as-built)
 - [Polymarket Account Setup](../../docs/guides/polymarket-account-setup.md) — Privy operator onboarding runbook (guide, not spec)
 
 ## Design Notes

@@ -6,11 +6,13 @@
  * Purpose: Privy-backed PolyTraderWalletPort implementation. Manages per-tenant
  *   Polymarket trading wallets by delegating custody to a DEDICATED user-wallets
  *   Privy app (SEPARATE_PRIVY_APP) — never the operator-wallet system app.
- * Scope: `provision` (advisory-locked idempotent), `resolve`, `getAddress`,
+ * Scope: `provisionWithGrant` (atomic wallet + default-grant write under an
+ *   advisory-lock, idempotent across retries), `resolve`, `getAddress`,
  *   `getBalances` (DB address + optional Polygon RPC via `POLYGON_RPC_URL`),
- *   `revoke`. Other port methods (`authorizeIntent`, `withdrawUsdc`,
- *   `rotateClobCreds`) are stubbed until a follow-up commit lands the grants
- *   table + withdraw flow + CLOB rotation wiring.
+ *   `authorizeIntent` (scope + cap + active-grant checks; mints the branded
+ *   `AuthorizedSigningContext`), `revoke` (cascades across `poly_wallet_grants`
+ *   in the same tx). `withdrawUsdc` + `rotateClobCreds` remain stubbed until
+ *   the Money-page + CLOB-rotation items land.
  * Invariants:
  *   - SEPARATE_PRIVY_APP: constructor takes a PrivyClient built from
  *     PRIVY_USER_WALLETS_* env. The operator-wallet triple is never read here.
@@ -34,6 +36,14 @@
  *     `generation = count(all rows for tenant) + 1` (includes revoked rows,
  *     so monotonic across revoke cycles). Retries converge; a new provision
  *     after revoke gets a fresh wallet by incrementing generation.
+ *   - AUTHORIZED_SIGNING_ONLY: `authorizeIntent` is the ONLY producer of the
+ *     branded `AuthorizedSigningContext`. `PolymarketClobAdapter.placeOrder`
+ *     requires the brand — no cap/scope check can be bypassed by constructing
+ *     a context elsewhere.
+ *   - REVOKE_CASCADES_FROM_CONNECTION: `revoke(billingAccountId)` flips
+ *     `poly_wallet_connections.revoked_at` AND every grant row whose
+ *     `wallet_connection_id` matches, inside the same transaction. Next
+ *     `authorizeIntent` fails with `no_active_grant`.
  * Side-effects: IO (Privy API, DB reads/writes, AEAD crypto).
  * Links: docs/spec/poly-trader-wallet-port.md,
  *        docs/spec/poly-multi-tenant-auth.md

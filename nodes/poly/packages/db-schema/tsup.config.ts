@@ -14,7 +14,12 @@
 import { defineConfig } from "tsup";
 
 export const tsupConfig = defineConfig({
-  entry: ["src/index.ts", "src/copy-trade.ts"],
+  entry: [
+    "src/index.ts",
+    "src/copy-trade.ts",
+    "src/wallet-connections.ts",
+    "src/wallet-grants.ts",
+  ],
   format: ["esm"],
   dts: false, // tsc -b emits per-file declarations; tsup handles JS only
   clean: false,
