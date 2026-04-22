@@ -209,7 +209,9 @@ export function makeColumns(opts: {
     col.accessor("volumeUsdc", {
       id: "volumeUsdc",
       header: ({ column }) => (
-        <DataGridColumnHeader column={column} title="Volume" visibility />
+        <div className="flex w-full justify-end">
+          <DataGridColumnHeader column={column} title="Volume" visibility />
+        </div>
       ),
       size: 120,
       cell: (info) => {
@@ -231,7 +233,9 @@ export function makeColumns(opts: {
     col.accessor("pnlUsdc", {
       id: "pnlUsdc",
       header: ({ column }) => (
-        <DataGridColumnHeader column={column} title="PnL (MTM)" visibility />
+        <div className="flex w-full justify-end">
+          <DataGridColumnHeader column={column} title="PnL (MTM)" visibility />
+        </div>
       ),
       size: 130,
       cell: (info) => {
@@ -258,7 +262,9 @@ export function makeColumns(opts: {
     col.accessor("roiPct", {
       id: "roiPct",
       header: ({ column }) => (
-        <DataGridColumnHeader column={column} title="ROI" visibility />
+        <div className="flex w-full justify-end">
+          <DataGridColumnHeader column={column} title="ROI" visibility />
+        </div>
       ),
       size: 90,
       cell: (info) => {
@@ -279,7 +285,9 @@ export function makeColumns(opts: {
     col.accessor("numTrades", {
       id: "numTrades",
       header: ({ column }) => (
-        <DataGridColumnHeader column={column} title="# Trades" visibility />
+        <div className="flex w-full justify-end">
+          <DataGridColumnHeader column={column} title="# Trades" visibility />
+        </div>
       ),
       size: 100,
       cell: ({ row }) => {

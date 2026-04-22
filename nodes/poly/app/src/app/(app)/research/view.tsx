@@ -29,7 +29,7 @@ import type { WalletTimePeriod } from "@cogni/ai-tools";
 import { PolyAddressSchema } from "@cogni/node-contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnFiltersState, SortingState } from "@tanstack/react-table";
-import { Ban, Minus, Plus, Shield } from "lucide-react";
+import { Ban, Plus, Radio, Shield } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -184,7 +184,7 @@ export function ResearchView() {
           <button
             type="button"
             aria-label={`Untrack ${row.proxyWallet}`}
-            title="Stop tracking this wallet"
+            title="Stop copy-trading this wallet (click the green icon to unfollow)"
             disabled={deleteTargetMutation.isPending}
             onClick={(e) => {
               e.stopPropagation();
@@ -192,7 +192,7 @@ export function ResearchView() {
             }}
             className="inline-flex size-7 items-center justify-center rounded text-success hover:bg-destructive/10 hover:text-destructive disabled:cursor-wait disabled:opacity-40"
           >
-            <Minus className="size-3.5" />
+            <Radio className="size-3.5 animate-pulse" />
           </button>
         );
       }
