@@ -309,20 +309,20 @@ jobs:
         run: bash app-src/scripts/ci/wait-for-argocd.sh
 
       - name: Wait for candidate readiness
-        if: steps.ssh-setup.outputs.has_vm == 'true'
+        if: steps.ssh-setup.outputs.has_vm == 'true' && needs.flight.outputs.promoted_apps != ''
         env:
           DOMAIN: ${{ vars.DOMAIN }}
         run: bash app-src/scripts/ci/wait-for-candidate-ready.sh
 
       - name: Wait for in-cluster services
-        if: steps.ssh-setup.outputs.has_vm == 'true'
+        if: steps.ssh-setup.outputs.has_vm == 'true' && needs.flight.outputs.promoted_apps != ''
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           DEPLOY_ENVIRONMENT: candidate-a
         run: bash app-src/scripts/ci/wait-for-in-cluster-services.sh
 
       - name: Run candidate smoke checks
-        if: steps.ssh-setup.outputs.has_vm == 'true'
+        if: steps.ssh-setup.outputs.has_vm == 'true' && needs.flight.outputs.promoted_apps != ''
         env:
           DOMAIN: ${{ vars.DOMAIN }}
           PROMOTED_APPS: ${{ needs.flight.outputs.promoted_apps }}
@@ -334,7 +334,7 @@ jobs:
       # promote-build-payload.sh and asserts each promoted app's /version.buildSha.
       # Falls back to EXPECTED_BUILDSHA + NODES if the map is absent.
       - name: Verify buildSha on endpoints
-        if: steps.ssh-setup.outputs.has_vm == 'true'
+        if: steps.ssh-setup.outputs.has_vm == 'true' && needs.flight.outputs.promoted_apps != ''
         env:
           DOMAIN: ${{ vars.DOMAIN }}
           SOURCE_SHA_MAP: deploy-branch/.promote-state/source-sha-by-app.json

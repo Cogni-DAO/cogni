@@ -564,7 +564,7 @@ jobs:
         run: bash app-src/scripts/ci/wait-for-argocd.sh
 
       - name: Wait for in-cluster services
-        if: env.VM_HOST != ''
+        if: env.VM_HOST != '' && needs.promote-k8s.outputs.promoted_apps != ''
         run: bash app-src/scripts/ci/wait-for-in-cluster-services.sh
 
       # Authoritative contract probe: pods serve the SHA that built their
@@ -576,7 +576,7 @@ jobs:
       # nodes may have mixed SHAs). Falls back to single-SHA single-NODES mode
       # on first-deploy bootstrap where the map file does not yet exist.
       - name: Verify buildSha on endpoints
-        if: env.VM_HOST != ''
+        if: env.VM_HOST != '' && needs.promote-k8s.outputs.promoted_apps != ''
         env:
           SOURCE_SHA_MAP: deploy-branch/.promote-state/source-sha-by-app.json
           EXPECTED_BUILDSHA: ${{ needs.promote-k8s.outputs.head_sha }}
