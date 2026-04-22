@@ -8,7 +8,7 @@ resources:
 namePrefix: operator-
 images:
 - name: ghcr.io/cogni-dao/cogni-template
-  newTag: preview-94642315131183c5d7293cb7acb9c79edee8fd14
+  newTag: preview-5bd402afc56c363d1bc2730085d12435b362bbde
 - name: ghcr.io/cogni-dao/cogni-template-migrate
   newTag: preview-fc25e68f59a0552eaab8e74697c51e34f6dea4f0-operator-migrate
 patches:
