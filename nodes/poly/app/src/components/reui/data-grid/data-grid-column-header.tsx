@@ -19,6 +19,7 @@ import {
   getColumnHeaderLabel,
   useDataGrid,
 } from "@/components/reui/data-grid/data-grid";
+import { Badge } from "@/components/reui/badge";
 import { Button } from "@/components/vendor/shadcn/button";
 import {
   DropdownMenu,
@@ -98,6 +99,28 @@ function DataGridColumnHeaderInner<TData, TValue>({
     ) : (
       <ChevronsUpDownIcon className="mt-px size-3.25" />
     ));
+
+  // Active-filter count badge. Surfaced on the header trigger so users can
+  // see at a glance that a filter is narrowing the table, without having to
+  // open each column dropdown. Shown only when the column actually exposes a
+  // filter UI (`filter` prop) AND a value is set.
+  const filterValue = column.getFilterValue();
+  const filterCount = Array.isArray(filterValue)
+    ? filterValue.length
+    : filterValue !== undefined && filterValue !== null && filterValue !== ""
+      ? 1
+      : 0;
+  const filterBadge =
+    filter && filterCount > 0 ? (
+      <Badge
+        variant="destructive-light"
+        size="xs"
+        radius="full"
+        aria-label={`${filterCount} filter${filterCount === 1 ? "" : "s"} active`}
+      >
+        {filterCount}
+      </Badge>
+    ) : null;
 
   const hasControls =
     props.tableLayout?.columnsMovable ||
@@ -298,6 +321,7 @@ function DataGridColumnHeaderInner<TData, TValue>({
               {icon && icon}
               {resolvedTitle}
               {sortIcon}
+              {filterBadge}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-40" align="start">

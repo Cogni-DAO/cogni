@@ -24,10 +24,11 @@ import { getServerSessionUser } from "@/lib/auth/server";
 // Route-local schema — mirrors WalletTimePeriodSchema / WalletOrderBySchema from
 // @cogni/ai-tools. Declared inline because app uses zod 4 while ai-tools is
 // built against zod 3, and cross-version `z.infer` loses the enum narrowing.
+// Max is 200 to power the /research discovery grid (AI-tool surface stays at 50).
 const QuerySchema = z.object({
   timePeriod: z.enum(["DAY", "WEEK", "MONTH", "ALL"]).optional(),
   orderBy: z.enum(["PNL", "VOL"]).optional(),
-  limit: z.coerce.number().int().min(1).max(50).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
 });
 
 export const dynamic = "force-dynamic";

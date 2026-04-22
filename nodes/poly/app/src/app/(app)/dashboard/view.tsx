@@ -55,9 +55,9 @@ import { fetchActivity } from "../activity/_api/fetchActivity";
 import { WorkItemDetail } from "../work/_components/WorkItemDetail";
 import { StatusPill, TypeIcon } from "../work/_components/work-item-icons";
 import { fetchRuns } from "./_api/fetchRuns";
+import { CopyTradedWalletsCard } from "./_components/CopyTradedWalletsCard";
 import { OperatorWalletCard } from "./_components/OperatorWalletCard";
 import { OrderActivityCard } from "./_components/OrderActivityCard";
-import { TopWalletsCard } from "./_components/TopWalletsCard";
 
 type Tab = "user" | "system";
 
@@ -294,7 +294,7 @@ export function DashboardView(): ReactElement {
         </h2>
         <WalletQuickJump />
       </div>
-      <TopWalletsCard />
+      <CopyTradedWalletsCard />
 
       {/* Two-column section: Agents + Work (demoted below the Polymarket cards) */}
       <div className="grid gap-6 lg:grid-cols-2">

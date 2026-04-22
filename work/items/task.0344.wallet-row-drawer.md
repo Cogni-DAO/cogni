@@ -2,12 +2,12 @@
 id: task.0344
 type: task
 title: "Wallet row → side drawer (skeleton-first, no page jump)"
-status: needs_implement
+status: done
 priority: 2
 rank: 5
 estimate: 1
 created: 2026-04-20
-updated: 2026-04-20
+updated: 2026-04-22
 summary: "Click a row on /research → side Sheet opens immediately with WalletAnalysisView; the three slices (snapshot, trades, balance) stream in via React Query as they land. Replaces the previous router.push to /research/w/[addr] for in-table interactions; the full page stays available via an 'Open in page →' link in the drawer header."
 outcome: "Browsing /research feels continuous — click a wallet, drawer slides in instantly, skeletons render in the same frame, real numbers fade in slice-by-slice as fetches complete. No full-page navigation, no perceived dead time."
 spec_refs:
@@ -15,12 +15,12 @@ spec_refs:
 assignees: [derekg1729]
 credit:
 project: proj.poly-prediction-bot
-branch: feat/wallet-row-drawer
-pr:
+branch: research-wallets-unify
+pr: 976
 reviewer:
 revision: 0
 blocked_by: [task.0343]
-deploy_verified: false
+deploy_verified: true
 labels: [poly, wallet-analysis, ui, drawer]
 ---
 

@@ -2,12 +2,12 @@
 id: task.0343
 type: task
 title: "Research page → wallets browse dashboard (replaces static dossier)"
-status: needs_implement
+status: done
 priority: 2
 rank: 5
 estimate: 2
 created: 2026-04-20
-updated: 2026-04-20
+updated: 2026-04-22
 summary: "Replace the static spike.0323 dossier on /research with a browseable wallets table that mirrors the /work toolbar pattern (Input + FacetedFilter + DataGrid). Same nav slot, same URL — no /wallets sprawl. Click any row → /research/w/[addr]. Compact no-fly-zone footer keeps the compliance reminder."
 outcome: "Click 'Research' in the sidebar → see live top-N Polymarket wallets in a sortable, filterable table. Filter by Period (DAY/WEEK/MONTH/ALL), Category (heuristic v0), Tracked (yes/no). Search by wallet substring or username. Quick-jump to any 0x via the existing WalletQuickJump. The static dossier (BeefSlayer hero, category map, runner-up cards, sources) is deleted — its content lives on /research/w/0x331b… and the no-fly-zone footer."
 spec_refs:
@@ -15,12 +15,12 @@ spec_refs:
 assignees: [derekg1729]
 credit:
 project: proj.poly-prediction-bot
-branch: feat/wallets-dashboard
-pr:
+branch: research-wallets-unify
+pr: 976
 reviewer:
 revision: 0
 blocked_by:
-deploy_verified: false
+deploy_verified: true
 labels: [poly, wallet-analysis, ui, research, dashboard]
 ---
 
