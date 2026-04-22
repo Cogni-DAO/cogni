@@ -577,7 +577,7 @@ non-blocking.
 
 - [ ] **S-8 — `/connect` output hardcodes `requires_funding: true` + fixed suggestions.**
       `route.ts:137-143` returns `{ requires_funding: true, suggested_usdc: 5,
-    suggested_matic: 0.1 }` on every call — including idempotent re-hits where the wallet
+suggested_matic: 0.1 }` on every call — including idempotent re-hits where the wallet
       already has balance. Same gap on `/status` (no balance field). UI will say "fund me with 5
       USDC" even when the wallet has 50. Real fix requires a Polygon RPC balance read; belongs
       with the withdraw-UX work (B3) or its own micro-task. Note, not blocking.
@@ -604,7 +604,7 @@ non-blocking.
   the unique index rejects the second insert.
 
 - **G-4 — AEAD AAD binding verified end-to-end.** `(billing_account_id, connection_id,
-    provider)` pinned into the AAD envelope; component test
+provider)` pinned into the AAD envelope; component test
   `adapter.int.test.ts:282-292` explicitly proves that re-binding ciphertext to a different
   `billing_account_id` causes `aeadDecrypt` to throw.
 
