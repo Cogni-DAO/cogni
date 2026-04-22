@@ -328,7 +328,7 @@ jobs:
       # Authoritative contract probe: promoted pods serve the SHA that built
       # their overlay digest. SOURCE_SHA_MAP mode (bug.0321 Fix 4) reads
       # deploy-branch/.promote-state/source-sha-by-app.json written by
-      # promote-build-payload.sh and asserts each node's /readyz.version.
+      # promote-build-payload.sh and asserts each promoted app's /version.buildSha.
       # Falls back to EXPECTED_BUILDSHA + NODES if the map is absent.
       - name: Verify buildSha on endpoints
         if: steps.ssh-setup.outputs.has_vm == 'true'

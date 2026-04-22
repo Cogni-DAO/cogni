@@ -50,6 +50,11 @@
 #                       key is an app name; each value is the PR head SHA
 #                       that built that app's overlay digest. Unset or
 #                       missing file → fall back to single-SHA mode.
+#   NODES               (optional CSV) when set and non-empty in map mode:
+#                       verify **only** these apps' map entries (intersection),
+#                       not every key in the file. Required for affected-only
+#                       flights/promotes: the map still carries older SHAs for
+#                       apps not promoted this run (task.0349).
 #
 # Hostname convention: operator → https://$DOMAIN, others → https://$node-$DOMAIN.
 
@@ -97,6 +102,34 @@ PY
   if [ "${#EXPECTED_BY_NODE[@]}" -eq 0 ]; then
     echo "ℹ️  source-sha-by-app.json has no entries — skipping buildSha check."
     exit 0
+  fi
+
+  # task.0349: map mode + non-empty NODES → verify only promoted apps.
+  # Without this, every ingress node in the full map is probed; affected-only
+  # flights promote a subset but the map still holds prior SHAs for other apps,
+  # which produces false reds (e.g. poly-only flight still checking operator).
+  if [ -n "${NODES:-}" ]; then
+    declare -A FILTERED=()
+    IFS=',' read -r -a WANT <<<"${NODES}"
+    for raw in "${WANT[@]}"; do
+      app=$(printf '%s' "$raw" | tr -d '[:space:]')
+      [ -z "$app" ] && continue
+      if [ -n "${EXPECTED_BY_NODE[$app]+x}" ]; then
+        FILTERED["$app"]="${EXPECTED_BY_NODE[$app]}"
+      else
+        echo "::error::verify-buildsha: NODES includes '${app}' but SOURCE_SHA_MAP has no entry — map/promotion mismatch" >&2
+        exit 1
+      fi
+    done
+    if [ "${#FILTERED[@]}" -eq 0 ]; then
+      echo "::error::verify-buildsha: NODES='${NODES}' produced no matching map entries" >&2
+      exit 1
+    fi
+    EXPECTED_BY_NODE=()
+    for k in "${!FILTERED[@]}"; do
+      EXPECTED_BY_NODE["$k"]="${FILTERED[$k]}"
+    done
+    echo "ℹ️  verify-buildsha: map mode restricted to NODES=${NODES} (${#EXPECTED_BY_NODE[@]} app(s))"
   fi
 else
   if [ -n "$SOURCE_SHA_MAP" ]; then

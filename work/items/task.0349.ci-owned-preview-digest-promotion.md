@@ -26,13 +26,20 @@ external_refs:
 
 > **Design review 2026-04-22:** REQUEST CHANGES on v1 (Cursor plan `design_review_task.0349`). Resolved in v2/v3: single authority on **main** (rsync seed), `workflow_run` after Flight Preview, affected-only tri-state digest resolution, spec-first amendment to `docs/spec/ci-cd.md`, message-prefix skips (not author email). Second review: **Option B only** (`promote-build-payload.sh` on `main` rejected — deploy-branch + `.promote-state/` coupling); clarify seed commit timing vs in-flight preview deploy.
 
-## PR A shipped in repo (2026-04-22)
+## Single PR scope (no PR-A/PR-B split)
+
+One merge closes the loop: digest seed on `main`, demote IU on the preview AppSet, **and** fix `verify-buildsha.sh` map mode so `NODES`/`promoted_apps` restricts checks to the promoted subset (affected-only flights were false-failing operator when only poly was promoted).
+
+### Shipped in this branch
 
 - [`scripts/ci/promote-preview-seed-main.sh`](../../scripts/ci/promote-preview-seed-main.sh) — Option B loop + tri-state resolve.
-- [`.github/workflows/promote-preview-digest-seed.yml`](../../.github/workflows/promote-preview-digest-seed.yml) — `workflow_run` on **Flight Preview** `completed` + `success` + `push` on `main`; gate on message prefixes + `origin/main == merge_sha`; race-safe push.
-- [`flight-preview.yml`](../../.github/workflows/flight-preview.yml) — skip `chore(preview):` as well as IU prefix.
-- [`docs/spec/ci-cd.md`](../../docs/spec/ci-cd.md) — preview seed authority + task.0349 + transitional bug.0344; removed anti-bespoke axiom.
-- **PR B** (strip IU AppSet annotations, delete `check-image-updater-scope.sh`, optional `ENABLE_IMAGE_UPDATER`) — **not** done; ship after ≥1 observed healthy merge cycle with PR A.
+- [`.github/workflows/promote-preview-digest-seed.yml`](../../.github/workflows/promote-preview-digest-seed.yml) — `workflow_run` on **Flight Preview** `completed` + `success` + `push` on `main`; message-prefix gates + race-safe push.
+- [`flight-preview.yml`](../../.github/workflows/flight-preview.yml) — skip `chore(preview):` and IU maintenance prefixes.
+- [`infra/k8s/argocd/preview-applicationset.yaml`](../../infra/k8s/argocd/preview-applicationset.yaml) — **no** Image Updater annotations (CI-owned seed).
+- [`scripts/ci/check-image-updater-scope.sh`](../../scripts/ci/check-image-updater-scope.sh) — empty allowlist: **zero** `argocd-image-updater.argoproj.io/*` on any `*-applicationset.yaml`.
+- [`scripts/ci/verify-buildsha.sh`](../../scripts/ci/verify-buildsha.sh) + [`scripts/ci/tests/verify-buildsha.test.sh`](../../scripts/ci/tests/verify-buildsha.test.sh) — map mode ∩ `NODES`.
+- [`docs/spec/ci-cd.md`](../../docs/spec/ci-cd.md), [`docs/guides/create-service.md`](../../docs/guides/create-service.md), [`.prettierignore`](../../.prettierignore) — authority + verify semantics aligned with code.
+- [`.github/workflows/candidate-flight.yml`](../../.github/workflows/candidate-flight.yml) — comment fix (`/version.buildSha`, not `/readyz.version`).
 
 ## Problem statement
 
@@ -92,29 +99,16 @@ Per [docs/spec/docs-work-system.md](../../docs/spec/docs-work-system.md) `LINK_D
 
 **Option B shipped:** [`scripts/ci/promote-preview-seed-main.sh`](../../scripts/ci/promote-preview-seed-main.sh) — `promote-k8s-image.sh --no-commit` per catalog target; tri-state digest resolution; no `.promote-state/` on `main`.
 
-## Staged PRs
+## Follow-ups (optional, not blocking this task)
 
-### PR A — Spec + CI promoter + Flight Preview skip (done in tree)
-
-1. ~~Amend `docs/spec/ci-cd.md`~~ Done.
-2. ~~Add `promote-preview-digest-seed.yml`~~ Done.
-3. ~~Update `flight-preview.yml`~~ Done (`chore(preview):` + IU prefixes).
-4. **Do not** remove Image Updater annotations yet (overlap is OK; both write **main** preview paths — last writer wins; seed workflow runs after Flight Preview success).
-
-### PR B — Demote Image Updater
-
-After ≥1 merge cycle with green digest-seed runs:
-
-- Strip IU annotations from [`infra/k8s/argocd/preview-applicationset.yaml`](../../infra/k8s/argocd/preview-applicationset.yaml).
-- Remove IU-only hygiene: `.prettierignore` carve-out (if safe), `check-image-updater-scope.sh`, IU-only `flight-preview` skip branch (keep `chore(preview):` branch).
-- Optional: gate [`deploy-infra.sh`](../../scripts/ci/deploy-infra.sh) step 7b with `ENABLE_IMAGE_UPDATER` (default false) — document rollback in runbook.
-- Update [`docs/runbooks/image-updater-bootstrap.md`](docs/runbooks/image-updater-bootstrap.md) + append reversal note on [bug.0344](bug.0344.adopt-digest-update-controller.md).
+- Gate in-cluster Image Updater install (`ENABLE_IMAGE_UPDATER` / deploy-infra) if we want the controller absent entirely — runbook + bug.0344 appendix.
+- Trim `flight-preview.yml` IU skip once we are confident no legacy `chore(deps): argocd-image-updater` pushes land on `main` (keeping the skip is harmless).
 
 ## Out of scope
 
 - Prod/canary promotion semantics; AppSet topology; multi-repo split.
 - Changing `promote-and-deploy` rsync model (would be a different task).
-- Candidate-a verify (already map-scoped).
+- ~~Candidate-a verify~~ — fixed here: map mode must intersect `SOURCE_SHA_MAP` with `NODES` when the caller passes `promoted_apps`.
 
 ## Validation
 
@@ -132,9 +126,8 @@ After ≥1 merge cycle with green digest-seed runs:
 
 ## Rollback
 
-- Revert PR B; re-annotate AppSet; re-enable IU in infra if gated off.
-- Revert PR A; IU resumes seed ownership (no rsync contradiction).
+- Revert this PR as a unit; re-annotate preview AppSet if restoring IU write-back; restore prior `verify-buildsha.sh` behavior only if intentionally reverifying full map on every flight.
 
 ## Success criteria
 
-- `deploy_verified: true` after observed merge cycle: zero `argocd-image-updater` commits in a 24h window post–PR B, seed commits ≤1 per human merge, preview digest pins consistent with `promote-and-deploy` rsync.
+- `deploy_verified: true` after observed merge cycle: zero new `argocd-image-updater` **write-back** commits from preview (AppSet demoted), seed commits ≤1 per human merge when digests change, candidate-a verify green on affected-only flights, preview digest pins consistent with `promote-and-deploy` rsync.
