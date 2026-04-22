@@ -8,9 +8,9 @@ resources:
 namePrefix: operator-
 images:
 - name: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:e9119c41c323f0617cbc1eba281bc3bb9e8a2c1d365a5b480c06c89e6845493c"
+    digest: "sha256:19e77c987e6eec0cdd1540afd5797ce46fe8100d3cee066e357914a9c518341e"
 - name: ghcr.io/cogni-dao/cogni-template-migrate
-    digest: "sha256:18eb287b76c4d56a54e7bed153f3c8007d1136974db9f4fcb97a9e3c298df0cc"
+    digest: "sha256:a27b330eff5741c1837ac73ef4b39b2910d0a9d3f78173b5d442d9605b9548d6"
 patches:
 # Node-specific ConfigMap values.
 # DNS names must match prefixed Service names (namePrefix applies to all resources).
