@@ -1,0 +1,115 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# task.0349 — After Flight Preview completes successfully for a merge to main,
+# refresh `main:infra/k8s/overlays/preview/**` digest pins in a single commit
+# (`chore(preview): …`) without reusing promote-build-payload (deploy-branch
+# coupling). See docs/spec/ci-cd.md.
+#
+# Timing: this runs *after* Flight Preview finishes; `flight-preview.sh` may
+# already have dispatched promote-and-deploy for the same merge. This seed
+# commit mainly protects *future* promote-and-deploy rsyncs (main-derived
+# overlay seeds), not the preview deploy already in flight for this SHA.
+
+name: Promote Preview Digest Seed
+
+on:
+  workflow_run:
+    workflows: ["Flight Preview"]
+    types: [completed]
+
+permissions:
+  contents: write
+  packages: read
+
+concurrency:
+  group: promote-preview-seed-main
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.event == 'push'
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          token: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
+
+      - name: Gate maintenance commits and main drift
+        id: gate
+        env:
+          MERGE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          msg=$(git log -1 --format=%s "$MERGE_SHA")
+          if [[ "$msg" == chore\(deps\):\ argocd-image-updater* ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "ℹ️  Skip: Image Updater maintenance commit"
+            exit 0
+          fi
+          if [[ "$msg" == chore\(preview\):* ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "ℹ️  Skip: digest-seed maintenance commit"
+            exit 0
+          fi
+          git fetch origin main --quiet
+          tip=$(git rev-parse origin/main)
+          if [ "$tip" != "$MERGE_SHA" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "ℹ️  Skip: origin/main ($tip) advanced past merge $MERGE_SHA — another merge won the race"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "✅ Gate passed for merge ${MERGE_SHA:0:12}"
+
+      - name: Set up Docker Buildx
+        if: steps.gate.outputs.skip != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: steps.gate.outputs.skip != 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Refresh preview digest seed on main
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          MERGE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: bash scripts/ci/promote-preview-seed-main.sh
+
+      - name: Commit and push if changed
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          MERGE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main --quiet
+          if [ "$(git rev-parse origin/main)" != "$MERGE_SHA" ]; then
+            echo "::warning::origin/main advanced before commit — discarding working tree changes"
+            git checkout -- infra/k8s/overlays/preview/
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add infra/k8s/overlays/preview/
+          if git diff --cached --quiet; then
+            echo "ℹ️  No overlay diff — nothing to push"
+            exit 0
+          fi
+          short=$(echo "$MERGE_SHA" | cut -c1-8)
+          git commit -m "chore(preview): refresh digest seed ${short}" -m "task.0349 — after Flight Preview success for merge ${MERGE_SHA}. Does not change the preview deploy already dispatched for this SHA; updates main overlay seeds for future promote-and-deploy rsyncs (INFRA_K8S_MAIN_DERIVED)."
+          git fetch origin main --quiet
+          if [ "$(git rev-parse origin/main)" != "$MERGE_SHA" ]; then
+            echo "::warning::origin/main moved after commit — aborting push (reset locally)"
+            git reset --hard HEAD~1
+            exit 0
+          fi
+          git push origin HEAD:main
