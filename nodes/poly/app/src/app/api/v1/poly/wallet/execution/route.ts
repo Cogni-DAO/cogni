@@ -4,8 +4,7 @@
 /**
  * Module: `@app/api/v1/poly/wallet/execution`
  * Purpose: HTTP GET — per-tenant execution feed (positions + daily trade
- *          counts, and eventually balance-history) for the caller's own
- *          Polymarket trading wallet. Powers the dashboard's
+ *          counts) for the caller's own Polymarket trading wallet. Powers the dashboard's
  *          `OperatorWalletChartsRow` + `ExecutionActivityCard`.
  * Scope: Session-auth, tenant-scoped. Resolves the caller's billing account,
  *   asks `PolyTraderWalletPort` for its `funder_address`, then delegates to
@@ -20,12 +19,9 @@
  *     wallet provisioned yet (or the adapter itself is unconfigured on this
  *     pod), the payload is empty arrays with a warning — the UI empty
  *     state renders without throwing.
- *   - BALANCE_HISTORY_DEFERRED: `balanceHistory` is empty because the
- *     per-tenant cash context (on-chain USDC.e + open-order notional) is
- *     not yet wired through `getExecutionSlice`'s optional
- *     `fetchOperatorExtras` hook. A future PR (tracked in task.0354)
- *     plugs in a tenant-scoped resolver backed by
- *     `PolyTraderWalletPort.getBalances` + a per-tenant open-order reader.
+ *   - EXECUTION_ONLY: current wallet totals live on
+ *     `/api/v1/poly/wallet/overview`; this route stays focused on positions
+ *     and trade cadence only.
  * Side-effects: IO (DB read, Polymarket Data API, public CLOB).
  * Links: packages/node-contracts/src/poly.wallet.execution.v1.contract.ts,
  *        docs/spec/poly-trader-wallet-port.md,
@@ -56,7 +52,6 @@ function emptyPayload(warning: { code: string; message: string }) {
   return polyWalletExecutionOperation.output.parse({
     address: ZERO_ADDRESS,
     capturedAt: new Date().toISOString(),
-    balanceHistory: [],
     dailyTradeCounts: [],
     positions: [],
     warnings: [warning],

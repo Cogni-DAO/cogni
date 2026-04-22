@@ -78,6 +78,7 @@ export * from "./poly.wallet.balance.v1.contract";
 export * from "./poly.wallet.balances.v1.contract";
 export * from "./poly.wallet.connection.v1.contract";
 export * from "./poly.wallet.execution.v1.contract";
+export * from "./poly.wallet.overview.v1.contract";
 export * from "./poly.wallet-analysis.v1.contract";
 // ── Runs ────────────────────────────────────────────────────────────────────
 export * from "./run-stream.contract";

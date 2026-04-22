@@ -22,11 +22,6 @@ export {
   mapExecutionPositions,
 } from "./position-timelines.js";
 export {
-  type MapWalletBalanceHistoryInput,
-  mapWalletBalanceHistory,
-  type WalletBalanceHistoryPoint,
-} from "./wallet-balance-history.js";
-export {
   type ComputeWalletMetricsOptions,
   computeWalletMetrics,
   type MarketResolutionInput,

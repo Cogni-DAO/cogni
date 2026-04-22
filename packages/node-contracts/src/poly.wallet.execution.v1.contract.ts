@@ -3,14 +3,14 @@
 
 /**
  * Module: `@contracts/poly.wallet.execution.v1.contract`
- * Purpose: Defines the operator-wallet execution route contract for the dashboard wallet charts and Positions view.
- * Scope: GET /api/v1/poly/wallet/execution. Read-only; does not mutate operator state.
+ * Purpose: Defines the trading-wallet execution route contract for the dashboard trade-cadence chart and positions view.
+ * Scope: GET /api/v1/poly/wallet/execution. Read-only; session-authenticated; does not mutate wallet state or infer wallet totals.
  * Invariants:
- *   - Address is always the configured operator wallet (or zero-address when unconfigured).
+ *   - Address is always the configured tenant wallet (or zero-address when unconfigured).
  *   - Position timelines are price-series traces, not fabricated balance curves.
  *   - Market links must come from upstream slugs, never title guessing.
  * Side-effects: none
- * Links: docs/design/poly-dashboard-balance-and-positions.md
+ * Links: docs/design/poly-dashboard-balance-and-positions.md, docs/design/wallet-analysis-components.md
  * @public
  */
 
@@ -88,14 +88,6 @@ export type WalletExecutionWarning = z.infer<
   typeof WalletExecutionWarningSchema
 >;
 
-export const WalletExecutionBalanceHistoryPointSchema = z.object({
-  ts: z.string(),
-  total: z.number(),
-});
-export type WalletExecutionBalanceHistoryPoint = z.infer<
-  typeof WalletExecutionBalanceHistoryPointSchema
->;
-
 export const WalletExecutionDailyCountSchema = z.object({
   day: z.string(),
   n: z.number().int().nonnegative(),
@@ -107,7 +99,6 @@ export type WalletExecutionDailyCount = z.infer<
 export const PolyWalletExecutionOutputSchema = z.object({
   address: PolyAddressSchema,
   capturedAt: z.string(),
-  balanceHistory: z.array(WalletExecutionBalanceHistoryPointSchema),
   dailyTradeCounts: z.array(WalletExecutionDailyCountSchema),
   positions: z.array(WalletExecutionPositionSchema),
   warnings: z.array(WalletExecutionWarningSchema),
@@ -119,9 +110,9 @@ export type PolyWalletExecutionOutput = z.infer<
 export const polyWalletExecutionOperation = {
   id: "poly.wallet.execution.v1",
   summary:
-    "Operator wallet charts and execution positions with traceable price timelines",
+    "Trading-wallet execution positions and trades-per-day with traceable price timelines",
   description:
-    "Returns the operator wallet's live balance-history estimate, daily trade counts, and execution positions derived from Polymarket Data API trades and positions plus public CLOB price history.",
+    "Returns the signed-in user's live daily trade counts and execution positions derived from Polymarket Data API trades and positions plus public CLOB price history.",
   input: z.object({}),
   output: PolyWalletExecutionOutputSchema,
 } as const;

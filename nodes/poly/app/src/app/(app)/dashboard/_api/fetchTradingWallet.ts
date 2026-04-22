@@ -4,23 +4,23 @@
 /**
  * Module: `@app/(app)/dashboard/_api/fetchTradingWallet`
  * Purpose: Client-side fetch for the dashboard's per-tenant trading-wallet
- *          snapshot card. Calls GET /api/v1/poly/wallet/balances (plural,
- *          task.0353) and returns the caller's USDC.e + POL balances.
+ *          summary card. Calls GET /api/v1/poly/wallet/overview and returns
+ *          the caller's merged live wallet snapshot.
  * Scope: Data fetching only. Session-cookie auth (`credentials: include`).
  * Side-effects: IO (HTTP fetch).
  * @public
  */
 
-import type { PolyWalletBalancesOutput } from "@cogni/node-contracts";
+import type { PolyWalletOverviewOutput } from "@cogni/node-contracts";
 
-export async function fetchTradingWallet(): Promise<PolyWalletBalancesOutput> {
-  const response = await fetch("/api/v1/poly/wallet/balances", {
+export async function fetchTradingWallet(): Promise<PolyWalletOverviewOutput> {
+  const response = await fetch("/api/v1/poly/wallet/overview", {
     credentials: "include",
   });
   if (!response.ok) {
     throw new Error(
-      `Failed to fetch trading wallet balances: ${response.status} ${response.statusText}`
+      `Failed to fetch trading wallet overview: ${response.status} ${response.statusText}`
     );
   }
-  return (await response.json()) as PolyWalletBalancesOutput;
+  return (await response.json()) as PolyWalletOverviewOutput;
 }

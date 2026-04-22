@@ -23,7 +23,6 @@ import {
   computeWalletMetrics,
   type MarketResolutionInput,
   mapExecutionPositions,
-  mapWalletBalanceHistory,
 } from "@cogni/market-provider/analysis";
 import type {
   PolyWalletExecutionOutput,
@@ -31,28 +30,12 @@ import type {
   WalletAnalysisSnapshot,
   WalletAnalysisTrades,
   WalletAnalysisWarning,
-  WalletExecutionBalanceHistoryPoint,
   WalletExecutionDailyCount,
   WalletExecutionPosition,
   WalletExecutionWarning,
 } from "@cogni/node-contracts";
 import pLimit from "p-limit";
 import { coalesce } from "./coalesce";
-
-/**
- * Balance-history extras for `getExecutionSlice`. Injected by callers that can
- * resolve cash context (available + locked USDC) for the supplied address —
- * e.g. a future per-tenant resolver that reads `PolyTraderWalletPort.getBalances`
- * + open-order notional for the session wallet. Kept as a type-only
- * injection hook because the single-operator helper that used to live at
- * `@/app/_lib/poly/operator-extras` was purged in task.0318 Phase B3.
- */
-type FetchOperatorExtras = (addr: `0x${string}`) => Promise<{
-  available: number | null;
-  locked: number | null;
-  polGas: number | null;
-  errors: string[];
-}>;
 
 /** Cache TTL for every slice. Matches design doc 30 s. */
 const SLICE_TTL_MS = 30_000;
@@ -249,12 +232,10 @@ export async function getBalanceSlice(
 }
 
 export async function getExecutionSlice(
-  addr: string,
-  fetchOperatorExtras?: FetchOperatorExtras
+  addr: string
 ): Promise<PolyWalletExecutionOutput> {
   const capturedAt = new Date().toISOString();
   const warnings: WalletExecutionWarning[] = [];
-  let balanceHistory: WalletExecutionBalanceHistoryPoint[] = [];
 
   const [positionsResult, tradesResult] = await Promise.allSettled([
     coalesce(
@@ -307,12 +288,7 @@ export async function getExecutionSlice(
     trades,
     asOfIso: capturedAt,
   }).slice(0, EXECUTION_POSITION_LIMIT);
-  const historyAssets = collectHistoryAssets(positions, trades, capturedAt);
   const priceHistoryByAsset = new Map<
-    string,
-    Awaited<ReturnType<PolymarketClobPublicClient["getPriceHistory"]>>
-  >();
-  const balanceHistoryPriceByAsset = new Map<
     string,
     Awaited<ReturnType<PolymarketClobPublicClient["getPriceHistory"]>>
   >();
@@ -346,57 +322,6 @@ export async function getExecutionSlice(
     })
   );
 
-  await Promise.all(
-    historyAssets.map(async (asset) => {
-      const endTs = Math.floor(new Date(capturedAt).getTime() / 1000);
-      const startTs =
-        endTs - (EXECUTION_HISTORY_WINDOW_DAYS - 1) * 86_400 - 3_600;
-      const history = await coalesce(
-        `execution-balance-history:${asset}:${startTs}:${endTs}`,
-        () =>
-          upstreamLimit(() =>
-            getClobPublicClient().getPriceHistory(asset, {
-              startTs,
-              endTs,
-              fidelity: 1440,
-            })
-          ),
-        SLICE_TTL_MS
-      );
-      if (history.length > 0) {
-        balanceHistoryPriceByAsset.set(asset, history);
-      }
-    })
-  );
-
-  if (fetchOperatorExtras) {
-    const extras = await fetchOperatorExtras(addr as `0x${string}`);
-    if (extras.errors.length > 0) {
-      for (const error of extras.errors) {
-        warnings.push({
-          code: "operator_extras_unavailable",
-          message: error,
-        });
-      }
-    }
-    if (extras.available !== null || extras.locked !== null) {
-      balanceHistory = mapWalletBalanceHistory({
-        positions,
-        trades,
-        priceHistoryByAsset: balanceHistoryPriceByAsset,
-        currentCash: Math.max(
-          0,
-          (extras.available ?? 0) + (extras.locked ?? 0)
-        ),
-        asOfIso: capturedAt,
-        windowDays: EXECUTION_HISTORY_WINDOW_DAYS,
-      }).map((point) => ({
-        ts: point.ts,
-        total: point.total,
-      }));
-    }
-  }
-
   const mapped = mapExecutionPositions({
     positions,
     trades,
@@ -408,7 +333,6 @@ export async function getExecutionSlice(
   return {
     address: addr.toLowerCase() as PolyWalletExecutionOutput["address"],
     capturedAt,
-    balanceHistory,
     dailyTradeCounts: dailyTradeCountsResult,
     positions: mapped.map(toExecutionContractPosition),
     warnings,
@@ -445,25 +369,6 @@ function buildDailyCounts(
     out.push({ day, n: buckets.get(day) ?? 0 });
   }
   return out;
-}
-
-function collectHistoryAssets(
-  positions: readonly { asset: string }[],
-  trades: readonly { asset: string; timestamp: number }[],
-  capturedAt: string
-): string[] {
-  const endTs = Math.floor(new Date(capturedAt).getTime() / 1000);
-  const startTs = endTs - (EXECUTION_HISTORY_WINDOW_DAYS - 1) * 86_400;
-  const assets = new Set<string>();
-  for (const position of positions) {
-    if (position.asset) assets.add(position.asset);
-  }
-  for (const trade of trades) {
-    if (trade.asset && trade.timestamp >= startTs) {
-      assets.add(trade.asset);
-    }
-  }
-  return [...assets];
 }
 
 function toExecutionContractPosition(

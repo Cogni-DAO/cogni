@@ -12,7 +12,9 @@
 import type { PolyWalletExecutionOutput } from "@cogni/node-contracts";
 
 export async function fetchExecution(): Promise<PolyWalletExecutionOutput> {
-  const response = await fetch("/api/v1/poly/wallet/execution");
+  const response = await fetch("/api/v1/poly/wallet/execution", {
+    credentials: "include",
+  });
   if (!response.ok) {
     throw new Error(
       `Failed to fetch wallet execution: ${response.status} ${response.statusText}`

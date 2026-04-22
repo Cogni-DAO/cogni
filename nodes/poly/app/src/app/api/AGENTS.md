@@ -67,6 +67,7 @@ HTTP API endpoints using Next.js App Router. Contract-validated entry points tha
   - `/api/v1/poly/wallet/connect` [POST] - provision the calling user's dedicated Polymarket trading wallet (session auth)
   - `/api/v1/poly/wallet/status` [GET] - read whether the calling user already has a resolvable dedicated Polymarket trading wallet (session auth)
   - `/api/v1/poly/wallet/balances` [GET] - read USDC.e + POL balances on the calling user's dedicated Polymarket trading wallet (session auth, distinct from legacy operator-only `/balance`)
+  - `/api/v1/poly/wallet/overview` [GET] - current dashboard wallet summary for the calling user's dedicated Polymarket trading wallet (session auth; available + locked + positions + gas)
   - `/api/v1/poly/internal/sync-health` [GET] - aggregate sync-freshness stats for the reconciler (no auth; aggregate-only)
 - **Files considered API:** v1/_/route.ts, admin/_/route.ts
 
