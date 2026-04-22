@@ -33,7 +33,8 @@ One merge closes the loop: digest seed on `main`, demote IU on the preview AppSe
 ### Shipped in this branch
 
 - [`scripts/ci/promote-preview-seed-main.sh`](../../scripts/ci/promote-preview-seed-main.sh) — Option B loop + tri-state resolve.
-- [`.github/workflows/promote-preview-digest-seed.yml`](../../.github/workflows/promote-preview-digest-seed.yml) — `workflow_run` on **Flight Preview** `completed` + `success` + `push` on `main`; message-prefix gates + race-safe push.
+- [`.github/workflows/promote-preview-digest-seed.yml`](../../.github/workflows/promote-preview-digest-seed.yml) — `workflow_run` on **Flight Preview** `completed` + `success` + `push` on `main`; **only if** Flight Preview artifact reports `dispatched` (not `queued`); read-only decide job + verified `head_sha` checkout before push (CodeQL); message-prefix gates + race-safe push.
+- [`.github/workflows/flight-preview.yml`](../../.github/workflows/flight-preview.yml) — uploads `preview-flight-outcome` artifact; **`preview-dispatched-marker`** job skipped when queue-only.
 - [`flight-preview.yml`](../../.github/workflows/flight-preview.yml) — skip `chore(preview):` and IU maintenance prefixes.
 - [`infra/k8s/argocd/preview-applicationset.yaml`](../../infra/k8s/argocd/preview-applicationset.yaml) — **no** Image Updater annotations (CI-owned seed).
 - [`scripts/ci/check-image-updater-scope.sh`](../../scripts/ci/check-image-updater-scope.sh) — empty allowlist: **zero** `argocd-image-updater.argoproj.io/*` on any `*-applicationset.yaml`.

@@ -1,15 +1,17 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 #
-# task.0349 — After Flight Preview completes successfully for a merge to main,
-# refresh `main:infra/k8s/overlays/preview/**` digest pins in a single commit
-# (`chore(preview): …`) without reusing promote-build-payload (deploy-branch
-# coupling). See docs/spec/ci-cd.md.
+# task.0349 — After Flight Preview **dispatched** promote-and-deploy for a
+# merge to main, refresh `main:infra/k8s/overlays/preview/**` digest pins in a
+# single commit (`chore(preview): …`). **Does not run** for queue-only Flight
+# Preview runs (preview lease locked) — no bot commits for those merges.
 #
-# Timing: this runs *after* Flight Preview finishes; `flight-preview.sh` may
-# already have dispatched promote-and-deploy for the same merge. This seed
-# commit mainly protects *future* promote-and-deploy rsyncs (main-derived
-# overlay seeds), not the preview deploy already in flight for this SHA.
+# Security (workflow_run): never checkout `workflow_run.head_sha` directly
+# with contents:write. A read-only job downloads the prior run's artifact; the
+# privileged job checks out `main` first, verifies `head_sha` is on main, then
+# checks out that commit (CodeQL "untrusted checkout" pattern).
+#
+# See docs/spec/ci-cd.md.
 
 name: Promote Preview Digest Seed
 
@@ -18,32 +20,91 @@ on:
     workflows: ["Flight Preview"]
     types: [completed]
 
-permissions:
-  contents: write
-  packages: read
+# Default deny; each job sets least privilege.
+permissions: {}
 
 concurrency:
   group: promote-preview-seed-main
   cancel-in-progress: false
 
 jobs:
-  seed:
+  decide-dispatch:
+    name: Digest seed gate (dispatched only)
     runs-on: ubuntu-latest
     if: |
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.event == 'push'
+    permissions:
+      actions: read
+    outputs:
+      should_seed: ${{ steps.read.outputs.should_seed }}
+      merge_sha: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Download Flight Preview outcome artifact
+        id: dl
+        continue-on-error: true
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: preview-flight-outcome
+          path: flight-outcome
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - id: read
+        name: Interpret flight outcome
+        run: |
+          set -euo pipefail
+          f="flight-outcome/preview-flight-outcome.txt"
+          if [ ! -f "$f" ]; then
+            echo "should_seed=false" >> "$GITHUB_OUTPUT"
+            echo "ℹ️  No preview-flight-outcome artifact (older Flight Preview or skipped job) — skip digest seed"
+            exit 0
+          fi
+          v=$(tr -d '[:space:]' < "$f")
+          if [ "$v" = "dispatched" ]; then
+            echo "should_seed=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Flight outcome=dispatched — digest seed may run"
+          else
+            echo "should_seed=false" >> "$GITHUB_OUTPUT"
+            echo "ℹ️  Flight outcome=${v} — skip digest seed (queue-only or error)"
+          fi
+
+  seed:
+    name: Refresh preview digest seed on main
+    needs: [decide-dispatch]
+    if: needs.decide-dispatch.outputs.should_seed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+    env:
+      MERGE_SHA: ${{ needs.decide-dispatch.outputs.merge_sha }}
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: main
           fetch-depth: 0
           token: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
 
+      - name: Verify merge SHA is on main before privileged checkout
+        run: |
+          set -euo pipefail
+          sha="${MERGE_SHA:?MERGE_SHA missing}"
+          git fetch origin main --quiet
+          if ! git rev-parse -q --verify "${sha}^{commit}" >/dev/null 2>&1; then
+            echo "::error::workflow_run.head_sha is not a valid commit — refusing checkout"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::workflow_run.head_sha $sha is not reachable from origin/main — refusing privileged checkout (untrusted ref)"
+            exit 1
+          fi
+          git checkout "$sha"
+          echo "✅ Checked out verified-on-main SHA ${sha:0:12}"
+
       - name: Gate maintenance commits and main drift
         id: gate
-        env:
-          MERGE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           msg=$(git log -1 --format=%s "$MERGE_SHA")
@@ -81,14 +142,10 @@ jobs:
 
       - name: Refresh preview digest seed on main
         if: steps.gate.outputs.skip != 'true'
-        env:
-          MERGE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: bash scripts/ci/promote-preview-seed-main.sh
 
       - name: Commit and push if changed
         if: steps.gate.outputs.skip != 'true'
-        env:
-          MERGE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           git fetch origin main --quiet
@@ -105,7 +162,7 @@ jobs:
             exit 0
           fi
           short=$(echo "$MERGE_SHA" | cut -c1-8)
-          git commit -m "chore(preview): refresh digest seed ${short}" -m "task.0349 — after Flight Preview success for merge ${MERGE_SHA}. Does not change the preview deploy already dispatched for this SHA; updates main overlay seeds for future promote-and-deploy rsyncs (INFRA_K8S_MAIN_DERIVED)."
+          git commit -m "chore(preview): refresh digest seed ${short}" -m "task.0349 — after Flight Preview **dispatched** preview for merge ${MERGE_SHA}. Updates main overlay seeds for future promote-and-deploy rsyncs (INFRA_K8S_MAIN_DERIVED)."
           git fetch origin main --quiet
           if [ "$(git rev-parse origin/main)" != "$MERGE_SHA" ]; then
             echo "::warning::origin/main moved after commit — aborting push (reset locally)"
