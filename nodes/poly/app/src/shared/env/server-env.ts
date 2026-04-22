@@ -251,16 +251,10 @@ export const serverSchema = z.object({
   PRIVY_APP_SECRET: optionalString,
   PRIVY_SIGNING_KEY: optionalString,
 
-  // Polymarket prototype wallet — fully independent from the production
-  // operator wallet (PRIVY_* above). See docs/guides/polymarket-account-setup.md.
-  POLY_PROTO_PRIVY_APP_ID: optionalString,
-  POLY_PROTO_PRIVY_APP_SECRET: optionalString,
-  POLY_PROTO_PRIVY_SIGNING_KEY: optionalString,
-
   // User-wallets Privy app (task.0318 Phase B).
   // SEPARATE_PRIVY_APP invariant: per-tenant Polymarket trading wallets live
-  // in a DEDICATED Privy app distinct from the operator / poly-proto triples.
-  // See docs/spec/poly-trader-wallet-port.md § Env.
+  // in a DEDICATED Privy app distinct from the operator wallet (PRIVY_*
+  // above). See docs/spec/poly-trader-wallet-port.md § Env.
   PRIVY_USER_WALLETS_APP_ID: optionalString,
   PRIVY_USER_WALLETS_APP_SECRET: optionalString,
   PRIVY_USER_WALLETS_SIGNING_KEY: optionalString,
@@ -269,18 +263,15 @@ export const serverSchema = z.object({
   // Format: 64 hex chars (32 bytes) for AES-256-GCM.
   POLY_WALLET_AEAD_KEY_HEX: optionalString,
   POLY_WALLET_AEAD_KEY_ID: optionalString,
-  POLY_PROTO_WALLET_ADDRESS: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/)
-    .optional(),
-  POLY_CLOB_API_KEY: optionalString,
-  POLY_CLOB_API_SECRET: optionalString,
-  POLY_CLOB_PASSPHRASE: optionalString,
+  // Polymarket CLOB host override. Default matches
+  // `@cogni/market-provider/adapters/polymarket` DEFAULT_CLOB_HOST
+  // (https://clob.polymarket.com). Used by the per-tenant
+  // `PolyTradeExecutor` factory + CLOB L2 cred derivation at provision time.
   POLY_CLOB_HOST: optionalUrl,
 
-  // Reconciler not-found grace window (task.0328 CP2, @scaffolding, Deleted-in-phase: 4).
-  // If CLOB returns not_found for a row whose age (now − created_at) exceeds
-  // this many ms, the reconciler promotes the row to `canceled` with
+  // Reconciler not-found grace window (task.0328 CP2). If CLOB returns
+  // not_found for a row whose age (now − created_at) exceeds this many ms,
+  // the per-tenant order-reconciler promotes the row to `canceled` with
   // reason="clob_not_found". Default: 15 min (900000 ms). Set lower in
   // staging/test to exercise the promotion path faster.
   POLY_CLOB_NOT_FOUND_GRACE_MS: z.coerce

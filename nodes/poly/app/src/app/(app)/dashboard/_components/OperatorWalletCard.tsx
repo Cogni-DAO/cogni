@@ -3,19 +3,23 @@
 
 /**
  * Module: `@app/(app)/dashboard/_components/OperatorWalletCard`
- * Purpose: Operator wallet snapshot — one horizontal stacked bar showing USDC available vs. locked in Polymarket open orders, plus the operator address and a compact stale / low-gas pill.
+ * Purpose: Legacy dashboard operator-wallet snapshot. Post-Stage-4 purge
+ *          (task.0318 Phase B) the backing env-pinned wallet is gone; this
+ *          card renders its "unconfigured" empty state against the
+ *          tombstone response from `/api/v1/poly/wallet/balance`. Kept in
+ *          place (rather than deleted) so the dashboard shell continues to
+ *          compile while the per-tenant Money-page rework replaces it.
  * Scope: Client component. React Query poll. Read-only.
  * Invariants:
- *   - SINGLE_TENANT_PROTOTYPE: reflects a single env-pinned wallet (POLY_PROTO_WALLET_ADDRESS).
+ *   - DORMANT_POST_STAGE_4: no live data path — always renders the
+ *     unconfigured state until the Money-page rework takes over.
  *   - READ_ONLY.
- *   - NO_RAW_ERRORS: backend `error_reason` string is never rendered directly — only a compact pill.
+ *   - NO_RAW_ERRORS: backend `error_reason` string is never rendered
+ *     directly — only a compact pill.
  * Side-effects: IO (via React Query)
  * Links: packages/node-contracts/src/poly.wallet.balance.v1.contract.ts
  * @public
  */
-
-// TODO(task.0315 P2 / single-tenant auth): replace env-pinned wallet with
-// per-user resolution once multi-tenant Privy auth lands.
 
 "use client";
 
@@ -94,11 +98,7 @@ export function OperatorWalletCard(): ReactElement {
           </p>
         ) : !configured ? (
           <p className="py-2 text-muted-foreground text-sm">
-            No operator wallet configured. Set{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">
-              POLY_PROTO_WALLET_ADDRESS
-            </code>
-            .
+            Operator-wallet view is being replaced by the per-user Money page.
           </p>
         ) : (
           <BalanceBar

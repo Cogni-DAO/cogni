@@ -757,48 +757,12 @@ const SECRETS: Secret[] = [
     generate: () => "v1",
   },
 
-  // ── Optional: Polymarket CLOB (L2 API creds derived from Privy wallet) ──
-  // See docs/guides/polymarket-account-setup.md for the full flow.
-  // Derivation is scripted: scripts/experiments/derive-polymarket-api-keys.ts
-  {
-    name: "POLY_CLOB_API_KEY",
-    required: false,
-    category: "Polymarket CLOB",
-    source: "agent",
-    description:
-      "Polymarket CLOB L2 API key (derived from operator Privy wallet)",
-    steps: [
-      "Ensure PRIVY_* and OPERATOR_WALLET_ADDRESS are set",
-      "Run: pnpm tsx --tsconfig tsconfig.scripts.json scripts/experiments/derive-polymarket-api-keys.ts",
-      "Paste the printed POLY_CLOB_* lines into .env.local",
-      "Also store secret + passphrase in 1Password",
-      "See docs/guides/polymarket-account-setup.md for full setup",
-    ],
-  },
-  {
-    name: "POLY_CLOB_API_SECRET",
-    required: false,
-    category: "Polymarket CLOB",
-    source: "agent",
-    description:
-      "Polymarket CLOB L2 API secret (derived alongside POLY_CLOB_API_KEY)",
-    steps: [
-      "Derived together with POLY_CLOB_API_KEY — see that entry",
-      "Idempotent: re-running the derive script returns the same secret",
-    ],
-  },
-  {
-    name: "POLY_CLOB_PASSPHRASE",
-    required: false,
-    category: "Polymarket CLOB",
-    source: "agent",
-    description:
-      "Polymarket CLOB L2 passphrase (derived alongside POLY_CLOB_API_KEY)",
-    steps: [
-      "Derived together with POLY_CLOB_API_KEY — see that entry",
-      "Idempotent: re-running the derive script returns the same passphrase",
-    ],
-  },
+  // task.0318 Phase B Stage 4: the single-operator POLY_CLOB_API_KEY /
+  // _SECRET / _PASSPHRASE + POLY_PROTO_* + POLY_PROTO_WALLET_ADDRESS secrets
+  // have been PURGED. Per-tenant CLOB L2 creds are now derived server-side
+  // at wallet-provision time from the user's per-user Privy wallet and
+  // stored AEAD-encrypted in `poly_wallet_connections.clob_api_key_ciphertext`.
+  // See docs/spec/poly-trader-wallet-port.md.
 
   // ── Optional: WalletConnect ────────────────────────────────────────────
   {

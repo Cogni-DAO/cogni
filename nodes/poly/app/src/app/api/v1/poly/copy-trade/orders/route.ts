@@ -21,7 +21,6 @@ import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import type { LedgerRow } from "@/features/trading";
-import { serverEnv } from "@/shared/env/server-env";
 import { logRequestWarn, type RequestContext } from "@/shared/observability";
 
 export const dynamic = "force-dynamic";
@@ -37,10 +36,7 @@ function handleRouteError(
   return null;
 }
 
-function toContractRow(
-  r: LedgerRow,
-  operatorAddress: string | undefined
-): PolyCopyTradeOrderRow {
+function toContractRow(r: LedgerRow): PolyCopyTradeOrderRow {
   const attrs = (r.attributes ?? {}) as Record<string, unknown>;
   const readStr = (k: string): string | null =>
     typeof attrs[k] === "string" ? (attrs[k] as string) : null;
@@ -50,14 +46,11 @@ function toContractRow(
   const side: PolyCopyTradeOrderRow["side"] =
     sideRaw === "BUY" || sideRaw === "SELL" ? sideRaw : null;
 
-  // The mirror order lives on Polymarket under OUR operator wallet — the
-  // wallet being copied (`target_wallet` on attrs) is separate. When we
-  // have an `order_id` + operator address configured, link to the
-  // operator's trade detail page; otherwise omit.
-  const profile =
-    r.order_id && operatorAddress
-      ? `https://polymarket.com/profile/${operatorAddress.toLowerCase()}/trade/${r.order_id}`
-      : null;
+  // Polymarket trade-detail URL is dormant post-Stage-4 purge: it used to
+  // link to the single-operator wallet's trade page. The per-tenant
+  // replacement resolves the owning wallet from `r.billing_account_id`
+  // and lands with the Money-page rework.
+  const profile: string | null = null;
 
   const syncedAt = r.synced_at ?? null;
   const staleness_ms =
@@ -119,8 +112,7 @@ export const GET = wrapRouteHandlerWithLogging(
           ? rows.filter((r) => r.status === input.status)
           : rows;
 
-      const operatorAddress = serverEnv().POLY_PROTO_WALLET_ADDRESS;
-      const orders = filtered.map((r) => toContractRow(r, operatorAddress));
+      const orders = filtered.map((r) => toContractRow(r));
       return NextResponse.json(
         polyCopyTradeOrdersOperation.output.parse({ orders })
       );

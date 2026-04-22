@@ -108,19 +108,15 @@ jobs:
       PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
       PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET }}
       PRIVY_SIGNING_KEY: ${{ secrets.PRIVY_SIGNING_KEY }}
-      POLY_PROTO_PRIVY_APP_ID: ${{ secrets.POLY_PROTO_PRIVY_APP_ID }}
-      POLY_PROTO_PRIVY_APP_SECRET: ${{ secrets.POLY_PROTO_PRIVY_APP_SECRET }}
-      POLY_PROTO_PRIVY_SIGNING_KEY: ${{ secrets.POLY_PROTO_PRIVY_SIGNING_KEY }}
       # task.0318 Phase B — per-user trading wallets (SEPARATE_PRIVY_APP).
+      # The single-operator POLY_PROTO_* + POLY_CLOB_* prototype secrets were
+      # purged in Stage 4; user wallets are provisioned in a dedicated Privy
+      # app and CLOB L2 creds are derived server-side at provision time.
       PRIVY_USER_WALLETS_APP_ID: ${{ secrets.PRIVY_USER_WALLETS_APP_ID }}
       PRIVY_USER_WALLETS_APP_SECRET: ${{ secrets.PRIVY_USER_WALLETS_APP_SECRET }}
       PRIVY_USER_WALLETS_SIGNING_KEY: ${{ secrets.PRIVY_USER_WALLETS_SIGNING_KEY }}
       POLY_WALLET_AEAD_KEY_HEX: ${{ secrets.POLY_WALLET_AEAD_KEY_HEX }}
       POLY_WALLET_AEAD_KEY_ID: ${{ secrets.POLY_WALLET_AEAD_KEY_ID }}
-      POLY_PROTO_WALLET_ADDRESS: ${{ secrets.POLY_PROTO_WALLET_ADDRESS }}
-      POLY_CLOB_API_KEY: ${{ secrets.POLY_CLOB_API_KEY }}
-      POLY_CLOB_API_SECRET: ${{ secrets.POLY_CLOB_API_SECRET }}
-      POLY_CLOB_PASSPHRASE: ${{ secrets.POLY_CLOB_PASSPHRASE }}
       CONNECTIONS_ENCRYPTION_KEY: ${{ secrets.CONNECTIONS_ENCRYPTION_KEY }}
       POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
       POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
