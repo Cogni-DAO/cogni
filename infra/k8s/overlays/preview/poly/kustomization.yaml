@@ -9,9 +9,9 @@ resources:
 namePrefix: poly-
 images:
 - name: ghcr.io/cogni-dao/cogni-template
-  newTag: preview-ca84691f97ce37ef2b53675a0142324a765d7a03-poly
+  newTag: preview-fc25e68f59a0552eaab8e74697c51e34f6dea4f0-poly
 - name: ghcr.io/cogni-dao/cogni-template-migrate
-  newTag: preview-12fa1c3f14162492422aa221b8eae1f58c73428b-poly-migrate
+  newTag: preview-fc25e68f59a0552eaab8e74697c51e34f6dea4f0-poly-migrate
 patches:
 # Node-specific ConfigMap values.
 # DNS names must match prefixed Service names (namePrefix applies to all resources).
