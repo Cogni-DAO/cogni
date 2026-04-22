@@ -124,13 +124,17 @@ export const POST = wrapRouteHandlerWithLogging(
       throw err;
     }
 
-    const result = await adapter.provision({
+    const result = await adapter.provisionWithGrant({
       billingAccountId: account.id,
       createdByUserId: sessionUser.id,
       custodialConsent: {
         acceptedAt: new Date(),
         actorKind: parsed.data.custodialConsentActorKind,
         actorId: parsed.data.custodialConsentActorId,
+      },
+      defaultGrant: {
+        perOrderUsdcCap: parsed.data.defaultGrant.perOrderUsdcCap,
+        dailyUsdcCap: parsed.data.defaultGrant.dailyUsdcCap,
       },
     });
 

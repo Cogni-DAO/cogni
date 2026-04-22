@@ -28,8 +28,15 @@ import { createAppDbClient, type Database } from "@cogni/db-client";
 import { billingAccounts, users } from "@cogni/db-schema";
 import { toUserId, userActor } from "@cogni/ids";
 import { type AeadAAD, aeadDecrypt } from "@cogni/node-shared";
-import { polyWalletConnections } from "@cogni/poly-db-schema";
-import type { PolyClobApiKeyCreds } from "@cogni/poly-wallet";
+import {
+  polyCopyTradeFills,
+  polyWalletConnections,
+  polyWalletGrants,
+} from "@cogni/poly-db-schema";
+import type {
+  OrderIntentSummary,
+  PolyClobApiKeyCreds,
+} from "@cogni/poly-wallet";
 import type { PrivyClient } from "@privy-io/node";
 import { generateTestWallet } from "@tests/_fixtures/auth/db-helpers";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
@@ -158,22 +165,24 @@ describe("PrivyPolyTraderWalletAdapter (component, RLS)", () => {
 
   beforeEach(async () => {
     createViemAccountMock.mockClear();
-    await seedDb
-      .delete(polyWalletConnections)
-      .where(
-        and(
-          eq(polyWalletConnections.createdByUserId, tenantA.userId),
-          eq(polyWalletConnections.billingAccountId, tenantA.billingAccountId)
-        )
-      );
-    await seedDb
-      .delete(polyWalletConnections)
-      .where(
-        and(
-          eq(polyWalletConnections.createdByUserId, tenantB.userId),
-          eq(polyWalletConnections.billingAccountId, tenantB.billingAccountId)
-        )
-      );
+    for (const tenant of [tenantA, tenantB]) {
+      await seedDb
+        .delete(polyCopyTradeFills)
+        .where(
+          eq(polyCopyTradeFills.billingAccountId, tenant.billingAccountId)
+        );
+      await seedDb
+        .delete(polyWalletGrants)
+        .where(eq(polyWalletGrants.billingAccountId, tenant.billingAccountId));
+      await seedDb
+        .delete(polyWalletConnections)
+        .where(
+          and(
+            eq(polyWalletConnections.createdByUserId, tenant.userId),
+            eq(polyWalletConnections.billingAccountId, tenant.billingAccountId)
+          )
+        );
+    }
   });
 
   it("round-trips provision -> resolve -> getAddress -> revoke across two tenants with RLS + AEAD binding", async () => {
@@ -472,5 +481,370 @@ describe("PrivyPolyTraderWalletAdapter (component, RLS)", () => {
         eq(polyWalletConnections.billingAccountId, tenantA.billingAccountId)
       );
     expect(rows).toHaveLength(1);
+  });
+});
+
+describe("PrivyPolyTraderWalletAdapter.authorizeIntent + provisionWithGrant (component)", () => {
+  const log = pino({ level: "silent" });
+
+  let seedDb: Database;
+  let tenant: TestTenant;
+
+  beforeAll(async () => {
+    seedDb = getSeedDb();
+    if (!process.env.DATABASE_URL) {
+      throw new Error(
+        "DATABASE_URL not set. Run this suite via vitest.component.config.mts."
+      );
+    }
+    tenant = { userId: randomUUID(), billingAccountId: randomUUID() };
+    await seedDb.insert(users).values({
+      id: tenant.userId,
+      name: `auth ${tenant.userId.slice(0, 8)}`,
+      walletAddress: generateTestWallet(`auth-${tenant.userId.slice(0, 8)}`),
+    });
+    await seedDb.insert(billingAccounts).values({
+      id: tenant.billingAccountId,
+      ownerUserId: tenant.userId,
+      balanceCredits: 0n,
+    });
+  });
+
+  afterAll(async () => {
+    await seedDb
+      .delete(polyCopyTradeFills)
+      .where(eq(polyCopyTradeFills.billingAccountId, tenant.billingAccountId));
+    await seedDb
+      .delete(polyWalletGrants)
+      .where(eq(polyWalletGrants.billingAccountId, tenant.billingAccountId));
+    await seedDb
+      .delete(polyWalletConnections)
+      .where(
+        eq(polyWalletConnections.billingAccountId, tenant.billingAccountId)
+      );
+    await seedDb
+      .delete(billingAccounts)
+      .where(eq(billingAccounts.id, tenant.billingAccountId));
+    await seedDb.delete(users).where(eq(users.id, tenant.userId));
+  });
+
+  beforeEach(async () => {
+    createViemAccountMock.mockClear();
+    await seedDb
+      .delete(polyCopyTradeFills)
+      .where(eq(polyCopyTradeFills.billingAccountId, tenant.billingAccountId));
+    await seedDb
+      .delete(polyWalletGrants)
+      .where(eq(polyWalletGrants.billingAccountId, tenant.billingAccountId));
+    await seedDb
+      .delete(polyWalletConnections)
+      .where(
+        eq(polyWalletConnections.billingAccountId, tenant.billingAccountId)
+      );
+  });
+
+  const consent = {
+    acceptedAt: new Date("2026-04-21T10:00:00.000Z"),
+    actorKind: "user" as const,
+    actorId: "",
+  };
+
+  function makeAdapter(walletMock = USER_WALLET_A) {
+    const createWalletMock = vi.fn().mockResolvedValue(walletMock);
+    const clobCredsFactory = vi.fn(async () => ({
+      key: "k",
+      secret: "s",
+      passphrase: "p",
+    }));
+    const adapter = new PrivyPolyTraderWalletAdapter({
+      privyClient: {
+        wallets: () => ({ create: createWalletMock }),
+      } as unknown as PrivyClient,
+      privySigningKey: "wallet-auth:test-signing-key",
+      serviceDb: seedDb,
+      encryptionKey: ENCRYPTION_KEY,
+      encryptionKeyId: ENCRYPTION_KEY_ID,
+      clobCredsFactory,
+      logger: log,
+    });
+    return { adapter, createWalletMock, clobCredsFactory };
+  }
+
+  const BUY_INTENT = {
+    side: "BUY",
+    usdcAmount: 1.5,
+    marketConditionId: "0xmarket",
+  } satisfies OrderIntentSummary;
+
+  const SELL_INTENT = {
+    side: "SELL",
+    usdcAmount: 1.5,
+    marketConditionId: "0xmarket",
+  } satisfies OrderIntentSummary;
+
+  async function insertFill(opts: {
+    fillId: string;
+    status: "pending" | "open" | "filled" | "partial" | "canceled" | "error";
+    sizeUsdc: number;
+    createdAt?: Date;
+  }) {
+    const now = opts.createdAt ?? new Date();
+    await seedDb.insert(polyCopyTradeFills).values({
+      billingAccountId: tenant.billingAccountId,
+      createdByUserId: tenant.userId,
+      targetId: randomUUID(),
+      fillId: `data-api:${opts.fillId}`,
+      observedAt: now,
+      clientOrderId: `cid-${opts.fillId}`,
+      orderId: null,
+      status: opts.status,
+      attributes: { size_usdc: opts.sizeUsdc },
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  it("happy-path: provisionWithGrant issues default grant + authorizeIntent mints branded context", async () => {
+    const { adapter } = makeAdapter();
+    await adapter.provisionWithGrant({
+      billingAccountId: tenant.billingAccountId,
+      createdByUserId: tenant.userId,
+      custodialConsent: { ...consent, actorId: tenant.userId },
+      defaultGrant: { perOrderUsdcCap: 5, dailyUsdcCap: 20 },
+    });
+
+    const grants = await seedDb
+      .select()
+      .from(polyWalletGrants)
+      .where(eq(polyWalletGrants.billingAccountId, tenant.billingAccountId));
+    expect(grants).toHaveLength(1);
+    expect(grants[0]?.scopes).toEqual(["poly:trade:buy", "poly:trade:sell"]);
+    expect(Number(grants[0]?.perOrderUsdcCap)).toBe(5);
+    expect(Number(grants[0]?.dailyUsdcCap)).toBe(20);
+    expect(grants[0]?.hourlyFillsCap).toBe(50);
+
+    const result = await adapter.authorizeIntent(
+      tenant.billingAccountId,
+      BUY_INTENT
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.context.grantId).toBe(grants[0]?.id);
+    expect(result.context.authorizedIntent).toEqual(BUY_INTENT);
+    expect(result.context.connectionId).toBeDefined();
+  });
+
+  it("provisionWithGrant is idempotent under re-hit (no duplicate grants)", async () => {
+    const { adapter } = makeAdapter();
+    const first = await adapter.provisionWithGrant({
+      billingAccountId: tenant.billingAccountId,
+      createdByUserId: tenant.userId,
+      custodialConsent: { ...consent, actorId: tenant.userId },
+      defaultGrant: { perOrderUsdcCap: 5, dailyUsdcCap: 20 },
+    });
+    const second = await adapter.provisionWithGrant({
+      billingAccountId: tenant.billingAccountId,
+      createdByUserId: tenant.userId,
+      custodialConsent: { ...consent, actorId: tenant.userId },
+      defaultGrant: { perOrderUsdcCap: 10, dailyUsdcCap: 50 },
+    });
+    expect(second.connectionId).toBe(first.connectionId);
+    const grants = await seedDb
+      .select()
+      .from(polyWalletGrants)
+      .where(eq(polyWalletGrants.billingAccountId, tenant.billingAccountId));
+    expect(grants).toHaveLength(1);
+    // First-call caps win (later re-hits don't rewrite caps).
+    expect(Number(grants[0]?.perOrderUsdcCap)).toBe(5);
+  });
+
+  it("no_active_grant — tenant with connection but no grant is denied", async () => {
+    const { adapter } = makeAdapter();
+    // `provision` (not `provisionWithGrant`) → connection without grant.
+    await adapter.provision({
+      billingAccountId: tenant.billingAccountId,
+      createdByUserId: tenant.userId,
+      custodialConsent: { ...consent, actorId: tenant.userId },
+    });
+    const result = await adapter.authorizeIntent(
+      tenant.billingAccountId,
+      BUY_INTENT
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected deny");
+    expect(result.reason).toBe("no_active_grant");
+  });
+
+  it("grant_expired — expires_at in the past denies", async () => {
+    const { adapter } = makeAdapter();
+    await adapter.provisionWithGrant({
+      billingAccountId: tenant.billingAccountId,
+      createdByUserId: tenant.userId,
+      custodialConsent: { ...consent, actorId: tenant.userId },
+      defaultGrant: { perOrderUsdcCap: 5, dailyUsdcCap: 20 },
+    });
+    await seedDb
+      .update(polyWalletGrants)
+      .set({ expiresAt: new Date(Date.now() - 60_000) })
+      .where(eq(polyWalletGrants.billingAccountId, tenant.billingAccountId));
+
+    const result = await adapter.authorizeIntent(
+      tenant.billingAccountId,
+      BUY_INTENT
+    );
+    if (result.ok) throw new Error("expected deny");
+    expect(result.reason).toBe("grant_expired");
+  });
+
+  it("scope_missing — SELL intent against BUY-only grant denies", async () => {
+    const { adapter } = makeAdapter();
+    await adapter.provisionWithGrant({
+      billingAccountId: tenant.billingAccountId,
+      createdByUserId: tenant.userId,
+      custodialConsent: { ...consent, actorId: tenant.userId },
+      defaultGrant: { perOrderUsdcCap: 5, dailyUsdcCap: 20 },
+    });
+    await seedDb
+      .update(polyWalletGrants)
+      .set({ scopes: ["poly:trade:buy"] })
+      .where(eq(polyWalletGrants.billingAccountId, tenant.billingAccountId));
+
+    const result = await adapter.authorizeIntent(
+      tenant.billingAccountId,
+      SELL_INTENT
+    );
+    if (result.ok) throw new Error("expected deny");
+    expect(result.reason).toBe("scope_missing");
+  });
+
+  it("cap_exceeded_per_order — intent > per_order_usdc_cap denies", async () => {
+    const { adapter } = makeAdapter();
+    await adapter.provisionWithGrant({
+      billingAccountId: tenant.billingAccountId,
+      createdByUserId: tenant.userId,
+      custodialConsent: { ...consent, actorId: tenant.userId },
+      defaultGrant: { perOrderUsdcCap: 1, dailyUsdcCap: 10 },
+    });
+    const result = await adapter.authorizeIntent(tenant.billingAccountId, {
+      ...BUY_INTENT,
+      usdcAmount: 2,
+    });
+    if (result.ok) throw new Error("expected deny");
+    expect(result.reason).toBe("cap_exceeded_per_order");
+  });
+
+  it("cap_exceeded_daily counts pending+open+filled+partial (pending-row race closed)", async () => {
+    const { adapter } = makeAdapter();
+    await adapter.provisionWithGrant({
+      billingAccountId: tenant.billingAccountId,
+      createdByUserId: tenant.userId,
+      custodialConsent: { ...consent, actorId: tenant.userId },
+      defaultGrant: { perOrderUsdcCap: 5, dailyUsdcCap: 10 },
+    });
+
+    // Each status that commits USDC contributes independently.
+    await insertFill({ fillId: "f1", status: "pending", sizeUsdc: 3 });
+    await insertFill({ fillId: "f2", status: "open", sizeUsdc: 3 });
+    await insertFill({ fillId: "f3", status: "filled", sizeUsdc: 2 });
+    // canceled + error don't count (no USDC attached).
+    await insertFill({ fillId: "f4", status: "canceled", sizeUsdc: 50 });
+    await insertFill({ fillId: "f5", status: "error", sizeUsdc: 50 });
+
+    // spent = 8; intent 3 would push to 11 > cap 10 → deny.
+    const deny = await adapter.authorizeIntent(tenant.billingAccountId, {
+      ...BUY_INTENT,
+      usdcAmount: 3,
+    });
+    if (deny.ok) throw new Error("expected deny");
+    expect(deny.reason).toBe("cap_exceeded_daily");
+
+    // But a 2-USDC intent fits (8 + 2 = 10, not > 10).
+    const ok = await adapter.authorizeIntent(tenant.billingAccountId, {
+      ...BUY_INTENT,
+      usdcAmount: 2,
+    });
+    expect(ok.ok).toBe(true);
+  });
+
+  it("cap_exceeded_hourly_fills — fills count reached denies", async () => {
+    const { adapter } = makeAdapter();
+    await adapter.provisionWithGrant({
+      billingAccountId: tenant.billingAccountId,
+      createdByUserId: tenant.userId,
+      custodialConsent: { ...consent, actorId: tenant.userId },
+      defaultGrant: { perOrderUsdcCap: 5, dailyUsdcCap: 100 },
+    });
+    // Narrow hourly cap to make the test deterministic.
+    await seedDb
+      .update(polyWalletGrants)
+      .set({ hourlyFillsCap: 2 })
+      .where(eq(polyWalletGrants.billingAccountId, tenant.billingAccountId));
+
+    await insertFill({ fillId: "h1", status: "open", sizeUsdc: 0.5 });
+    await insertFill({ fillId: "h2", status: "pending", sizeUsdc: 0.5 });
+
+    const result = await adapter.authorizeIntent(
+      tenant.billingAccountId,
+      BUY_INTENT
+    );
+    if (result.ok) throw new Error("expected deny");
+    expect(result.reason).toBe("cap_exceeded_hourly_fills");
+  });
+
+  it("no_connection — grant present but connection revoked denies", async () => {
+    const { adapter } = makeAdapter();
+    await adapter.provisionWithGrant({
+      billingAccountId: tenant.billingAccountId,
+      createdByUserId: tenant.userId,
+      custodialConsent: { ...consent, actorId: tenant.userId },
+      defaultGrant: { perOrderUsdcCap: 5, dailyUsdcCap: 20 },
+    });
+    // Simulate a stale-grant race: flip the grant back to active AFTER
+    // revoking the connection (bypassing the adapter.revoke cascade).
+    await seedDb
+      .update(polyWalletConnections)
+      .set({ revokedAt: new Date(), revokedByUserId: tenant.userId })
+      .where(
+        eq(polyWalletConnections.billingAccountId, tenant.billingAccountId)
+      );
+
+    const result = await adapter.authorizeIntent(
+      tenant.billingAccountId,
+      BUY_INTENT
+    );
+    if (result.ok) throw new Error("expected deny");
+    // Grant still exists (not cascaded because we bypassed adapter.revoke),
+    // but resolve returns null → no_connection.
+    expect(["no_connection", "no_active_grant"]).toContain(result.reason);
+  });
+
+  it("grant_revoked via adapter.revoke cascade — authorizeIntent denies", async () => {
+    const { adapter } = makeAdapter();
+    await adapter.provisionWithGrant({
+      billingAccountId: tenant.billingAccountId,
+      createdByUserId: tenant.userId,
+      custodialConsent: { ...consent, actorId: tenant.userId },
+      defaultGrant: { perOrderUsdcCap: 5, dailyUsdcCap: 20 },
+    });
+
+    await adapter.revoke({
+      billingAccountId: tenant.billingAccountId,
+      revokedByUserId: tenant.userId,
+    });
+
+    const grants = await seedDb
+      .select()
+      .from(polyWalletGrants)
+      .where(eq(polyWalletGrants.billingAccountId, tenant.billingAccountId));
+    // Cascade landed: grant row has revoked_at set.
+    expect(grants[0]?.revokedAt).toBeInstanceOf(Date);
+
+    const result = await adapter.authorizeIntent(
+      tenant.billingAccountId,
+      BUY_INTENT
+    );
+    if (result.ok) throw new Error("expected deny");
+    // No active grant (cascade marked it revoked) → no_active_grant.
+    expect(result.reason).toBe("no_active_grant");
   });
 });

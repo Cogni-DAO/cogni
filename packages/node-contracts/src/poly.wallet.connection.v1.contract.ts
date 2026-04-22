@@ -37,6 +37,29 @@ export const polyWalletConnectOperation = {
     // both values so no schema change is needed when we widen.
     custodialConsentActorKind: z.literal("user"),
     custodialConsentActorId: z.string().min(1),
+    /**
+     * Caps baked into the default `poly_wallet_grants` row the server issues
+     * atomically with the wallet provision. UI gathers these via two
+     * horizontal sliders on the consent step. Bounds mirror the slider
+     * ranges in the profile view; the DB CHECK on
+     * `poly_wallet_grants.daily_usdc_cap >= per_order_usdc_cap` is a
+     * backstop — validated here too so the 400 response explains the issue
+     * before it reaches the adapter.
+     *
+     * `hourlyFillsCap` is NOT on the wire: baked in server-side from
+     * `MIRROR_MAX_FILLS_PER_HOUR` to keep the consent UI minimal. A future
+     * per-tenant preferences table (task.0347) will swap the server-side
+     * default for a user-adjustable value without widening this contract.
+     */
+    defaultGrant: z
+      .object({
+        perOrderUsdcCap: z.number().positive().min(0.5).max(20),
+        dailyUsdcCap: z.number().positive().min(2).max(200),
+      })
+      .refine((grant) => grant.dailyUsdcCap >= grant.perOrderUsdcCap, {
+        message: "dailyUsdcCap must be >= perOrderUsdcCap",
+        path: ["dailyUsdcCap"],
+      }),
   }),
   output: z.object({
     connection_id: z.string().uuid(),

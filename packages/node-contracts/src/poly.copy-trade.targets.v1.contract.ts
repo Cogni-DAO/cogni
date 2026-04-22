@@ -37,10 +37,6 @@ const targetSchema = z.object({
   mode: z.enum(["paper", "live"]),
   /** Fixed mirror notional per fill (USDC). Operator-wide scaffolding in Phase A. */
   mirror_usdc: z.number().positive(),
-  /** Intent-based daily USDC cap. Operator-wide scaffolding in Phase A. */
-  max_daily_usdc: z.number().positive(),
-  /** Intent-based rate cap per rolling hour. Operator-wide scaffolding in Phase A. */
-  max_fills_per_hour: z.number().int().positive(),
   /** Mirrors the per-tenant `poly_copy_trade_config.enabled` row. */
   enabled: z.boolean(),
   /** Provenance: `"env"` for the local-dev fallback; `"db"` once `dbTargetSource` is wired. */

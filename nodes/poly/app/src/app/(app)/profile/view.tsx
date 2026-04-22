@@ -523,6 +523,63 @@ function ChatGptConnectFlow({
   );
 }
 
+/**
+ * Default slider positions for the first-time consent modal. Chosen to match
+ * MIRROR_USDC's current default (~$1) so a new tenant that immediately
+ * enables copy-trade can mirror at least one fill per market without
+ * tripping the per-order cap.
+ */
+const DEFAULT_PER_ORDER_CAP_USDC = 2;
+const DEFAULT_DAILY_CAP_USDC = 10;
+
+function GrantCapSlider({
+  id,
+  label,
+  min,
+  max,
+  step,
+  value,
+  onChange,
+  helperText,
+}: {
+  id: string;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  onChange: (next: number) => void;
+  helperText?: string;
+}): ReactElement {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <label htmlFor={id} className="font-medium text-foreground text-sm">
+          {label}
+        </label>
+        <span className="font-mono text-foreground text-sm tabular-nums">
+          ${value.toFixed(2)}
+        </span>
+      </div>
+      <input
+        id={id}
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-primary"
+      />
+      <div className="flex justify-between text-muted-foreground text-xs">
+        <span>${min.toFixed(2)}</span>
+        {helperText && <span>{helperText}</span>}
+        <span>${max.toFixed(2)}</span>
+      </div>
+    </div>
+  );
+}
+
 function TradingWalletConnectFlow({
   userId,
   onConnected,
@@ -534,6 +591,17 @@ function TradingWalletConnectFlow({
 }): ReactElement {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [perOrderCapUsdc, setPerOrderCapUsdc] = useState(
+    DEFAULT_PER_ORDER_CAP_USDC
+  );
+  const [dailyCapUsdc, setDailyCapUsdc] = useState(DEFAULT_DAILY_CAP_USDC);
+
+  // Keep daily >= per-order (matches DB CHECK on poly_wallet_grants).
+  useEffect(() => {
+    if (dailyCapUsdc < perOrderCapUsdc) {
+      setDailyCapUsdc(perOrderCapUsdc);
+    }
+  }, [perOrderCapUsdc, dailyCapUsdc]);
 
   const handleCreate = async (): Promise<void> => {
     setIsSubmitting(true);
@@ -546,6 +614,10 @@ function TradingWalletConnectFlow({
           custodialConsentAcknowledged: true,
           custodialConsentActorKind: "user",
           custodialConsentActorId: userId,
+          defaultGrant: {
+            perOrderUsdcCap: perOrderCapUsdc,
+            dailyUsdcCap: dailyCapUsdc,
+          },
         }),
       });
       const body: unknown = await res.json().catch(() => null);
@@ -582,6 +654,34 @@ function TradingWalletConnectFlow({
           on your behalf inside the app and that funding, withdrawals, and
           disconnect controls will live here in Profile.
         </p>
+      </div>
+
+      <div className="space-y-3 rounded-md border border-border bg-background p-3">
+        <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
+          Trading limits
+        </div>
+        <p className="text-muted-foreground text-xs">
+          Caps the copy-trade pipeline enforces before every order. You can
+          revoke the wallet (and the limits) at any time.
+        </p>
+        <GrantCapSlider
+          id="grant-per-order-cap"
+          label="Max per trade"
+          min={0.5}
+          max={20}
+          step={0.5}
+          value={perOrderCapUsdc}
+          onChange={setPerOrderCapUsdc}
+        />
+        <GrantCapSlider
+          id="grant-daily-cap"
+          label="Max per day"
+          min={Math.max(2, perOrderCapUsdc)}
+          max={200}
+          step={1}
+          value={dailyCapUsdc}
+          onChange={setDailyCapUsdc}
+        />
       </div>
 
       {error ? (

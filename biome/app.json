@@ -28,7 +28,8 @@
     {
       "includes": [
         "nodes/poly/app/src/**/*.{ts,tsx}",
-        "!nodes/poly/app/src/bootstrap/capabilities/poly-trade.ts"
+        "!nodes/poly/app/src/bootstrap/capabilities/poly-trade.ts",
+        "!nodes/poly/app/src/bootstrap/capabilities/poly-trade-executor.ts"
       ],
       "linter": {
         "rules": {
@@ -37,7 +38,7 @@
               "level": "error",
               "options": {
                 "paths": {
-                  "@polymarket/clob-client": "Import @polymarket/clob-client only from bootstrap/capabilities/poly-trade.ts. All placement code must go through PolyTradeCapability (task.0315 CP4.25)."
+                  "@polymarket/clob-client": "Import @polymarket/clob-client only from bootstrap/capabilities/poly-trade.ts or bootstrap/capabilities/poly-trade-executor.ts. All placement code must go through PolyTradeCapability or PolyTradeExecutor (task.0315 CP4.25, task.0318 Phase B3)."
                 }
               }
             }

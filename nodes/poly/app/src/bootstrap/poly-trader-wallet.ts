@@ -21,7 +21,9 @@ import type { Logger } from "pino";
 import type { LocalAccount } from "viem";
 import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
 import { PrivyPolyTraderWalletAdapter } from "@/adapters/server/wallet";
-import { createOrDerivePolymarketApiKeyForSigner } from "@/bootstrap/capabilities/poly-trade";
+// Re-homed to `poly-trade-executor.ts` so Stage 4's purge of
+// `poly-trade.ts` does not break provisioning. (C7 design-review concern.)
+import { createOrDerivePolymarketApiKeyForSigner } from "@/bootstrap/capabilities/poly-trade-executor";
 import { serverEnv } from "@/shared/env/server-env";
 
 export class WalletAdapterUnconfiguredError extends Error {

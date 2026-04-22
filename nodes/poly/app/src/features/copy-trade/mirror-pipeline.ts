@@ -2,18 +2,19 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@features/copy-trade/mirror-coordinator`
- * Purpose: Thin coordinator that glues `features/wallet-watch/` → `decide()` → `features/trading/`. Pure `runOnce(deps)` — no `setInterval`, no env reads, no DB client construction. The ONLY file in the feature layer that imports from both sibling slices.
- * Scope: Sequencing + INSERT_BEFORE_PLACE enforcement. Does not own cadence (job shim in `bootstrap/jobs/copy-trade-mirror.job.ts`), does not own cursor persistence (deps supply `getCursor`/`setCursor`), does not construct adapters (bootstrap injects them).
+ * Module: `@features/copy-trade/mirror-pipeline`
+ * Purpose: Thin pipeline that glues `features/wallet-watch/` → `planMirrorFromFill()` → `features/trading/`. Pure `runMirrorTick(deps)` — no `setInterval`, no env reads, no DB client construction. The ONLY file in the feature layer that imports from both sibling slices.
+ * Scope: Sequencing + INSERT_BEFORE_PLACE enforcement. Does not own cadence (bootstrap job), does not own cursor persistence (deps supply `getCursor`/`setCursor`), does not construct adapters.
  * Invariants:
- *   - COPY_TRADE_ONLY_COORDINATES — the coordinator is the only slice file that imports both `trading/` and `wallet-watch/`.
- *   - INSERT_BEFORE_PLACE — `order-ledger.insertPending` runs BEFORE `placeIntent`. `markOrderId` / `markError` run AFTER. Crash between insert and place leaves a pending row whose `client_order_id` will be in the next tick's `already_placed_ids`, so `decide()` returns `skip/already_placed`.
+ *   - COPY_TRADE_ONLY_PIPES — the pipeline is the only slice file that imports both `trading/` and `wallet-watch/`.
+ *   - INSERT_BEFORE_PLACE — `order-ledger.insertPending` runs BEFORE the placeIntent executor. `markOrderId` / `markError` run AFTER. Crash between insert and place leaves a pending row whose `client_order_id` will be in the next tick's `already_placed_ids`, so `planMirrorFromFill()` returns `skip/already_placed`.
  *   - IDEMPOTENT_BY_CLIENT_ID — `client_order_id = clientOrderIdFor(target.target_id, fill.fill_id)`, pinned helper. Deterministic from the PK pair so re-runs dedupe.
- *   - RECORD_EVERY_DECISION — `order-ledger.recordDecision` fires for EVERY decide() outcome (placed, skipped, or error). Supports P4 divergence analysis without the fills ledger.
- *   - DECISIONS_TOTAL_HAS_SOURCE — `poly_mirror_decisions_total{outcome, reason, source}` always carries `source` (v0 = `"data-api"`, P4 adds `"clob-ws"`).
- *   - TENANT_INHERITED_FROM_TARGET — every `insertPending` and `recordDecision` writes `(billing_account_id, created_by_user_id)` taken from `deps.target` (`TargetConfig`). The mirror-coordinator never reads tenant from anywhere else.
- * Side-effects: delegated — DB I/O via `OrderLedger`, HTTP via `WalletActivitySource`, Polymarket CLOB via `placeIntent`. Coordinator itself is pure sequencing + logger/metrics calls.
- * Links: work/items/task.0315.poly-copy-trade-prototype.md (CP4.3d), docs/spec/poly-copy-trade-phase1.md, docs/spec/poly-multi-tenant-auth.md
+ *   - RECORD_EVERY_DECISION — `order-ledger.recordDecision` fires for EVERY planMirrorFromFill() outcome (placed, skipped, or error). Supports divergence analysis without the fills ledger.
+ *   - DECISIONS_TOTAL_HAS_SOURCE — `poly_mirror_decisions_total{outcome, reason, source}` always carries `source` (v0 = `"data-api"`).
+ *   - TENANT_INHERITED_FROM_TARGET — every `insertPending` and `recordDecision` writes `(billing_account_id, created_by_user_id)` taken from `deps.target` (`MirrorTargetConfig`). The pipeline never reads tenant from anywhere else.
+ *   - CAPS_LIVE_IN_GRANT — daily / hourly caps are enforced by `authorizeIntent` inside the per-tenant `placeIntent` executor, not here.
+ * Side-effects: delegated — DB I/O via `OrderLedger`, HTTP via `WalletActivitySource`, Polymarket CLOB via `placeIntent`. Pipeline itself is pure sequencing + logger/metrics calls.
+ * Links: work/items/task.0318 (Phase B3), docs/spec/poly-multi-tenant-auth.md
  * @public
  */
 
@@ -29,15 +30,12 @@ import { EVENT_NAMES } from "@cogni/node-shared";
 import type { OrderLedger } from "@/features/trading";
 import type { WalletActivitySource } from "@/features/wallet-watch";
 
-import { decide } from "./decide";
-import type { MirrorReason, SizingPolicy, TargetConfig } from "./types";
+import { planMirrorFromFill } from "./plan-mirror";
+import type { MirrorReason, MirrorTargetConfig, SizingPolicy } from "./types";
 
 /**
  * Extract a representative USDC notional from a sizing policy for uses that
  * predate per-fill sizing math — SELL-close caps and audit-log skip blobs.
- * For `kind: "fixed"`, this is the user's target bet size. For future kinds
- * (proportional, percentile) the call site must be revisited; the switch is
- * exhaustive, so the compiler will flag it. bug.0342.
  */
 function nominalSizeUsdc(sizing: SizingPolicy): number {
   switch (sizing.kind) {
@@ -46,14 +44,14 @@ function nominalSizeUsdc(sizing: SizingPolicy): number {
   }
 }
 
-/** Minimal position shape needed by the coordinator — subset of PolymarketUserPosition. */
+/** Minimal position shape needed by the pipeline — subset of PolymarketUserPosition. */
 export interface OperatorPosition {
   asset: string;
   size: number;
 }
 
-/** Metric names emitted by the coordinator. */
-export const MIRROR_COORDINATOR_METRICS = {
+/** Metric names emitted by the pipeline. */
+export const MIRROR_PIPELINE_METRICS = {
   /** `poly_mirror_decisions_total{outcome, reason, source}` — always fired, bounded labels. */
   decisionsTotal: "poly_mirror_decisions_total",
   /** `poly_mirror_placement_errors_total` — `placeIntent` throw after pending insert. */
@@ -63,26 +61,30 @@ export const MIRROR_COORDINATOR_METRICS = {
 /** `Fill.source` values that land in `decisions_total{source}`. */
 export type DecisionSource = "data-api" | "clob-ws";
 
-export interface MirrorCoordinatorDeps {
-  /** Fill source — v0 is the Polymarket Data-API adapter; P4 swaps in WS. */
+export interface MirrorPipelineDeps {
+  /** Fill source — v0 is the Polymarket Data-API adapter. */
   source: WalletActivitySource;
   /** Order ledger — reads state + writes pending/mark/decision rows. */
   ledger: OrderLedger;
-  /** Raw placement seam from `createPolyTradeCapability().placeIntent`. */
+  /**
+   * Tenant-scoped placement seam. Delegates to the per-tenant
+   * `PolyTradeExecutor.placeIntent`, which wraps `authorizeIntent` +
+   * `PolymarketClobAdapter.placeOrder`. Must be constructed against
+   * `deps.target.billing_account_id` by the caller.
+   */
   placeIntent: (intent: OrderIntent) => Promise<OrderReceipt>;
   /**
    * Market-constraint fetch seam — returns `{ minShares }` for a token id so
-   * the sizing policy can avoid sub-min submissions (bug.0342). Optional: when
-   * absent (unit tests, paper-only flows), the share-min guard is skipped.
+   * the sizing policy can avoid sub-min submissions (bug.0342). Optional.
    */
   getMarketConstraints?:
     | ((
         tokenId: string
       ) => Promise<{ minShares: number; minUsdcNotional?: number }>)
     | undefined;
-  /** Static target config for v0 — P2 swaps for a per-tick DB resolver. */
-  target: TargetConfig;
-  /** Cursor accessor — bootstrap closures hold the in-memory state for v0. */
+  /** Per-target config. */
+  target: MirrorTargetConfig;
+  /** Cursor accessor — bootstrap closures hold the in-memory state. */
   getCursor: () => number | undefined;
   /** Cursor writeback — called once per tick with the `newSince` from the source. */
   setCursor: (since: number) => void;
@@ -93,10 +95,9 @@ export interface MirrorCoordinatorDeps {
   /** Clock injection — tests pin `Date`. Default = real `Date`. */
   clock?: () => Date;
   /**
-   * Optional — SELL-to-close path. When present, SELL fills route through
-   * this after a position check. When absent, SELL fills degrade to
-   * `skip/sell_without_position` (safe: we never open a short).
-   * Signature matches `PolyTradeBundle.closePosition` exactly.
+   * Optional — SELL-to-close path. Routes through the per-tenant executor's
+   * `closePosition` which authorizes + caps + signs. When absent, SELL fills
+   * degrade to `skip/sell_without_position` (never open a short).
    */
   closePosition?: (params: {
     tokenId: string;
@@ -105,41 +106,28 @@ export interface MirrorCoordinatorDeps {
     client_order_id: `0x${string}`;
   }) => Promise<OrderReceipt>;
   /**
-   * Optional — position query used by the SELL branch. When absent (or no
-   * `closePosition`), SELL fills degrade to `skip/sell_without_position`.
-   * Returns a minimal position list; the coordinator only needs `asset` + `size`.
+   * Optional — position query used by the SELL branch. Per-tenant.
+   * When absent (or no `closePosition`), SELL fills degrade to
+   * `skip/sell_without_position`.
    */
   getOperatorPositions?: () => Promise<OperatorPosition[]>;
 }
 
 /**
- * One coordinator tick. Fully sequential — no concurrency across fills inside
- * one tick, so `decide()`'s `already_placed_ids` snapshot stays consistent.
- *
- * Ordering per fill:
- *   1. compute `client_order_id`
- *   2. snapshot state (kill-switch + caps + placed ids)
- *   3. `decide()`
- *   4. `recordDecision` (always)
- *   5. if `place`: `insertPending` → `placeIntent` → `markOrderId` / `markError`
- *
- * Errors inside a single fill's path are logged + recorded as `outcome:"error"`
- * in the decisions ledger but do NOT halt the tick — the coordinator continues
- * with the next fill so one broken market doesn't stall the mirror loop.
+ * One pipeline tick. Fully sequential — no concurrency across fills inside
+ * one tick, so `planMirrorFromFill()`'s `already_placed_ids` snapshot stays
+ * consistent.
  *
  * @public
  */
-export async function runOnce(deps: MirrorCoordinatorDeps): Promise<void> {
+export async function runMirrorTick(deps: MirrorPipelineDeps): Promise<void> {
   const clock = deps.clock ?? (() => new Date());
   const log = deps.logger.child({
-    component: "mirror-coordinator",
+    component: "mirror-pipeline",
     target_id: deps.target.target_id,
     target_wallet: deps.target.target_wallet,
   });
 
-  // Tick-start + empty-page logs intentionally dropped — low signal, high
-  // volume (1/tick × N targets). The decision + source-error events below
-  // carry the same debugging value without flooding Loki.
   const cursor = deps.getCursor();
 
   let result: {
@@ -149,8 +137,6 @@ export async function runOnce(deps: MirrorCoordinatorDeps): Promise<void> {
   try {
     result = await deps.source.fetchSince(cursor);
   } catch (err: unknown) {
-    // Source-level failure — log + skip this tick. Keep cursor unchanged so
-    // next tick re-tries from the same point. Do NOT halt the job.
     log.warn(
       {
         event: EVENT_NAMES.POLY_MIRROR_SOURCE_ERROR,
@@ -158,7 +144,7 @@ export async function runOnce(deps: MirrorCoordinatorDeps): Promise<void> {
         cursor,
         err: err instanceof Error ? err.message : String(err),
       },
-      "mirror coordinator: source fetch failed; skipping tick"
+      "mirror pipeline: source fetch failed; skipping tick"
     );
     return;
   }
@@ -172,14 +158,12 @@ export async function runOnce(deps: MirrorCoordinatorDeps): Promise<void> {
 
 async function processFill(
   fill: import("@cogni/market-provider").Fill,
-  deps: MirrorCoordinatorDeps,
+  deps: MirrorPipelineDeps,
   clock: () => Date,
   log: LoggerPort
 ): Promise<void> {
   const client_order_id = clientOrderIdFor(deps.target.target_id, fill.fill_id);
 
-  // Snapshot is per-fill — simple, slightly more DB reads but correct when
-  // caps tighten mid-tick (e.g. first fill tips over the daily cap).
   const snapshot = await deps.ledger.snapshotState(
     deps.target.target_id,
     deps.target.billing_account_id
@@ -194,10 +178,6 @@ async function processFill(
     decided_at: clock(),
   };
 
-  // ── SELL branch: close-vs-short discrimination ──────────────────────────────
-  // Must run BEFORE decide() so we never pass a bare SELL through the BUY-only
-  // decide() path. If deps are missing or operator has no position, skip safely
-  // (never open a short — CLOB would reject it and semantically it's wrong).
   if (fill.side === "SELL") {
     await processSellFill({
       fill,
@@ -210,12 +190,6 @@ async function processFill(
     return;
   }
 
-  // ── BUY branch ──────────────────────────────────────────────────────────────
-  // Fetch market share-min + USDC-notional floor before decide() so the
-  // sizing policy can scale to whichever floor dominates at this price.
-  // Failures are swallowed → decide runs without constraints (legacy
-  // behavior); defense-in-depth guard in the adapter still catches sub-floor
-  // submissions and throws a classified error. bug.0342.
   let min_shares: number | undefined;
   let min_usdc_notional: number | undefined;
   if (deps.getMarketConstraints) {
@@ -234,18 +208,16 @@ async function processFill(
             client_order_id,
             err: err instanceof Error ? err.message : String(err),
           },
-          "mirror coordinator: getMarketConstraints threw; decide() will run without market floors"
+          "mirror pipeline: getMarketConstraints threw; planMirrorFromFill will run without market floors"
         );
       }
     }
   }
 
-  const decision = decide({
+  const plan = planMirrorFromFill({
     fill,
     config: { ...deps.target, enabled: snapshot.enabled },
     state: {
-      today_spent_usdc: snapshot.today_spent_usdc,
-      fills_last_hour: snapshot.fills_last_hour,
       already_placed_ids: snapshot.already_placed_ids,
     },
     client_order_id,
@@ -253,12 +225,12 @@ async function processFill(
     min_usdc_notional,
   });
 
-  if (decision.action === "skip") {
-    emitDecisionMetric(deps.metrics, "skipped", decision.reason, source);
+  if (plan.kind === "skip") {
+    emitDecisionMetric(deps.metrics, "skipped", plan.reason, source);
     await deps.ledger.recordDecision({
       ...decisionBase,
       outcome: "skipped",
-      reason: decision.reason,
+      reason: plan.reason,
       intent: buildDecisionIntentBlob(fill, deps.target, client_order_id),
       receipt: null,
     });
@@ -266,25 +238,24 @@ async function processFill(
       {
         event: EVENT_NAMES.POLY_MIRROR_DECISION,
         outcome: "skipped",
-        reason: decision.reason,
+        reason: plan.reason,
         source,
         fill_id: fill.fill_id,
         client_order_id,
       },
-      "mirror coordinator: skip"
+      "mirror pipeline: skip"
     );
     return;
   }
 
-  // action === "place" — delegate to shared insert+execute helper.
-  await executePlacement(
+  await executeMirrorOrder(
     deps,
     fill,
     client_order_id,
     decisionBase,
     source,
-    decision.intent,
-    decision.reason,
+    plan.intent,
+    plan.reason,
     log
   );
 }
@@ -292,7 +263,7 @@ async function processFill(
 /** Handles a SELL fill: position-check then close, or skip. */
 async function processSellFill(args: {
   fill: import("@cogni/market-provider").Fill;
-  deps: MirrorCoordinatorDeps;
+  deps: MirrorPipelineDeps;
   client_order_id: `0x${string}`;
   source: DecisionSource;
   decisionBase: {
@@ -307,7 +278,6 @@ async function processSellFill(args: {
   const { fill, deps, client_order_id, source, decisionBase, log } = args;
   const { closePosition, getOperatorPositions } = deps;
 
-  // Degrade-gracefully: if either dep is absent, skip safely.
   if (!closePosition || !getOperatorPositions) {
     emitDecisionMetric(
       deps.metrics,
@@ -334,7 +304,7 @@ async function processSellFill(args: {
         client_order_id,
         detail: "closePosition/getOperatorPositions deps absent",
       },
-      "mirror coordinator: skip (no close deps)"
+      "mirror pipeline: skip (no close deps)"
     );
     return;
   }
@@ -342,12 +312,10 @@ async function processSellFill(args: {
   const tokenId =
     typeof fill.attributes?.asset === "string" ? fill.attributes.asset : "";
 
-  // Query operator positions for the token.
   let positions: OperatorPosition[];
   try {
     positions = await getOperatorPositions();
   } catch {
-    // Position-query failure: skip safely, do not open a short.
     emitDecisionMetric(
       deps.metrics,
       "skipped",
@@ -373,7 +341,7 @@ async function processSellFill(args: {
         client_order_id,
         detail: "getOperatorPositions threw; skipping to avoid short",
       },
-      "mirror coordinator: skip (position query failed)"
+      "mirror pipeline: skip (position query failed)"
     );
     return;
   }
@@ -407,17 +375,13 @@ async function processSellFill(args: {
         client_order_id,
         token_id: tokenId,
       },
-      "mirror coordinator: skip (no position to close)"
+      "mirror pipeline: skip (no position to close)"
     );
     return;
   }
 
-  // Operator holds a position — route through closePosition.
-  // The bundle's closePosition caps size at position value; no double-capping here.
-  // Both deps are guaranteed non-undefined here (checked above). Capture into
-  // a narrowed const so TypeScript tracks the non-optional type.
   const boundClose = deps.closePosition;
-  if (!boundClose) return; // narrowing — guard above already proved this
+  if (!boundClose) return;
   const closeExecutor = (intent: OrderIntent): Promise<OrderReceipt> =>
     boundClose({
       tokenId: intent.attributes?.token_id as string,
@@ -426,7 +390,6 @@ async function processSellFill(args: {
       client_order_id,
     });
 
-  // Build a synthetic SELL intent for the INSERT_BEFORE_PLACE ledger record.
   const closeIntent: OrderIntent = {
     provider: "polymarket",
     market_id: fill.market_id,
@@ -442,7 +405,7 @@ async function processSellFill(args: {
     },
   };
 
-  await executePlacement(
+  await executeMirrorOrder(
     deps,
     fill,
     client_order_id,
@@ -457,13 +420,10 @@ async function processSellFill(args: {
 
 /**
  * Shared INSERT_BEFORE_PLACE + mark/record sequence used by both the BUY path
- * and the SELL-close path. The only difference between the two callers is:
- *   - `intent` (what goes in the ledger's pending row)
- *   - `intentExecutor` (BUY = `deps.placeIntent`; SELL-close = `closePosition` wrapper)
- *   - `reason` (BUY = from `decide()`; SELL = `"sell_closed_position"`)
+ * and the SELL-close path.
  */
-async function executePlacement(
-  deps: MirrorCoordinatorDeps,
+async function executeMirrorOrder(
+  deps: MirrorPipelineDeps,
   fill: import("@cogni/market-provider").Fill,
   client_order_id: `0x${string}`,
   decisionBase: {
@@ -491,8 +451,6 @@ async function executePlacement(
       intent,
     });
   } catch {
-    // Pending-insert failure is fatal for this fill — cannot prove
-    // INSERT_BEFORE_PLACE without it. Log + record error, do not place.
     emitDecisionMetric(deps.metrics, "error", "pending_insert_failed", source);
     await deps.ledger.recordDecision({
       ...decisionBase,
@@ -510,7 +468,7 @@ async function executePlacement(
         source,
         fill_id: fill.fill_id,
       },
-      "mirror coordinator: pending insert failed; skipping placement"
+      "mirror pipeline: pending insert failed; skipping placement"
     );
     return;
   }
@@ -548,11 +506,11 @@ async function executePlacement(
         client_order_id,
         order_id: receipt.order_id,
       },
-      "mirror coordinator: placed"
+      "mirror pipeline: placed"
     );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    deps.metrics.incr(MIRROR_COORDINATOR_METRICS.placementErrorsTotal, {});
+    deps.metrics.incr(MIRROR_PIPELINE_METRICS.placementErrorsTotal, {});
     await deps.ledger.markError({ client_order_id, error: msg });
     emitDecisionMetric(deps.metrics, "error", "placement_failed", source);
     await deps.ledger.recordDecision({
@@ -572,7 +530,7 @@ async function executePlacement(
         fill_id: fill.fill_id,
         client_order_id,
       },
-      "mirror coordinator: placement error"
+      "mirror pipeline: placement error"
     );
   }
 }
@@ -583,24 +541,16 @@ function emitDecisionMetric(
   reason: MirrorReason | "pending_insert_failed" | "placement_failed",
   source: DecisionSource
 ): void {
-  metrics.incr(MIRROR_COORDINATOR_METRICS.decisionsTotal, {
+  metrics.incr(MIRROR_PIPELINE_METRICS.decisionsTotal, {
     outcome,
     reason,
     source,
   });
 }
 
-/**
- * Snapshot of the fill + config context for the `decisions.intent` jsonb
- * column. Used across skip/place/error branches so the audit log has the
- * full decision context regardless of outcome.
- *
- * `extra` may carry `{ side, close }` for SELL-close decisions so the
- * audit log clearly distinguishes a position-close from a BUY.
- */
 function buildDecisionIntentBlob(
   fill: import("@cogni/market-provider").Fill,
-  target: TargetConfig,
+  target: MirrorTargetConfig,
   client_order_id: `0x${string}`,
   extra?: Record<string, unknown>
 ): Record<string, unknown> {

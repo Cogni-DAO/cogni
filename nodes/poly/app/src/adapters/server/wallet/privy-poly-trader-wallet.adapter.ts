@@ -42,8 +42,14 @@
 
 import type { Database } from "@cogni/db-client";
 import { type AeadAAD, aeadDecrypt, aeadEncrypt } from "@cogni/node-shared";
-import { polyWalletConnections } from "@cogni/poly-db-schema";
+import {
+  polyCopyTradeFills,
+  polyWalletConnections,
+  polyWalletGrants,
+} from "@cogni/poly-db-schema";
 import type {
+  AuthorizationFailure,
+  AuthorizedSigningContext,
   AuthorizeIntentResult,
   CustodialConsent,
   OrderIntentSummary,
@@ -53,7 +59,17 @@ import type {
 } from "@cogni/poly-wallet";
 import type { AuthorizationContext, PrivyClient } from "@privy-io/node";
 import { createViemAccount } from "@privy-io/node/viem";
-import { and, count, eq, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  sql,
+  sum,
+} from "drizzle-orm";
 import type { Logger } from "pino";
 import {
   createPublicClient,
@@ -76,6 +92,53 @@ const POL_DECIMALS = 18;
 const ERC20_BALANCEOF_ABI = parseAbi([
   "function balanceOf(address owner) view returns (uint256)",
 ]);
+
+/**
+ * Default scopes auto-issued alongside every new wallet. BUY + SELL so the
+ * mirror pipeline's closePosition path can execute from day one; tenants can
+ * downscope later via grant revoke + re-issue.
+ */
+const DEFAULT_GRANT_SCOPES = ["poly:trade:buy", "poly:trade:sell"] as const;
+
+/**
+ * Fills-per-hour rate limit baked into every default grant. Not surfaced in
+ * the consent UI (the plan intentionally narrows the slider set to per-order
+ * + daily USDC only, per `.cursor/plans/poly-per-tenant-trade-execution_92073c70.plan.md`).
+ * Value mirrors today's `MIRROR_MAX_FILLS_PER_HOUR` in copy-trade-mirror.job.ts.
+ */
+const DEFAULT_GRANT_HOURLY_FILLS_CAP = 50;
+
+/**
+ * Fill statuses that commit (or already committed) USDC to the exchange. Used
+ * by the authorize-intent daily / hourly cap windows so two concurrent pending
+ * orders cannot race past the cap (the canonical bug that "count only filled"
+ * exhibits). `canceled` + `error` are excluded — no USDC attached.
+ */
+const IN_FLIGHT_FILL_STATUSES = [
+  "pending",
+  "open",
+  "filled",
+  "partial",
+] as const;
+
+/**
+ * Grant caps the consent UI collects. The HTTP contract validates bounds
+ * (per-order 0.50..20, daily 2..200) before the route hands them here; the
+ * DB CHECK enforces `daily >= per_order` as a backstop.
+ */
+export interface DefaultGrantInput {
+  readonly perOrderUsdcCap: number;
+  readonly dailyUsdcCap: number;
+}
+
+/**
+ * Drizzle's transaction handle is structurally the same as `Database` for
+ * the CRUD surface we use (select / insert / update / execute) but omits
+ * the postgres.js `$client` pool accessor. `Omit` the optional piece so
+ * `provisionInsideTx` accepts both a top-level `Database` call and a
+ * `.transaction((tx) => …)` handle.
+ */
+type TxOrDb = Omit<Database, "$client" | "transaction">;
 
 export interface PrivyPolyTraderWalletAdapterConfig {
   /**
@@ -281,135 +344,231 @@ export class PrivyPolyTraderWalletAdapter implements PolyTraderWalletPort {
     createdByUserId: string;
     custodialConsent: CustodialConsent;
   }): Promise<PolyTraderSigningContext> {
-    const consent = input.custodialConsent;
-
     return this.serviceDb.transaction(async (tx) => {
       // PROVISION_IS_IDEMPOTENT: tenant-scoped advisory lock for the whole txn.
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtext(${input.billingAccountId}))`
       );
-
-      // Idempotency short-circuit.
-      const existing = await tx
-        .select()
-        .from(polyWalletConnections)
-        .where(
-          and(
-            eq(polyWalletConnections.billingAccountId, input.billingAccountId),
-            isNull(polyWalletConnections.revokedAt)
-          )
-        )
-        .limit(1);
-
-      if (existing[0]) {
-        const row = existing[0];
-        if (row.billingAccountId !== input.billingAccountId) {
-          throw new Error(
-            "tenant mismatch on provision idempotency check — aborting"
-          );
-        }
-        const clobCreds = this.decryptCreds(row.clobApiKeyCiphertext, {
-          billing_account_id: row.billingAccountId,
-          connection_id: row.id,
-          provider: CREDENTIAL_PROVIDER,
-        });
-        const rawIdemAccount = createViemAccount(this.privyClient, {
-          walletId: row.privyWalletId,
-          address: row.address as `0x${string}`,
-          authorizationContext: this.authorizationContext,
-        });
-        // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
-        const account: any = rawIdemAccount;
-        return {
-          account,
-          clobCreds,
-          funderAddress: getAddress(row.address),
-          connectionId: row.id,
-        };
-      }
-
-      // PROVISION_NO_ORPHAN: derive a deterministic generation counter from
-      // the tenant's full row history (active + revoked). Under the advisory
-      // lock this is race-free; on retry after crash the count is unchanged
-      // so the idempotency key resolves to the same Privy wallet.
-      const [generationRow] = await tx
-        .select({ c: count() })
-        .from(polyWalletConnections)
-        .where(
-          eq(polyWalletConnections.billingAccountId, input.billingAccountId)
-        );
-      const generation = Number(generationRow?.c ?? 0) + 1;
-      const idempotencyKey = `poly-wallet:${input.billingAccountId}:${generation}`;
-
-      // Fresh provision path. The idempotencyKey option maps to the
-      // `privy-idempotency-key` HTTP header; Privy returns the same wallet
-      // for repeated calls with the same key instead of minting a new one.
-      const privyWallet = await this.privyClient
-        .wallets()
-        .create({ chain_type: "ethereum" }, { idempotencyKey });
-
-      const rawFreshAccount = createViemAccount(this.privyClient, {
-        walletId: privyWallet.id,
-        address: privyWallet.address as `0x${string}`,
-        authorizationContext: this.authorizationContext,
-      });
-      // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
-      const account: any = rawFreshAccount;
-
-      const clobCreds = await this.clobCredsFactory(account);
-
-      // Pre-assign the row id so the AEAD AAD binds to it before INSERT.
-      const [{ gen_id }] = (await tx.execute<{ gen_id: string }>(
-        sql`SELECT gen_random_uuid()::text AS gen_id`
-      )) as unknown as [{ gen_id: string }];
-
-      const aad: AeadAAD = {
-        billing_account_id: input.billingAccountId,
-        connection_id: gen_id,
-        provider: CREDENTIAL_PROVIDER,
-      };
-      const ciphertext = aeadEncrypt(
-        JSON.stringify(clobCreds),
-        aad,
-        this.encryptionKey
-      );
-
-      await tx.insert(polyWalletConnections).values({
-        id: gen_id,
-        billingAccountId: input.billingAccountId,
-        createdByUserId: input.createdByUserId,
-        privyWalletId: privyWallet.id,
-        address: getAddress(privyWallet.address),
-        chainId: 137,
-        clobApiKeyCiphertext: ciphertext,
-        encryptionKeyId: this.encryptionKeyId,
-        allowanceState: null,
-        custodialConsentAcceptedAt: consent.acceptedAt,
-        custodialConsentActorKind: consent.actorKind,
-        custodialConsentActorId: consent.actorId,
-      });
-
-      this.log.info(
-        {
-          billing_account_id: input.billingAccountId,
-          connection_id: gen_id,
-          funder_address: getAddress(privyWallet.address),
-          generation,
-        },
-        "poly.wallet.provision — created per-tenant Privy trading wallet"
-      );
-
-      return {
-        account,
-        clobCreds,
-        funderAddress: getAddress(privyWallet.address),
-        connectionId: gen_id,
-      };
+      const result = await this.provisionInsideTx(tx, input);
+      return result.signingContext;
     });
   }
 
   /**
-   * Soft-delete the tenant's active connection row.
+   * Provision + atomic default-grant issuance. The /connect route calls this
+   * (not `provision`) so a freshly-provisioned wallet is never without a
+   * grant — `authorizeIntent` is fail-closed on missing grants, so handing
+   * back a wallet without one would produce a soft-brick.
+   *
+   * Consent + grant + connection all land inside one transaction; the tenant
+   * advisory lock serializes concurrent attempts exactly the way `provision`
+   * already does.
+   */
+  async provisionWithGrant(input: {
+    billingAccountId: string;
+    createdByUserId: string;
+    custodialConsent: CustodialConsent;
+    defaultGrant: DefaultGrantInput;
+  }): Promise<PolyTraderSigningContext> {
+    return this.serviceDb.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${input.billingAccountId}))`
+      );
+      const result = await this.provisionInsideTx(tx, {
+        billingAccountId: input.billingAccountId,
+        createdByUserId: input.createdByUserId,
+        custodialConsent: input.custodialConsent,
+      });
+
+      // Idempotent re-hit on an already-provisioned tenant must still have an
+      // active grant. If a grant already exists we keep it (caller's earlier
+      // slider choice wins); if not, we issue one using the current request's
+      // caps so a crash between provision and grant-insert is self-healing.
+      const activeGrant = await tx
+        .select({ id: polyWalletGrants.id })
+        .from(polyWalletGrants)
+        .where(
+          and(
+            eq(
+              polyWalletGrants.walletConnectionId,
+              result.signingContext.connectionId
+            ),
+            isNull(polyWalletGrants.revokedAt)
+          )
+        )
+        .limit(1);
+
+      if (!activeGrant[0]) {
+        const [inserted] = await tx
+          .insert(polyWalletGrants)
+          .values({
+            billingAccountId: input.billingAccountId,
+            walletConnectionId: result.signingContext.connectionId,
+            createdByUserId: input.createdByUserId,
+            scopes: [...DEFAULT_GRANT_SCOPES],
+            perOrderUsdcCap: input.defaultGrant.perOrderUsdcCap.toFixed(2),
+            dailyUsdcCap: input.defaultGrant.dailyUsdcCap.toFixed(2),
+            hourlyFillsCap: DEFAULT_GRANT_HOURLY_FILLS_CAP,
+            expiresAt: null,
+          })
+          .returning({ id: polyWalletGrants.id });
+
+        this.log.info(
+          {
+            billing_account_id: input.billingAccountId,
+            grant_id: inserted?.id,
+            connection_id: result.signingContext.connectionId,
+            per_order_cap: input.defaultGrant.perOrderUsdcCap,
+            daily_cap: input.defaultGrant.dailyUsdcCap,
+            hourly_fills_cap: DEFAULT_GRANT_HOURLY_FILLS_CAP,
+          },
+          "poly.wallet.grant.issue — auto-issued default grant"
+        );
+      }
+
+      return result.signingContext;
+    });
+  }
+
+  /**
+   * Shared provision body. Lives inside a caller-owned transaction so
+   * `provisionWithGrant` can insert the grant row in the same atomic unit
+   * without duplicating the advisory lock / idempotency logic.
+   */
+  private async provisionInsideTx(
+    tx: TxOrDb,
+    input: {
+      billingAccountId: string;
+      createdByUserId: string;
+      custodialConsent: CustodialConsent;
+    }
+  ): Promise<{
+    signingContext: PolyTraderSigningContext;
+    isIdempotentHit: boolean;
+  }> {
+    const consent = input.custodialConsent;
+
+    const existing = await tx
+      .select()
+      .from(polyWalletConnections)
+      .where(
+        and(
+          eq(polyWalletConnections.billingAccountId, input.billingAccountId),
+          isNull(polyWalletConnections.revokedAt)
+        )
+      )
+      .limit(1);
+
+    if (existing[0]) {
+      const row = existing[0];
+      if (row.billingAccountId !== input.billingAccountId) {
+        throw new Error(
+          "tenant mismatch on provision idempotency check — aborting"
+        );
+      }
+      const clobCreds = this.decryptCreds(row.clobApiKeyCiphertext, {
+        billing_account_id: row.billingAccountId,
+        connection_id: row.id,
+        provider: CREDENTIAL_PROVIDER,
+      });
+      const rawIdemAccount = createViemAccount(this.privyClient, {
+        walletId: row.privyWalletId,
+        address: row.address as `0x${string}`,
+        authorizationContext: this.authorizationContext,
+      });
+      // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
+      const account: any = rawIdemAccount;
+      return {
+        signingContext: {
+          account,
+          clobCreds,
+          funderAddress: getAddress(row.address),
+          connectionId: row.id,
+        },
+        isIdempotentHit: true,
+      };
+    }
+
+    // PROVISION_NO_ORPHAN: derive a deterministic generation counter from
+    // the tenant's full row history (active + revoked). Under the advisory
+    // lock this is race-free; on retry after crash the count is unchanged
+    // so the idempotency key resolves to the same Privy wallet.
+    const [generationRow] = await tx
+      .select({ c: count() })
+      .from(polyWalletConnections)
+      .where(
+        eq(polyWalletConnections.billingAccountId, input.billingAccountId)
+      );
+    const generation = Number(generationRow?.c ?? 0) + 1;
+    const idempotencyKey = `poly-wallet:${input.billingAccountId}:${generation}`;
+
+    const privyWallet = await this.privyClient
+      .wallets()
+      .create({ chain_type: "ethereum" }, { idempotencyKey });
+
+    const rawFreshAccount = createViemAccount(this.privyClient, {
+      walletId: privyWallet.id,
+      address: privyWallet.address as `0x${string}`,
+      authorizationContext: this.authorizationContext,
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
+    const account: any = rawFreshAccount;
+
+    const clobCreds = await this.clobCredsFactory(account);
+
+    const [{ gen_id }] = (await tx.execute<{ gen_id: string }>(
+      sql`SELECT gen_random_uuid()::text AS gen_id`
+    )) as unknown as [{ gen_id: string }];
+
+    const aad: AeadAAD = {
+      billing_account_id: input.billingAccountId,
+      connection_id: gen_id,
+      provider: CREDENTIAL_PROVIDER,
+    };
+    const ciphertext = aeadEncrypt(
+      JSON.stringify(clobCreds),
+      aad,
+      this.encryptionKey
+    );
+
+    await tx.insert(polyWalletConnections).values({
+      id: gen_id,
+      billingAccountId: input.billingAccountId,
+      createdByUserId: input.createdByUserId,
+      privyWalletId: privyWallet.id,
+      address: getAddress(privyWallet.address),
+      chainId: 137,
+      clobApiKeyCiphertext: ciphertext,
+      encryptionKeyId: this.encryptionKeyId,
+      allowanceState: null,
+      custodialConsentAcceptedAt: consent.acceptedAt,
+      custodialConsentActorKind: consent.actorKind,
+      custodialConsentActorId: consent.actorId,
+    });
+
+    this.log.info(
+      {
+        billing_account_id: input.billingAccountId,
+        connection_id: gen_id,
+        funder_address: getAddress(privyWallet.address),
+        generation,
+      },
+      "poly.wallet.provision — created per-tenant Privy trading wallet"
+    );
+
+    return {
+      signingContext: {
+        account,
+        clobCreds,
+        funderAddress: getAddress(privyWallet.address),
+        connectionId: gen_id,
+      },
+      isIdempotentHit: false,
+    };
+  }
+
+  /**
+   * Soft-delete the tenant's active connection row + cascade to grants.
    *
    * WARNING — this is a halt-future kill-switch ONLY. It does NOT:
    *   - delete the Privy backend wallet (funds at that address remain spendable),
@@ -420,47 +579,278 @@ export class PrivyPolyTraderWalletAdapter implements PolyTraderWalletPort {
    * the current on-chain balance and require explicit "proceed with non-zero
    * balance" confirmation from the user. Skipping that check strands funds.
    *
-   * A real balance-guard lands with B3 (withdraw UX + Polygon RPC wiring); for
-   * v0 the port stays halt-future-only and enforcement lives in the caller.
+   * The grant cascade (REVOKE_CASCADES_FROM_CONNECTION invariant, migration
+   * 0031) runs inside the same transaction as the connection update so
+   * `authorizeIntent` cannot succeed against a stale grant whose connection
+   * just got revoked.
    */
   async revoke(input: {
     billingAccountId: string;
     revokedByUserId: string;
   }): Promise<void> {
-    await this.serviceDb
-      .update(polyWalletConnections)
-      .set({
-        revokedAt: new Date(),
-        revokedByUserId: input.revokedByUserId,
-      })
-      .where(
-        and(
-          eq(polyWalletConnections.billingAccountId, input.billingAccountId),
-          isNull(polyWalletConnections.revokedAt)
+    await this.serviceDb.transaction(async (tx) => {
+      const [revokedConnection] = await tx
+        .update(polyWalletConnections)
+        .set({
+          revokedAt: new Date(),
+          revokedByUserId: input.revokedByUserId,
+        })
+        .where(
+          and(
+            eq(polyWalletConnections.billingAccountId, input.billingAccountId),
+            isNull(polyWalletConnections.revokedAt)
+          )
         )
+        .returning({ id: polyWalletConnections.id });
+
+      if (!revokedConnection) {
+        // Nothing to cascade — either no active connection or already revoked.
+        return;
+      }
+
+      const revokedGrants = await tx
+        .update(polyWalletGrants)
+        .set({
+          revokedAt: new Date(),
+          revokedByUserId: input.revokedByUserId,
+        })
+        .where(
+          and(
+            eq(polyWalletGrants.walletConnectionId, revokedConnection.id),
+            isNull(polyWalletGrants.revokedAt)
+          )
+        )
+        .returning({ id: polyWalletGrants.id });
+
+      this.log.info(
+        {
+          billing_account_id: input.billingAccountId,
+          connection_id: revokedConnection.id,
+          revoked_by_user_id: input.revokedByUserId,
+          cascaded_grant_ids: revokedGrants.map((g) => g.id),
+        },
+        "poly.wallet.revoke — soft-deleted active connection + cascaded grants (funds NOT moved; caller must have enforced withdraw)"
       );
+
+      for (const g of revokedGrants) {
+        this.log.info(
+          {
+            billing_account_id: input.billingAccountId,
+            grant_id: g.id,
+            cascaded_from_connection_id: revokedConnection.id,
+          },
+          "poly.wallet.grant.revoke — cascaded by connection revoke"
+        );
+      }
+    });
+  }
+
+  /**
+   * Resolve + grant-check in one call. Only mint site for
+   * `AuthorizedSigningContext`; `PolymarketClobAdapter.placeOrder` takes the
+   * branded type, so a tenant without an active grant simply cannot place
+   * orders. Fails closed — any DB error returns `backend_unreachable`.
+   *
+   * Reads connection + grant fresh on every call so a cached per-tenant
+   * executor cannot bypass a revoke that landed after the executor was
+   * constructed.
+   *
+   * Cap windows count any fill status that currently commits or has
+   * committed USDC (pending / open / filled / partial). Counting only
+   * `filled` would let two concurrent pending orders race past the cap.
+   */
+  async authorizeIntent(
+    billingAccountId: string,
+    intent: OrderIntentSummary
+  ): Promise<AuthorizeIntentResult> {
+    try {
+      const [grant] = await this.serviceDb
+        .select()
+        .from(polyWalletGrants)
+        .where(
+          and(
+            eq(polyWalletGrants.billingAccountId, billingAccountId),
+            isNull(polyWalletGrants.revokedAt)
+          )
+        )
+        .orderBy(desc(polyWalletGrants.createdAt))
+        .limit(1);
+
+      if (!grant) {
+        return this.denyAuthorization(
+          billingAccountId,
+          intent,
+          "no_active_grant"
+        );
+      }
+      // TENANT_DEFENSE_IN_DEPTH.
+      if (grant.billingAccountId !== billingAccountId) {
+        this.log.warn(
+          {
+            billing_account_id: billingAccountId,
+            grant_id: grant.id,
+          },
+          "tenant mismatch on poly_wallet_grants SELECT — refusing to authorize"
+        );
+        return this.denyAuthorization(
+          billingAccountId,
+          intent,
+          "backend_unreachable"
+        );
+      }
+
+      if (grant.expiresAt && grant.expiresAt.getTime() <= Date.now()) {
+        return this.denyAuthorization(
+          billingAccountId,
+          intent,
+          "grant_expired",
+          grant.id
+        );
+      }
+
+      const requiredScope =
+        intent.side === "BUY" ? "poly:trade:buy" : "poly:trade:sell";
+      if (!grant.scopes.includes(requiredScope)) {
+        return this.denyAuthorization(
+          billingAccountId,
+          intent,
+          "scope_missing",
+          grant.id
+        );
+      }
+
+      const perOrderCap = Number(grant.perOrderUsdcCap);
+      if (intent.usdcAmount > perOrderCap) {
+        return this.denyAuthorization(
+          billingAccountId,
+          intent,
+          "cap_exceeded_per_order",
+          grant.id
+        );
+      }
+
+      // Cap windows — include every status that has USDC attached (pending /
+      // open / filled / partial). CAPS_COUNT_INTENTS: filter by createdAt
+      // (intent insertion time) NOT observedAt (upstream fill time) so
+      // historical target activity doesn't artificially backdate caps.
+      const [spendRow] = await this.serviceDb
+        .select({
+          spent: sum(
+            sql<string>`COALESCE((${polyCopyTradeFills.attributes}->>'size_usdc')::numeric, 0)`
+          ),
+        })
+        .from(polyCopyTradeFills)
+        .where(
+          and(
+            eq(polyCopyTradeFills.billingAccountId, billingAccountId),
+            gte(polyCopyTradeFills.createdAt, sql`now() - interval '24 hours'`),
+            inArray(polyCopyTradeFills.status, [...IN_FLIGHT_FILL_STATUSES])
+          )
+        );
+
+      const spent24h = Number(spendRow?.spent ?? 0);
+      const dailyCap = Number(grant.dailyUsdcCap);
+      if (spent24h + intent.usdcAmount > dailyCap) {
+        return this.denyAuthorization(
+          billingAccountId,
+          intent,
+          "cap_exceeded_daily",
+          grant.id
+        );
+      }
+
+      const [rateRow] = await this.serviceDb
+        .select({ n: count() })
+        .from(polyCopyTradeFills)
+        .where(
+          and(
+            eq(polyCopyTradeFills.billingAccountId, billingAccountId),
+            gte(polyCopyTradeFills.createdAt, sql`now() - interval '1 hour'`),
+            inArray(polyCopyTradeFills.status, [...IN_FLIGHT_FILL_STATUSES])
+          )
+        );
+      const fillsLastHour = Number(rateRow?.n ?? 0);
+      if (fillsLastHour >= grant.hourlyFillsCap) {
+        return this.denyAuthorization(
+          billingAccountId,
+          intent,
+          "cap_exceeded_hourly_fills",
+          grant.id
+        );
+      }
+
+      // All checks passed; resolve signing context. `resolve` performs the
+      // connection SELECT + decrypt + viem-account wrap; if it returns null
+      // the connection was revoked (or never existed) despite the grant —
+      // treat as `no_connection` so callers see the right failure class.
+      const signingContext = await this.resolve(billingAccountId);
+      if (!signingContext) {
+        return this.denyAuthorization(
+          billingAccountId,
+          intent,
+          "no_connection",
+          grant.id
+        );
+      }
+
+      const authorized = {
+        ...signingContext,
+        grantId: grant.id,
+        authorizedIntent: intent,
+      } as AuthorizedSigningContext;
+
+      this.log.info(
+        {
+          billing_account_id: billingAccountId,
+          grant_id: grant.id,
+          intent_side: intent.side,
+          intent_usdc: intent.usdcAmount,
+          ok: true,
+        },
+        "poly.authorize.outcome"
+      );
+
+      return { ok: true, context: authorized };
+    } catch (err) {
+      this.log.warn(
+        {
+          billing_account_id: billingAccountId,
+          intent_side: intent.side,
+          intent_usdc: intent.usdcAmount,
+          err: err instanceof Error ? err.message : String(err),
+        },
+        "poly.authorize.outcome — backend unreachable"
+      );
+      return {
+        ok: false,
+        reason: "backend_unreachable",
+      };
+    }
+  }
+
+  private denyAuthorization(
+    billingAccountId: string,
+    intent: OrderIntentSummary,
+    reason: AuthorizationFailure,
+    grantId?: string
+  ): AuthorizeIntentResult {
     this.log.info(
       {
-        billing_account_id: input.billingAccountId,
-        revoked_by_user_id: input.revokedByUserId,
+        billing_account_id: billingAccountId,
+        grant_id: grantId,
+        intent_side: intent.side,
+        intent_usdc: intent.usdcAmount,
+        ok: false,
+        reason,
       },
-      "poly.wallet.revoke — soft-deleted active connection (funds NOT moved; caller must have enforced withdraw)"
+      "poly.authorize.outcome"
     );
+    return { ok: false, reason };
   }
 
   // ────────────────────────────────────────────────────────────────────────
-  // Deferred methods — lands in a follow-up B2 slice alongside grants table.
-  // Calls throw explicitly so misuse is obvious in logs + tests.
+  // Deferred methods — follow-up ops slices.
   // ────────────────────────────────────────────────────────────────────────
-
-  async authorizeIntent(
-    _billingAccountId: string,
-    _intent: OrderIntentSummary
-  ): Promise<AuthorizeIntentResult> {
-    throw new Error(
-      "PrivyPolyTraderWalletAdapter.authorizeIntent: not implemented (B4 grants wiring)"
-    );
-  }
 
   async withdrawUsdc(_input: {
     billingAccountId: string;

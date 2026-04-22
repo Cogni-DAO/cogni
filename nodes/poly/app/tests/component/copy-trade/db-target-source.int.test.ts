@@ -24,6 +24,8 @@ import { toUserId, userActor } from "@cogni/ids";
 import {
   polyCopyTradeConfig,
   polyCopyTradeTargets,
+  polyWalletConnections,
+  polyWalletGrants,
 } from "@cogni/poly-db-schema";
 import { generateTestWallet } from "@tests/_fixtures/auth/db-helpers";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
@@ -36,11 +38,50 @@ import { dbTargetSource } from "@/features/copy-trade/target-source";
 interface TestTenant {
   userId: string;
   billingAccountId: string;
+  walletConnectionId: string;
 }
 
 const TARGET_A = "0xAAAAbbbbAAAAbbbbAAAAbbbbAAAAbbbbAAAAbbbb";
 const TARGET_B = "0xCCCCddddCCCCddddCCCCddddCCCCddddCCCCdddd";
 const TARGET_SHARED = "0xEEEEffffEEEEffffEEEEffffEEEEffffEEEEffff";
+
+/**
+ * Seed a placeholder wallet connection + active grant for a tenant so the
+ * enumerator's `listAllActive` join (connections + grants) matches this row.
+ * The address + ciphertext contents don't matter for these tests — they exist
+ * only so the inner joins succeed. Address is derived from tenant id to
+ * satisfy the chain+address unique-active index across tenants.
+ */
+async function seedWalletConnectionAndGrant(
+  superDb: Database,
+  t: TestTenant
+): Promise<void> {
+  const addrSuffix = t.billingAccountId.replace(/-/g, "").slice(0, 40);
+  const paddedAddr = addrSuffix.padEnd(40, "0");
+  const address = `0x${paddedAddr}`;
+  await superDb.insert(polyWalletConnections).values({
+    id: t.walletConnectionId,
+    billingAccountId: t.billingAccountId,
+    createdByUserId: t.userId,
+    privyWalletId: `privy-wallet-${t.billingAccountId.slice(0, 8)}`,
+    address,
+    chainId: 137,
+    clobApiKeyCiphertext: Buffer.from("placeholder-ciphertext"),
+    encryptionKeyId: "test-key-v1",
+    custodialConsentAcceptedAt: new Date("2026-04-21T10:00:00.000Z"),
+    custodialConsentActorKind: "user",
+    custodialConsentActorId: t.userId,
+  });
+  await superDb.insert(polyWalletGrants).values({
+    billingAccountId: t.billingAccountId,
+    walletConnectionId: t.walletConnectionId,
+    createdByUserId: t.userId,
+    scopes: ["poly:trade:buy", "poly:trade:sell"],
+    perOrderUsdcCap: "5",
+    dailyUsdcCap: "20",
+    hourlyFillsCap: 50,
+  });
+}
 
 describe("dbTargetSource (component, RLS)", () => {
   let superDb: Database;
@@ -52,8 +93,16 @@ describe("dbTargetSource (component, RLS)", () => {
     superDb = getSeedDb();
     appDb = getAppDb();
 
-    tenantA = { userId: randomUUID(), billingAccountId: randomUUID() };
-    tenantB = { userId: randomUUID(), billingAccountId: randomUUID() };
+    tenantA = {
+      userId: randomUUID(),
+      billingAccountId: randomUUID(),
+      walletConnectionId: randomUUID(),
+    };
+    tenantB = {
+      userId: randomUUID(),
+      billingAccountId: randomUUID(),
+      walletConnectionId: randomUUID(),
+    };
 
     for (const t of [tenantA, tenantB]) {
       await superDb.insert(users).values({
@@ -72,6 +121,9 @@ describe("dbTargetSource (component, RLS)", () => {
         createdByUserId: t.userId,
         enabled: true,
       });
+      // Stage 3: listAllActive now inner-joins wallet_connections + wallet_grants.
+      // Without these rows, the enumerator filters the tenant out entirely.
+      await seedWalletConnectionAndGrant(superDb, t);
     }
 
     // tenantA tracks TARGET_A + TARGET_SHARED.
@@ -104,6 +156,16 @@ describe("dbTargetSource (component, RLS)", () => {
   });
 
   afterAll(async () => {
+    // Grants + connections don't cascade from billing_accounts; clean up first.
+    for (const t of [tenantA, tenantB]) {
+      if (!t?.billingAccountId) continue;
+      await superDb
+        .delete(polyWalletGrants)
+        .where(eq(polyWalletGrants.billingAccountId, t.billingAccountId));
+      await superDb
+        .delete(polyWalletConnections)
+        .where(eq(polyWalletConnections.billingAccountId, t.billingAccountId));
+    }
     // Cascading deletes from billing_accounts → poly_copy_trade_*.
     if (tenantA?.billingAccountId) {
       await superDb
@@ -224,6 +286,103 @@ describe("dbTargetSource (component, RLS)", () => {
       .set({ enabled: true })
       .where(
         eq(polyCopyTradeConfig.billingAccountId, tenantA.billingAccountId)
+      );
+  });
+
+  it("listAllActive drops tenants whose wallet_grant is revoked (Stage 3 join)", async () => {
+    // Revoke tenantA's grant — tenantA should disappear from the enumerator.
+    await superDb
+      .update(polyWalletGrants)
+      .set({ revokedAt: new Date(), revokedByUserId: tenantA.userId })
+      .where(eq(polyWalletGrants.billingAccountId, tenantA.billingAccountId));
+
+    const source = dbTargetSource({
+      appDb: appDb as unknown as PostgresJsDatabase<Record<string, unknown>>,
+      serviceDb: superDb as unknown as PostgresJsDatabase<
+        Record<string, unknown>
+      >,
+    });
+
+    const enumerated = await source.listAllActive();
+    expect(
+      enumerated.filter((e) => e.billingAccountId === tenantA.billingAccountId)
+    ).toHaveLength(0);
+    // tenantB still has an active grant and must remain.
+    expect(
+      enumerated
+        .filter((e) => e.billingAccountId === tenantB.billingAccountId)
+        .map((r) => r.targetWallet)
+        .sort()
+    ).toEqual([TARGET_B, TARGET_SHARED].sort());
+
+    // Restore.
+    await superDb
+      .update(polyWalletGrants)
+      .set({ revokedAt: null, revokedByUserId: null })
+      .where(eq(polyWalletGrants.billingAccountId, tenantA.billingAccountId));
+  });
+
+  it("listAllActive drops tenants whose wallet_grant has expired (Stage 3 join)", async () => {
+    // Expire tenantB's grant in the past.
+    await superDb
+      .update(polyWalletGrants)
+      .set({ expiresAt: new Date(Date.now() - 60_000) })
+      .where(eq(polyWalletGrants.billingAccountId, tenantB.billingAccountId));
+
+    const source = dbTargetSource({
+      appDb: appDb as unknown as PostgresJsDatabase<Record<string, unknown>>,
+      serviceDb: superDb as unknown as PostgresJsDatabase<
+        Record<string, unknown>
+      >,
+    });
+
+    const enumerated = await source.listAllActive();
+    expect(
+      enumerated.filter((e) => e.billingAccountId === tenantB.billingAccountId)
+    ).toHaveLength(0);
+    // tenantA unaffected (still NULL expires_at).
+    expect(
+      enumerated
+        .filter((e) => e.billingAccountId === tenantA.billingAccountId)
+        .map((r) => r.targetWallet)
+        .sort()
+    ).toEqual([TARGET_A, TARGET_SHARED].sort());
+
+    // Restore.
+    await superDb
+      .update(polyWalletGrants)
+      .set({ expiresAt: null })
+      .where(eq(polyWalletGrants.billingAccountId, tenantB.billingAccountId));
+  });
+
+  it("listAllActive drops tenants whose wallet_connection is revoked (Stage 3 join)", async () => {
+    // Revoke tenantA's connection directly — grant stays active but the join
+    // on connections (revoked_at IS NULL) filters the tenant out.
+    await superDb
+      .update(polyWalletConnections)
+      .set({ revokedAt: new Date(), revokedByUserId: tenantA.userId })
+      .where(
+        eq(polyWalletConnections.billingAccountId, tenantA.billingAccountId)
+      );
+
+    const source = dbTargetSource({
+      appDb: appDb as unknown as PostgresJsDatabase<Record<string, unknown>>,
+      serviceDb: superDb as unknown as PostgresJsDatabase<
+        Record<string, unknown>
+      >,
+    });
+
+    const enumerated = await source.listAllActive();
+    expect(
+      enumerated.filter((e) => e.billingAccountId === tenantA.billingAccountId)
+    ).toHaveLength(0);
+
+    // Restore.
+    await superDb
+      .update(polyWalletConnections)
+      .set({ revokedAt: null, revokedByUserId: null })
+      .where(
+        eq(polyWalletConnections.billingAccountId, tenantA.billingAccountId)
       );
   });
 

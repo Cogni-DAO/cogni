@@ -3,15 +3,16 @@
 
 /**
  * Module: `@bootstrap/jobs/copy-trade-mirror.job`
- * Purpose: Disposable 30s scheduler that drives `mirror-coordinator.runOnce()`. Boot-guarded by Polymarket-capability-bundle presence + a non-empty `CopyTradeTargetSource`. Uses `setInterval` (not `@cogni/scheduler-core` — that package is governance-schedule machinery, not a tick library). In-memory cursor + one-shot singleton claim. One poll instance per target wallet.
+ * Purpose: Disposable 30s scheduler that drives `mirror-pipeline.runMirrorTick()`. Boot-guarded by per-tenant executor factory presence + a non-empty `CopyTradeTargetSource`. Uses `setInterval` (not `@cogni/scheduler-core` — that package is governance-schedule machinery, not a tick library). In-memory cursor + one-shot singleton claim. One poll instance per (tenant × target wallet) pair.
  * Scope: Wiring + cadence only. Does not build adapters (container injects), does not own decision logic, does not touch DB directly. One function: `startMirrorPoll(deps) → stop()`.
  * Invariants:
  *   - SCAFFOLDING_LABELED — this file and its wiring are `@scaffolding` / `Deleted-in-phase: 4`. P4's cutover PR deletes this file + the env-based target config.
  *   - SINGLE_WRITER — exactly one process runs the poll. Enforced by caller (POLY_ROLE=trader + replicas=1 is the joint invariant). Boot logs `event:poly.mirror.poll.singleton_claim` so a second pod running this code is Loki-visible.
- *   - TICK_IS_SELF_HEALING — the coordinator already swallows per-fill + per-source errors; the tick wrapper catches anything that escapes, logs, and keeps the interval going.
- *   - NO_CURSOR_PERSISTENCE_V0 — cursor lives in-memory and resets on boot. On startup the initial cursor is `Math.floor(now/1000) - WARMUP_BACKLOG_SEC` so we don't replay a target's months-deep history through `decide()`.
+ *   - TICK_IS_SELF_HEALING — the pipeline already swallows per-fill + per-source errors; the tick wrapper catches anything that escapes, logs, and keeps the interval going.
+ *   - NO_CURSOR_PERSISTENCE_V0 — cursor lives in-memory and resets on boot. On startup the initial cursor is `Math.floor(now/1000) - WARMUP_BACKLOG_SEC` so we don't replay a target's months-deep history through `planMirrorFromFill()`.
+ *   - CAPS_LIVE_IN_GRANT — daily / hourly USDC caps are enforced downstream by `authorizeIntent` inside the per-tenant `placeIntent` executor (see `bootstrap/capabilities/poly-trade-executor.ts`). Mirror-sizing here is notional only.
  * Side-effects: starts a `setInterval`, emits logs + metrics.
- * Links: work/items/task.0315.poly-copy-trade-prototype.md (CP4.3e), docs/spec/poly-copy-trade-phase1.md
+ * Links: work/items/task.0318 (Phase B3), docs/spec/poly-multi-tenant-auth.md
  *
  * @scaffolding
  * Deleted-in-phase: 4 (replaced by Temporal-hosted WS ingester workflow; see
@@ -27,12 +28,12 @@ import type {
 } from "@cogni/market-provider";
 import { EVENT_NAMES } from "@cogni/node-shared";
 import {
-  type MirrorCoordinatorDeps,
+  type MirrorPipelineDeps,
   type OperatorPosition,
-  runOnce,
-} from "@/features/copy-trade/mirror-coordinator";
+  runMirrorTick,
+} from "@/features/copy-trade/mirror-pipeline";
 import { targetIdFromWallet } from "@/features/copy-trade/target-id";
-import type { TargetConfig } from "@/features/copy-trade/types";
+import type { MirrorTargetConfig } from "@/features/copy-trade/types";
 import type { OrderLedger } from "@/features/trading";
 import type { WalletActivitySource } from "@/features/wallet-watch";
 
@@ -47,16 +48,9 @@ export const MIRROR_JOB_METRICS = {
 const WARMUP_BACKLOG_SEC = 60;
 
 /**
- * Hardcoded v0 scaffolding parameters. For a single-operator hardcoded
- * prototype, env-knobs-per-value buys nothing. Change the number in code,
- * redeploy. Deleted-in-phase: 4 alongside the rest of this file.
- *
- * Reasoning:
- * - 30s poll cadence = conservative for copy-trade latency goals; Phase 4
- *   moves to a WS push model and these numbers become irrelevant.
- * - $1 mirror, $100/day, 50/hour = raised from Phase 1 defaults to allow
- *   active copy-trade across 10+ target wallets without hitting caps mid-day.
- *   + keeps a misbehaving target from bankrupting the operator prototype.
+ * Hardcoded v0 scaffolding parameters for mirror sizing. Caps ($/day, fills/hr)
+ * moved to the tenant's `poly_wallet_grants` row in Phase B3 and are enforced
+ * by `authorizeIntent`.
  */
 const MIRROR_POLL_MS = 30_000;
 const MIRROR_USDC = 1;
@@ -65,17 +59,15 @@ const MIRROR_USDC = 1;
  * market's share-minimum (in USDC terms) only when the scaled notional still
  * fits under this ceiling; otherwise it skips with `below_market_min`. Sized
  * at $5 because top-volume Polymarket markets require 5 shares min, and 5
- * shares × max_price (1.0) = $5 worst case. bug.0342. Phase-B surfaces this
- * as a per-tenant column.
+ * shares × max_price (1.0) = $5 worst case. bug.0342.
  */
 const MIRROR_MAX_USDC_PER_TRADE = 5;
-const MIRROR_MAX_DAILY_USDC = 100;
-const MIRROR_MAX_FILLS_PER_HOUR = 50;
 
 /**
- * Build a `TargetConfig` from an enumerated target wallet + tenant attribution.
- * All non-tenant fields (mode, mirror_usdc, caps) stay hardcoded scaffolding.
- * Phase B will source caps from the per-tenant `poly_wallet_grants` row.
+ * Build a `MirrorTargetConfig` from an enumerated target wallet + tenant
+ * attribution. All non-tenant fields stay hardcoded scaffolding. Daily /
+ * hourly caps now live on the tenant's `poly_wallet_grants` row and are
+ * enforced by `authorizeIntent`.
  *
  * @public
  */
@@ -83,7 +75,7 @@ export function buildMirrorTargetConfig(params: {
   targetWallet: `0x${string}`;
   billingAccountId: string;
   createdByUserId: string;
-}): TargetConfig {
+}): MirrorTargetConfig {
   return {
     target_id: targetIdFromWallet(params.targetWallet),
     target_wallet: params.targetWallet,
@@ -95,29 +87,31 @@ export function buildMirrorTargetConfig(params: {
       mirror_usdc: MIRROR_USDC,
       max_usdc_per_trade: MIRROR_MAX_USDC_PER_TRADE,
     },
-    max_daily_usdc: MIRROR_MAX_DAILY_USDC,
-    max_fills_per_hour: MIRROR_MAX_FILLS_PER_HOUR,
     enabled: true, // overwritten per-tick by the runtime kill-switch snapshot
   };
 }
 
 export interface MirrorJobDeps {
-  /** Target config — P1 builds via `buildMirrorTargetConfig`; P2 reads from DB. */
-  target: TargetConfig;
+  /** Target config — built via `buildMirrorTargetConfig`; Phase 4 reads from a tenant-aware table. */
+  target: MirrorTargetConfig;
   /** Injected source (Data-API adapter) — P4 swaps in WS. */
   source: WalletActivitySource;
   /** Order ledger (Drizzle-backed in prod, FakeOrderLedger in tests). */
   ledger: OrderLedger;
-  /** Raw placement seam from `createPolyTradeCapability().placeIntent`. */
-  placeIntent: MirrorCoordinatorDeps["placeIntent"];
-  /** Optional market-constraints fetch; pipes into the coordinator. bug.0342. */
-  getMarketConstraints?: MirrorCoordinatorDeps["getMarketConstraints"];
+  /**
+   * Tenant-scoped placement seam. Delegates to the per-tenant
+   * `PolyTradeExecutor.placeIntent`, which wraps `authorizeIntent` + adapter
+   * `placeOrder`. Must be constructed against `params.billingAccountId`.
+   */
+  placeIntent: MirrorPipelineDeps["placeIntent"];
+  /** Optional market-constraints fetch; pipes into the pipeline. bug.0342. */
+  getMarketConstraints?: MirrorPipelineDeps["getMarketConstraints"];
   /** Structured log sink. */
   logger: LoggerPort;
   /** Metrics sink. */
   metrics: MetricsPort;
   /**
-   * Optional SELL-to-close path from `PolyTradeBundle.closePosition`.
+   * Optional SELL-to-close path from `PolyTradeExecutor.closePosition`.
    * When absent, SELL fills degrade to `skip/sell_without_position`.
    */
   closePosition?: (params: {
@@ -127,7 +121,7 @@ export interface MirrorJobDeps {
     client_order_id: `0x${string}`;
   }) => Promise<OrderReceipt>;
   /**
-   * Optional position query from `PolyTradeBundle.getOperatorPositions`.
+   * Optional position query from `PolyTradeExecutor.listPositions`.
    * When absent, SELL fills degrade to `skip/sell_without_position`.
    */
   getOperatorPositions?: () => Promise<OperatorPosition[]>;
@@ -148,6 +142,7 @@ export function startMirrorPoll(deps: MirrorJobDeps): MirrorJobStopFn {
     target_id: deps.target.target_id,
     target_wallet: deps.target.target_wallet,
     mode: deps.target.mode,
+    billing_account_id: deps.target.billing_account_id,
   });
 
   // First-tick cursor — avoid replaying a target's historical activity at boot.
@@ -164,7 +159,7 @@ export function startMirrorPoll(deps: MirrorJobDeps): MirrorJobStopFn {
     "mirror poll starting (SINGLE_WRITER — alert on duplicate pods running this)"
   );
 
-  const coordinatorDeps: MirrorCoordinatorDeps = {
+  const pipelineDeps: MirrorPipelineDeps = {
     source: deps.source,
     ledger: deps.ledger,
     placeIntent: deps.placeIntent,
@@ -188,10 +183,10 @@ export function startMirrorPoll(deps: MirrorJobDeps): MirrorJobStopFn {
 
   async function tick(): Promise<void> {
     try {
-      await runOnce(coordinatorDeps);
+      await runMirrorTick(pipelineDeps);
       deps.metrics.incr(MIRROR_JOB_METRICS.pollTicksTotal, {});
     } catch (err: unknown) {
-      // Belt-and-suspenders: the coordinator already catches per-fill errors
+      // Belt-and-suspenders: the pipeline already catches per-fill errors
       // + source errors. Anything that escapes to here is a real bug, not
       // operational data. Log + counter + keep the interval going.
       deps.metrics.incr(MIRROR_JOB_METRICS.pollTickErrorsTotal, {});

@@ -78,8 +78,6 @@ function buildTargetView(params: {
     // the internal sizing policy is a discriminated union (bug.0342). For
     // `kind: "fixed"`, project the nominal bet size onto the response.
     mirror_usdc: config.sizing.kind === "fixed" ? config.sizing.mirror_usdc : 0,
-    max_daily_usdc: config.max_daily_usdc,
-    max_fills_per_hour: config.max_fills_per_hour,
     enabled: params.enabled,
     source: params.source,
   };
@@ -93,7 +91,7 @@ export const GET = wrapRouteHandlerWithLogging(
     routeId: "poly.copy_trade.targets.list",
     auth: { mode: "required", getSessionUser },
   },
-  async (ctx, _request, sessionUser) => {
+  async (_ctx, _request, sessionUser) => {
     if (!sessionUser) throw new Error("sessionUser required");
     const container = getContainer();
 

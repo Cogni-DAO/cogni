@@ -3,15 +3,16 @@
 
 /**
  * Module: `@features/copy-trade/types`
- * Purpose: Port-level types for the copy-trade decide/execute boundary — `TargetConfig`, `SizingPolicy`, `RuntimeState`, `MirrorDecision`, skip-reason enum.
- * Scope: Pure type surface consumed by `decide.ts`, `clob-executor.ts`, and the poll job. Does not contain logic, does not import adapters.
+ * Purpose: Port-level types for the copy-trade plan/execute boundary — `MirrorTargetConfig`, `SizingPolicy`, `RuntimeState`, `MirrorPlan`, skip-reason enum.
+ * Scope: Pure type surface consumed by `plan-mirror.ts`, `clob-executor.ts`, and the mirror pipeline. Does not contain logic, does not import adapters.
  * Invariants:
  *   - MIRROR_REASON_BOUNDED — reason codes are an enum (bounded Prom label cardinality).
- *   - DECISION_IS_PURE_INPUT — all runtime state is handed to decide() explicitly, never read at decide-time.
- *   - TARGET_CONFIG_CARRIES_TENANT — every TargetConfig carries `billing_account_id` (data) + `created_by_user_id` (RLS key) so downstream fills/decisions writes inherit tenant attribution.
- *   - SIZING_POLICY_IS_DISCRIMINATED — TargetConfig.sizing is a discriminated union on `kind`; future policies (proportional, percentile) add variants, never flat fields.
+ *   - DECISION_IS_PURE_INPUT — all runtime state is handed to planMirrorFromFill() explicitly, never read at plan-time.
+ *   - TARGET_CONFIG_CARRIES_TENANT — every MirrorTargetConfig carries `billing_account_id` (data) + `created_by_user_id` (RLS key) so downstream fills/decisions writes inherit tenant attribution.
+ *   - SIZING_POLICY_IS_DISCRIMINATED — MirrorTargetConfig.sizing is a discriminated union on `kind`; future policies (proportional, percentile) add variants, never flat fields.
+ *   - CAPS_LIVE_IN_GRANT — daily + hourly caps are enforced by `PolyTraderWalletPort.authorizeIntent` against the per-tenant `poly_wallet_grants` row. `planMirrorFromFill` no longer owns those checks; this config surface no longer carries them.
  * Side-effects: none
- * Links: work/items/task.0315.poly-copy-trade-prototype.md (Phase 1 CP4.1), work/items/bug.0342.poly-clob-dynamic-min-order-size.md, docs/spec/poly-multi-tenant-auth.md
+ * Links: docs/spec/poly-multi-tenant-auth.md, work/items/task.0318
  * @public
  */
 
@@ -19,7 +20,7 @@ import type { Fill, OrderIntent } from "@cogni/market-provider";
 import { z } from "zod";
 
 /**
- * Sizing policy — how the coordinator derives `OrderIntent.size_usdc` from a
+ * Sizing policy — how the pipeline derives `OrderIntent.size_usdc` from a
  * target's fill. Discriminated union: today one variant; future variants
  * (proportional, percentile, historical-distribution) plug in by adding a new
  * `kind` without touching the adapter or the port.
@@ -30,7 +31,7 @@ export const FixedSizingPolicySchema = z.object({
   mirror_usdc: z.number().positive(),
   /**
    * Hard ceiling on notional USDC per mirrored intent. When a market's
-   * share-min forces the notional above this value, the coordinator skips with
+   * share-min forces the notional above this value, the pipeline skips with
    * `reason: "below_market_min"` rather than overspending. Default equals
    * `mirror_usdc` (opt-out of scaling); callers opt in by setting it higher.
    */
@@ -44,11 +45,12 @@ export const SizingPolicySchema = z.discriminatedUnion("kind", [
 export type SizingPolicy = z.infer<typeof SizingPolicySchema>;
 
 /**
- * Per-target configuration. P1 sources from env and constructs one per boot;
- * P2 sources from `poly_copy_trade_targets` rows. Shape is frozen across phases.
+ * Per-target configuration. Populated from `poly_copy_trade_targets` rows +
+ * per-tenant scaffolding defaults; daily / hourly caps now live on the
+ * tenant's `poly_wallet_grants` row and are enforced by `authorizeIntent`.
  */
-export const TargetConfigSchema = z.object({
-  /** Synthetic UUID for P1 (one per env target wallet); FK into `poly_copy_trade_targets` in P2. */
+export const MirrorTargetConfigSchema = z.object({
+  /** Synthetic UUID (deterministic from target wallet) for `client_order_id` correlation. */
   target_id: z.string().uuid(),
   /** The wallet being copied. 0x-prefixed 40-hex. */
   target_wallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
@@ -56,29 +58,22 @@ export const TargetConfigSchema = z.object({
   billing_account_id: z.string(),
   /** RLS key column. FK → users.id — owner of this tracked target. */
   created_by_user_id: z.string(),
-  /** `live` → PolymarketClobAdapter; `paper` → paper adapter (P3). */
+  /** `live` → PolymarketClobAdapter; `paper` → paper adapter. */
   mode: z.enum(["live", "paper"]),
   /** Per-target sizing policy. See SizingPolicySchema. */
   sizing: SizingPolicySchema,
-  /** Intent-based USDC cap per UTC day (see decide.ts header). */
-  max_daily_usdc: z.number().positive(),
-  /** Rate cap per rolling-1-hour window, intent-based. */
-  max_fills_per_hour: z.number().int().positive(),
   /** Per-tenant kill-switch state (read from `poly_copy_trade_config.enabled`). */
   enabled: z.boolean(),
 });
-export type TargetConfig = z.infer<typeof TargetConfigSchema>;
+export type MirrorTargetConfig = z.infer<typeof MirrorTargetConfigSchema>;
 
 /**
- * Snapshot of runtime state at decide-time. The poll computes this via a
- * SELECT over `poly_copy_trade_fills` / `poly_copy_trade_decisions` and
- * hands it to `decide()` — the pure function does NOT reach into the DB.
+ * Snapshot of runtime state at plan-time. The pipeline computes this via a
+ * SELECT over `poly_copy_trade_fills` and hands it to `planMirrorFromFill()`
+ * — the pure function does NOT reach into the DB. Cap-window state has moved
+ * to `authorizeIntent` and is no longer part of this snapshot.
  */
 export const RuntimeStateSchema = z.object({
-  /** Intent-based USDC already committed today (UTC date) for this target. */
-  today_spent_usdc: z.number().min(0),
-  /** Intent count over the last rolling hour for this target. */
-  fills_last_hour: z.number().int().min(0),
   /** client_order_id values that already exist in poly_copy_trade_fills — idempotency gate. */
   already_placed_ids: z.array(z.string()),
 });
@@ -86,12 +81,10 @@ export type RuntimeState = z.infer<typeof RuntimeStateSchema>;
 
 /**
  * Bounded enum of skip / success reasons. Used verbatim as a Prometheus label
- * (`poly_copy_trade_decide_total{outcome, reason}`). Keep small + stable.
+ * (`poly_mirror_decisions_total{outcome, reason}`). Keep small + stable.
  */
 export const MirrorReasonSchema = z.enum([
   "kill_switch_off",
-  "daily_cap_hit",
-  "rate_cap_hit",
   "already_placed",
   "mode_paper",
   "market_unknown",
@@ -103,7 +96,6 @@ export const MirrorReasonSchema = z.enum([
   /**
    * Target fill × current limit_price × market share-min exceeds the user's
    * `max_usdc_per_trade` ceiling — skip rather than scale past the ceiling.
-   * Covers both "target's fill was small" and "user's ceiling was tight".
    * bug.0342.
    */
   "below_market_min",
@@ -111,45 +103,39 @@ export const MirrorReasonSchema = z.enum([
 export type MirrorReason = z.infer<typeof MirrorReasonSchema>;
 
 /**
- * Outcome of `decide()`. `action: "place"` carries an `OrderIntent` ready
- * for the executor; `action: "skip"` just carries the reason.
+ * Outcome of `planMirrorFromFill()`. `kind: "place"` carries an `OrderIntent`
+ * ready for the executor; `kind: "skip"` just carries the reason.
  */
-export type MirrorDecision =
-  | { action: "place"; reason: "ok" | "mode_paper"; intent: OrderIntent }
+export type MirrorPlan =
+  | { kind: "place"; reason: "ok" | "mode_paper"; intent: OrderIntent }
   | {
-      action: "skip";
+      kind: "skip";
       reason: Exclude<MirrorReason, "ok" | "sell_closed_position">;
     };
 
-/** Inputs to `decide()` — bundled for clarity + testability. */
-export interface DecideInput {
+/** Inputs to `planMirrorFromFill()` — bundled for clarity + testability. */
+export interface PlanMirrorInput {
   fill: Fill;
-  config: TargetConfig;
+  config: MirrorTargetConfig;
   state: RuntimeState;
   /** Pre-computed idempotency key via `clientOrderIdFor(target_id, fill_id)`. */
   client_order_id: `0x${string}`;
   /**
-   * Market-enforced minimum share count for this fill's token, fetched by the
-   * coordinator via `MarketProviderPort.getMarketConstraints`. Used by the
-   * sizing policy to compute effective notional in share-space (avoids float-
-   * associativity round-trips through USDC). Optional: when absent, the
-   * sizing policy skips the market-min guard (legacy behavior). bug.0342.
+   * Market-enforced minimum share count for this fill's token. Used by the
+   * sizing policy to compute effective notional in share-space. Optional:
+   * when absent, the market-min guard is skipped (legacy behavior). bug.0342.
    */
   min_shares?: number | undefined;
   /**
    * Platform-enforced USDC-notional floor for a marketable BUY (e.g.
-   * Polymarket = $1). Applies orthogonally to `min_shares`: on a 1-share-min
-   * market at price 0.49, sharewise sizing gives $0.49 notional but the
-   * platform rejects for USDC-floor. When present, sizing scales to whichever
-   * floor dominates: `targetShares = max(minShares, minUsdcNotional / price)`.
+   * Polymarket = $1). Applies orthogonally to `min_shares`.
    */
   min_usdc_notional?: number | undefined;
 }
 
 /**
- * Result of applying `TargetConfig.sizing` to a fill — either a concrete
- * notional to submit, or a bounded skip reason. Pure output of
- * `applySizingPolicy(sizing, price, minShares)`; decide() maps onto this.
+ * Result of applying `MirrorTargetConfig.sizing` to a fill — either a concrete
+ * notional to submit, or a bounded skip reason.
  */
 export type SizingResult =
   | { ok: true; size_usdc: number }

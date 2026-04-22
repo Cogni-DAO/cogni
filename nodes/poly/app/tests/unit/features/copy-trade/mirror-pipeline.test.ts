@@ -2,12 +2,15 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@tests/unit/features/copy-trade/mirror-coordinator.test`
- * Purpose: Unit tests for `runOnce()` — covers the 5 Phase 1 scenarios: idempotent re-run, insert-then-crash resume, kill-switch off, empty-tx propagation, and cap-hit branches.
+ * Module: `@tests/unit/features/copy-trade/mirror-pipeline.test`
+ * Purpose: Unit tests for `runMirrorTick()` — idempotent re-run, insert-then-crash resume, kill-switch off, empty-page, SELL discrimination, and happy path.
  * Scope: Pure — no DB, no network. Uses `FakeOrderLedger` + a stub `WalletActivitySource` + a spy `placeIntent`.
  * Invariants: INSERT_BEFORE_PLACE, IDEMPOTENT_BY_CLIENT_ID, RECORD_EVERY_DECISION.
+ * Note: Daily / hourly cap assertions removed. Cap enforcement moved to
+ *       `authorizeIntent` (CAPS_LIVE_IN_GRANT); those tests live on the
+ *       adapter component test.
  * Side-effects: none
- * Links: src/features/copy-trade/mirror-coordinator.ts, docs/spec/poly-copy-trade-phase1.md
+ * Links: src/features/copy-trade/mirror-pipeline.ts, work/items/task.0318 (Phase B3)
  * @internal
  */
 
@@ -23,17 +26,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FakeOrderLedger } from "@/adapters/test";
 import {
-  MIRROR_COORDINATOR_METRICS,
+  MIRROR_PIPELINE_METRICS,
   type OperatorPosition,
-  runOnce,
-} from "@/features/copy-trade/mirror-coordinator";
-import type { TargetConfig } from "@/features/copy-trade/types";
+  runMirrorTick,
+} from "@/features/copy-trade/mirror-pipeline";
+import type { MirrorTargetConfig } from "@/features/copy-trade/types";
 import type { WalletActivitySource } from "@/features/wallet-watch";
 
 const TARGET_ID = "11111111-1111-1111-1111-111111111111";
 const TARGET_WALLET = "0xAAaaaaaAAaAaAaAAaAaaaAaaAaaAAaAaAaaAAaaa" as const;
 
-const BASE_TARGET: TargetConfig = {
+const BASE_TARGET: MirrorTargetConfig = {
   target_id: TARGET_ID,
   target_wallet: TARGET_WALLET,
   billing_account_id: "00000000-0000-4000-b000-000000000000",
@@ -44,8 +47,6 @@ const BASE_TARGET: TargetConfig = {
     mirror_usdc: 5,
     max_usdc_per_trade: 5,
   },
-  max_daily_usdc: 50,
-  max_fills_per_hour: 10,
   enabled: true, // runtime kill-switch comes from ledger snapshot
 };
 
@@ -97,7 +98,7 @@ function cidFor(fill: Fill, target_id = TARGET_ID): `0x${string}` {
 // re-placements and the decision is `skipped/already_placed`.
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("mirror-coordinator.runOnce — idempotent re-run", () => {
+describe("mirror-pipeline.runMirrorTick — idempotent re-run", () => {
   it("skips a fill whose client_order_id is already in the ledger", async () => {
     const fill = makeFill();
     const cid = cidFor(fill);
@@ -120,7 +121,7 @@ describe("mirror-coordinator.runOnce — idempotent re-run", () => {
     const metrics = createRecordingMetrics();
     let cursor: number | undefined;
 
-    await runOnce({
+    await runMirrorTick({
       source: makeSource([fill]),
       ledger,
       placeIntent,
@@ -141,7 +142,7 @@ describe("mirror-coordinator.runOnce — idempotent re-run", () => {
     const skipMetric = metrics.emissions.find(
       (e) =>
         e.kind === "counter" &&
-        e.name === MIRROR_COORDINATOR_METRICS.decisionsTotal &&
+        e.name === MIRROR_PIPELINE_METRICS.decisionsTotal &&
         e.labels.outcome === "skipped" &&
         e.labels.reason === "already_placed"
     );
@@ -150,23 +151,20 @@ describe("mirror-coordinator.runOnce — idempotent re-run", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Scenario B — insert-then-crash resume: first tick inserts pending then the
-// placeIntent throws; the row stays. On the second tick, the same fill is
-// re-observed and `decide()` returns `already_placed` — no double placement.
+// Scenario B — insert-then-crash resume.
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("mirror-coordinator.runOnce — crash resume", () => {
+describe("mirror-pipeline.runMirrorTick — crash resume", () => {
   it("insert-then-crash leaves a pending row; next tick skips as already_placed", async () => {
     const fill = makeFill();
     const ledger = new FakeOrderLedger();
     let cursor: number | undefined;
     const metrics = createRecordingMetrics();
 
-    // Tick 1 — placeIntent explodes
     const placeIntent1 = vi.fn(async () => {
       throw new Error("CLOB rejected order: synthetic test failure");
     });
-    await runOnce({
+    await runMirrorTick({
       source: makeSource([fill]),
       ledger,
       placeIntent: placeIntent1,
@@ -179,13 +177,11 @@ describe("mirror-coordinator.runOnce — crash resume", () => {
       metrics,
     });
     expect(placeIntent1).toHaveBeenCalledTimes(1);
-    // Pending row now exists with error status
     expect(ledger.rows).toHaveLength(1);
     expect(ledger.rows[0]?.status).toBe("error");
 
-    // Tick 2 — same fill re-observed. placeIntent MUST NOT fire.
     const placeIntent2 = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
-    await runOnce({
+    await runMirrorTick({
       source: makeSource([fill]),
       ledger,
       placeIntent: placeIntent2,
@@ -206,18 +202,17 @@ describe("mirror-coordinator.runOnce — crash resume", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Scenario C — kill-switch off: ledger.enabled=false triggers
-// decide→skip/kill_switch_off for every fill. No placements, no pending rows.
+// Scenario C — kill-switch off.
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("mirror-coordinator.runOnce — kill-switch off", () => {
+describe("mirror-pipeline.runMirrorTick — kill-switch off", () => {
   it("skips every fill and does not insert pending when enabled=false", async () => {
     const fill = makeFill();
     const ledger = new FakeOrderLedger({ enabled: false });
     const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
     const metrics = createRecordingMetrics();
 
-    await runOnce({
+    await runMirrorTick({
       source: makeSource([fill]),
       ledger,
       placeIntent,
@@ -238,12 +233,10 @@ describe("mirror-coordinator.runOnce — kill-switch off", () => {
 
   it("also fails closed when the ledger snapshot throws", async () => {
     const fill = makeFill();
-    // FakeOrderLedger.failConfigRead mirrors the Drizzle adapter's
-    // fail-closed contract — snapshot returns enabled=false on DB error.
     const ledger = new FakeOrderLedger({ failConfigRead: true });
     const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
 
-    await runOnce({
+    await runMirrorTick({
       source: makeSource([fill]),
       ledger,
       placeIntent,
@@ -260,18 +253,17 @@ describe("mirror-coordinator.runOnce — kill-switch off", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Scenario D — empty page: source returns no fills; coordinator is a no-op
-// except for cursor advance. No decisions, no placements.
+// Scenario D — empty page.
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("mirror-coordinator.runOnce — empty source page", () => {
+describe("mirror-pipeline.runMirrorTick — empty source page", () => {
   it("returns cleanly and advances cursor even with zero fills", async () => {
     const ledger = new FakeOrderLedger();
     const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
     const metrics = createRecordingMetrics();
     let cursor: number | undefined;
 
-    await runOnce({
+    await runMirrorTick({
       source: {
         async fetchSince() {
           return { fills: [], newSince: 9_999 };
@@ -295,76 +287,6 @@ describe("mirror-coordinator.runOnce — empty source page", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Scenario E — cap-hit branches: fill #1 places, fill #2 tips the daily cap.
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("mirror-coordinator.runOnce — cap-hit", () => {
-  it("places first fill, skips second with daily_cap_hit when mirror_usdc would exceed cap", async () => {
-    const target: TargetConfig = {
-      ...BASE_TARGET,
-      sizing: { kind: "fixed", mirror_usdc: 6, max_usdc_per_trade: 6 },
-      max_daily_usdc: 10, // first fill: 0 + 6 <= 10 OK; second: 6 + 6 > 10 SKIP
-    };
-    const fill1 = makeFill({ fill_id: "data-api:0xtx1:0xasset:BUY:1001" });
-    const fill2 = makeFill({ fill_id: "data-api:0xtx2:0xasset:BUY:1002" });
-    const ledger = new FakeOrderLedger();
-    const placeIntent = vi.fn(
-      async (i: OrderIntent): Promise<OrderReceipt> =>
-        makeReceipt("0xorder", i.client_order_id)
-    );
-    const metrics = createRecordingMetrics();
-
-    await runOnce({
-      source: makeSource([fill1, fill2]),
-      ledger,
-      placeIntent,
-      target,
-      getCursor: () => undefined,
-      setCursor: () => {},
-      logger: noopLogger,
-      metrics,
-    });
-
-    expect(placeIntent).toHaveBeenCalledTimes(1);
-    const capHit = ledger.decisions.find(
-      (d) => d.outcome === "skipped" && d.reason === "daily_cap_hit"
-    );
-    expect(capHit).toBeDefined();
-    expect(capHit?.fill_id).toBe(fill2.fill_id);
-    const placed = ledger.decisions.find((d) => d.outcome === "placed");
-    expect(placed?.fill_id).toBe(fill1.fill_id);
-  });
-
-  it("skips on rate_cap_hit once fills_last_hour >= max_fills_per_hour", async () => {
-    const target: TargetConfig = { ...BASE_TARGET, max_fills_per_hour: 1 };
-    const fill1 = makeFill({ fill_id: "data-api:0xtx1:0xasset:BUY:1001" });
-    const fill2 = makeFill({ fill_id: "data-api:0xtx2:0xasset:BUY:1002" });
-    const ledger = new FakeOrderLedger();
-    const placeIntent = vi.fn(
-      async (i: OrderIntent): Promise<OrderReceipt> =>
-        makeReceipt("0xorder", i.client_order_id)
-    );
-
-    await runOnce({
-      source: makeSource([fill1, fill2]),
-      ledger,
-      placeIntent,
-      target,
-      getCursor: () => undefined,
-      setCursor: () => {},
-      logger: noopLogger,
-      metrics: createRecordingMetrics(),
-    });
-
-    expect(placeIntent).toHaveBeenCalledTimes(1);
-    const rateCap = ledger.decisions.find(
-      (d) => d.outcome === "skipped" && d.reason === "rate_cap_hit"
-    );
-    expect(rateCap).toBeDefined();
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Scenario F — SELL fill discrimination: close vs short.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -380,7 +302,7 @@ function makePosition(asset: string, size: number): OperatorPosition {
   return { asset, size };
 }
 
-describe("mirror-coordinator.runOnce — SELL fill: no position → skip", () => {
+describe("mirror-pipeline.runMirrorTick — SELL fill: no position → skip", () => {
   it("skips with sell_without_position when operator holds no position for the asset", async () => {
     const fill = makeSellFill({ attributes: { asset: "12345" } });
     const ledger = new FakeOrderLedger();
@@ -396,9 +318,9 @@ describe("mirror-coordinator.runOnce — SELL fill: no position → skip", () =>
       >();
     const getOperatorPositions = vi
       .fn<() => Promise<OperatorPosition[]>>()
-      .mockResolvedValue([]); // no positions
+      .mockResolvedValue([]);
 
-    await runOnce({
+    await runMirrorTick({
       source: makeSource([fill]),
       ledger,
       placeIntent,
@@ -437,7 +359,7 @@ describe("mirror-coordinator.runOnce — SELL fill: no position → skip", () =>
       .fn<() => Promise<OperatorPosition[]>>()
       .mockResolvedValue([makePosition("12345", 0)]);
 
-    await runOnce({
+    await runMirrorTick({
       source: makeSource([fill]),
       ledger,
       placeIntent,
@@ -459,7 +381,7 @@ describe("mirror-coordinator.runOnce — SELL fill: no position → skip", () =>
   });
 });
 
-describe("mirror-coordinator.runOnce — SELL fill: has position → closePosition called", () => {
+describe("mirror-pipeline.runMirrorTick — SELL fill: has position → closePosition called", () => {
   it("calls closePosition with matching token_id and max_size_usdc=mirror_usdc, records placed/sell_closed_position", async () => {
     const TOKEN = "12345";
     const fill = makeSellFill({ attributes: { asset: TOKEN }, price: 0.75 });
@@ -479,9 +401,9 @@ describe("mirror-coordinator.runOnce — SELL fill: has position → closePositi
       .mockResolvedValue(closeReceipt);
     const getOperatorPositions = vi
       .fn<() => Promise<OperatorPosition[]>>()
-      .mockResolvedValue([makePosition(TOKEN, 10)]); // holds 10 shares
+      .mockResolvedValue([makePosition(TOKEN, 10)]);
 
-    await runOnce({
+    await runMirrorTick({
       source: makeSource([fill]),
       ledger,
       placeIntent,
@@ -504,68 +426,23 @@ describe("mirror-coordinator.runOnce — SELL fill: has position → closePositi
     expect(callArgs?.limit_price).toBe(fill.price);
     expect(callArgs?.client_order_id).toBe(cid);
 
-    // INSERT_BEFORE_PLACE — pending row written before close
     expect(ledger.rows).toHaveLength(1);
     expect(ledger.rows[0]?.order_id).toBe("0xcloseorder");
 
-    // Decision recorded as placed/sell_closed_position
     const placedDec = ledger.decisions.find((d) => d.outcome === "placed");
     expect(placedDec).toBeDefined();
     expect(placedDec?.reason).toBe("sell_closed_position");
     expect(placedDec?.receipt).toMatchObject({ order_id: "0xcloseorder" });
   });
-
-  it("still calls closePosition when operator position size < mirror_usdc notional (bundle caps it)", async () => {
-    // Position worth $0.50: size=1 share × curPrice=0.5 < mirror_usdc=$5
-    // Coordinator should NOT double-cap; pass mirror_usdc as-is, let bundle decide.
-    const TOKEN = "tok-small";
-    const fill = makeSellFill({ attributes: { asset: TOKEN }, price: 0.5 });
-    const ledger = new FakeOrderLedger();
-    const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
-    const cid = cidFor(fill);
-    const closePosition = vi
-      .fn<
-        (p: {
-          tokenId: string;
-          max_size_usdc: number;
-          limit_price: number;
-          client_order_id: `0x${string}`;
-        }) => Promise<OrderReceipt>
-      >()
-      .mockResolvedValue(makeReceipt("0xsmallclose", cid));
-    const getOperatorPositions = vi
-      .fn<() => Promise<OperatorPosition[]>>()
-      .mockResolvedValue([makePosition(TOKEN, 1)]); // size > 0
-
-    await runOnce({
-      source: makeSource([fill]),
-      ledger,
-      placeIntent,
-      target: BASE_TARGET,
-      getCursor: () => undefined,
-      setCursor: () => {},
-      logger: noopLogger,
-      metrics: createRecordingMetrics(),
-      closePosition,
-      getOperatorPositions,
-    });
-
-    expect(closePosition).toHaveBeenCalledTimes(1);
-    // max_size_usdc is mirror_usdc, not capped by position value
-    expect(closePosition.mock.calls[0]?.[0].max_size_usdc).toBe(
-      BASE_TARGET.sizing.kind === "fixed" ? BASE_TARGET.sizing.mirror_usdc : 0
-    );
-  });
 });
 
-describe("mirror-coordinator.runOnce — SELL fill: deps absent → degrade to skip", () => {
+describe("mirror-pipeline.runMirrorTick — SELL fill: deps absent → degrade to skip", () => {
   it("skips sell_without_position when closePosition dep is absent", async () => {
     const fill = makeSellFill({ attributes: { asset: "12345" } });
     const ledger = new FakeOrderLedger();
     const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
-    // No closePosition or getOperatorPositions wired
 
-    await runOnce({
+    await runMirrorTick({
       source: makeSource([fill]),
       ledger,
       placeIntent,
@@ -574,7 +451,6 @@ describe("mirror-coordinator.runOnce — SELL fill: deps absent → degrade to s
       setCursor: () => {},
       logger: noopLogger,
       metrics: createRecordingMetrics(),
-      // intentionally omit closePosition + getOperatorPositions
     });
 
     expect(placeIntent).not.toHaveBeenCalled();
@@ -584,46 +460,11 @@ describe("mirror-coordinator.runOnce — SELL fill: deps absent → degrade to s
     );
     expect(skipDec).toBeDefined();
   });
-
-  it("skips sell_without_position when only getOperatorPositions is absent", async () => {
-    const fill = makeSellFill({ attributes: { asset: "12345" } });
-    const ledger = new FakeOrderLedger();
-    const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
-    const closePosition =
-      vi.fn<
-        (p: {
-          tokenId: string;
-          max_size_usdc: number;
-          limit_price: number;
-          client_order_id: `0x${string}`;
-        }) => Promise<OrderReceipt>
-      >();
-
-    await runOnce({
-      source: makeSource([fill]),
-      ledger,
-      placeIntent,
-      target: BASE_TARGET,
-      getCursor: () => undefined,
-      setCursor: () => {},
-      logger: noopLogger,
-      metrics: createRecordingMetrics(),
-      closePosition,
-      // intentionally omit getOperatorPositions
-    });
-
-    expect(closePosition).not.toHaveBeenCalled();
-    expect(placeIntent).not.toHaveBeenCalled();
-    const skipDec = ledger.decisions.find(
-      (d) => d.outcome === "skipped" && d.reason === "sell_without_position"
-    );
-    expect(skipDec).toBeDefined();
-  });
 });
 
-describe("mirror-coordinator.runOnce — BUY fill smoke (unchanged path)", () => {
+describe("mirror-pipeline.runMirrorTick — BUY fill smoke", () => {
   it("BUY fill routes through placeIntent unchanged when SELL deps are present", async () => {
-    const fill = makeFill(); // side: "BUY"
+    const fill = makeFill();
     const ledger = new FakeOrderLedger();
     const placeIntent = vi.fn(
       async (i: OrderIntent): Promise<OrderReceipt> =>
@@ -642,7 +483,7 @@ describe("mirror-coordinator.runOnce — BUY fill smoke (unchanged path)", () =>
       .fn<() => Promise<OperatorPosition[]>>()
       .mockResolvedValue([]);
 
-    await runOnce({
+    await runMirrorTick({
       source: makeSource([fill]),
       ledger,
       placeIntent,
@@ -657,7 +498,6 @@ describe("mirror-coordinator.runOnce — BUY fill smoke (unchanged path)", () =>
 
     expect(placeIntent).toHaveBeenCalledTimes(1);
     expect(closePosition).not.toHaveBeenCalled();
-    // getOperatorPositions should NOT be called for BUY fills
     expect(getOperatorPositions).not.toHaveBeenCalled();
     const placedDec = ledger.decisions.find((d) => d.outcome === "placed");
     expect(placedDec).toBeDefined();
@@ -668,7 +508,7 @@ describe("mirror-coordinator.runOnce — BUY fill smoke (unchanged path)", () =>
 // Happy path — one fill → one placement, decisions ledger records `placed`.
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("mirror-coordinator.runOnce — happy path", () => {
+describe("mirror-pipeline.runMirrorTick — happy path", () => {
   let ledger: FakeOrderLedger;
   let placeIntent: ReturnType<
     typeof vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>
@@ -686,7 +526,7 @@ describe("mirror-coordinator.runOnce — happy path", () => {
     const fill = makeFill();
     const metrics = createRecordingMetrics();
 
-    await runOnce({
+    await runMirrorTick({
       source: makeSource([fill]),
       ledger,
       placeIntent,
@@ -708,7 +548,7 @@ describe("mirror-coordinator.runOnce — happy path", () => {
 
   it("client_order_id is deterministic from (target_id, fill_id)", async () => {
     const fill = makeFill();
-    await runOnce({
+    await runMirrorTick({
       source: makeSource([fill]),
       ledger,
       placeIntent,

@@ -35,8 +35,10 @@ import {
 import {
   polyCopyTradeConfig,
   polyCopyTradeTargets,
+  polyWalletConnections,
+  polyWalletGrants,
 } from "@cogni/poly-db-schema";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { targetIdFromWallet } from "@/features/copy-trade/target-id";
 
@@ -164,8 +166,14 @@ export function dbTargetSource(
     },
 
     async listAllActive(): Promise<readonly EnumeratedTarget[]> {
-      // The ONE sanctioned BYPASSRLS read. Joins targets × config so we only
-      // surface rows whose tenant has explicitly flipped the kill-switch.
+      // The ONE sanctioned BYPASSRLS read. Joins:
+      //   targets × config  — only tenants with kill-switch ON
+      //   × wallet_connections (status='active')  — only tenants with a live trader wallet
+      //   × wallet_grants (revoked_at IS NULL, expires_at > now or NULL) — only tenants with an active grant
+      // Net effect: `listAllActive` returns exactly the tenants for whom the
+      // per-tenant path can actually sign + `authorizeIntent` will let through.
+      // Side benefit: the system-tenant prototype drops out of the mirror fan-out
+      // until Stage 4 back-fills a grant row.
       const rows = await deps.serviceDb
         .select({
           billing_account_id: polyCopyTradeTargets.billingAccountId,
@@ -178,6 +186,27 @@ export function dbTargetSource(
           eq(
             polyCopyTradeConfig.billingAccountId,
             polyCopyTradeTargets.billingAccountId
+          )
+        )
+        .innerJoin(
+          polyWalletConnections,
+          and(
+            eq(
+              polyWalletConnections.billingAccountId,
+              polyCopyTradeTargets.billingAccountId
+            ),
+            isNull(polyWalletConnections.revokedAt)
+          )
+        )
+        .innerJoin(
+          polyWalletGrants,
+          and(
+            eq(polyWalletGrants.walletConnectionId, polyWalletConnections.id),
+            isNull(polyWalletGrants.revokedAt),
+            or(
+              isNull(polyWalletGrants.expiresAt),
+              gt(polyWalletGrants.expiresAt, sql`now()`)
+            )
           )
         )
         .where(

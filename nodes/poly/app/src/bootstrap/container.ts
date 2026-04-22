@@ -31,6 +31,7 @@ import {
   DoltgresKnowledgeStoreAdapter,
 } from "@cogni/knowledge-store/adapters/doltgres";
 import { parseMcpConfigFromEnv } from "@cogni/langgraph-graphs";
+import { noopMetrics as noopMetricsForExecutor } from "@cogni/market-provider";
 import {
   COGNI_SYSTEM_PRINCIPAL_USER_ID,
   EVENT_NAMES,
@@ -111,6 +112,10 @@ import {
   derivePrometheusQueryUrl,
 } from "@/bootstrap/capabilities/metrics";
 import { createPolyTradeCapability } from "@/bootstrap/capabilities/poly-trade";
+import {
+  createPolyTradeExecutorFactory,
+  type PolyTradeExecutor,
+} from "@/bootstrap/capabilities/poly-trade-executor";
 import { createRepoCapability } from "@/bootstrap/capabilities/repo";
 import { createScheduleCapability } from "@/bootstrap/capabilities/schedule";
 import { stubVcsCapability } from "@/bootstrap/capabilities/vcs";
@@ -123,6 +128,10 @@ import {
   type OrderReconcilerHandle,
   startOrderReconciler,
 } from "@/bootstrap/jobs/order-reconciler.job";
+import {
+  getPolyTraderWalletAdapter,
+  WalletAdapterUnconfiguredError,
+} from "@/bootstrap/poly-trader-wallet";
 import { startProcessHealthPublisher } from "@/bootstrap/publishers";
 import {
   type CopyTradeTargetSource,
@@ -709,6 +718,37 @@ function createContainer(): Container {
       >,
   });
 
+  // Per-tenant trade-executor factory. Lazily constructs a
+  // `PolyTradeExecutor` for a given `billingAccountId`. Uses the per-user
+  // Privy app (`PRIVY_USER_WALLETS_*`) — distinct from the operator-wallet
+  // Privy app used by `OperatorWalletPort`. Undefined when any of those
+  // envs are missing; callers degrade gracefully (no mirror polls for
+  // user-scoped tenants; legacy `polyTradeBundle` still covers the old
+  // system-tenant path until Stage 4 migrates it away).
+  const polyTradeExecutorFactory:
+    | ReturnType<typeof createPolyTradeExecutorFactory>
+    | undefined = (() => {
+    try {
+      const walletPort = getPolyTraderWalletAdapter(log);
+      return createPolyTradeExecutorFactory({
+        walletPort,
+        logger: log,
+        metrics: noopMetricsForExecutor,
+        host: env.POLY_CLOB_HOST,
+        polygonRpcUrl: env.POLYGON_RPC_URL,
+      });
+    } catch (err) {
+      if (err instanceof WalletAdapterUnconfiguredError) {
+        log.info(
+          { missing: err.message },
+          "per-tenant poly-trade executor not configured (PRIVY_USER_WALLETS_* or POLY_WALLET_AEAD_* missing)"
+        );
+        return undefined;
+      }
+      throw err;
+    }
+  })();
+
   // Autonomous 30s mirror poll per target wallet (task.0315 CP4.3e, @scaffolding).
   // Starts when Polymarket creds are present (polyTradeBundle defined). A
   // target-set reconciler ticks `copyTradeTargetSource.listAllActive()` every
@@ -717,9 +757,11 @@ function createContainer(): Container {
   // restart (bug.0338 / POLL_RECONCILES_PER_TICK). One `startMirrorPoll` per
   // active wallet; exactly one `startOrderReconciler` regardless of target
   // count (operator-wide CLOB reconciliation, not per-target). Size + cadence
-  // + caps are hardcoded in the job shim; `poly_copy_trade_config.enabled`
-  // remains the per-tenant kill-switch between "polls are running" and "polls
-  // actually place orders."
+  // are hardcoded in the job shim; daily/hourly USDC caps live in the
+  // tenant's `poly_wallet_grants` and are enforced by `authorizeIntent` on
+  // the hot path inside `PolyTradeExecutor.placeIntent`.
+  // `poly_copy_trade_config.enabled` remains the per-tenant kill-switch
+  // between "polls are running" and "polls actually place orders."
   if (polyTradeBundle !== undefined) {
     // Lazy-load the poll wiring so its transitive imports (Data-API HTTP
     // client, Drizzle queries) don't run on pods without Polymarket creds.
@@ -762,6 +804,15 @@ function createContainer(): Container {
         // Target-set reconciler — ticks listAllActive every 30s, starts/stops
         // per-wallet polls to match. First tick fires immediately. See
         // docs/spec/poly-multi-tenant-auth.md § POLL_RECONCILES_PER_TICK.
+        //
+        // Phase B3: `listAllActive` now joins `poly_wallet_connections` +
+        // `poly_wallet_grants`, so the reconciler only hands us tenants that
+        // have (a) an active trading wallet and (b) an active grant. The
+        // system-tenant prototype drops out here until Stage 4 back-fills a
+        // grant for it. Each per-tenant poll routes placements through the
+        // per-tenant `PolyTradeExecutor`, which wraps every `placeOrder`
+        // with `authorizeIntent` so scope + cap + grant-revoke checks run
+        // on the hot path.
         _targetsReconcilerStop = startCopyTradeReconciler({
           targetSource: copyTradeTargetSource,
           startPollForTarget: (enumeratedTarget) => {
@@ -777,14 +828,48 @@ function createContainer(): Container {
               logger: mirrorLogger,
               metrics: noopMetrics,
             });
+
+            // Build once per (tenant × target). Executor is cached across
+            // ticks inside the factory keyed on billingAccountId.
+            let cachedExecutor: PolyTradeExecutor | null = null;
+            const getExecutor = async (): Promise<PolyTradeExecutor> => {
+              if (cachedExecutor) return cachedExecutor;
+              if (!polyTradeExecutorFactory) {
+                throw new Error(
+                  "polyTradeExecutorFactory is unavailable — listAllActive returned a tenant but PRIVY_USER_WALLETS_* are missing"
+                );
+              }
+              cachedExecutor =
+                await polyTradeExecutorFactory.getPolyTradeExecutorFor(
+                  enumeratedTarget.billingAccountId
+                );
+              return cachedExecutor;
+            };
+
             return startMirrorPoll({
               target,
               source,
               ledger: orderLedger,
-              placeIntent: polyTradeBundle.placeIntent,
-              getMarketConstraints: polyTradeBundle.getMarketConstraints,
-              closePosition: polyTradeBundle.closePosition,
-              getOperatorPositions: polyTradeBundle.getOperatorPositions,
+              placeIntent: async (intent) => {
+                const executor = await getExecutor();
+                return executor.placeIntent(intent);
+              },
+              getMarketConstraints: async (tokenId) => {
+                const executor = await getExecutor();
+                return executor.getMarketConstraints(tokenId);
+              },
+              closePosition: async (params) => {
+                const executor = await getExecutor();
+                return executor.closePosition(params);
+              },
+              getOperatorPositions: async () => {
+                const executor = await getExecutor();
+                const positions = await executor.listPositions();
+                return positions.map((p) => ({
+                  asset: p.asset,
+                  size: p.size,
+                }));
+              },
               logger: mirrorLogger,
               metrics: noopMetrics,
             });

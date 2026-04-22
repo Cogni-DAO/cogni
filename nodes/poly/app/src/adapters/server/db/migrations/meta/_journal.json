@@ -218,6 +218,13 @@
       "when": 1776790200000,
       "tag": "0030_poly_wallet_connections",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1777262400000,
+      "tag": "0031_poly_wallet_grants",
+      "breakpoints": true
     }
   ]
 }
