@@ -16,7 +16,7 @@ images:
     newName: ghcr.io/cogni-dao/cogni-template
     newTag: "prod-placeholder-poly"
   - name: ghcr.io/cogni-dao/cogni-template-migrate
-    newName: ghcr.io/cogni-dao/cogni-template-migrate
+    newName: ghcr.io/cogni-dao/cogni-template
     newTag: "prod-placeholder-poly"
 
 patches:

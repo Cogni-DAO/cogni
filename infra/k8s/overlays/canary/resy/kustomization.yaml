@@ -16,7 +16,7 @@ images:
     newName: ghcr.io/cogni-dao/cogni-template
     digest: "sha256:4fb529466e55abe9b121e68bf9d0f1855bef76bfbc50cf6328c3ec2472820633"
   - name: ghcr.io/cogni-dao/cogni-template-migrate
-    newName: ghcr.io/cogni-dao/cogni-template-migrate
+    newName: ghcr.io/cogni-dao/cogni-template
     digest: "sha256:f6c723a29c402c89fffd805c3707f0200d9dc0bf252418a771043027a8d3352c"
 
 patches:

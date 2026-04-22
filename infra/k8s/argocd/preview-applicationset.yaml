@@ -22,9 +22,6 @@ spec:
       namespace: argocd
       finalizers:
         - resources-finalizer.argocd.argoproj.io
-      # task.0349 — Preview digest pins are CI-owned (promote-k8s-image.sh on
-      # deploy/preview + digest seed on main after Flight Preview). No
-      # argocd-image-updater write-back on this ApplicationSet.
     spec:
       project: default
       source:
