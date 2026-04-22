@@ -127,6 +127,7 @@ export function getPolyTraderWalletAdapter(
       logger,
       polygonRpcUrl: env.POLYGON_RPC_URL,
     }),
+    polygonRpcUrl: env.POLYGON_RPC_URL,
     logger,
   });
   return cached;

@@ -10,7 +10,7 @@ summary: "Autonomous mirror of selected Polymarket wallets from a Cogni-controll
 outcome: "A Cogni node autonomously mirrors N Polymarket target wallets onto M per-user operator wallets with sub-30s latency, RLS-enforced tenancy, at-most-once idempotency, and real-money caps enforced in code. DAO treasury earns measurable realized PnL tracked against a counterfactual baseline."
 assignees: derekg1729
 created: 2026-04-19
-updated: 2026-04-21
+updated: 2026-04-22
 labels: [poly, polymarket, copy-trading, mirror, privy, rls, multi-tenant]
 ---
 
@@ -55,6 +55,9 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 | Signing-backend decision (Safe+4337 vs Privy-per-user vs Turnkey) — resolved to Privy-per-user for v0  | Done         | 2   | (inline in task.0318)                                                    |
 | User-wallet orphan sweep for the dedicated Privy app (ops hygiene, not v0 trading path)                | Needs Design | 2   | [task.0348](../items/task.0348.poly-wallet-orphan-sweep.md)              |
 | Per-tenant wallet preferences + copy-trade sizing config (retire hardcoded funding + caps)             | Needs Design | 3   | [task.0347](../items/task.0347.poly-wallet-preferences-sizing-config.md) |
+| Trading wallet withdrawal — `withdrawUsdc` adapter + route + dialog (replaces stubbed button on Money) | Needs Triage | 3   | [task.0351](../items/task.0351.poly-trading-wallet-withdrawal.md)        |
+| Trading wallet one-click fund flow — Polygon in wagmi + `trading_wallet_funding` repo-spec + dialog    | Needs Design | 3   | [task.0352](../items/task.0352.poly-trading-wallet-fund-flow.md)         |
+| Money page v0 — hybrid AI-credits + trading-wallet panel; nav label Money, route `/credits`            | Done         | 2   | [task.0353](../items/task.0353.poly-money-page-v0.md)                    |
 
 ### Phase 4 (P4) — Streaming + adversarial-robust ranking
 
@@ -93,6 +96,7 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 ## As-Built Specs
 
 - [Poly Copy-Trade Phase 1](../../docs/spec/poly-copy-trade-phase1.md) — layer boundaries, invariants, fill_id shape (as-built v0)
+- [Poly Trader Wallet Port](../../docs/spec/poly-trader-wallet-port.md) — `PolyTraderWalletPort` including read-only `getBalances` + HTTP `poly.wallet.balances.v1` (Money page surface)
 - [Poly Multi-Tenant Auth](../../docs/spec/poly-multi-tenant-auth.md) — tenant-scoped copy-trade tables, `CopyTradeTargetSource` port, Phase A implemented; `WalletSignerPort` + `poly_wallet_{connections,grants}` pending Phase B
 - [Polymarket Account Setup](../../docs/guides/polymarket-account-setup.md) — Privy operator onboarding runbook (guide, not spec)
 

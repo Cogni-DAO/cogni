@@ -10,10 +10,7 @@
  * @public
  */
 
-export function formatShortWallet(wallet: string): string {
-  if (wallet.length < 10) return wallet;
-  return `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
-}
+export { formatShortWallet } from "@/components/kit/wallet";
 
 export function formatUsdc(n: number): string {
   const sign = n < 0 ? "-" : "";

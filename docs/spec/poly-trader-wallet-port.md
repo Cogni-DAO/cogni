@@ -10,7 +10,7 @@ read_when: Wiring per-user Polymarket trading, adding a new signing backend, pro
 implements: proj.poly-copy-trading
 owner: derekg1729
 created: 2026-04-20
-verified: 2026-04-20
+verified: 2026-04-22
 tags: [poly, polymarket, wallets, multi-tenant, privy, port-adapter]
 ---
 
@@ -158,6 +158,21 @@ export interface PolyTraderWalletPort {
   getAddress(billingAccountId: string): Promise<`0x${string}` | null>;
 
   /**
+   * Read-only Polygon balance snapshot for the tenant funder address: USDC.e
+   * (Polymarket quote token) plus native POL for gas. Implementations use a
+   * DB-only address lookup (same row as `getAddress`) plus optional RPC via
+   * `POLYGON_RPC_URL`; no Privy call, no CLOB decrypt. Returns `null` when
+   * there is no active `poly_wallet_connections` row. RPC failures per field
+   * surface in `errors[]`; the method does not throw.
+   */
+  getBalances(billingAccountId: string): Promise<{
+    readonly address: `0x${string}`;
+    readonly usdcE: number | null;
+    readonly pol: number | null;
+    readonly errors: readonly string[];
+  } | null>;
+
+  /**
    * Provision a brand-new wallet for a tenant.
    * Idempotent under concurrency: implementations MUST hold a tenant-scoped
    * lock (e.g. a Postgres advisory lock keyed on `billing_account_id`) for
@@ -254,6 +269,7 @@ export interface PolyTraderWalletPort {
 - `KEY_NEVER_IN_APP` — no raw private key material in the app process; backend holds custody.
 - `FAIL_CLOSED_ON_RESOLVE` — `resolve` returns `null` (never a stub signer) when credentials are unavailable; the executor treats `null` as "skip this tenant this tick."
 - `TENANT_DEFENSE_IN_DEPTH` — after any RLS-scoped DB read, the adapter verifies `row.billing_account_id === input.billingAccountId` before returning, mirroring `DrizzleConnectionBrokerAdapter.resolve`.
+- `READ_BALANCES_FAIL_SOFT` — `getBalances` never throws; RPC or config gaps populate `errors[]` and null numeric fields while the HTTP route stays 200.
 - `CREDS_ENCRYPTED_AT_REST` — CLOB API creds stored in `poly_wallet_connections.clob_api_key_ciphertext` via the existing `connections` AEAD envelope.
 - `PROVISION_IS_IDEMPOTENT` — calling `provision` twice for the same tenant (concurrently or sequentially) returns the same connection. Implementations MUST serialize the create-wallet → derive-creds → insert sequence per tenant (advisory lock); partial failures roll back inside the lock so orphaned backend wallets cannot be created.
 - `REVOKE_IS_DURABLE` — `revoked_at` is the authoritative kill-switch; the executor's `resolve` call is the only enforcement point. Revocation is halt-future-only: in-flight orders complete, funds on the revoked address remain until the user withdraws.

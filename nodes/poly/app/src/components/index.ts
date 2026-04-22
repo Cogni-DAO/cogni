@@ -85,6 +85,13 @@ export {
 } from "./kit/typography/CodeHero";
 export { HeroActionWords } from "./kit/typography/HeroActionWords";
 export { Prompt } from "./kit/typography/Prompt";
+export {
+  AddressChip,
+  type AddressChipProps,
+  CopyAddressButton,
+  type CopyAddressButtonProps,
+  formatShortWallet,
+} from "./kit/wallet";
 export { Checkbox } from "./vendor/shadcn/checkbox";
 export {
   Dialog,

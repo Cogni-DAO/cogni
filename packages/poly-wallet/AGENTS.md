@@ -40,7 +40,8 @@ Standalone workspace package (`@cogni/poly-wallet`) providing a per-tenant Polym
 ## Public Surface
 
 - **Port types:** `PolyTraderWalletPort`, `PolyTraderSigningContext`, `AuthorizedSigningContext` (branded), `OrderIntentSummary`, `AuthorizationFailure`, `AuthorizeIntentResult`, `PolyClobApiKeyCreds`
-- **Adapters:** `PrivyPolyTraderWalletAdapter` (placeholder barrel today; implementation in follow-up)
+- **Port methods:** `resolve`, `getAddress`, `getBalances` (read-only USDC.e + POL snapshot for UI panels), `provision`, `revoke`, `authorizeIntent`, `withdrawUsdc`, `rotateClobCreds`.
+- **Adapters:** `PrivyPolyTraderWalletAdapter` lives in `nodes/poly/app/src/adapters/server/wallet/` (not exported from this package).
 - **Env/Config keys:** `PRIVY_USER_WALLETS_APP_ID`, `PRIVY_USER_WALLETS_APP_SECRET`, `PRIVY_USER_WALLETS_SIGNING_KEY` — consumed by `nodes/poly/app` bootstrap, not by this package directly. **MUST NOT** reference `PRIVY_APP_ID` / `PRIVY_APP_SECRET` / `PRIVY_SIGNING_KEY` (those are the operator-wallet system app — `SEPARATE_PRIVY_APP` invariant, enforced via dep-cruiser).
 
 ## Ports
@@ -50,7 +51,7 @@ Standalone workspace package (`@cogni/poly-wallet`) providing a per-tenant Polym
 
 ## Responsibilities
 
-- This directory **does**: define the `PolyTraderWalletPort` interface; provide the `PrivyPolyTraderWalletAdapter` impl (follow-up) covering `resolve` / `getAddress` / `provision` (advisory-locked) / `revoke` / `authorizeIntent` (grant-aware, branded return) / `withdrawUsdc` (intent-typed ERC-20 transfer) / `rotateClobCreds`.
+- This directory **does**: define the `PolyTraderWalletPort` interface; ship types consumed by `nodes/poly/app` adapters covering `resolve` / `getAddress` / `getBalances` / `provision` (advisory-locked) / `revoke` / `authorizeIntent` / `withdrawUsdc` / `rotateClobCreds` (adapter implementations live under `nodes/poly/app`).
 - This directory **does not**: hold raw key material; read system-tenant Privy creds (`PRIVY_APP_*`); expose a generic `signMessage` / `signTransaction` surface; implement on-chain allowance setup (onboarding UX concern); own `mirror-coordinator` wiring (that's `nodes/poly/app`).
 
 ## Invariants (code-review criteria)

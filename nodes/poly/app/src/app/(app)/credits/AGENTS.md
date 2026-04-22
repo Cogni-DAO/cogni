@@ -9,7 +9,12 @@
 
 ## Purpose
 
-Protected credits page composition and payment widget wiring. Server component loads repo-spec-driven widget config; client component renders DePay widget and payment flows.
+Protected Money page (served from the `/credits` route — URL is stable; the page is relabelled, not renamed). Composes two panels:
+
+- `AiCreditsPanel` — AI credits balance + USDC top-up flow (unchanged behaviour from the single-column credits page).
+- `TradingWalletPanel` — per-tenant Polymarket trading-wallet balances (USDC.e + POL) driven by `/api/v1/poly/wallet/status` + `/api/v1/poly/wallet/balances`; fund + withdraw are stubbed buttons linked to [task.0352](../../../../../../work/items/task.0352.poly-trading-wallet-fund-flow.md) and [task.0351](../../../../../../work/items/task.0351.poly-trading-wallet-withdrawal.md).
+
+Desktop renders both panels as a two-column grid; mobile uses a **Credits** / **Wallet** pill toggle above a single-column stack.
 
 ## Pointers
 
@@ -39,13 +44,13 @@ Protected credits page composition and payment widget wiring. Server component l
 ## Public Surface
 
 - **Exports:** none
-- **Route:** `/credits` (server page + client composition)
-- **Files considered API:** `page.tsx`, `CreditsPage.client.tsx`
+- **Route:** `/credits` (server page + client composition; label in nav is "Money", Lucide `Coins` icon)
+- **Files considered API:** `page.tsx`, `CreditsPage.client.tsx`, `AiCreditsPanel.tsx`, `TradingWalletPanel.tsx`
 
 ## Responsibilities
 
-- **Does:** Fetch widget config server-side via `@/shared/config` (repo-spec), render credits UI, pass config to client DePay widget, trigger confirm calls.
-- **Does not:** Read env vars or repo-spec on the client; hardcode wallets or chain IDs; bypass confirm endpoint/business logic.
+- **Does:** Fetch widget config server-side via `@/shared/config` (repo-spec), render the Money page shell, compose `AiCreditsPanel` (payments) + `TradingWalletPanel` (poly wallet) as a responsive two-column grid with a mobile toggle.
+- **Does not:** Read env vars or repo-spec on the client; hardcode wallets or chain IDs; perform trading-wallet withdrawal or fund writes (those land via task.0351 / task.0352).
 
 ## Usage
 
@@ -58,7 +63,7 @@ Protected credits page composition and payment widget wiring. Server component l
 
 ## Dependencies
 
-- **Internal:** `@/shared/config`, `@/components/vendor/depay`, `@tanstack/react-query`
+- **Internal:** `@/shared/config`, `@/components/vendor/depay`, `@tanstack/react-query`, `@/components/kit/wallet` (AddressChip).
 - **External:** none
 
 ## Change Protocol

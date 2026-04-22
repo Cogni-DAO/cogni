@@ -3,126 +3,75 @@
 
 /**
  * Module: `@app/(app)/credits/CreditsPage.client`
- * Purpose: Client-side credits page UI handling balance display and USDC payment flow.
- * Scope: Fetches credits data via React Query, renders native USDC payment flow, and refreshes balance on success. Does not handle backend payment verification or wallet connection.
- * Invariants: Payment amounts stored as integer cents (no float math).
- * Side-effects: IO (fetch API via React Query).
- * Links: docs/spec/payments-design.md
+ * Purpose: Money page composed of two panels — AI Credits (USDC top-up)
+ *   and the Polymarket Trading Wallet (per-tenant Privy wallet balances +
+ *   stubbed fund/withdraw). Two columns on desktop; mobile uses Credits /
+ *   Wallet pill toggle. Route stays `/credits` so existing links and footer
+ *   nav stay stable.
+ * Scope: Client layout shell only. Panels own their own data fetching.
+ * Invariants: No URL rename — relabel-only per the project charter.
+ * Side-effects: none (panels perform their own IO).
+ * Links: packages/node-contracts/src/poly.wallet.connection.v1.contract.ts,
+ *        packages/node-contracts/src/poly.wallet.balances.v1.contract.ts
  * @public
  */
 
 "use client";
 
-import { isValidAmountInput, parseDollarsToCents } from "@cogni/node-shared";
-import { useQueryClient } from "@tanstack/react-query";
-import { Info } from "lucide-react";
-import type { ReactElement } from "react";
-import { useState } from "react";
-import {
-  Card,
-  HintText,
-  PageContainer,
-  SectionCard,
-  SplitInput,
-  UsdcPaymentFlow,
-} from "@/components";
-import {
-  creditsToUsd,
-  useCreditsSummary,
-  usePaymentFlow,
-} from "@/features/payments/public";
+import { type ReactElement, useState } from "react";
+import { PageContainer } from "@/components";
+import { cn } from "@/shared/util/cn";
+import { AiCreditsPanel } from "./AiCreditsPanel";
+import { TradingWalletPanel } from "./TradingWalletPanel";
 
-function formatDollars(credits: number): string {
-  const dollars = creditsToUsd(credits);
-  return dollars.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+type MobileTab = "credits" | "wallet";
 
 export function CreditsPageClient(): ReactElement {
-  const [amountInput, setAmountInput] = useState<string>("");
-  const queryClient = useQueryClient();
-
-  const summaryQuery = useCreditsSummary({ limit: 1 });
-
-  // Parse amount using string-to-cents utility (no float math)
-  const amountCents = parseDollarsToCents(amountInput);
-  const isValidAmount = amountCents !== null;
-
-  const paymentFlow = usePaymentFlow({
-    amountUsdCents: amountCents ?? 200, // Default to $2.00 if invalid
-    onSuccess: () => {
-      // Refetch balance but DON'T clear amount (would unmount dialog)
-      void queryClient.invalidateQueries({
-        queryKey: ["payments-summary", { limit: 1 }],
-      });
-    },
-  });
-
-  // Wrap reset to also clear amount (called from "Done" button)
-  const handleResetAndClear = () => {
-    paymentFlow.reset();
-    setAmountInput(""); // Clear after user acknowledges success
-  };
-
-  const balance = summaryQuery.data?.balanceCredits ?? 0;
-  const balanceDisplay = summaryQuery.isLoading ? "—" : formatDollars(balance);
-  const isNegative = balance < 0;
+  const [mobileTab, setMobileTab] = useState<MobileTab>("credits");
 
   return (
     <PageContainer maxWidth="2xl">
-      {/* Balance Card */}
-      <Card className="flex items-center justify-between p-6">
-        <span
-          className={`font-bold text-4xl ${isNegative ? "text-destructive" : ""}`}
+      {/* Mobile toggle — hidden ≥md. Keeps the visual hierarchy minimal: two
+          pill-buttons, one active at a time, switching which panel renders. */}
+      <div className="mb-4 flex gap-2 md:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileTab("credits")}
+          className={cn(
+            "flex-1 rounded-md px-3 py-2 font-medium text-sm",
+            mobileTab === "credits"
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground"
+          )}
+          aria-pressed={mobileTab === "credits"}
         >
-          $ {balanceDisplay}
-        </span>
-      </Card>
+          Credits
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("wallet")}
+          className={cn(
+            "flex-1 rounded-md px-3 py-2 font-medium text-sm",
+            mobileTab === "wallet"
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground"
+          )}
+          aria-pressed={mobileTab === "wallet"}
+        >
+          Wallet
+        </button>
+      </div>
 
-      {/* Buy Credits Section */}
-      <SectionCard title="Buy Credits">
-        <SplitInput
-          label="Amount"
-          value={amountInput}
-          onChange={(val) => {
-            // Allow typing: digits with optional decimal and up to 2 decimal places
-            if (isValidAmountInput(val)) {
-              setAmountInput(val);
-            }
-          }}
-          placeholder="2.00 - 100000.00"
-          disabled={
-            // Lock input when: on-chain tx exists OR terminal state (requires explicit reset)
-            paymentFlow.state.txHash !== null ||
-            paymentFlow.state.result !== null
-          }
-        />
-
-        {/* Payment Flow */}
-        {isValidAmount ? (
-          <UsdcPaymentFlow
-            amountUsdCents={amountCents}
-            state={paymentFlow.state}
-            onStartPayment={paymentFlow.startPayment}
-            onReset={handleResetAndClear}
-            disabled={summaryQuery.isLoading}
-          />
-        ) : (
-          <button
-            type="button"
-            disabled
-            className="w-full cursor-not-allowed rounded-md bg-muted px-4 py-2 text-muted-foreground"
-          >
-            Invalid amount
-          </button>
-        )}
-
-        <HintText icon={<Info size={16} />}>
-          Transactions may take many minutes to confirm
-        </HintText>
-      </SectionCard>
+      {/* Desktop grid — two columns ≥md; panels stack on mobile with only the
+          selected tab visible. */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className={cn(mobileTab === "credits" ? "" : "hidden md:block")}>
+          <AiCreditsPanel />
+        </div>
+        <div className={cn(mobileTab === "wallet" ? "" : "hidden md:block")}>
+          <TradingWalletPanel />
+        </div>
+      </div>
     </PageContainer>
   );
 }
