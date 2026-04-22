@@ -20,38 +20,19 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Check, Copy } from "lucide-react";
-import { type ReactElement, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components";
+import type { ReactElement } from "react";
+import {
+  AddressChip,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components";
 import { BalanceBar } from "@/features/wallet-analysis";
 import { cn } from "@/shared/util/cn";
 import { fetchWalletBalance } from "../_api/fetchWalletBalance";
-import { formatShortWallet } from "./wallet-format";
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
-
-function CopyAddressButton({ address }: { address: string }): ReactElement {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      aria-label="Copy wallet address"
-      onClick={() => {
-        void navigator.clipboard.writeText(address).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        });
-      }}
-      className="inline-flex items-center rounded px-1 py-0.5 text-muted-foreground hover:text-foreground"
-    >
-      {copied ? (
-        <Check className="size-3 text-success" />
-      ) : (
-        <Copy className="size-3" />
-      )}
-    </button>
-  );
-}
 
 export function OperatorWalletCard(): ReactElement {
   const { data, isLoading, isError } = useQuery({
@@ -99,17 +80,7 @@ export function OperatorWalletCard(): ReactElement {
               </span>
             ) : null}
             {configured && data ? (
-              <span className="inline-flex items-center gap-1 font-mono text-muted-foreground">
-                <a
-                  href={`https://polygonscan.com/address/${data.operator_address}`}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="hover:text-foreground"
-                >
-                  {formatShortWallet(data.operator_address)}
-                </a>
-                <CopyAddressButton address={data.operator_address} />
-              </span>
+              <AddressChip address={data.operator_address} />
             ) : null}
           </div>
         </div>

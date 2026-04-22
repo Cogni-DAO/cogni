@@ -40,6 +40,7 @@ Standalone workspace package (`@cogni/poly-wallet`) providing a per-tenant Polym
 ## Public Surface
 
 - **Port types:** `PolyTraderWalletPort`, `PolyTraderSigningContext`, `AuthorizedSigningContext` (branded), `OrderIntentSummary`, `AuthorizationFailure`, `AuthorizeIntentResult`, `PolyClobApiKeyCreds`
+- **Port methods:** `resolve`, `getAddress`, `getBalances` (read-only USDC.e + POL snapshot for UI panels), `provision`, `revoke`, `authorizeIntent`, `withdrawUsdc`, `rotateClobCreds`.
 - **Adapters:** `PrivyPolyTraderWalletAdapter` (placeholder barrel today; implementation in follow-up)
 - **Env/Config keys:** `PRIVY_USER_WALLETS_APP_ID`, `PRIVY_USER_WALLETS_APP_SECRET`, `PRIVY_USER_WALLETS_SIGNING_KEY` — consumed by `nodes/poly/app` bootstrap, not by this package directly. **MUST NOT** reference `PRIVY_APP_ID` / `PRIVY_APP_SECRET` / `PRIVY_SIGNING_KEY` (those are the operator-wallet system app — `SEPARATE_PRIVY_APP` invariant, enforced via dep-cruiser).
 

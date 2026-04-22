@@ -145,6 +145,28 @@ export interface PolyTraderWalletPort {
   getAddress(billingAccountId: string): Promise<`0x${string}` | null>;
 
   /**
+   * Read-only on-chain balance snapshot for the tenant's trading wallet on
+   * Polygon: native POL gas + USDC.e (`0x2791Bca1…`, the Polymarket quote
+   * token). Returns `null` when no connection row exists for the tenant
+   * (PROVISION_FIRST). A connection that exists but partially fails RPC
+   * reads returns partial values with `errors[]` populated, never throws —
+   * matches the fail-soft contract of `resolve()` for read surfaces.
+   *
+   * This is a pure read method: no signing, no Privy call, no decryption.
+   * The adapter MAY use the backend custody API to learn the address but
+   * SHOULD prefer a DB-only lookup (same as `getAddress`) for page-render
+   * performance. No grant check — callers are read-only UIs.
+   */
+  getBalances(billingAccountId: string): Promise<{
+    readonly address: `0x${string}`;
+    /** Decimal USDC.e. `null` when the RPC read failed. */
+    readonly usdcE: number | null;
+    /** Decimal native POL. `null` when the RPC read failed. */
+    readonly pol: number | null;
+    readonly errors: readonly string[];
+  } | null>;
+
+  /**
    * Provision a brand-new wallet for a tenant.
    * Idempotent under concurrency via a Postgres advisory lock on
    * `billing_account_id` + a deterministic idempotency key on the backend

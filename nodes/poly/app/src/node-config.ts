@@ -1,11 +1,11 @@
 import type { NodeAppConfig } from "@cogni/node-app/extensions";
 import {
   Briefcase,
-  CreditCard,
   FlaskConical,
   Github,
   LayoutDashboard,
   Vote,
+  Wallet,
 } from "lucide-react";
 
 export const nodeConfig: NodeAppConfig = {
@@ -16,7 +16,7 @@ export const nodeConfig: NodeAppConfig = {
     { href: "/research", label: "Research", icon: FlaskConical },
     { href: "/work", label: "Work", icon: Briefcase },
     { href: "/gov", label: "Gov", icon: Vote },
-    { href: "/credits", label: "Credits", icon: CreditCard },
+    { href: "/credits", label: "💰 Money", icon: Wallet },
   ],
   externalLinks: [
     { href: "https://github.com/cogni-dao", label: "GitHub", icon: Github },

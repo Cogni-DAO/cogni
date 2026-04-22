@@ -49,12 +49,15 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 
 > **Active.** Phase A already shipped tenant-scoped copy-trade rows + RLS. Phase B pivots to Privy-per-user and is partially landed in PR #968: port, schema, adapter, route, env plumbing, and B2.10 component coverage are in. The remaining v0-critical step is real CLOB creds (B2.12). Orphan cleanup is now tracked separately as follow-up ops work.
 
-| Deliverable                                                                                            | Status       | Est | Work Item                                                                |
-| ------------------------------------------------------------------------------------------------------ | ------------ | --- | ------------------------------------------------------------------------ |
-| Per-user operator wallet binding + durable `WalletGrant` (RLS on copy-trade tables shipped in Phase A) | In Review    | 5   | [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md) Phase B |
-| Signing-backend decision (Safe+4337 vs Privy-per-user vs Turnkey) — resolved to Privy-per-user for v0  | Done         | 2   | (inline in task.0318)                                                    |
-| User-wallet orphan sweep for the dedicated Privy app (ops hygiene, not v0 trading path)                | Needs Design | 2   | [task.0348](../items/task.0348.poly-wallet-orphan-sweep.md)              |
-| Per-tenant wallet preferences + copy-trade sizing config (retire hardcoded funding + caps)             | Needs Design | 3   | [task.0347](../items/task.0347.poly-wallet-preferences-sizing-config.md) |
+| Deliverable                                                                                            | Status         | Est | Work Item                                                                |
+| ------------------------------------------------------------------------------------------------------ | -------------- | --- | ------------------------------------------------------------------------ |
+| Per-user operator wallet binding + durable `WalletGrant` (RLS on copy-trade tables shipped in Phase A) | In Review      | 5   | [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md) Phase B |
+| Signing-backend decision (Safe+4337 vs Privy-per-user vs Turnkey) — resolved to Privy-per-user for v0  | Done           | 2   | (inline in task.0318)                                                    |
+| User-wallet orphan sweep for the dedicated Privy app (ops hygiene, not v0 trading path)                | Needs Design   | 2   | [task.0348](../items/task.0348.poly-wallet-orphan-sweep.md)              |
+| Per-tenant wallet preferences + copy-trade sizing config (retire hardcoded funding + caps)             | Needs Design   | 3   | [task.0347](../items/task.0347.poly-wallet-preferences-sizing-config.md) |
+| Trading wallet withdrawal — `withdrawUsdc` adapter + route + dialog (replaces stubbed button on Money) | Needs Triage   | 3   | [task.0351](../items/task.0351.poly-trading-wallet-withdrawal.md)        |
+| Trading wallet one-click fund flow — Polygon in wagmi + `trading_wallet_funding` repo-spec + dialog    | Needs Design   | 3   | [task.0352](../items/task.0352.poly-trading-wallet-fund-flow.md)         |
+| Money page v0 — hybrid AI-credits + trading-wallet panel (relabel `/credits` → "💰 Money")             | Needs Closeout | 2   | [task.0353](../items/task.0353.poly-money-page-v0.md)                    |
 
 ### Phase 4 (P4) — Streaming + adversarial-robust ranking
 
