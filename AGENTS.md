@@ -21,7 +21,7 @@ You are done when **all** of the following are true — not before:
 1. **Lifecycle completed** — work item moved through the [`/triage → (/design) → /implement → /closeout → /review-implementation`](docs/spec/development-lifecycle.md) flow. Every `needs_*` status maps to exactly one `/command`.
 2. **Validation block committed** — `## Validation` section with `exercise:` + `observability:` is on the work item before `/closeout` creates the PR. (Invariant `VALIDATION_REQUIRED`.)
 3. **Code gate green** — PR merged to `main`. `status: done`. _This is only the code gate._
-4. **Flight gate green** — promoted to [`candidate-a`](docs/spec/ci-cd.md#environment-model) via flight. Argo `Healthy`, rollout clean, `/readyz.version` matches the source-sha map.
+4. **Flight gate green** — promoted to [`candidate-a`](docs/spec/ci-cd.md#environment-model) via flight. Argo `Healthy`, rollout clean, `/version.buildSha` matches the source-sha map (per promoted apps).
 5. **Feature gate green — by your own hand** — you (or qa-agent) have hit the real candidate-a URL with the `exercise:` from your validation block, got the expected response, and queried Loki for the observability signal at the deployed SHA and seen _your own request_ in the logs. Then set `deploy_verified: true` on the work item.
 
 `status: done` = code gate. `deploy_verified: true` = real gate. Never conflate.

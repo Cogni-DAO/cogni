@@ -49,6 +49,9 @@ for target in "${all_appsets[@]}"; do
     has_annotation=1
   fi
 
+  # When ALLOWLIST is empty (task.0349), is_allowed is always false — every
+  # AppSet must be annotation-free. The branch below only runs when the
+  # allowlist is repopulated.
   if is_allowed "$rel"; then
     # Allowed files MUST carry annotations — an empty allowlisted file
     # is suspicious (design intent silently lost). Warn, but don't fail;

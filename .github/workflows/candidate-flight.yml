@@ -12,7 +12,7 @@ name: Candidate Flight
 #   1. flight          — acquire slot, promote digests, push deploy branch,
 #                        reconcile AppSet. Emits promoted_apps + deploy_branch_sha.
 #   2. verify-candidate — gated `if: flight.outputs.promoted_apps != ''`.
-#                        Waits for Argo sync + rollout + /readyz + smoke. When
+#                        Waits for Argo sync + rollout + smoke + /version.buildSha verify. When
 #                        promoted_apps is empty, this job is visibly SKIPPED
 #                        (grey in the checks list), never a silent-green.
 #   3. release-slot    — always() && flight acquired. Releases lease based on

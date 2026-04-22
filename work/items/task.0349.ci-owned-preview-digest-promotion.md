@@ -87,9 +87,9 @@ CI seed commits to `main` have **no** `(#NNN)` merge suffix. Without a skip rule
 
 Commitlint: keep subject ≤100 chars; body carries detail.
 
-## Spec-first (PR A is not “workflow only”)
+## Spec-first (not “workflow only”)
 
-[`docs/spec/ci-cd.md`](../../docs/spec/ci-cd.md) **PR A:** anti-bespoke axiom removed; task.0349 authority, `workflow_run` ordering, tri-state semantics, and maintenance message-prefix skips are documented in the spec body.
+[`docs/spec/ci-cd.md`](../../docs/spec/ci-cd.md): anti-bespoke axiom removed; task.0349 authority, `workflow_run` ordering, tri-state semantics, `NODES` ∩ map verify semantics, and maintenance message-prefix skips are documented in the spec body.
 
 Per [docs/spec/docs-work-system.md](../../docs/spec/docs-work-system.md) `LINK_DONT_DUPLICATE`, long SCREAMING_SNAKE invariants live in the spec; this work item links and lists PR checklists only.
 

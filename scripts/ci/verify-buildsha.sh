@@ -12,11 +12,13 @@
 # Two modes:
 #   1. Single-SHA (preview, candidate): all promoted nodes built from the
 #      same PR head SHA. Caller passes EXPECTED_BUILDSHA + NODES.
-#   2. Per-app map (production, cross-PR): different nodes built from
+#   2. Per-app map (production, candidate-a cross-PR): different nodes built from
 #      different PR head SHAs (affected-only CI rebuilt a subset; production
 #      copies preview's mixed overlay state). Caller passes SOURCE_SHA_MAP
 #      pointing to .promote-state/source-sha-by-app.json — the script asserts
-#      each node's /version.buildSha matches that node's entry in the map.
+#      /version.buildSha against map entries. Optional NODES (CSV): when set,
+#      verify only that subset (task.0349; flights pass promoted_apps). When
+#      unset, every Ingress-probeable key in the map is checked.
 #
 # Contract (both modes): `/version.buildSha` equals the expected SHA for this
 # node. Any mismatch is a hard failure regardless of prior workflow status.
