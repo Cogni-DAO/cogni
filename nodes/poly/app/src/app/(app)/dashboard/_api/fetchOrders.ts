@@ -3,7 +3,7 @@
 
 /**
  * Module: `@app/(app)/dashboard/_api/fetchOrders`
- * Purpose: Client-side fetch for the Active Orders dashboard card. Calls GET /api/v1/poly/copy-trade/orders.
+ * Purpose: Client-side fetch for the dashboard execution surface. Calls GET /api/v1/poly/copy-trade/orders.
  * Scope: Data fetching only. Maps UI status-bucket filter → contract status; graceful empty on failure.
  * Side-effects: IO (HTTP fetch)
  * Links: packages/node-contracts/src/poly.copy-trade.orders.v1.contract.ts

@@ -25,6 +25,49 @@ export type WalletDailyCount = {
   n: number;
 };
 
+export type WalletBalanceHistoryPoint = {
+  ts: string;
+  total: number;
+  available?: number;
+  locked?: number;
+  positions?: number;
+};
+
+export type WalletPositionStatus = "open" | "closed";
+
+export type WalletPositionTimelinePoint = {
+  ts: string;
+  value: number;
+};
+
+export type WalletPositionMarkerKind = "entry" | "scale" | "current" | "close";
+
+export type WalletPositionMarkerTone = "neutral" | "positive" | "negative";
+
+export type WalletPositionMarker = {
+  ts: string;
+  kind: WalletPositionMarkerKind;
+  tone?: WalletPositionMarkerTone;
+};
+
+export type WalletPosition = {
+  positionId: string;
+  conditionId: string;
+  asset: string;
+  marketTitle: string;
+  outcome: string;
+  side: WalletTradeSide;
+  status: WalletPositionStatus;
+  openedAt: string;
+  closedAt?: string;
+  heldMinutes: number;
+  currentValue: number;
+  pnlUsd: number;
+  pnlPct: number;
+  timeline: readonly WalletPositionTimelinePoint[];
+  markers: readonly WalletPositionMarker[];
+};
+
 /**
  * Realized-outcome metrics are nullable when the resolved-position sample is
  * too small to be meaningful (< `minResolvedForMetrics` in
@@ -70,6 +113,8 @@ export type WalletAnalysisData = {
   snapshot?: WalletSnapshot;
   trades?: WalletTrades;
   balance?: WalletBalance;
+  balanceHistory?: readonly WalletBalanceHistoryPoint[];
+  positions?: readonly WalletPosition[];
 };
 
 export type WalletAnalysisVariant = "page" | "drawer" | "compact";

@@ -85,6 +85,14 @@ export {
 } from "./kit/typography/CodeHero";
 export { HeroActionWords } from "./kit/typography/HeroActionWords";
 export { Prompt } from "./kit/typography/Prompt";
+export {
+  type ChartConfig,
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "./vendor/shadcn/chart";
 export { Checkbox } from "./vendor/shadcn/checkbox";
 export {
   Dialog,
