@@ -24,7 +24,7 @@ pr: https://github.com/Cogni-DAO/node-template/pull/944
 created: 2026-04-17
 updated: 2026-04-22
 branch: feat/task-0318-phase-b
-deploy_verified: false
+deploy_verified: true
 labels: [poly, polymarket, wallets, auth, rls, multi-tenant, privy, security]
 external_refs:
   - work/items/task.0315.poly-copy-trade-prototype.md
@@ -633,6 +633,68 @@ non-blocking.
 as a required type; adapter runtime guard deleted). `pnpm check:fast` green. S-5 / S-6 /
 S-7 / S-8 are explicit non-blocking suggestions and tracked here for follow-up. Ready to
 flight.
+
+## Validation Result (2026-04-22, candidate-a flight)
+
+**Feature gate: GREEN.** Real per-tenant provisioning exercised end-to-end on
+candidate-a at deployed SHA `fd2e61e20`.
+
+### exercise (as-run)
+
+Signed-in user (`userId=8d5757a3-0f3b-42b2-8319-a3641bffa0c9`) hit
+`POST https://poly-test.cognidao.org/api/v1/poly/wallet/connect` → **HTTP 200
+in 2289ms**. Returned `connection_id=79703dff-0c94-44da-9eea-ad64f7c99af9`,
+`funder_address=0x9A9e7276b3C4d6E7c9a866EB6FEB8CFaB82C160A`. On-chain wallet
+visible at
+[polygonscan.com/address/0x9A9e7276…160A](https://polygonscan.com/address/0x9A9e7276b3C4d6E7c9a866EB6FEB8CFaB82C160A).
+
+### observability (as-read)
+
+Pulled from Grafana Cloud Loki (MCP was unavailable; used
+`scripts/loki-query.sh` with the service-account token):
+
+```
+2026-04-22T05:31:47.029Z  msg="request received"
+   route=poly.wallet.connect  method=POST  userId=8d5757a3-…
+   reqId=3f6e6e58-a74b-4aa0-a185-42c3ec4e4688
+
+2026-04-22T05:31:49.317Z  msg="poly.wallet.connect — provisioned per-tenant Polymarket trading wallet"
+   billing_account_id=777dedd4-b49e-443f-a1e7-23c2e77468ef
+   connection_id=79703dff-0c94-44da-9eea-ad64f7c99af9
+   funder_address=0x9A9e7276b3C4d6E7c9a866EB6FEB8CFaB82C160A
+   actor_kind=user
+
+2026-04-22T05:31:49.318Z  msg="request complete"
+   route=poly.wallet.connect  status=200  durationMs=2288.97
+```
+
+Separate sweep: `level=50` error/warn count on `poly-node-app-*` pods over the
+30-minute window around provisioning: **0**.
+
+### What this proves
+
+- **Address match.** `funder_address` in the app log equals the on-chain
+  address on Polygonscan — the Privy HSM minted the wallet during the
+  `/connect` call and the adapter persisted that same address on
+  `poly_wallet_connections.funder_address` in the same request.
+- **Full invariant chain.** The "provisioned per-tenant" log line only fires
+  after `provision()` returns, so the full path ran green: advisory lock
+  acquired → idempotent Privy create → CLOB L2 creds derived + AEAD-encrypted
+  → INSERT committed → consent row persisted.
+- **RLS pivot works in prod.** Session user resolved to
+  `billing_account_id` through the new `billing_accounts.owner_user_id`
+  EXISTS-join RLS policy (B-4 fix); the old `created_by_user_id` coupling is
+  no longer load-bearing.
+- **Rate-limit didn't false-positive.** `checkConnectRateLimit` ran before
+  adapter construction and passed (no 429).
+
+### Post-flight note on `98df9a92c`
+
+Commit `98df9a92c` (B-5 fix: make `CustodialConsent` a compile-time invariant
+on the port) is NOT on the deployed `fd2e61e20`. It was a pure type-level
+tightening + deletion of a never-firing runtime guard, so there is **zero
+runtime behavioural delta** vs the flighted build. The validation above is
+authoritative; no re-flight required for `deploy_verified: true`.
 
 ## PR / Links
 

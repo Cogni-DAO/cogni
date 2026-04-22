@@ -198,6 +198,7 @@
 | 2 | 15 | 3 | needs_implement | task.0192 | Walk: Per-tenant BYO-AI — Profile page OAuth + DrizzleConnectionBroker | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 2 | 16 | 3 | needs_design | task.0003 | Sweep stale doc references across the codebase | Maximize OSS Tools | proj.maximize-oss-tools |
 | 2 | 17 | 1 | needs_research | spike.0037 | Research Tailscale/Headscale mesh VPN for Cogni infrastructure |  |  |
+| 2 | 19 | 3 | needs_design | task.0347 | Poly wallet — per-tenant preferences + copy-trade sizing config | Cogni Poly | proj.poly-copy-trading |
 | 2 | 20 | 3 | needs_design | task.0211 | BYO-AI ChatGPT — auth manager + Codex CLI in Docker image | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 2 | 20 | 2 | needs_closeout | bug.0342 | poly copy-trade places sub-min orders — CLOB rejects silently (success=undefined, orderID=<missing>, errorMsg="") | Cogni Poly | proj.poly-copy-trading |
 | 2 | 30 | 1 | needs_implement | bug.0168 | App container uses seccomp=unconfined for TigerBeetle io_uring — replace with targeted profile | AI Operator Wallet | proj.ai-operator-wallet |

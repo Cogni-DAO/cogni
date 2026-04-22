@@ -54,6 +54,7 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 | Per-user operator wallet binding + durable `WalletGrant` (RLS on copy-trade tables shipped in Phase A) | In Review    | 5   | [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md) Phase B |
 | Signing-backend decision (Safe+4337 vs Privy-per-user vs Turnkey) — resolved to Privy-per-user for v0  | Done         | 2   | (inline in task.0318)                                                    |
 | User-wallet orphan sweep for the dedicated Privy app (ops hygiene, not v0 trading path)                | Needs Design | 2   | [task.0346](../items/task.0346.poly-wallet-orphan-sweep.md)              |
+| Per-tenant wallet preferences + copy-trade sizing config (retire hardcoded funding + caps)             | Needs Design | 3   | [task.0347](../items/task.0347.poly-wallet-preferences-sizing-config.md) |
 
 ### Phase 4 (P4) — Streaming + adversarial-robust ranking
 
@@ -72,7 +73,7 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 
 ## Constraints
 
-- **Live-money caps are hardcoded in v0/v1**: $1/trade, $10/day, 5 fills/hr. Any lift requires code change + redeploy + scorecard review.
+- **Live-money caps are hardcoded in v0/v1**: $1/trade, $10/day, 5 fills/hr. Any lift requires code change + redeploy + scorecard review. Per-tenant config lift tracked as [task.0347](../items/task.0347.poly-wallet-preferences-sizing-config.md).
 - **INSERT_BEFORE_PLACE is the correctness gate**: ledger row must land before CLOB submit. Skipping it breaks at-most-once mirroring.
 - **Idempotency is always `keccak256(target_id + ':' + fill_id)` → client_order_id.** No alternatives.
 - **`fill_id` shape is frozen** at `data-api:<tx>:<asset>:<side>:<ts>`. Phase 4 adds `clob-ws:…` — never mix schemes within one fill.
