@@ -85,3 +85,4 @@ pnpm check:agentsmd             # Validate all AGENTS.md files
 - AGENTS.md validator enforces hexagonal import standards for AGENTS.md
 - `run-scoped-package-build.mjs` falls back to a full `pnpm packages:build` when global build inputs change, emitting a warning so developers notice the scope expansion.
 - `check-fast.sh` and `check-all.sh` run `workspace:lint` via `run-turbo-checks.sh` so local checks catch the same per-workspace Biome/ESLint failures that CI's workspace runs would catch.
+- `check-fast.sh` has two modes: default (strict, verify-only; uses `:check` variants; what `.husky/pre-push` gates on) and `--fix` (auto-fix lint/format; exposed as `pnpm check:fast:fix`). Both modes hash working-tree content before and after the run and fail with `✗ drift: files modified during checks` if anything mutated — pre-existing WIP is ignored.

@@ -13,6 +13,7 @@
     "check:verbose": "bash scripts/check-all.sh --verbose",
     "check:fix": "bash scripts/check-all.sh --fix",
     "check:fast": "bash scripts/check-fast.sh",
+    "check:fast:fix": "bash scripts/check-fast.sh --fix",
     "check:fast:verbose": "bash scripts/check-fast.sh --verbose",
     "check:full": "bash scripts/check-full.sh",
     "check:full:fast": "bash scripts/check-full.sh --skip-build",

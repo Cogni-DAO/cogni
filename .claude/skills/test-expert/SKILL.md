@@ -25,7 +25,7 @@ The matrix below separates them because their tradeoffs, speeds, and fix pattern
 | **Docs**        | `pnpm check:docs`        | AGENTS.md headers, metadata, work-item index             | Fix the frontmatter                         |
 | **Root layout** | `pnpm check:root-layout` | Project root structure invariants                        | Move the misplaced file                     |
 
-All of the above run in `ci.yaml`. Local bundle: `pnpm check:fast` (iteration) → `pnpm check` (once, pre-commit).
+All of the above run in `ci.yaml`. Local bundle: `pnpm check:fast:fix` (iterate with auto-fix) → `pnpm check:fast` (strict, verify-only — what pre-push runs) → `pnpm check` (once, pre-commit).
 
 ## Test layer matrix (vitest + Playwright)
 
@@ -114,7 +114,7 @@ When the user's question is "does the machine-agent API actually work end-to-end
 
 6. **Sequence non-parallelism for stateful lanes.** Component + external configs use `sequence: { concurrent: false }` + `pool: forks`, `singleFork: true`. Stateful tests (shared GitHub test repo, single testcontainer DB epoch) race catastrophically in parallel. Don't remove this in a new config.
 
-7. **Check discipline.** `pnpm check:fast` during iteration (auto-fixes format/lint, runs unit tests). `pnpm check` once as the pre-commit gate. Never run `pnpm check` more than once per session — it's the heavyweight pipeline.
+7. **Check discipline.** `pnpm check:fast:fix` during iteration (auto-fixes format/lint, runs unit tests). `pnpm check:fast` (strict, verify-only) is what `.husky/pre-push` runs — if it fails with drift, run the `:fix` variant, commit, retry. `pnpm check` once as the pre-commit gate; never run `pnpm check` more than once per session — it's the heavyweight pipeline.
 
 8. **Time budgets.** Unit test files <1s. Component 5–30s. Stack 30–90s. External up to 3min (`testTimeout: 30_000` per-test; totals add up). If a test is exceeding these, first suspect missing env (see #2), not genuine slowness.
 
@@ -147,4 +147,4 @@ Triage in this order:
 3. Run the layer's specific command first (`pnpm test:component`, `pnpm test:contract`, etc.), not `pnpm check`. Fastest feedback.
 4. If the test needs env or infra, read the relevant config's header TSDoc — every config documents its invariants at the top.
 5. If the layer is stack/e2e/money and you're an agent without infra access, open the PR and let CI run it rather than burning a session on local setup.
-6. Once the new test passes in isolation, run `pnpm check:fast`. Only run `pnpm check` when ready to commit.
+6. Once the new test passes in isolation, run `pnpm check:fast:fix` (auto-fix) then `pnpm check:fast` (strict). Only run `pnpm check` when ready to commit.
