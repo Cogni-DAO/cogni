@@ -143,7 +143,7 @@ Additionally: a short-duration candidate-a soak (≥100 fills aggregate across �
 - `nodes/poly/app/src/bootstrap/jobs/copy-trade-mirror.job.ts` — `startMirrorPoll` setInterval shim + hardcoded poll cadence
 - `nodes/poly/app/src/features/wallet-watch/polymarket-source.ts` — per-wallet Data-API client instance today
 - `nodes/poly/app/src/features/copy-trade/mirror-coordinator.ts` — `runOnce` seam the shared poller will call
-- `.claude/skills/poly-dev-expert/SKILL.md` — poll cadence + rate-cap + idempotency rules this must preserve
+- `.claude/skills/poly-copy-trading/SKILL.md` — poll cadence + rate-cap + idempotency rules this must preserve
 - [task.0318](task.0318.poly-wallet-multi-tenant-auth.md) — the multi-tenant work this unblocks
 - [task.0323](task.0323.poly-copy-trade-v1-hardening.md) §1 — cursor persistence gap (this task subsumes the multi-wallet flavor)
 - [task.0322](task.0322.poly-copy-trade-phase4-design-prep.md) — Phase 4 WebSocket ingestion that plugs into the same router

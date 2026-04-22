@@ -207,7 +207,7 @@ In CP3.1.5 we deleted `PolymarketOrderSigner` + `OperatorWalletPort.signPolymark
   - Reconciler stays single, operator-wide (BYPASSRLS via `serviceDb`).
 
 - [x] **A7 — Delete `COPY_TRADE_TARGET_WALLETS` env var (and its CI plumbing)**
-  - Remove from `nodes/poly/app/src/shared/env/server-env.ts`, `.env.local.example`, `.claude/skills/poly-dev-expert/SKILL.md`. Update `MOCK_SERVER_ENV` test fixture.
+  - Remove from `nodes/poly/app/src/shared/env/server-env.ts`, `.env.local.example`, and any remaining skill references (`.claude/skills/poly-copy-trading/SKILL.md` covers the `envTargetSource` local-dev-only caveat). Update `MOCK_SERVER_ENV` test fixture.
   - **CI plumbing added by PR #932 commit `3e61f45f1`** (must be removed in the same A7 commit so nothing orphans):
     - `.github/workflows/candidate-flight-infra.yml` — drop the `COPY_TRADE_TARGET_WALLETS: ${{ secrets.COPY_TRADE_TARGET_WALLETS }}` env line
     - `scripts/ci/deploy-infra.sh` — drop the `COPY_TRADE_TARGET_WALLETS=${COPY_TRADE_TARGET_WALLETS:-}` declaration and the forwarded env var on the SSH command
