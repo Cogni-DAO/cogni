@@ -124,13 +124,15 @@ jobs:
       - name: Architecture check
         run: pnpm arch:check
 
-      # bug.0344 B12(c) — hard gate: production-applicationset.yaml must
-      # never carry argocd-image-updater annotations. Production overlay
-      # digests are human-gated via promote-to-production.yml; the MVP
-      # GHCR-split + preview/candidate-a image updater wiring deliberately
-      # stops there. This check is the structural backstop for that invariant.
-      - name: No Argo CD Image Updater annotations on production AppSet (bug.0344 B12c)
-        run: bash scripts/ci/check-no-image-updater-on-production.sh
+      # bug.0344 — structural guardrail on image-updater scope. Positive
+      # allowlist: only ApplicationSets named in ALLOWLIST inside the
+      # script are permitted to carry argocd-image-updater annotations.
+      # Any new or existing *-applicationset.yaml under infra/k8s/argocd/
+      # that sneaks in annotations without updating the allowlist fails
+      # closed. Current allowlist is preview-only (see script header for
+      # why candidate-a + production are intentionally excluded).
+      - name: Image Updater scope (bug.0344)
+        run: bash scripts/ci/check-image-updater-scope.sh
 
       - name: Unit + contract coverage tests
         run: pnpm test:ci

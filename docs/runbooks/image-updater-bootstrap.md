@@ -2,7 +2,7 @@
 
 > Installed by bug.0344 to retire hand-curated overlay-digest maintenance on `main`.
 > Manifests: `infra/k8s/argocd/image-updater/`
-> Watches: preview + candidate-a ApplicationSets' Applications → writes to `main`'s `infra/k8s/overlays/{preview,candidate-a}/<app>/kustomization.yaml` (MVP scope). Production is human-gated via `promote-to-production.yml` and enforced by `scripts/ci/check-no-image-updater-on-production.sh`.
+> Watches: **preview** ApplicationSet's Applications → writes to `main`'s `infra/k8s/overlays/preview/<app>/kustomization.yaml` (MVP scope). Candidate-a was descoped post-#974 merge (write rate vs. seed-value trade-off — see `candidate-a-applicationset.yaml` docstring). Production is human-gated via `promote-to-production.yml`. Scope is enforced by an allowlist in `scripts/ci/check-image-updater-scope.sh`.
 
 ## What it does
 
@@ -63,7 +63,7 @@ Two prerequisites must hold before Step 7b can succeed on a new cluster:
 ssh root@<vm-host> "kubectl logs -n argocd deployment/argocd-image-updater --tail=50 | grep -i 'considering\|updated image'"
 ```
 
-Within one poll cycle (≤2 minutes after the workflow finishes) you should see `considering image` lines for each annotated Application across **both** environments: `preview-{operator,poly,resy,scheduler-worker}` and `candidate-a-{operator,poly,resy,scheduler-worker}`.
+Within one poll cycle (≤2 minutes after the workflow finishes) you should see `considering image` lines for each annotated Application in the preview environment: `preview-{operator,poly,resy,scheduler-worker}`. Candidate-a Applications are present on the controller's candidate-a VM but carry no image-updater annotations (post-#974 descope), so the controller logs `considering 0 annotated application(s)` there.
 
 ## Smoke test (end-to-end)
 
@@ -113,18 +113,18 @@ If step 4 shows no commit after 10 minutes:
 
 ## MVP scope
 
-| Environment                               | Who writes the digest                                                                                                  |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `main:infra/k8s/overlays/preview/`        | Image updater — preview AppSet annotations                                                                             |
-| `main:infra/k8s/overlays/candidate-a/`    | Image updater — candidate-a AppSet annotations (same `^preview-*` regex as preview, per bug.0344 B9 Path A)            |
-| `main:infra/k8s/overlays/production/`     | Human-gated only. `promote-to-production.yml` reads from `deploy/preview` and opens a review PR to `deploy/production` |
-| `deploy/{preview,candidate-a,production}` | Flight workflows (`flight-preview.yml`, `candidate-flight.yml`, `promote-and-deploy.yml`) via `promote-k8s-image.sh`   |
+| Environment                               | Who writes the digest                                                                                                                                                                              |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `main:infra/k8s/overlays/preview/`        | Image updater — preview AppSet annotations                                                                                                                                                         |
+| `main:infra/k8s/overlays/candidate-a/`    | **Nobody.** Developer-reference artifact only; `candidate-flight.yml` unconditionally overwrites `deploy/candidate-a`. Guardrail: `check-image-updater-scope.sh` (allowlist excludes candidate-a). |
+| `main:infra/k8s/overlays/production/`     | Human-gated only. `promote-to-production.yml` reads from `deploy/preview` and opens a review PR to `deploy/production`. Guardrail: same script as candidate-a.                                     |
+| `deploy/{preview,candidate-a,production}` | Flight workflows (`flight-preview.yml`, `candidate-flight.yml`, `promote-and-deploy.yml`) via `promote-k8s-image.sh`                                                                               |
 
 Per-node migrator digests (`-operator-migrate`, `-poly-migrate`, `-resy-migrate`) are covered via the `migrator` image alias pointing at the split `cogni-template-migrate` GHCR package (bug.0344 B8). `scheduler-worker` has no migrator and silently no-ops.
 
-### Production invariant (enforced)
+### Scope-guard invariant (enforced)
 
-`infra/k8s/argocd/production-applicationset.yaml` must carry **zero** `argocd-image-updater.argoproj.io/*` annotations. Enforced by `scripts/ci/check-no-image-updater-on-production.sh` in the CI `unit` job — every PR is blocked if this invariant is violated. See bug.0344 § B12(c).
+`scripts/ci/check-image-updater-scope.sh` enforces a positive allowlist of AppSets permitted to carry `argocd-image-updater.argoproj.io/*` annotations. Current allowlist: `preview-applicationset.yaml` only. Every other `*-applicationset.yaml` under `infra/k8s/argocd/` (currently candidate-a + production) must be annotation-free and fails the CI `unit` job if it isn't. Adding a new AppSet to the allowlist is a design decision — edit the `ALLOWLIST` array in the script with an accompanying rationale; don't silently annotate. See `candidate-a-applicationset.yaml` docstring for why candidate-a was descoped post-#974.
 
 ## Rollback
 
@@ -141,7 +141,7 @@ git revert <bad-sha> && git push origin main
 To disable permanently:
 
 - Remove `image-updater` from `infra/k8s/argocd/kustomization.yaml` resources.
-- Remove the `argocd-image-updater.argoproj.io/*` annotations from both `infra/k8s/argocd/preview-applicationset.yaml` and `infra/k8s/argocd/candidate-a-applicationset.yaml`.
+- Remove the `argocd-image-updater.argoproj.io/*` annotations from `infra/k8s/argocd/preview-applicationset.yaml` (candidate-a + production are already annotation-free and enforced by the guardrail).
 - Delete the controller: `kubectl delete deployment argocd-image-updater -n argocd`.
 
 The bespoke anti-pattern `promote-k8s-image.sh` still works for every environment, so rolling back does not break flights — it just means you're back to hand-maintained `main` seeds (bug.0344 is reopened).
