@@ -109,19 +109,27 @@ Support:
 | `infra/provision/cherry/`     | OpenTofu modules for Cherry Servers VMs                  |
 | `infra/provision/cherry/k3s/` | k3s bootstrap (cloud-init, Argo CD, ksops)               |
 
-### VM SSH keys (`.local/`, gitignored)
+### VM SSH access — policy first, path second
 
-`provision-test-vm.sh` writes SSH keys and VM metadata to `.local/`:
+**SSH is not a general tool in this repo. Reproducibility via infrastructure-as-code is the lifeblood — every ad-hoc SSH action is a latent drift source.** The rules below are hard, not aspirational:
 
-| File                          | Purpose                                |
-| ----------------------------- | -------------------------------------- |
-| `.local/{env}-vm-key`         | SSH private key for `root@<VM_IP>`     |
-| `.local/{env}-vm-ip`          | VM IP address (single line)            |
-| `.local/{env}-vm-age-key`     | SOPS age key for k8s secret decryption |
-| `.local/{env}-vm-secrets.env` | Extra env vars not in `.env.{env}`     |
+1. **SSH is read-only by default.** Inspect pods, tail logs, `kubectl get`, `curl` from inside the network. Never `kubectl apply`, never `kubectl edit`, never `docker compose up` by hand, never edit files on the VM. The only sanctioned write path is a commit to git (code branch or `deploy/*`) that Argo / the pipeline reconciles.
+2. **The only environment where write-mode SSH is permitted is `candidate-a`.** Even there it's a last resort for a 5-minute experiment that must be captured as a script, OpenTofu change, or GitOps commit **before the session ends**, per the repo-wide "if it isn't in git, it didn't happen" rule. A write-mode SSH to candidate-a that leaves no diff behind is a bug.
+3. **Never SSH to production.** Not for reads, not for writes, not for diagnostics. If you need production signal, query Grafana/Loki via the MCP, check `/readyz` / `/livez` from outside the network, or read `deploy/production` state from git. If those don't answer the question, the question is asking you to violate the IaC contract — escalate, don't shell in.
+4. **Preview reads are discouraged.** Prefer Loki / Grafana / `/readyz` from outside. A preview SSH is acceptable only when an external signal is provably missing and the read genuinely can't wait for instrumentation to land.
 
-SSH usage: `ssh -i .local/preview-vm-key root@$(cat .local/preview-vm-ip)`
-Environments provisioned: `candidate-a`, `preview`, `production`.
+**Where SSH coordinates live (when you're allowed to use them)**
+
+The sanctioned path — and the only one an agent should rely on — is what [`docs/guides/multi-node-deploy.md`](../../../docs/guides/multi-node-deploy.md) documents: `scripts/setup/provision-test-vm.sh` writes the SSH private key + VM IP to `.local/` (gitignored) at provision time.
+
+| File                  | Purpose                            |
+| --------------------- | ---------------------------------- |
+| `.local/{env}-vm-key` | SSH private key for `root@<VM_IP>` |
+| `.local/{env}-vm-ip`  | VM IP address (single line)        |
+
+Usage (candidate-a only; read-only): `ssh -i .local/candidate-a-vm-key root@$(cat .local/candidate-a-vm-ip) "kubectl -n argocd get applications"`.
+
+If `.local/{env}-vm-key` isn't present for the env you need, this device isn't the provisioner for that env. Do not improvise — don't source shell aliases from personal dotfiles, don't paste IPs from Slack, don't copy keys from a teammate. Either re-run `provision-test-vm.sh` (candidate-a only) or drive the change through the pipeline.
 
 ## Enforcement rules
 
