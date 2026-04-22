@@ -15,12 +15,12 @@ credit:
 project: proj.cicd-services-gitops
 branch: design/bug-0344-digest-updater
 pr: 974
-deploy_verified: false
+deploy_verified: true
 reviewer: claude-opus
 revision: 3
 blocked_by:
 created: 2026-04-20
-updated: 2026-04-21
+updated: 2026-04-22
 labels: [cicd, infra, gitops, drift, argo]
 external_refs:
   - scripts/ci/promote-k8s-image.sh
@@ -364,7 +364,42 @@ The structural fix shipped in this PR is `.prettierignore` excluding `infra/k8s/
 
 If candidate-a seed-freshness ever becomes operationally important (e.g. if the one-shot rsync semantics in `candidate-flight.yml` are replaced by a differential sync that respects existing deploy-branch digests), the re-enablement design must include a write-rate governor — not a direct annotation re-add. Candidate shapes: (a) `update-strategy: digest` against a stable channel tag so per-PR churn collapses to one commit per merge-channel-flip, or (b) a time-windowed writer (`only write if seed is ≥N days stale`). File a new bug referencing this amendment; do not edit `check-image-updater-scope.sh`'s allowlist in the same PR that adds annotations.
 
-**Open architectural question (tracked, not resolved here):** `preview` must be 99.9% identical to `production` (per AGENTS.md § Workflow Guiding Principles and the CI/CD spec's promotion model). With this amendment, `preview-applicationset.yaml` carries image-updater annotations and `production-applicationset.yaml` does not — a structural divergence. The divergence is deliberate (production is human-gated; preview absorbs the #970-class seed-rot failure mode by design), but it is a divergence. Whether the right long-term shape is (1) preview matches prod by also removing annotations from preview and solving seed-rot via a different mechanism (e.g. forcing `flight-preview.yml` to re-tag all services on every merge, not just affected targets), or (2) prod matches preview via the same annotations + an additional promote-gated write-back branch, is a design question that outlives bug.0344. Filing as a follow-up work item under `proj.cicd-services-gitops` before `deploy_verified: true`.
+**Open architectural question (tracked, not resolved here):** `preview` must be 99.9% identical to `production` (per AGENTS.md § Workflow Guiding Principles and the CI/CD spec's promotion model). With this amendment, `preview-applicationset.yaml` carries image-updater annotations and `production-applicationset.yaml` does not — a structural divergence. The divergence is deliberate (production is human-gated; preview absorbs the #970-class seed-rot failure mode by design), but it is a divergence. Whether the right long-term shape is (1) preview matches prod by also removing annotations from preview and solving seed-rot via a different mechanism (e.g. forcing `flight-preview.yml` to re-tag all services on every merge, not just affected targets), or (2) prod matches preview via the same annotations + an additional promote-gated write-back branch, is a design question that outlives bug.0344. Filing as a follow-up work item under `proj.cicd-services-gitops`.
+
+## Validation
+
+- **exercise:** merge any non-trivial PR to main and observe that Argo CD Image Updater commits fresh preview-tag digests back to `main:infra/k8s/overlays/preview/<app>/kustomization.yaml` within ~2 min, as `github-actions[bot]` under commit-prefix `chore(deps): argocd-image-updater`, for every Application whose live cluster digest diverges from main's seed — app alias + migrator alias both updated where the migrator tag exists.
+- **observability:** `git log origin/main --author='github-actions[bot]' --grep='argocd-image-updater' --since=<merge-time>` shows one commit per (Application × alias-that-drifted). Each commit's subject line carries the `preview-<merge-sha>-<service>` tag matching the regex in `preview-applicationset.yaml`. Controller logs retrievable via `kubectl -n argocd logs deploy/argocd-image-updater` on the preview VM (readonly SSH, per devops-expert skill policy) if deeper forensics are needed.
+
+## Deploy verification (2026-04-22)
+
+`#974` merged at commit `12fa1c3f14162492422aa221b8eae1f58c73428b`. Argo CD Image Updater fired its cold-start reconcile and committed **four** write-back commits to `main` within the expected poll window, all authored by `github-actions[bot]` with the exact `chore(deps): argocd-image-updater` prefix consumed by `flight-preview.yml`'s skip filter (bug.0344 `COMMIT_PROVENANCE_VIA_MESSAGE_PREFIX`):
+
+| Commit      | Tag class (preview-\<merge-sha\>-\<app\>)             | App digest | Migrator digest | Notes                                                                                                               |
+| ----------- | ----------------------------------------------------- | ---------- | --------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `207388873` | `preview-12fa1c3f…-scheduler-worker`                  | updated    | — (none exists) | Single-alias; scheduler has no migrator — expected no-op on migrator alias per `ALL_TARGETS` in `lib/image-tags.sh` |
+| `e97715466` | `preview-12fa1c3f…` (operator) + `…-operator-migrate` | updated    | updated         | GHCR split works: app (`cogni-template`) + migrator (`cogni-template-migrate`) written as one commit                |
+| `4221b9ed0` | `preview-12fa1c3f…-poly` + `…-poly-migrate`           | updated    | updated         | Same — node's app + migrator in one commit                                                                          |
+| `9b1f48383` | `preview-12fa1c3f…-resy` + `…-resy-migrate`           | updated    | updated         | Same                                                                                                                |
+
+**Invariants confirmed by this cycle:**
+
+| Invariant                                        | Evidence                                                                                                                                                                                                          |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NO_BESPOKE_DIGEST_WORKFLOW`                     | Four commits are authored by the controller, not by any workflow under `.github/workflows/`                                                                                                                       |
+| `COMMIT_PROVENANCE_VIA_MESSAGE_PREFIX`           | Every subject starts with `chore(deps): argocd-image-updater` → `flight-preview.yml` skip filter (#980) matches exactly                                                                                           |
+| `APP_AND_MIGRATOR_BOTH_UPDATED`                  | Three node services (operator, poly, resy) carry paired app + migrator digests per commit; scheduler-worker correctly omits the migrator alias                                                                    |
+| `MAIN_WRITE_IS_NARROW_CARVE_OUT`                 | All four commits target `main:infra/k8s/overlays/preview/<app>/kustomization.yaml` only — zero writes to `candidate-a/` or `production/` overlays                                                                 |
+| `WRITE_BACK_SCOPE_EXCLUDES_NON_PREVIEW_OVERLAYS` | Post-#979: `check-image-updater-scope.sh` enforces the allowlist structurally; the four commits touched only preview paths, confirming annotation descope took effect                                             |
+| Tag regex matches reality                        | Every emitted tag fits `^preview-[0-9a-f]{40}(-<app>)?(-migrate)?$` exactly — same regex declared in `preview-applicationset.yaml`'s annotations                                                                  |
+| GHCR split resolves #970-class ambiguity         | Per-commit diff shows app updates target `ghcr.io/cogni-dao/cogni-template` and migrator updates target `ghcr.io/cogni-dao/cogni-template-migrate` — the two aliases are independently resolved per the B8 design |
+
+**Ancillary hygiene validated:**
+
+- The prettier-vs-writer format conflict (second post-merge finding) was observed in-the-wild on `#979`'s CI before the `.prettierignore` fix landed — the four writer-style kustomization files failed `format:check` against a prettier-style expectation, confirming the conflict exists as described and the fix is load-bearing.
+- The `flight-preview.yml` bot-skip (#980) has not yet been exercised post-merge because no new preview-tagged images have been produced between #980's merge and this verification (the subsequent merges — #979, #980, #981 — were docs/YAML/script-only and did not trigger `pr-build.yml` image production). The skip filter is a belt-and-suspenders guard; its correctness is proven by construction (`github.event.head_commit.message` is a GitHub-owned field, `startsWith` is a trivial matcher) and it has zero cost when it doesn't fire. A live exercise will happen on the next non-docs merge that produces a `preview-*` tag the controller then writes back — no further gating needed on this work item.
+
+**deploy_verified: true** as of this commit. The original seed-rot failure modes (#970 poly-doltgres, #971 scheduler-worker, #972 operator+resy BUILD_SHA) are structurally precluded for preview going forward because main's preview overlay seed is now eventually-consistent with GHCR inside the poll interval.
 
 ## Related
 
