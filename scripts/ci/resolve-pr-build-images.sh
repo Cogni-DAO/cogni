@@ -44,7 +44,7 @@ if [ -z "$IMAGE_TAG" ]; then
 fi
 
 # SOURCE_SHA is the PR head SHA baked into every image via pr-build.yml
-# (BUILD_SHA label / /readyz.version). Flows into the payload envelope so
+# (BUILD_SHA label / /version.buildSha). Flows into the payload envelope so
 # promote-build-payload.sh can write .promote-state/source-sha-by-app.json
 # for cross-env contract verification (bug.0321 Fix 4). Fall back to
 # parsing the IMAGE_TAG (`pr-{N}-{sha}` convention) when the caller

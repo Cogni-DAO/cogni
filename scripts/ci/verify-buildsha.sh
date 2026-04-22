@@ -16,10 +16,23 @@
 #      different PR head SHAs (affected-only CI rebuilt a subset; production
 #      copies preview's mixed overlay state). Caller passes SOURCE_SHA_MAP
 #      pointing to .promote-state/source-sha-by-app.json — the script asserts
-#      each node's /readyz.version matches that node's entry in the map.
+#      each node's /version.buildSha matches that node's entry in the map.
 #
-# Contract (both modes): `/readyz.version` equals the expected SHA for this
+# Contract (both modes): `/version.buildSha` equals the expected SHA for this
 # node. Any mismatch is a hard failure regardless of prior workflow status.
+#
+# Endpoint choice (task.0345 / PR #978): we probe the dedicated `/version`
+# endpoint rather than `/readyz`. Rationale:
+#   - `/version` is unauthenticated and dependency-free (no env, secrets, RPC,
+#     or Temporal checks) — it cannot false-fail due to transient infra
+#     degradation while the build artifact is correctly deployed.
+#   - `/readyz` returns 503 on infra-degraded (by design); serving the right
+#     buildSha is a distinct signal from "I am ready to serve traffic".
+#   - Separation lets us retire the prior `/readyz.version` field without
+#     breaking liveness/readiness semantics.
+# Response shape: `{"version": "<pkg-ver>", "buildSha": "<git-sha>", "buildTime": "..."}`
+# — we read `.buildSha` (the git SHA); `.version` on this endpoint is the
+# package version, NOT a fallback.
 #
 # Env (single-SHA mode):
 #   DOMAIN              (required) base domain (operator Ingress host)
@@ -46,7 +59,7 @@ DOMAIN="${DOMAIN:?DOMAIN required}"
 SOURCE_SHA_MAP="${SOURCE_SHA_MAP:-}"
 
 # Cutover polling (task.0341): Argo "Healthy" fires before ingress endpoints
-# fully cut over to new pods, so a one-shot /readyz can hit the old pod
+# fully cut over to new pods, so a one-shot probe can hit the old pod
 # serving the prior SHA. Retry per-node until the expected SHA appears or
 # CUTOVER_TIMEOUT expires. Default 90s covers normal pod-startup + endpoint
 # propagation; anything longer is a real deploy issue, not a cutover race,
@@ -54,7 +67,7 @@ SOURCE_SHA_MAP="${SOURCE_SHA_MAP:-}"
 CUTOVER_TIMEOUT="${CUTOVER_TIMEOUT:-90}"
 CUTOVER_SLEEP="${CUTOVER_SLEEP:-5}"
 
-# Only node-apps expose /readyz via HTTPS Ingress. scheduler-worker and
+# Only node-apps expose /version via HTTPS Ingress. scheduler-worker and
 # migrator are promoted-apps too but are in-cluster only — they're covered
 # by wait-for-in-cluster-services (kubectl rollout status) upstream.
 NODE_APPS="operator poly resy"
@@ -126,8 +139,10 @@ fi
 # don't need a real HTTPS endpoint to cover the polling logic.
 CURL_CMD="${CURL_CMD:-curl -sk --max-time 10}"
 
-# Poll $url/readyz until .version matches $expected or CUTOVER_TIMEOUT elapses.
-# Returns 0 on match, 1 on timeout. Prints the final line outcome.
+# Poll $url (/version) until .buildSha matches $expected or CUTOVER_TIMEOUT
+# elapses. Returns 0 on match, 1 on timeout. Prints the final line outcome.
+# Reads `.buildSha` from the response — `.version` on /version is the package
+# version (e.g. "0.1.0"), not the git SHA, so it is not a valid fallback.
 check_node() {
   local node="$1" expected="$2" url="$3"
   local deadline=$(( SECONDS + CUTOVER_TIMEOUT ))
@@ -136,19 +151,19 @@ check_node() {
   while :; do
     attempts=$((attempts + 1))
     body=$($CURL_CMD "$url" 2>/dev/null || echo "")
-    actual=$(printf '%s' "$body" | python3 -c 'import json,sys; print(json.loads(sys.stdin.read()).get("version",""))' 2>/dev/null || echo "")
+    actual=$(printf '%s' "$body" | python3 -c 'import json,sys; print(json.loads(sys.stdin.read()).get("buildSha",""))' 2>/dev/null || echo "")
     actual=$(printf '%s' "$actual" | tr '[:upper:]' '[:lower:]')
 
     if [ "$actual" = "$expected" ] && [ -n "$actual" ]; then
-      echo "  ✅ ${node}: version=${actual:0:12} matches expected ${expected:0:12} (attempt ${attempts})"
+      echo "  ✅ ${node}: buildSha=${actual:0:12} matches expected ${expected:0:12} (attempt ${attempts})"
       return 0
     fi
 
     if [ "$SECONDS" -ge "$deadline" ]; then
       if [ -z "$actual" ]; then
-        echo "  ❌ ${node}: ${url} returned no parseable version after ${CUTOVER_TIMEOUT}s / ${attempts} attempts (body: ${body:0:120})"
+        echo "  ❌ ${node}: ${url} returned no parseable buildSha after ${CUTOVER_TIMEOUT}s / ${attempts} attempts (body: ${body:0:120})"
       else
-        echo "  ❌ ${node}: version=${actual:0:12} != expected ${expected:0:12} after ${CUTOVER_TIMEOUT}s / ${attempts} attempts"
+        echo "  ❌ ${node}: buildSha=${actual:0:12} != expected ${expected:0:12} after ${CUTOVER_TIMEOUT}s / ${attempts} attempts"
       fi
       return 1
     fi
@@ -167,7 +182,7 @@ for node in "${NODE_ARR[@]}"; do
   else
     host="${node}-${DOMAIN}"
   fi
-  url="https://${host}/readyz"
+  url="https://${host}/version"
 
   check_node "$node" "$expected" "$url" || FAILED=1
 done

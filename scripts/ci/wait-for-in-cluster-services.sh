@@ -18,7 +18,7 @@
 #
 # Without gate 2, downstream HTTPS probes can land on a Terminating pod
 # during the up-to-terminationGracePeriodSeconds window, causing
-# verify-buildsha to read the previous deploy's /readyz.version and fail
+# verify-buildsha to read the previous deploy's /version.buildSha and fail
 # the flight even though the deploy is correct.
 #
 # Env:

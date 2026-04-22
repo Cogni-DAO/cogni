@@ -137,7 +137,7 @@ echo "$SOURCE_SHA" > .promote-state/source-sha
 # (bug.0321 Fix 4). Production promotions are cross-PR: different nodes
 # may have been built from different PR head SHAs (affected-only CI).
 # verify-buildsha.sh reads this map in SOURCE_SHA_MAP mode to assert each
-# node's /readyz.version matches the SHA that built that node's digest.
+# node's /version.buildSha matches the SHA that built that node's digest.
 # On first-deploy bootstrap, preview may not yet have the file — skip
 # silently; verify-buildsha.sh falls back to single-SHA mode.
 if git show "origin/${PREVIEW_BRANCH}:.promote-state/source-sha-by-app.json" > .promote-state/source-sha-by-app.json 2>/dev/null; then

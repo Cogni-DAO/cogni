@@ -4,13 +4,17 @@
 #
 # scripts/ci/tests/verify-buildsha.test.sh
 #
-# Regression harness for task.0341. Covers the polling loop that replaces the
-# single-shot curl-per-node (which false-failed during rollout cutover).
+# Regression harness for task.0341 + task.0345. Covers the polling loop that
+# replaces the single-shot curl-per-node (task.0341, false-failed during rollout
+# cutover) AND the pivot from `/readyz.version` → `/version.buildSha` as the
+# authoritative build-identity probe (task.0345 / PR #978).
 #
 # Cases:
 #   1. Converges after N failed attempts  → exits 0 (polling succeeds).
 #   2. Never converges within timeout     → exits 1 (fails loudly, no masking).
 #   3. Expected SHA matches on first try  → exits 0 fast (no regression on happy path).
+#   4. Response carries `.version` (pkg ver) but no `.buildSha` → fails (we do
+#      NOT silently accept the pkg-version field; only `.buildSha` is the SHA).
 #
 # The verify-buildsha.sh under test is shelled via a CURL_CMD injection
 # pointing to a fixture script under /tmp, so no real HTTPS endpoint is needed.
@@ -89,20 +93,26 @@ EOF
 
 # --- Case 1: converges on 3rd attempt ---
 DIR1=$(mktemp -d --tmpdir="$TMPROOT" case1.XXXX)
-printf '{"version":"%s"}' "$STALE"    >"${DIR1}/1.json"
-printf '{"version":"%s"}' "$STALE"    >"${DIR1}/2.json"
-printf '{"version":"%s"}' "$EXPECTED" >"${DIR1}/3.json"
+printf '{"version":"0.1.0","buildSha":"%s","buildTime":"t"}' "$STALE"    >"${DIR1}/1.json"
+printf '{"version":"0.1.0","buildSha":"%s","buildTime":"t"}' "$STALE"    >"${DIR1}/2.json"
+printf '{"version":"0.1.0","buildSha":"%s","buildTime":"t"}' "$EXPECTED" >"${DIR1}/3.json"
 run_case "converges-on-3rd" "$DIR1" 0 10 1 || exit 1
 
 # --- Case 2: never converges → fails loudly ---
 DIR2=$(mktemp -d --tmpdir="$TMPROOT" case2.XXXX)
-printf '{"version":"%s"}' "$STALE" >"${DIR2}/1.json"
+printf '{"version":"0.1.0","buildSha":"%s","buildTime":"t"}' "$STALE" >"${DIR2}/1.json"
 run_case "timeout-fails-loudly" "$DIR2" 1 3 1 || exit 1
 
 # --- Case 3: matches on first attempt (happy path, no regression) ---
 DIR3=$(mktemp -d --tmpdir="$TMPROOT" case3.XXXX)
-printf '{"version":"%s"}' "$EXPECTED" >"${DIR3}/1.json"
+printf '{"version":"0.1.0","buildSha":"%s","buildTime":"t"}' "$EXPECTED" >"${DIR3}/1.json"
 run_case "matches-first-try" "$DIR3" 0 10 1 || exit 1
+
+# --- Case 4: response has pkg-version but no buildSha → fails (do NOT
+# fall back to `.version`, which carries npm package version on /version). ---
+DIR4=$(mktemp -d --tmpdir="$TMPROOT" case4.XXXX)
+printf '{"version":"%s","buildTime":"t"}' "$EXPECTED" >"${DIR4}/1.json"
+run_case "no-buildSha-field-fails" "$DIR4" 1 3 1 || exit 1
 
 echo ""
 echo "✅ verify-buildsha.test.sh — all cases passed"

@@ -52,7 +52,7 @@ From `docs/spec/development-lifecycle.md`:
 From `docs/spec/ci-cd.md`:
 
 - Axiom 3: pre-merge safety happens in `candidate-*` slots.
-- Minimum authoritative validation for v0 (§ "Minimum Authoritative Validation"): affected-only checks + build + Argo reconciled Healthy + rollout clean + smoke pack + contract probe (`/readyz.version == map[app]`).
+- Minimum authoritative validation for v0 (§ "Minimum Authoritative Validation"): affected-only checks + build + Argo reconciled Healthy + rollout clean + smoke pack + contract probe (`/version.buildSha == map[app]`).
 
 From `docs/guides/agent-api-validation.md`:
 

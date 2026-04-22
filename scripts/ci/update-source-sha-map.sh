@@ -9,7 +9,7 @@
 #
 # The map is the artifact-provenance carrier for cross-env contract
 # verification (bug.0321 Fix 4). verify-buildsha.sh reads it to assert
-# each node's /readyz.version matches the SHA that built that node's
+# each node's /version.buildSha matches the SHA that built that node's
 # overlay digest — even when different nodes were built from different
 # PR head SHAs (affected-only CI, cross-PR production promotions).
 #

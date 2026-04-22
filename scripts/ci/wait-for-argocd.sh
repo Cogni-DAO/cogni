@@ -18,7 +18,7 @@
 # bug.0326: sync.revision + health.status are Application-level signals and
 # go green while a rolling update is still in flight — "Healthy" fires as
 # soon as enough pods are Ready, which includes the OLD ReplicaSet's pods
-# during the window between sync and rollout completion. /readyz from those
+# during the window between sync and rollout completion. /version from those
 # pods serves the prior BUILD_SHA, so downstream verify-buildsha.sh fails
 # on a green flight. After Argo reports Healthy for an app, this script now
 # also runs `kubectl rollout status` on the app's Deployment — that command
@@ -167,7 +167,7 @@ wait_for_app() {
     if [ "$REV" = "$EXPECTED_SHA" ] && [ "$HEALTH" = "Healthy" ]; then
       # bug.0326: sync.revision + health.status are Argo-Application-level
       # signals. During a rolling update, "Healthy" fires as soon as enough
-      # pods are Ready — which includes the OLD ReplicaSet's pods. /readyz
+      # pods are Ready — which includes the OLD ReplicaSet's pods. /version
       # from those pods serves the prior BUILD_SHA. Before declaring this
       # app done, block on `kubectl rollout status`: it only returns 0 when
       # the new ReplicaSet is fully available AND the old pods are torn
