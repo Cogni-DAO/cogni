@@ -63,6 +63,12 @@ jobs:
       TEMPORAL_DB_PASSWORD: ${{ secrets.TEMPORAL_DB_PASSWORD }}
       GHCR_DEPLOY_TOKEN: ${{ secrets.GHCR_DEPLOY_TOKEN }}
       GHCR_USERNAME: Cogni-1729
+      # bug.0344: Argo CD Image Updater git write-back to main. Consumed by
+      # Step 7b in scripts/ci/deploy-infra.sh, which upserts the imperative
+      # `argocd-image-updater-git-creds` Secret in the argocd namespace.
+      # Same PAT that release.yml, promote-and-deploy.yml, promote-to-production.yml,
+      # and flight-preview.yml already use for automated pushes to main.
+      ACTIONS_AUTOMATION_BOT_PAT: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
       GRAFANA_CLOUD_LOKI_URL: ${{ secrets.GRAFANA_CLOUD_LOKI_URL }}
       GRAFANA_CLOUD_LOKI_USER: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
       GRAFANA_CLOUD_LOKI_API_KEY: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}

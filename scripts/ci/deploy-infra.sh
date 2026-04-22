@@ -326,6 +326,12 @@ OPTIONAL_SECRETS=(
     "PRIVY_APP_SECRET"
     "PRIVY_SIGNING_KEY"
     "CONNECTIONS_ENCRYPTION_KEY"
+    # bug.0344: required for Argo CD Image Updater git write-back to main.
+    # Optional (warn-only) during rollout — Step 7b skips gracefully if unset so
+    # legacy callers (e.g. promote-and-deploy.yml preview/prod legs that have
+    # not yet wired this through) don't break. Flip to REQUIRED_SECRETS once
+    # every caller passes it (tracked in bug.0344 § "Deployment impact").
+    "ACTIONS_AUTOMATION_BOT_PAT"
 )
 
 for secret in "${OPTIONAL_SECRETS[@]}"; do
@@ -1039,6 +1045,78 @@ else
 fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 7b: Argo CD Image Updater — secrets + controller reconcile (bug.0344)
+#
+# Idempotent upsert of the two imperative Secrets in the `argocd` namespace
+# (`argocd-image-updater-ghcr`, `argocd-image-updater-git-creds`) and kustomize
+# apply of the pinned v0.15.2 controller. Same `create --dry-run=client -o yaml
+# | apply -f -` pattern as Step 7's per-node secrets — ksops is retired (task.0284).
+#
+# The Argo CD Image Updater kustomize tree was rsynced to
+# /opt/cogni-template-argocd-updater/ by the caller. The full Argo CD tree
+# (ApplicationSets etc.) is still reconciled by promote-and-deploy.yml /
+# candidate-flight.yml via SCP + `kubectl apply -f`; this step is scoped to
+# the image-updater subtree only — the bootstrap that bug.0344 owns.
+#
+# Gracefully skips when:
+#   - argocd namespace is not present (Argo CD not yet installed — early boot),
+#   - kustomize tree is not on the VM (caller didn't rsync — legacy caller path),
+#   - ACTIONS_AUTOMATION_BOT_PAT is unset (legacy caller path during rollout).
+# This invariant — "deploy-infra bootstraps the image updater so the carve-out
+# stays in git, not in a runbook" — is bug.0344's
+# ARGO_CD_IMAGE_UPDATER_BOOTSTRAP_IN_DEPLOY_INFRA.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if command -v kubectl &>/dev/null; then
+  log_info "[$(date -u +%H:%M:%S)] Reconciling Argo CD Image Updater (bug.0344)..."
+
+  if ! kubectl get namespace argocd &>/dev/null; then
+    log_warn "argocd namespace not present — skipping image-updater bootstrap (Argo CD not yet installed on this VM)"
+  elif [[ -z "${ACTIONS_AUTOMATION_BOT_PAT:-}" ]] || [[ -z "${GHCR_DEPLOY_TOKEN:-}" ]] || [[ -z "${GHCR_USERNAME:-}" ]]; then
+    log_warn "image-updater bootstrap skipped: ACTIONS_AUTOMATION_BOT_PAT, GHCR_DEPLOY_TOKEN, and GHCR_USERNAME must all be set (legacy caller path)"
+  else
+    emit_deployment_event "infra_deployment.image_updater_started" "in_progress" "Reconciling image-updater secrets + controller"
+
+    # GHCR credentials — consumed by registries.conf entry
+    #   credentials: secret:argocd/argocd-image-updater-ghcr#token
+    # in infra/k8s/argocd/image-updater/config-patch.yaml.
+    kubectl -n argocd create secret generic argocd-image-updater-ghcr \
+      --from-literal=token="${GHCR_USERNAME}:${GHCR_DEPLOY_TOKEN}" \
+      --dry-run=client -o yaml | kubectl apply -f -
+
+    # Git write-back credentials — consumed by
+    #   write-back-method: git:secret:argocd/argocd-image-updater-git-creds
+    # on preview + candidate-a ApplicationSets. Pusher is Cogni-1729 (admin +
+    # enforce_admins: false carve-out on main); authorship is github-actions[bot]
+    # via the ConfigMap git.user/git.email in config-patch.yaml.
+    kubectl -n argocd create secret generic argocd-image-updater-git-creds \
+      --from-literal=username="${GHCR_USERNAME}" \
+      --from-literal=password="${ACTIONS_AUTOMATION_BOT_PAT}" \
+      --dry-run=client -o yaml | kubectl apply -f -
+
+    log_info "  argocd-image-updater-ghcr + argocd-image-updater-git-creds applied"
+
+    if [[ -d /opt/cogni-template-argocd-updater ]]; then
+      # `kubectl kustomize | apply` matches the one-shot pattern used to
+      # bootstrap Argo CD itself in infra/k8s/argocd/kustomization.yaml —
+      # resolves the https:// pin to the upstream v0.15.2 install manifest
+      # and applies the config-patch overlay in one go.
+      kubectl kustomize /opt/cogni-template-argocd-updater/ | kubectl apply -f -
+
+      # Force controller reload so any rotated secret values are picked up
+      # (the controller caches creds on startup per upstream v0.15.2 docs).
+      kubectl -n argocd rollout restart deployment/argocd-image-updater 2>/dev/null || true
+      if ! kubectl -n argocd rollout status deployment/argocd-image-updater --timeout=120s 2>/dev/null; then
+        log_warn "argocd-image-updater rollout did not complete within 120s (not fatal — continues in background)"
+      fi
+      log_info "  argocd-image-updater controller reconciled (pinned v0.15.2)"
+      emit_deployment_event "infra_deployment.image_updater_complete" "success" "Image updater bootstrap complete"
+    else
+      log_warn "/opt/cogni-template-argocd-updater missing on VM — skipping controller kustomize apply (secrets still upserted)"
+    fi
+  fi
+fi
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 8: Verify deployment
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 log_info "Waiting for containers to be ready..."
@@ -1077,8 +1155,9 @@ if [[ "$DRY_RUN" == "true" ]]; then
     echo "Ref:                $REF (SHA: $REF_SHA)"
     echo "Source worktree:    $SRC_WORKTREE"
     echo "Rsync targets:"
-    echo "    $REPO_ROOT/infra/compose/edge/     → root@$VM_HOST:/opt/cogni-template-edge/"
-    echo "    $REPO_ROOT/infra/compose/runtime/  → root@$VM_HOST:/opt/cogni-template-runtime/"
+    echo "    $REPO_ROOT/infra/compose/edge/                → root@$VM_HOST:/opt/cogni-template-edge/"
+    echo "    $REPO_ROOT/infra/compose/runtime/             → root@$VM_HOST:/opt/cogni-template-runtime/"
+    echo "    $REPO_ROOT/infra/k8s/argocd/image-updater/    → root@$VM_HOST:/opt/cogni-template-argocd-updater/  (bug.0344)"
     echo "Remote script:      $ARTIFACT_DIR/deploy-infra-remote.sh → /tmp/deploy-infra-remote.sh"
     echo "Infra services managed by remote script: postgres, litellm, temporal, alloy, caddy (plus healthchecks)"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -1090,7 +1169,7 @@ fi
 # Deploy bundles to VM via rsync
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 log_info "Deploying edge and runtime bundles to VM..."
-ssh $SSH_OPTS root@"$VM_HOST" "mkdir -p /opt/cogni-template-edge /opt/cogni-template-runtime"
+ssh $SSH_OPTS root@"$VM_HOST" "mkdir -p /opt/cogni-template-edge /opt/cogni-template-runtime /opt/cogni-template-argocd-updater"
 
 # Upload edge bundle (rarely changes - Caddy config only)
 rsync -av -e "ssh $SSH_OPTS" \
@@ -1101,6 +1180,16 @@ rsync -av -e "ssh $SSH_OPTS" \
 rsync -av -e "ssh $SSH_OPTS" \
   "$REPO_ROOT/infra/compose/runtime/" \
   root@"$VM_HOST":/opt/cogni-template-runtime/
+
+# Upload Argo CD Image Updater kustomize tree (bug.0344 — consumed by Step 7b
+# in the remote script). Scoped to the image-updater subtree only; the rest
+# of infra/k8s/argocd/ (ApplicationSets) is reconciled by promote-and-deploy.yml /
+# candidate-flight.yml's own kubectl-apply step.
+if [[ -d "$REPO_ROOT/infra/k8s/argocd/image-updater" ]]; then
+  rsync -av --delete -e "ssh $SSH_OPTS" \
+    "$REPO_ROOT/infra/k8s/argocd/image-updater/" \
+    root@"$VM_HOST":/opt/cogni-template-argocd-updater/
+fi
 
 # OpenClaw config/workspace uploads removed — sandbox-openclaw disabled.
 
@@ -1134,7 +1223,7 @@ log_info "deploy-infra-remote.sh verified on VM (sha256 match)"
 # Execute remote script with env vars
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ssh $SSH_OPTS root@"$VM_HOST" \
-    "DOMAIN='$DOMAIN' APP_ENV='$APP_ENV' DEPLOY_ENVIRONMENT='$DEPLOY_ENVIRONMENT' DATABASE_URL='$DATABASE_URL' DATABASE_SERVICE_URL='$DATABASE_SERVICE_URL' LITELLM_MASTER_KEY='$LITELLM_MASTER_KEY' OPENROUTER_API_KEY='$OPENROUTER_API_KEY' AUTH_SECRET='$AUTH_SECRET' POSTGRES_ROOT_USER='$POSTGRES_ROOT_USER' POSTGRES_ROOT_PASSWORD='$POSTGRES_ROOT_PASSWORD' APP_DB_USER='$APP_DB_USER' APP_DB_PASSWORD='$APP_DB_PASSWORD' APP_DB_SERVICE_USER='$APP_DB_SERVICE_USER' APP_DB_SERVICE_PASSWORD='$APP_DB_SERVICE_PASSWORD' APP_DB_NAME='$APP_DB_NAME' EVM_RPC_URL='$EVM_RPC_URL' TEMPORAL_DB_USER='$TEMPORAL_DB_USER' TEMPORAL_DB_PASSWORD='$TEMPORAL_DB_PASSWORD' GHCR_DEPLOY_TOKEN='$GHCR_DEPLOY_TOKEN' GHCR_USERNAME='$GHCR_USERNAME' GRAFANA_CLOUD_LOKI_URL='${GRAFANA_CLOUD_LOKI_URL:-}' GRAFANA_CLOUD_LOKI_USER='${GRAFANA_CLOUD_LOKI_USER:-}' GRAFANA_CLOUD_LOKI_API_KEY='${GRAFANA_CLOUD_LOKI_API_KEY:-}' METRICS_TOKEN='${METRICS_TOKEN:-}' SCHEDULER_API_TOKEN='${SCHEDULER_API_TOKEN:-}' BILLING_INGEST_TOKEN='${BILLING_INGEST_TOKEN:-}' INTERNAL_OPS_TOKEN='${INTERNAL_OPS_TOKEN:-}' PROMETHEUS_REMOTE_WRITE_URL='${PROMETHEUS_REMOTE_WRITE_URL:-}' PROMETHEUS_USERNAME='${PROMETHEUS_USERNAME:-}' PROMETHEUS_PASSWORD='${PROMETHEUS_PASSWORD:-}' PROMETHEUS_QUERY_URL='${PROMETHEUS_QUERY_URL:-}' PROMETHEUS_READ_USERNAME='${PROMETHEUS_READ_USERNAME:-}' PROMETHEUS_READ_PASSWORD='${PROMETHEUS_READ_PASSWORD:-}' LANGFUSE_PUBLIC_KEY='${LANGFUSE_PUBLIC_KEY:-}' LANGFUSE_SECRET_KEY='${LANGFUSE_SECRET_KEY:-}' LANGFUSE_BASE_URL='${LANGFUSE_BASE_URL:-}' COGNI_REPO_URL='$COGNI_REPO_URL' COGNI_REPO_REF='$COGNI_REPO_REF' GIT_READ_USERNAME='$GIT_READ_USERNAME' GIT_READ_TOKEN='$GIT_READ_TOKEN' OPENCLAW_GATEWAY_TOKEN='$OPENCLAW_GATEWAY_TOKEN' OPENCLAW_GITHUB_RW_TOKEN='${OPENCLAW_GITHUB_RW_TOKEN:-}' GRAFANA_URL='${GRAFANA_URL:-}' GRAFANA_SERVICE_ACCOUNT_TOKEN='${GRAFANA_SERVICE_ACCOUNT_TOKEN:-}' POSTHOG_API_KEY='$POSTHOG_API_KEY' POSTHOG_HOST='$POSTHOG_HOST' DISCORD_BOT_TOKEN='${DISCORD_BOT_TOKEN:-}' GH_OAUTH_CLIENT_ID='${GH_OAUTH_CLIENT_ID:-}' GH_OAUTH_CLIENT_SECRET='${GH_OAUTH_CLIENT_SECRET:-}' DISCORD_OAUTH_CLIENT_ID='${DISCORD_OAUTH_CLIENT_ID:-}' DISCORD_OAUTH_CLIENT_SECRET='${DISCORD_OAUTH_CLIENT_SECRET:-}' GOOGLE_OAUTH_CLIENT_ID='${GOOGLE_OAUTH_CLIENT_ID:-}' GOOGLE_OAUTH_CLIENT_SECRET='${GOOGLE_OAUTH_CLIENT_SECRET:-}' GH_REVIEW_APP_ID='${GH_REVIEW_APP_ID:-}' GH_REVIEW_APP_PRIVATE_KEY_BASE64='${GH_REVIEW_APP_PRIVATE_KEY_BASE64:-}' GH_REPOS='${GH_REPOS:-}' GH_WEBHOOK_SECRET='${GH_WEBHOOK_SECRET:-}' PRIVY_APP_ID='${PRIVY_APP_ID:-}' PRIVY_APP_SECRET='${PRIVY_APP_SECRET:-}' PRIVY_SIGNING_KEY='${PRIVY_SIGNING_KEY:-}' POLY_PROTO_PRIVY_APP_ID='${POLY_PROTO_PRIVY_APP_ID:-}' POLY_PROTO_PRIVY_APP_SECRET='${POLY_PROTO_PRIVY_APP_SECRET:-}' POLY_PROTO_PRIVY_SIGNING_KEY='${POLY_PROTO_PRIVY_SIGNING_KEY:-}' POLY_PROTO_WALLET_ADDRESS='${POLY_PROTO_WALLET_ADDRESS:-}' POLY_CLOB_API_KEY='${POLY_CLOB_API_KEY:-}' POLY_CLOB_API_SECRET='${POLY_CLOB_API_SECRET:-}' POLY_CLOB_PASSPHRASE='${POLY_CLOB_PASSPHRASE:-}' CONNECTIONS_ENCRYPTION_KEY='${CONNECTIONS_ENCRYPTION_KEY:-}' COGNI_NODE_DBS='${COGNI_NODE_DBS:-}' LITELLM_IMAGE='${LITELLM_IMAGE:-ghcr.io/cogni-dao/cogni-template:litellm-b6e4e942cb23}' COMMIT_SHA='${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}' DEPLOY_ACTOR='${GITHUB_ACTOR:-$(whoami)}' bash /tmp/deploy-infra-remote.sh"
+    "DOMAIN='$DOMAIN' APP_ENV='$APP_ENV' DEPLOY_ENVIRONMENT='$DEPLOY_ENVIRONMENT' DATABASE_URL='$DATABASE_URL' DATABASE_SERVICE_URL='$DATABASE_SERVICE_URL' LITELLM_MASTER_KEY='$LITELLM_MASTER_KEY' OPENROUTER_API_KEY='$OPENROUTER_API_KEY' AUTH_SECRET='$AUTH_SECRET' POSTGRES_ROOT_USER='$POSTGRES_ROOT_USER' POSTGRES_ROOT_PASSWORD='$POSTGRES_ROOT_PASSWORD' APP_DB_USER='$APP_DB_USER' APP_DB_PASSWORD='$APP_DB_PASSWORD' APP_DB_SERVICE_USER='$APP_DB_SERVICE_USER' APP_DB_SERVICE_PASSWORD='$APP_DB_SERVICE_PASSWORD' APP_DB_NAME='$APP_DB_NAME' EVM_RPC_URL='$EVM_RPC_URL' TEMPORAL_DB_USER='$TEMPORAL_DB_USER' TEMPORAL_DB_PASSWORD='$TEMPORAL_DB_PASSWORD' GHCR_DEPLOY_TOKEN='$GHCR_DEPLOY_TOKEN' GHCR_USERNAME='$GHCR_USERNAME' GRAFANA_CLOUD_LOKI_URL='${GRAFANA_CLOUD_LOKI_URL:-}' GRAFANA_CLOUD_LOKI_USER='${GRAFANA_CLOUD_LOKI_USER:-}' GRAFANA_CLOUD_LOKI_API_KEY='${GRAFANA_CLOUD_LOKI_API_KEY:-}' METRICS_TOKEN='${METRICS_TOKEN:-}' SCHEDULER_API_TOKEN='${SCHEDULER_API_TOKEN:-}' BILLING_INGEST_TOKEN='${BILLING_INGEST_TOKEN:-}' INTERNAL_OPS_TOKEN='${INTERNAL_OPS_TOKEN:-}' PROMETHEUS_REMOTE_WRITE_URL='${PROMETHEUS_REMOTE_WRITE_URL:-}' PROMETHEUS_USERNAME='${PROMETHEUS_USERNAME:-}' PROMETHEUS_PASSWORD='${PROMETHEUS_PASSWORD:-}' PROMETHEUS_QUERY_URL='${PROMETHEUS_QUERY_URL:-}' PROMETHEUS_READ_USERNAME='${PROMETHEUS_READ_USERNAME:-}' PROMETHEUS_READ_PASSWORD='${PROMETHEUS_READ_PASSWORD:-}' LANGFUSE_PUBLIC_KEY='${LANGFUSE_PUBLIC_KEY:-}' LANGFUSE_SECRET_KEY='${LANGFUSE_SECRET_KEY:-}' LANGFUSE_BASE_URL='${LANGFUSE_BASE_URL:-}' COGNI_REPO_URL='$COGNI_REPO_URL' COGNI_REPO_REF='$COGNI_REPO_REF' GIT_READ_USERNAME='$GIT_READ_USERNAME' GIT_READ_TOKEN='$GIT_READ_TOKEN' OPENCLAW_GATEWAY_TOKEN='$OPENCLAW_GATEWAY_TOKEN' OPENCLAW_GITHUB_RW_TOKEN='${OPENCLAW_GITHUB_RW_TOKEN:-}' GRAFANA_URL='${GRAFANA_URL:-}' GRAFANA_SERVICE_ACCOUNT_TOKEN='${GRAFANA_SERVICE_ACCOUNT_TOKEN:-}' POSTHOG_API_KEY='$POSTHOG_API_KEY' POSTHOG_HOST='$POSTHOG_HOST' DISCORD_BOT_TOKEN='${DISCORD_BOT_TOKEN:-}' GH_OAUTH_CLIENT_ID='${GH_OAUTH_CLIENT_ID:-}' GH_OAUTH_CLIENT_SECRET='${GH_OAUTH_CLIENT_SECRET:-}' DISCORD_OAUTH_CLIENT_ID='${DISCORD_OAUTH_CLIENT_ID:-}' DISCORD_OAUTH_CLIENT_SECRET='${DISCORD_OAUTH_CLIENT_SECRET:-}' GOOGLE_OAUTH_CLIENT_ID='${GOOGLE_OAUTH_CLIENT_ID:-}' GOOGLE_OAUTH_CLIENT_SECRET='${GOOGLE_OAUTH_CLIENT_SECRET:-}' GH_REVIEW_APP_ID='${GH_REVIEW_APP_ID:-}' GH_REVIEW_APP_PRIVATE_KEY_BASE64='${GH_REVIEW_APP_PRIVATE_KEY_BASE64:-}' GH_REPOS='${GH_REPOS:-}' GH_WEBHOOK_SECRET='${GH_WEBHOOK_SECRET:-}' PRIVY_APP_ID='${PRIVY_APP_ID:-}' PRIVY_APP_SECRET='${PRIVY_APP_SECRET:-}' PRIVY_SIGNING_KEY='${PRIVY_SIGNING_KEY:-}' POLY_PROTO_PRIVY_APP_ID='${POLY_PROTO_PRIVY_APP_ID:-}' POLY_PROTO_PRIVY_APP_SECRET='${POLY_PROTO_PRIVY_APP_SECRET:-}' POLY_PROTO_PRIVY_SIGNING_KEY='${POLY_PROTO_PRIVY_SIGNING_KEY:-}' POLY_PROTO_WALLET_ADDRESS='${POLY_PROTO_WALLET_ADDRESS:-}' POLY_CLOB_API_KEY='${POLY_CLOB_API_KEY:-}' POLY_CLOB_API_SECRET='${POLY_CLOB_API_SECRET:-}' POLY_CLOB_PASSPHRASE='${POLY_CLOB_PASSPHRASE:-}' CONNECTIONS_ENCRYPTION_KEY='${CONNECTIONS_ENCRYPTION_KEY:-}' COGNI_NODE_DBS='${COGNI_NODE_DBS:-}' ACTIONS_AUTOMATION_BOT_PAT='${ACTIONS_AUTOMATION_BOT_PAT:-}' LITELLM_IMAGE='${LITELLM_IMAGE:-ghcr.io/cogni-dao/cogni-template:litellm-b6e4e942cb23}' COMMIT_SHA='${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}' DEPLOY_ACTOR='${GITHUB_ACTOR:-$(whoami)}' bash /tmp/deploy-infra-remote.sh"
 
 emit_deployment_event "infra_deployment.complete" "success" "Infrastructure deployment completed"
 log_info "Infrastructure deployment complete!"

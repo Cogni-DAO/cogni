@@ -17,68 +17,53 @@ Every Application carries two image aliases pointing at **distinct GHCR packages
 
 Every commit is prefixed `chore(deps): argocd-image-updater` so `git log --grep='argocd-image-updater' -- infra/k8s/overlays/` is the controller-specific audit filter, and `git log --author='github-actions\[bot\]' -- infra/k8s/overlays/` is the broader CI-bot audit filter.
 
-## One-time bootstrap
+## Bootstrap: automated via `deploy-infra.sh` (the only supported path)
 
-Run these once per cluster. Both credentials reuse existing repo-wide values — nothing new needs minting.
+The Argo CD Image Updater bootstrap is **not** a standalone runbook step you run once by hand — it's **Step 7b** of `scripts/ci/deploy-infra.sh`, idempotent, and re-runs on every infra lever dispatch (invariant `ARGO_CD_IMAGE_UPDATER_BOOTSTRAP_IN_DEPLOY_INFRA` in bug.0344). Every dispatch of `candidate-flight-infra.yml` (candidate-a) and the `deploy-infra` job in `promote-and-deploy.yml` (preview/production) does all of the following:
 
-### 1. Create the two Kubernetes secrets imperatively
+1. `rsync infra/k8s/argocd/image-updater/ → root@$VM_HOST:/opt/cogni-template-argocd-updater/`.
+2. Upserts the two `argocd`-namespace Secrets (`argocd-image-updater-ghcr` + `argocd-image-updater-git-creds`) via `kubectl create secret generic ... | kubectl apply -f -` — same pattern as the per-node app secrets in Step 7. ksops was retired (`infra/provision/cherry/base/bootstrap.yaml`, task.0284 ESO migration), so these Secrets are **not** committed to git; they're rotated into the cluster directly from GitHub Environment secrets at CD time.
+3. `kubectl kustomize /opt/cogni-template-argocd-updater/ | kubectl apply -f -` — pulls the upstream `v0.15.2` install manifest + applies the local `config-patch.yaml` (GHCR registry, commit authorship, commit-message template).
+4. `kubectl rollout restart deployment/argocd-image-updater -n argocd` + `kubectl rollout status … --timeout=120s` — forces the controller to pick up rotated Secret values immediately (the controller caches creds on startup per upstream v0.15.2 docs).
 
-ksops was retired from this repo's Argo CD bootstrap (see `infra/provision/cherry/base/bootstrap.yaml`, task.0284 ESO migration). The Image Updater's two credentials are therefore created with `kubectl create secret generic --dry-run=client -o yaml | kubectl apply -f -` — the same idempotent-apply pattern `scripts/ci/deploy-infra.sh` uses for every other node secret. They are **not** committed to git.
+The two GitHub-Environment secrets that feed this path (same ones that already power other automated pushes to main):
 
-Export the two values from your env (or 1Password), then apply both:
+- `GHCR_DEPLOY_TOKEN` — GHCR `read:packages` PAT, shared with every other pull consumer.
+- `ACTIONS_AUTOMATION_BOT_PAT` — git push PAT (`Cogni-1729`), shared with `release.yml`, `promote-to-production.yml`, `promote-and-deploy.yml`, and `flight-preview.yml`.
 
-```bash
-# GHCR read:packages PAT — same value used by every other pull consumer.
-export GHCR_DEPLOY_TOKEN="<paste from secret store>"
-
-# Git push PAT — same ACTIONS_AUTOMATION_BOT_PAT used by release.yml,
-# promote-to-production.yml, promote-and-deploy.yml, flight-preview.yml.
-export ACTIONS_AUTOMATION_BOT_PAT="<paste from secret store>"
-
-# GHCR creds — Opaque Secret with `token` key; matches
-# `credentials: secret:argocd/argocd-image-updater-ghcr#token` in config-patch.yaml.
-kubectl -n argocd create secret generic argocd-image-updater-ghcr \
-  --from-literal=token="Cogni-1729:${GHCR_DEPLOY_TOKEN}" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-# Git push creds — Opaque Secret with `username` + `password` keys; matches
-# `write-back-method: git:secret:argocd/argocd-image-updater-git-creds` in
-# preview-applicationset.yaml.
-kubectl -n argocd create secret generic argocd-image-updater-git-creds \
-  --from-literal=username="Cogni-1729" \
-  --from-literal=password="${ACTIONS_AUTOMATION_BOT_PAT}" \
-  --dry-run=client -o yaml | kubectl apply -f -
-```
-
-These two commands are safe to re-run — `create --dry-run=client -o yaml | apply` upserts.
-
-### 2. Apply the argocd Kustomize tree
-
-This is the same one-shot hand-apply that bootstraps Argo CD itself. The Image Updater install slots in alongside:
+Adding the image-updater controller or rotating either PAT is therefore a **workflow dispatch**, not a kubectl session:
 
 ```bash
-kubectl kustomize infra/k8s/argocd/ | kubectl apply -f -
-kubectl rollout status deployment/argocd-image-updater -n argocd --timeout=2m
+# candidate-a:
+gh workflow run candidate-flight-infra.yml
+
+# preview / production (full promotion):
+gh workflow run promote-and-deploy.yml -f environment=preview -f head_sha=<sha>
 ```
 
-### 3. Confirm it's scanning
+Step 7b skips gracefully (and logs a warning, not an error) when the `argocd` namespace doesn't exist yet (very first cluster bootstrap, before Argo CD itself is installed), when any of the three required env vars (`ACTIONS_AUTOMATION_BOT_PAT` / `GHCR_DEPLOY_TOKEN` / `GHCR_USERNAME`) are unset (legacy caller during rollout), or when `/opt/cogni-template-argocd-updater/` isn't on the VM (caller didn't rsync). **Do not copy the manual kubectl commands into a wiki page and have ops run them by hand** — every hand-applied command that isn't in `deploy-infra.sh` is a drift risk by construction (the dedicated [Deterministic reproducibility](../../AGENTS.md#workflow-guiding-principles) principle).
+
+### Pre-flight (run once when bootstrapping a fresh cluster)
+
+Two prerequisites must hold before Step 7b can succeed on a new cluster:
+
+1. **Argo CD itself must be installed** (the `argocd` namespace + `install.yaml` from `infra/k8s/argocd/kustomization.yaml`) — bootstrap path lives in `infra/provision/cherry/base/bootstrap.yaml` and `scripts/setup/provision-test-vm.sh`. Until that lands on the VM, Step 7b no-ops harmlessly.
+2. **The main-branch carve-out must be in place** — admin + `enforce_admins: false` on `main`'s branch protection. The image updater's write-back silently 403s every commit otherwise, into a log no one reads:
+
+   ```bash
+   gh api repos/cogni-dao/cogni-template/branches/main/protection \
+     | jq -e '.enforce_admins.enabled == false'
+   ```
+
+   If this returns `false` (the jq assertion fails), stop. Either restore the carve-out or decline to enable the image updater until there's an explicit decision about how writes to `main` will authenticate.
+
+### Confirm it's scanning (post-dispatch)
 
 ```bash
-kubectl logs -n argocd deployment/argocd-image-updater --tail=50 | grep -i 'considering\|updated image'
+ssh root@<vm-host> "kubectl logs -n argocd deployment/argocd-image-updater --tail=50 | grep -i 'considering\|updated image'"
 ```
 
-Within one poll cycle (≤2 minutes) you should see `considering image` lines for each annotated Application across **both** environments: `preview-{operator,poly,resy,scheduler-worker}` and `candidate-a-{operator,poly,resy,scheduler-worker}`.
-
-### Pre-flight: confirm the main-branch carve-out is still in place
-
-The image updater's write-back path relies on the existing admin + `enforce_admins: false` carve-out on `main` that PR merges already use. If that protection ever flips, the image updater will silently 403 every commit into a log no one reads. Run once per bootstrap:
-
-```bash
-gh api repos/cogni-dao/cogni-template/branches/main/protection \
-  | jq -e '.enforce_admins.enabled == false'
-```
-
-If this returns `false` (the jq assertion fails), stop. Either restore the carve-out or decline to enable the image updater until there's an explicit decision about how writes to `main` will authenticate.
+Within one poll cycle (≤2 minutes after the workflow finishes) you should see `considering image` lines for each annotated Application across **both** environments: `preview-{operator,poly,resy,scheduler-worker}` and `candidate-a-{operator,poly,resy,scheduler-worker}`.
 
 ## Smoke test (end-to-end)
 
@@ -163,30 +148,25 @@ The bespoke anti-pattern `promote-k8s-image.sh` still works for every environmen
 
 ## PAT rotation
 
-When `ACTIONS_AUTOMATION_BOT_PAT` rotates (see `docs/runbooks/SECRET_ROTATION.md`):
+Rotations land via the same workflow dispatch that bootstrapped the controller — there is no out-of-band kubectl command. Both PATs (`ACTIONS_AUTOMATION_BOT_PAT`, `GHCR_DEPLOY_TOKEN`) live only as GitHub Environment secrets; rotating them in the Environment and re-dispatching `candidate-flight-infra.yml` (for candidate-a) or `promote-and-deploy.yml` (for preview/production) lets `deploy-infra.sh` Step 7b upsert the new values into the cluster and restart the controller to pick them up. Procedure:
 
-```bash
-export ACTIONS_AUTOMATION_BOT_PAT="<new value>"
+1. Rotate the PAT upstream (GitHub → Settings → Developer settings → Personal access tokens, or per `docs/runbooks/SECRET_ROTATION.md`).
+2. Update the GitHub Environment secret (`candidate-a` + `preview` + `production` Environments for `ACTIONS_AUTOMATION_BOT_PAT`; same environments plus any other GHCR-pulling workflow envs for `GHCR_DEPLOY_TOKEN`).
+3. Dispatch the infra lever for each affected environment:
 
-# Re-apply the Secret (idempotent upsert).
-kubectl -n argocd create secret generic argocd-image-updater-git-creds \
-  --from-literal=username="Cogni-1729" \
-  --from-literal=password="${ACTIONS_AUTOMATION_BOT_PAT}" \
-  --dry-run=client -o yaml | kubectl apply -f -
+   ```bash
+   gh workflow run candidate-flight-infra.yml               # candidate-a
+   gh workflow run promote-and-deploy.yml -f environment=preview -f head_sha=<current-main-sha>
+   gh workflow run promote-and-deploy.yml -f environment=production -f head_sha=<current-prod-sha>
+   ```
 
-# Force controller reload (it caches creds on startup).
-kubectl rollout restart deployment/argocd-image-updater -n argocd
-```
+4. Confirm the controller picked up the new credentials:
 
-Same procedure for `GHCR_DEPLOY_TOKEN`:
+   ```bash
+   ssh root@<vm-host> "kubectl logs -n argocd deployment/argocd-image-updater --tail=20 | grep -iE 'successfully|401|403'"
+   ```
 
-```bash
-export GHCR_DEPLOY_TOKEN="<new value>"
-kubectl -n argocd create secret generic argocd-image-updater-ghcr \
-  --from-literal=token="Cogni-1729:${GHCR_DEPLOY_TOKEN}" \
-  --dry-run=client -o yaml | kubectl apply -f -
-kubectl rollout restart deployment/argocd-image-updater -n argocd
-```
+Step 7b is idempotent, so re-dispatching without a rotation is a safe no-op.
 
 ## Upgrades
 

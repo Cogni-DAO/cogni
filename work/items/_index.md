@@ -74,6 +74,7 @@
 | 1 | 1 | 1 | needs_merge | bug.0320 | flight-preview silently skips every auto-triggered run — gh api commits/{sha}/pulls is eventually consistent | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 2 | needs_merge | bug.0321 | CICD silent-green: remaining paths that report success without verifying deploy state | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 1 | needs_closeout | task.0341 | verify-buildsha polling: close the pod-cutover race | Observability Hardening | proj.observability-hardening |
+| 1 | 1 | 0 | needs_closeout | task.0345 | candidate-flight-infra: default to dispatch ref so PR branches can be flown | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD Pipeline | proj.cicd-services-gitops |
