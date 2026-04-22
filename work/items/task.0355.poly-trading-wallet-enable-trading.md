@@ -173,6 +173,7 @@ Subsidized gas, Safe+4337, approval revocation UI, lazy on-chain re-check, agent
 
 ## Notes
 
+- **Automated `ensureTradingApprovals` / full onboarding E2E ladder** is tracked separately — defer to [task.0356](./task.0356.poly-wallet-onboarding-trading-e2e-test-suite.md) (implementation-review gap on PR #992).
 - **Blocks `task.0318.deploy_verified: true`.** The Phase B3 code gate is green (PR #990 in review). The feature gate requires a real user to trade end-to-end on candidate-a, which requires this task. Every day this sits in triage is a day the Phase B3 deployment stays unverifiable.
 - **Supersedes bug.0335 operationally.** `bug.0335` was scoped to the single-operator prototype wallet, which is now purged. Its root cause (missing approvals on the trading EOA) applies identically to every per-tenant wallet — this task is the productized fix. Close `bug.0335` with a reference to this task once this ships.
 - **Pairs with task.0352.** Fund flow (task.0352) lands USDC.e + POL into the tenant wallet in one click. v0 of this task (0355) requires the user to bring POL. If 0352 lands first, the Enable Trading button becomes reachable automatically on a fresh provision. If 0355 lands first, users onboard via a two-step (fund POL manually → enable) and 0352 compresses to one click.

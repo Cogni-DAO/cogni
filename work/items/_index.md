@@ -208,6 +208,7 @@
 | 2 | 25 | 3 | needs_triage | task.0354 | Poly trading hardening — post-B3 cleanup + executor cache + cap-source robustness | Cogni Poly | proj.poly-copy-trading |
 | 2 | 30 | 1 | needs_implement | bug.0168 | App container uses seccomp=unconfined for TigerBeetle io_uring — replace with targeted profile | AI Operator Wallet | proj.ai-operator-wallet |
 | 2 | 30 | 1 | needs_merge | bug.0339 | Tenant context missing from request-envelope logs — Loki can't slice by user/billing |  |  |
+| 2 | 30 | 5 | needs_triage | task.0356 | Poly — automated E2E suite: wallet onboarding + trading execution |  |  |
 | 2 | 50 | 2 | needs_implement | task.0134 | EIP-4824 daoURI v0 — lightweight DAOstar metadata endpoint | Financial Ledger | proj.financial-ledger |
 | 2 | 50 | 2 | needs_merge | task.0324 | Per-node DB schema split (minimal — no new tooling) | Database Operations | proj.database-ops |
 | 2 | 50 | 3 | needs_triage | bug.0330 | poly /api/v1/chat/completions intermittently returns empty body on candidate-a | CI/CD Pipeline | proj.cicd-services-gitops |
