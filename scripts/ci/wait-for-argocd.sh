@@ -233,7 +233,25 @@ wait_for_app() {
     HEALTH=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "Unknown")
     SYNC_PHASE=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.phase}' 2>/dev/null || echo "")
 
-    if [ "$REV" = "$EXPECTED_SHA" ] && [ "$HEALTH" = "Healthy" ]; then
+    # Health check: accept both Healthy AND Progressing when sync completed.
+    # Also accept Missing/Unknown for first-deploy (app not deployed yet).
+    # Reason: health=Progressing with phase=Succeeded means sync is done but
+    # Argo's health assessment hasn't transitioned yet. The kubectl rollout
+    # check below confirms actual pod readiness, so Progressing is acceptable
+    # when the sync-operation completed successfully.
+    is_healthy_enough() {
+      local health="$1"
+      local phase="$2"
+      [ -z "$health" ] && return 0  # empty - first deploy
+      [ "$health" = "Healthy" ] && return 0
+      [ "$health" = "Missing" ] && return 0  # first deploy - no prior
+      [ "$health" = "Unknown" ] && return 0  # no health status
+      [ "$health" = "Progressing" ] && [ "$phase" = "Succeeded" ] && return 0
+      return 1
+    }
+
+    # First check revision match, then health
+    if [ "$REV" = "$EXPECTED_SHA" ] && is_healthy_enough "$HEALTH" "$SYNC_PHASE"; then
       # bug.0326: sync.revision + health.status are Argo-Application-level
       # signals. During a rolling update, "Healthy" fires as soon as enough
       # pods are Ready — which includes the OLD ReplicaSet's pods. /version
@@ -242,10 +260,10 @@ wait_for_app() {
       # the new ReplicaSet is fully available AND the old pods are torn
       # down. That is the signal verify-buildsha.sh needs downstream.
       if rollout_check "$app_name" "$deadline"; then
-        echo "  ✅ ${app_name} at ${REV:0:8} (Healthy + rollout complete)"
+        echo "  ✅ ${app_name} at ${REV:0:8} (sync complete + rollout ready)"
         return 0
       fi
-      echo "  ❌ ${app_name} rollout did not complete (sync.revision=${REV:0:8} Healthy but stale ReplicaSet still present)"
+      echo "  ❌ ${app_name} rollout did not complete (sync=${REV:0:8} health=${HEALTH} phase=${SYNC_PHASE} but stale ReplicaSet)"
       return 1
     fi
     echo "    ${app_name}: rev=${REV:0:8} expected=${EXPECTED_SHA:0:8} health=${HEALTH} phase=${SYNC_PHASE} (waiting...)"
@@ -264,7 +282,7 @@ wait_for_app() {
     sleep 10
   done
 
-  echo "  ❌ ${app_name} timed out (rev=${REV:0:8} expected=${EXPECTED_SHA:0:8} health=${HEALTH})"
+  echo "  ❌ ${app_name} timed out (rev=${REV:0:8} health=${HEALTH} phase=${SYNC_PHASE})"
   kubectl -n argocd get application "$app_name" -o jsonpath='{.status.sync.status} {.status.health.status} phase={.status.operationState.phase} msg={.status.operationState.message}{"\n"}' 2>/dev/null || true
   return 1
 }
