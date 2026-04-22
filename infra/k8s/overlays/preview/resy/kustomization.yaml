@@ -8,9 +8,9 @@ resources:
 namePrefix: resy-
 images:
 - name: ghcr.io/cogni-dao/cogni-template
-  newTag: preview-65cf2e978277c2fd92ef2f7d21c2f4c44cedb383-resy
+  newTag: preview-fc25e68f59a0552eaab8e74697c51e34f6dea4f0-resy
 - name: ghcr.io/cogni-dao/cogni-template-migrate
-  newTag: preview-12fa1c3f14162492422aa221b8eae1f58c73428b-resy-migrate
+  newTag: preview-fc25e68f59a0552eaab8e74697c51e34f6dea4f0-resy-migrate
 patches:
 # Node-specific ConfigMap values.
 # DNS names must match prefixed Service names (namePrefix applies to all resources).
