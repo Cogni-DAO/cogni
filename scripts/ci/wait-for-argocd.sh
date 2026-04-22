@@ -25,11 +25,13 @@
 # only returns 0 when the new ReplicaSet is fully available AND the old
 # pods are torn down. Only then is the app considered done.
 #
-# Belt-and-suspenders active sync trigger: if an app's sync.revision has not
-# caught up to EXPECTED_SHA after ACTIVE_SYNC_AFTER seconds, we kubectl-patch
-# the Application to kick an explicit sync. This unblocks deploys in clusters
-# where automated sync is misconfigured or the AppSet template drifted (the
-# case that wedged preview for a week on deploy/staging pre-bug.0312).
+# Belt-and-suspenders active sync: if an app's reported revision has not
+# caught up to EXPECTED_SHA, we (1) request a hard git refresh on the
+# Application, (2) kubectl-patch a hook sync operation. The first kick (after
+# ACTIVE_SYNC_AFTER) also deletes stale PreSync hook Jobs so Argo cannot wedge
+# on sticky Jobs; subsequent kicks repeat refresh + patch every SYNC_KICK_INTERVAL
+# until the deadline. A single silent patch was not enough on candidate-a when
+# the controller ignored the first operation (2026-04 flight stalls).
 #
 # Usage: wait-for-argocd.sh
 # Env:
@@ -47,8 +49,9 @@
 #                       in this run may legitimately be pinned at prior digest
 #                       (e.g. sandbox-openclaw placeholder) and would false-fail.
 #   ARGOCD_TIMEOUT      (optional, default 300) overall timeout in seconds
-#   ACTIVE_SYNC_AFTER   (optional, default 30) seconds of no-progress before
-#                       triggering an active sync via kubectl patch
+#   ACTIVE_SYNC_AFTER   (optional, default 30) seconds before the first Argo kick
+#   SYNC_KICK_INTERVAL  (optional, default 45) seconds between subsequent kicks
+#                       while revision still mismatches (hard refresh + sync op)
 #   SSH_OPTS            (optional) ssh flags
 #
 # Side-effect on success: writes ARGOCD_SYNC_VERIFIED=true to $GITHUB_ENV
@@ -63,7 +66,10 @@ EXPECTED_SHA="${EXPECTED_SHA:?EXPECTED_SHA is required (deploy-branch tip SHA)}"
 SSH_OPTS="${SSH_OPTS:--i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6}"
 ARGOCD_TIMEOUT="${ARGOCD_TIMEOUT:-300}"
 ACTIVE_SYNC_AFTER="${ACTIVE_SYNC_AFTER:-30}"
+SYNC_KICK_INTERVAL="${SYNC_KICK_INTERVAL:-45}"
 PROMOTED_APPS="${PROMOTED_APPS:-}"
+
+EXPECTED_SHA=$(printf '%s' "$EXPECTED_SHA" | tr '[:upper:]' '[:lower:]')
 
 # If caller specified which apps were promoted, wait only for those.
 # Apps not promoted in this run keep their existing overlay digest and are
@@ -85,13 +91,16 @@ cat > "$REMOTE_SCRIPT" <<'REMOTESCRIPT'
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Args: DEPLOY_ENVIRONMENT EXPECTED_SHA ARGOCD_TIMEOUT ACTIVE_SYNC_AFTER app1 app2 ...
+# Args: DEPLOY_ENVIRONMENT EXPECTED_SHA ARGOCD_TIMEOUT ACTIVE_SYNC_AFTER SYNC_KICK_INTERVAL app1 ...
 DEPLOY_ENVIRONMENT="$1"
 EXPECTED_SHA="$2"
 ARGOCD_TIMEOUT="$3"
 ACTIVE_SYNC_AFTER="$4"
-shift 4
+SYNC_KICK_INTERVAL="$5"
+shift 5
 APPS=("$@")
+
+EXPECTED_SHA=$(printf '%s' "$EXPECTED_SHA" | tr '[:upper:]' '[:lower:]')
 
 # Early exit: if Application CRD doesn't exist, skip entirely (first deploy / no Argo)
 if ! kubectl get crd applications.argoproj.io &>/dev/null; then
@@ -176,25 +185,51 @@ delete_stale_hook_jobs() {
   done
 }
 
-trigger_sync() {
+# Prefer status.sync.revision; fall back to last successful operation revision
+# (some Argo states leave sync.revision empty while a sync completed).
+get_app_revision() {
   local app_name="$1"
-  delete_stale_hook_jobs "$app_name"
-  echo "    ⚡ triggering active sync on ${app_name}"
-  kubectl -n argocd patch application "$app_name" --type=merge -p \
-    '{"operation":{"sync":{"syncStrategy":{"hook":{"force":false}}}}}' >/dev/null 2>&1 || true
+  local r=""
+  r=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.sync.revision}' 2>/dev/null || true)
+  r=$(printf '%s' "$r" | tr -d '[:space:]')
+  if [ -z "$r" ]; then
+    r=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.syncResult.revision}' 2>/dev/null || true)
+    r=$(printf '%s' "$r" | tr -d '[:space:]')
+  fi
+  printf '%s' "$r" | tr '[:upper:]' '[:lower:]'
+}
+
+# Force repo-server to re-resolve the deploy branch (stale cache wedged flights).
+request_hard_refresh() {
+  local app_name="$1"
+  local out
+  if ! out=$(kubectl -n argocd patch application "$app_name" --type=merge -p \
+    '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}' 2>&1); then
+    echo "    ⚠️  hard-refresh annotation patch failed for ${app_name}: $out" >&2
+  fi
+}
+
+patch_sync_operation() {
+  local app_name="$1"
+  local out
+  if ! out=$(kubectl -n argocd patch application "$app_name" --type=merge -p \
+    '{"operation":{"sync":{"syncStrategy":{"hook":{"force":false}}}}}' 2>&1); then
+    echo "    ⚠️  sync operation patch failed for ${app_name}: $out" >&2
+    return 1
+  fi
+  return 0
 }
 
 # Poll a single app until it reports EXPECTED_SHA on sync.revision AND is Healthy,
-# OR until the overall deadline is hit. Triggers an active sync after
-# ACTIVE_SYNC_AFTER seconds of no progress.
+# OR until the overall deadline is hit. Re-kicks Argo periodically while mismatched.
 wait_for_app() {
   local app_name="$1"
   local deadline="$2"
-  local active_triggered=0
-  local active_deadline=$((SECONDS + ACTIVE_SYNC_AFTER))
+  local next_kick=$((SECONDS + ACTIVE_SYNC_AFTER))
+  local kick_count=0
 
   while [ $SECONDS -lt "$deadline" ]; do
-    REV=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.sync.revision}' 2>/dev/null || echo "")
+    REV=$(get_app_revision "$app_name")
     HEALTH=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "Unknown")
     SYNC_PHASE=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.phase}' 2>/dev/null || echo "")
 
@@ -215,16 +250,22 @@ wait_for_app() {
     fi
     echo "    ${app_name}: rev=${REV:0:8} expected=${EXPECTED_SHA:0:8} health=${HEALTH} phase=${SYNC_PHASE} (waiting...)"
 
-    # Active-sync trigger: fire once, only after first grace period with no progress.
-    if [ "$active_triggered" -eq 0 ] && [ $SECONDS -ge "$active_deadline" ]; then
-      trigger_sync "$app_name"
-      active_triggered=1
+    if [ $SECONDS -ge "$next_kick" ]; then
+      kick_count=$((kick_count + 1))
+      echo "    ⚡ ${app_name}: Argo reconcile kick #${kick_count} (hard refresh + hook sync)"
+      request_hard_refresh "$app_name"
+      if [ "$kick_count" -eq 1 ]; then
+        delete_stale_hook_jobs "$app_name"
+      fi
+      patch_sync_operation "$app_name" || true
+      next_kick=$((SECONDS + SYNC_KICK_INTERVAL))
     fi
 
     sleep 10
   done
 
   echo "  ❌ ${app_name} timed out (rev=${REV:0:8} expected=${EXPECTED_SHA:0:8} health=${HEALTH})"
+  kubectl -n argocd get application "$app_name" -o jsonpath='{.status.sync.status} {.status.health.status} phase={.status.operationState.phase} msg={.status.operationState.message}{"\n"}' 2>/dev/null || true
   return 1
 }
 
@@ -255,7 +296,7 @@ rm -f "$REMOTE_SCRIPT"
 
 # shellcheck disable=SC2086
 ssh $SSH_OPTS root@"$VM_HOST" \
-  "bash /tmp/wait-for-argocd-remote.sh '$DEPLOY_ENVIRONMENT' '$EXPECTED_SHA' '$ARGOCD_TIMEOUT' '$ACTIVE_SYNC_AFTER' ${APPS[*]}; RC=\$?; rm -f /tmp/wait-for-argocd-remote.sh; exit \$RC"
+  "bash /tmp/wait-for-argocd-remote.sh '$DEPLOY_ENVIRONMENT' '$EXPECTED_SHA' '$ARGOCD_TIMEOUT' '$ACTIVE_SYNC_AFTER' '$SYNC_KICK_INTERVAL' ${APPS[*]}; RC=\$?; rm -f /tmp/wait-for-argocd-remote.sh; exit \$RC"
 
 # Gate-ordering invariant (bug.0321 Fix 4): signal downstream steps in the
 # same job that Argo sync was verified at EXPECTED_SHA. wait-for-candidate-ready.sh
