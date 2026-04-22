@@ -49,7 +49,7 @@ Reference interaction patterns:
 
 Each stage is a real signal, not a ceremony. Skipping a stage does not save time — it just moves the failure later.
 
-- **During iteration:** `pnpm check:fast` — typecheck + lint/format auto-fix + unit. Run targeted tests for what you changed.
+- **During iteration:** `pnpm check:fast:fix` auto-fixes lint/format and runs typecheck + unit; `pnpm check:fast` is the strict (verify-only) variant the pre-push hook runs. If `check:fast` fails with drift, run `check:fast:fix`, commit the result, and retry.
 - **Pre-commit:** `pnpm check` — once per session, never repeated. The full static gate.
 - **Pre-merge (CI):** `pnpm check:full` (~20 min). Stack-test success is the required CI gate. Check PR status after push.
 - **Post-merge:** flight to `candidate-a` → exercise the feature on the live URL → read your own request back out of Loki → `deploy_verified: true`. This is the gate that actually proves the feature exists.
@@ -120,7 +120,8 @@ Essentials only — full catalog in [Developer Setup](docs/guides/developer-setu
 pnpm dev:stack                # primary dev loop (operator + infra)
 pnpm dev:stack:full           # operator + all nodes + infra
 pnpm dev:stack:test           # dev server + infra for stack tests
-pnpm check:fast               # iteration gate (typecheck + lint/format fix + unit)
+pnpm check:fast               # strict iteration gate — verify-only, no mutation (pre-push runs this)
+pnpm check:fast:fix           # auto-fix variant — applies lint/format fixes, fails on residual drift
 pnpm check                    # pre-commit gate — once per session
 pnpm check:full               # CI-parity gate (~20 min)
 pnpm test:component           # component tests (isolated testcontainers)
@@ -128,3 +129,5 @@ pnpm test:stack:dev           # stack tests (requires dev:stack:test running)
 ```
 
 `:fast` variants skip Docker rebuilds for faster startup.
+
+trailing whitespace line

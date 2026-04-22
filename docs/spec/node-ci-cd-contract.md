@@ -79,11 +79,12 @@ Define the CI/CD invariants, merge gate, and file ownership boundaries that ensu
 
 ### Local Gates
 
-| Command           | Script                  | Purpose                                                                  |
-| ----------------- | ----------------------- | ------------------------------------------------------------------------ |
-| `pnpm check:fast` | `scripts/check-fast.sh` | Iteration gate: typecheck + lint/format fix + unit tests                 |
-| `pnpm check`      | `scripts/check-all.sh`  | Pre-commit gate: typecheck + lint + format + unit/contract + docs + arch |
-| `pnpm check:full` | `scripts/check-full.sh` | CI parity: Docker build + stack + all test suites (~20 min)              |
+| Command               | Script                        | Purpose                                                                  |
+| --------------------- | ----------------------------- | ------------------------------------------------------------------------ |
+| `pnpm check:fast`     | `scripts/check-fast.sh`       | Strict iteration gate (pre-push): verify-only, fails on any drift        |
+| `pnpm check:fast:fix` | `scripts/check-fast.sh --fix` | Auto-fix variant: rewrites lint/format, fails if drift persists          |
+| `pnpm check`          | `scripts/check-all.sh`        | Pre-commit gate: typecheck + lint + format + unit/contract + docs + arch |
+| `pnpm check:full`     | `scripts/check-full.sh`       | CI parity: Docker build + stack + all test suites (~20 min)              |
 
 ### File Ownership Classification
 
