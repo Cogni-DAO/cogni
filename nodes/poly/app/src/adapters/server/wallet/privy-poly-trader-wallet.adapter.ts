@@ -176,8 +176,9 @@ const ENABLE_TRADING_MIN_POL = 0.02;
 
 /**
  * Default scopes auto-issued alongside every new wallet. BUY + SELL so the
- * mirror pipeline's closePosition path can execute from day one; tenants can
- * downscope later via grant revoke + re-issue.
+ * mirror pipeline's closePosition path can execute from day one. Today this
+ * is an app-issued default for the tenant's active connection; user-managed
+ * downscoping and delegated actor grants are future product work.
  */
 const DEFAULT_GRANT_SCOPES = ["poly:trade:buy", "poly:trade:sell"] as const;
 
@@ -842,6 +843,7 @@ export class PrivyPolyTraderWalletAdapter implements PolyTraderWalletPort {
         .where(
           and(
             eq(polyWalletGrants.billingAccountId, billingAccountId),
+            eq(polyWalletGrants.walletConnectionId, connection.id),
             isNull(polyWalletGrants.revokedAt)
           )
         )

@@ -5,7 +5,7 @@ title: Poly Multi-Tenant Auth — Tracked Wallets, Actor Wallets, Grants & RLS
 status: active
 spec_state: active
 trust: reviewed
-summary: Tenant-isolated copy-trade for the poly node — `poly_copy_trade_*` tables RLS-scoped by `billing_account_id`, per-tenant signing wallet (Phase B shipped Privy-per-user behind the `PolyTraderWalletPort`; a portable port contract is retained for a future OSS-hardening task that swaps Privy for self-hosted Safe+4337), and durable `poly_wallet_grants` that authorize autonomous placement when the user is offline. The legacy single-operator prototype (`POLY_PROTO_*` + `POLY_CLOB_API_*` + `bootstrap/capabilities/poly-trade.ts`) was purged in Stage 4 of Phase B3 — the per-tenant `PolyTradeExecutor` is now the only placement path.
+summary: Tenant-isolated copy-trade for the poly node — `poly_copy_trade_*` tables RLS-scoped by `billing_account_id`, per-tenant signing wallet (Phase B shipped Privy-per-user behind the `PolyTraderWalletPort`; a portable port contract is retained for a future OSS-hardening task that swaps Privy for self-hosted Safe+4337), and connection-bound `poly_wallet_grants` that currently act as hidden execution-cap records for autonomous placement. The legacy single-operator prototype (`POLY_PROTO_*` + `POLY_CLOB_API_*` + `bootstrap/capabilities/poly-trade.ts`) was purged in Stage 4 of Phase B3 — the per-tenant `PolyTradeExecutor` is now the only placement path.
 read_when: Adding tables to the poly node, touching the copy-trade executor, wiring a new signing backend, implementing the dashboard CRUD for tracked wallets or wallet connections, or auditing tenant isolation.
 implements: proj.poly-prediction-bot
 owner: derekg1729
@@ -16,7 +16,7 @@ tags: [poly, polymarket, copy-trading, auth, rls, multi-tenant, wallets, web3]
 
 # Poly Multi-Tenant Auth — Tracked Wallets, Actor Wallets, Grants & RLS
 
-> Tenant-isolated copy-trade. Each user manages their own list of wallets to mirror **and** owns the wallet that places trades. RLS enforces isolation at the database. A durable grant gates autonomous placement so the executor can run while the user is offline.
+> Tenant-isolated copy-trade. Each user manages their own list of wallets to mirror **and** owns the wallet that places trades. RLS enforces isolation at the database. Today a connection-bound execution-cap grant gates autonomous placement so the executor can run while the user is offline; richer delegated-agent grants are future work.
 
 ### Key References
 
@@ -32,7 +32,7 @@ tags: [poly, polymarket, copy-trading, auth, rls, multi-tenant, wallets, web3]
 
 ## Goal
 
-Define the contract for a multi-tenant Polymarket copy-trade system in which (a) each user records their own list of wallets to mirror, (b) each user owns the on-chain wallet that places those mirrored trades, and (c) autonomous placement runs under a durable, revocable grant when the user is offline — with PostgreSQL RLS as the structural enforcement layer.
+Define the contract for a multi-tenant Polymarket copy-trade system in which (a) each user records their own list of wallets to mirror, (b) each user owns the on-chain wallet that places those mirrored trades, and (c) autonomous placement runs under a revocable, connection-bound execution authorization when the user is offline — with PostgreSQL RLS as the structural enforcement layer.
 
 ## Non-Goals
 
@@ -64,7 +64,7 @@ graph TD
   end
 
   U -->|adds wallet to follow| T
-  U -->|grants trade authority| WG
+  U -->|connect flow auto-issues default execution grant| WG
 
   subgraph Operator pod
     POLL[Mirror pipeline]
@@ -81,10 +81,10 @@ graph TD
 
 ### Two layers, one tenancy model
 
-| Layer               | Question it answers                                                                      | Source-of-truth table                            | Port                                                                                           |
-| ------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| **Tracked wallets** | "Which Polymarket wallets is this user mirroring?"                                       | `poly_copy_trade_targets`                        | `CopyTradeTargetSource` (already exists; today env-backed, lands DB-backed under this spec)    |
-| **Actor wallets**   | "Which on-chain wallet places this user's mirror trades, and who's authorized to do so?" | `poly_wallet_connections` + `poly_wallet_grants` | [`PolyTraderWalletPort`](./poly-trader-wallet-port.md) (abstracts Privy / Safe+4337 / Turnkey) |
+| Layer               | Question it answers                                                                                       | Source-of-truth table                            | Port                                                                                           |
+| ------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| **Tracked wallets** | "Which Polymarket wallets is this user mirroring?"                                                        | `poly_copy_trade_targets`                        | `CopyTradeTargetSource` (already exists; today env-backed, lands DB-backed under this spec)    |
+| **Actor wallets**   | "Which on-chain wallet places this user's mirror trades, and what execution caps gate that wallet today?" | `poly_wallet_connections` + `poly_wallet_grants` | [`PolyTraderWalletPort`](./poly-trader-wallet-port.md) (abstracts Privy / Safe+4337 / Turnkey) |
 
 Both layers share the same tenant boundary: `billing_account_id` is the **data column** that names the financial owner, but the **RLS policy keys on `created_by_user_id = current_setting('app.current_user_id', true)`** — the exact pattern shipped by [`connections`](./tenant-connections.md) (migration `0025_add_connections.sql`).
 
@@ -217,6 +217,8 @@ Constraints:
 
 #### Trade-placement grants
 
+> **Current product reality:** in v0 this table is not yet a user-managed delegated-agent grant surface. The app auto-issues one default execution-cap grant for the tenant's active wallet connection during `/api/v1/poly/wallet/connect`, and `authorizeIntent` consumes that row at the signing boundary. Richer actor-scoped grants are future work.
+
 **Table:** `poly_wallet_grants`
 
 | Column                 | Type          | Constraints                                                    | Description                                            |
@@ -239,7 +241,7 @@ Constraints (as shipped, migration `0031_poly_wallet_grants.sql`):
 - `CHECK array_length(scopes, 1) > 0` — non-empty scopes
 - `CHECK per_order_usdc_cap > 0` + `CHECK daily_usdc_cap > 0` + `CHECK hourly_fills_cap > 0`
 - `CHECK daily_usdc_cap >= per_order_usdc_cap` — a single order can never exceed the day
-- Partial index `poly_wallet_grants_active_idx ON (billing_account_id, created_at DESC) WHERE revoked_at IS NULL` — hot-path "latest active grant per tenant" read
+- Partial index `poly_wallet_grants_active_idx ON (billing_account_id, created_at DESC) WHERE revoked_at IS NULL` — hot-path "latest non-revoked grant per tenant" read
 - Partial index `poly_wallet_grants_connection_idx ON (wallet_connection_id) WHERE revoked_at IS NULL` — adapter.revoke cascade
 - RLS: same billing-account-ownership EXISTS form as `poly_wallet_connections` above
 
@@ -259,7 +261,7 @@ Per [database-rls](./database-rls.md) § `SERVICE_BYPASS_CONTAINED`: the service
 | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | TENANT_SCOPED_ROWS                    | Every `poly_copy_trade_*` and `poly_wallet_*` table has `billing_account_id NOT NULL` (data column, FK → `billing_accounts(id)` ON DELETE CASCADE) + `created_by_user_id NOT NULL` (RLS key, FK → `users(id)`) + RLS policy `USING (created_by_user_id = current_setting('app.current_user_id', true)) WITH CHECK (...)`. Mirrors `connections` migration `0025_add_connections.sql`. No row may exist without both.                                                                                                                                                                                                                                                                                                                    |
 | TENANT_DEFENSE_IN_DEPTH               | After every RLS-scoped SELECT, app code verifies `row.billing_account_id === expected.tenantId`. Mirrors `DrizzleConnectionBrokerAdapter.resolve()` defense check. RLS is the structural floor; the app check catches misconfig and future multi-user-per-account RBAC drift.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| GRANT_REQUIRED_FOR_PLACEMENT          | `PolyTraderWalletPort.authorizeIntent` MUST resolve an active, unrevoked, unexpired `poly_wallet_grants` row before returning a branded `AuthorizedSigningContext`. Missing grant → `authorizeIntent` throws; the intent is recorded in `poly_copy_trade_decisions` with `reason = no_active_grant`. `placeOrder` is structurally unreachable without a branded context.                                                                                                                                                                                                                                                                                                                                                                |
+| GRANT_REQUIRED_FOR_PLACEMENT          | `PolyTraderWalletPort.authorizeIntent` MUST resolve a non-revoked `poly_wallet_grants` row for the tenant's active `poly_wallet_connections.id` before returning a branded `AuthorizedSigningContext`; expiry is then checked on that row before authorization succeeds. Missing grant → `authorizeIntent` throws; the intent is recorded in `poly_copy_trade_decisions` with `reason = no_active_grant`. `placeOrder` is structurally unreachable without a branded context.                                                                                                                                                                                                                                                           |
 | SCOPES_ENFORCED                       | A grant's `scopes` array gates the corresponding intent: `poly:trade:buy` for BUY, `poly:trade:sell` for SELL. Missing scope → skip with `reason = scope_missing`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | PER_TENANT_KILL_SWITCH                | `poly_copy_trade_config.enabled` is per-`billing_account_id`. Flipping one tenant's row has zero effect on other tenants. Default-`false` is fail-closed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | CAPS_ENFORCED_PER_GRANT               | `decide()` reads `per_order_usdc_cap` / `daily_usdc_cap` / `hourly_fills_cap` from the resolved grant. Reading these from env vars or hardcoded constants is a violation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
