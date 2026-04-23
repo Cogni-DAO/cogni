@@ -20,10 +20,11 @@
 # soon as enough pods are Ready, which includes the OLD ReplicaSet's pods
 # during the window between sync and rollout completion. /version from those
 # pods serves the prior BUILD_SHA, so downstream verify-buildsha.sh fails
-# on a green flight. After Argo reports Healthy for an app, this script now
-# also runs `kubectl rollout status` on the app's Deployment — that command
-# only returns 0 when the new ReplicaSet is fully available AND the old
-# pods are torn down. Only then is the app considered done.
+# on a green flight. This script therefore waits for the promoted app's
+# Deployment resource inside the Argo Application to report `status=Synced`
+# before trusting rollout status. That closes the "revision advanced but
+# live Deployment never adopted the new spec" class seen on candidate-a,
+# where app-level health was green while operator/resy stayed OutOfSync.
 #
 # Belt-and-suspenders active sync: if an app's reported revision has not
 # caught up to EXPECTED_SHA, we (1) request a hard git refresh on the
@@ -121,6 +122,41 @@ resolve_deployment() {
     operator | poly | resy) echo "${app}-node-app" ;;
     *) echo "" ;;  # unknown app — caller treats empty as "skip digest check"
   esac
+}
+
+get_deployment_resource_sync_status() {
+  local app_name="$1"
+  local deployment
+
+  deployment=$(resolve_deployment "$app_name")
+  if [ -z "$deployment" ]; then
+    printf ''
+    return 0
+  fi
+
+  kubectl -n argocd get application "$app_name" \
+    -o jsonpath='{range .status.resources[*]}{.kind}{"\t"}{.name}{"\t"}{.status}{"\n"}{end}' \
+    2>/dev/null | awk -F '\t' -v deployment="$deployment" '
+      $1 == "Deployment" && $2 == deployment {
+        print $3
+        found = 1
+        exit
+      }
+      END {
+        if (!found) {
+          print ""
+        }
+      }
+    '
+}
+
+deployment_sync_ready() {
+  local deployment="$1"
+  local status="$2"
+  if [ -z "$deployment" ]; then
+    return 0
+  fi
+  [ "$status" = "Synced" ]
 }
 
 # Block until the Deployment's new ReplicaSet is fully available AND the old
@@ -228,11 +264,18 @@ wait_for_app() {
   local deadline=$((SECONDS + timeout_seconds))
   local next_kick=$((SECONDS + ACTIVE_SYNC_AFTER))
   local kick_count=0
+  local deployment deployment_status
+
+  deployment=$(resolve_deployment "$app_name")
 
   while [ $SECONDS -lt "$deadline" ]; do
     REV=$(get_app_revision "$app_name")
     HEALTH=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "Unknown")
     SYNC_PHASE=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.phase}' 2>/dev/null || echo "")
+    deployment_status=""
+    if [ -n "$deployment" ]; then
+      deployment_status=$(get_deployment_resource_sync_status "$app_name")
+    fi
 
     # Decide whether to proceed to the authoritative kubectl rollout check.
     # Only accept: Healthy, OR Progressing when sync operation completed.
@@ -245,8 +288,11 @@ wait_for_app() {
       return 1
     }
 
-    # First verify revision matches, then check if we can proceed to rollout
-    if [ "$REV" = "$EXPECTED_SHA" ] && can_proceed_to_rollout_check "$HEALTH" "$SYNC_PHASE"; then
+    # First verify revision matches, then ensure Argo reports the promoted
+    # Deployment resource itself as Synced before trusting rollout status.
+    if [ "$REV" = "$EXPECTED_SHA" ] &&
+       can_proceed_to_rollout_check "$HEALTH" "$SYNC_PHASE" &&
+       deployment_sync_ready "$deployment" "$deployment_status"; then
       # bug.0326: sync.revision + health.status are Argo-Application-level
       # signals. During a rolling update, "Healthy" fires as soon as enough
       # pods are Ready — which includes the OLD ReplicaSet's pods. /version
@@ -261,9 +307,17 @@ wait_for_app() {
       echo "  ❌ ${app_name} rollout did not complete (sync.revision=${REV:0:8} Healthy but stale ReplicaSet still present)"
       return 1
     fi
-    echo "    ${app_name}: rev=${REV:0:8} expected=${EXPECTED_SHA:0:8} health=${HEALTH} phase=${SYNC_PHASE} (waiting...)"
 
-    if [ $SECONDS -ge "$next_kick" ]; then
+    if [ -n "$deployment" ]; then
+      echo "    ${app_name}: rev=${REV:0:8} expected=${EXPECTED_SHA:0:8} health=${HEALTH} phase=${SYNC_PHASE} deployment=${deployment} deploymentStatus=${deployment_status:-<missing>} (waiting...)"
+    else
+      echo "    ${app_name}: rev=${REV:0:8} expected=${EXPECTED_SHA:0:8} health=${HEALTH} phase=${SYNC_PHASE} (waiting...)"
+    fi
+
+    if [ $SECONDS -ge "$next_kick" ] &&
+       { [ "$REV" != "$EXPECTED_SHA" ] ||
+         ! can_proceed_to_rollout_check "$HEALTH" "$SYNC_PHASE" ||
+         ! deployment_sync_ready "$deployment" "$deployment_status"; }; then
       kick_count=$((kick_count + 1))
       echo "    ⚡ ${app_name}: Argo reconcile kick #${kick_count} (hard refresh + hook sync)"
       request_hard_refresh "$app_name"
