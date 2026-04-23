@@ -201,6 +201,12 @@ rollout_check() {
 # obj->obj, Argo can decide the first out-of-sync wave is Sync/0 and never
 # recreate the PreSync Jobs even with hook sync enabled. Remove those stale
 # named Jobs first so the active sync has to materialize them again.
+#
+# bug.0361: never delete a Job whose `.status.active > 0` — that's a live
+# migration doing real work. Killing it mid-flight leaves Argo waiting for a
+# hook that no longer exists, which triggers clear_stale_missing_hook_operation
+# → Argo auto-syncs → new jobs → script kills them again (infinite loop). Only
+# Completed / Failed / absent jobs are eligible for deletion.
 delete_stale_hook_jobs() {
   local app_name="$1"
   local app namespace jobs=()
@@ -224,6 +230,11 @@ delete_stale_hook_jobs() {
   fi
 
   for job in "${jobs[@]}"; do
+    active=$(kubectl -n "$namespace" get job "$job" -o jsonpath='{.status.active}' 2>/dev/null || true)
+    if [ "${active:-0}" -gt 0 ]; then
+      echo "    ⏭ skipping active hook job ${namespace}/${job} (still running — protecting live migration)"
+      continue
+    fi
     echo "    🧹 deleting stale hook job ${namespace}/${job}"
     kubectl -n "$namespace" delete job "$job" --ignore-not-found >/dev/null 2>&1 || true
   done
