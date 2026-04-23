@@ -166,7 +166,9 @@ if [ "${WILL_DISPATCH:-0}" = "1" ] && [ "$FLIGHT_LEASE_LOST" = "0" ]; then
     --repo "$REPO" \
     --ref main \
     -f environment=preview \
-    -f source_sha="$SHA"
+    -f source_sha="$SHA" \
+    -f build_sha="${BUILD_SHA:-$SHA}" \
+    -f skip_infra=true
   echo "✅ Preview flight dispatched for ${SHORT_SHA}"
   emit_status "dispatched"
   emit_summary "dispatched" "promote-and-deploy kicked off; \`deploy-preview\` job in this workflow will run."

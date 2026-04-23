@@ -57,6 +57,15 @@ on:
       source_sha:
         description: "SHA of source images (PR head SHA — images must exist as preview-{sha} in GHCR)"
         required: false
+      build_sha:
+        description: "SHA baked into images at build time (PR branch head). Defaults to source_sha. Needed on squash-merge where source_sha is the merge commit but containers report the branch SHA."
+        required: false
+      skip_infra:
+        description: "Skip deploy-infra (Compose) step — use for app-only changes; infra has its own lever (candidate-flight-infra.yml)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["true", "false"]
 
 permissions:
   contents: write
@@ -78,6 +87,7 @@ jobs:
       environment: ${{ steps.env.outputs.environment }}
       overlay: ${{ steps.env.outputs.overlay }}
       head_sha: ${{ steps.env.outputs.head_sha }}
+      build_sha: ${{ steps.env.outputs.build_sha }}
       deploy_branch: ${{ steps.env.outputs.deploy_branch }}
       deploy_branch_sha: ${{ steps.deploy-push.outputs.deploy_branch_sha }}
       promoted_apps: ${{ steps.deploy-push.outputs.promoted_apps }}
@@ -87,6 +97,12 @@ jobs:
         run: |
           ENV="${{ inputs.environment }}"
           SHA="${{ inputs.source_sha || github.sha }}"
+          # build_sha is the SHA baked into images at pr-build time (PR branch head).
+          # On squash-merge, source_sha is the new main commit SHA but containers
+          # report the PR branch SHA. Callers (flight-preview.sh) pass this
+          # explicitly. Falls back to source_sha when not supplied (direct-push or
+          # production promotion where the same image is re-used).
+          BUILD_SHA="${{ inputs.build_sha || inputs.source_sha || github.sha }}"
 
           case "$ENV" in
             preview)    OVERLAY=preview;    DEPLOY_BRANCH=deploy/preview ;;
@@ -97,8 +113,9 @@ jobs:
           echo "environment=$ENV" >> $GITHUB_OUTPUT
           echo "overlay=$OVERLAY" >> $GITHUB_OUTPUT
           echo "head_sha=$SHA" >> $GITHUB_OUTPUT
+          echo "build_sha=$BUILD_SHA" >> $GITHUB_OUTPUT
           echo "deploy_branch=$DEPLOY_BRANCH" >> $GITHUB_OUTPUT
-          echo "Promoting to $ENV (overlay: $OVERLAY, deploy branch: $DEPLOY_BRANCH, sha: ${SHA:0:8})"
+          echo "Promoting to $ENV (overlay: $OVERLAY, deploy branch: $DEPLOY_BRANCH, source: ${SHA:0:8}, build: ${BUILD_SHA:0:8})"
 
       # Checkout app source for scripts and overlay templates
       - name: Checkout app source
@@ -224,7 +241,9 @@ jobs:
           # also records its source_sha into .promote-state/source-sha-by-app.json
           # for cross-env contract verification (bug.0321 Fix 4).
           PROMOTED=()
-          SOURCE_SHA="${{ steps.env.outputs.head_sha }}"
+          # Use build_sha (PR branch head) not head_sha (merge commit) so
+          # verify-buildsha.sh compares against the SHA actually in the image.
+          SOURCE_SHA="${{ steps.env.outputs.build_sha }}"
 
           promote_app() {
             local app="$1" digest="$2" migrator="${3:-}"
@@ -334,7 +353,11 @@ jobs:
           echo "✅ Direct push to ${DEPLOY_BRANCH} for ${OVERLAY_ENV} ${SHORT_SHA} (deploy-branch SHA: ${DEPLOY_SHA:0:8}, promoted: ${PROMOTED_CSV})"
 
   # ── Deploy Compose infrastructure ────────────────────────────────
+  # Skipped when skip_infra=true (app-only changes). Infra has its own
+  # lever: candidate-flight-infra.yml for candidate-a, or dispatch this
+  # workflow with skip_infra=false when compose config changes.
   deploy-infra:
+    if: inputs.skip_infra != 'true'
     runs-on: ubuntu-latest
     needs: promote-k8s
     environment: ${{ needs.promote-k8s.outputs.environment }}
@@ -577,7 +600,9 @@ jobs:
         if: env.VM_HOST != ''
         env:
           SOURCE_SHA_MAP: deploy-branch/.promote-state/source-sha-by-app.json
-          EXPECTED_BUILDSHA: ${{ needs.promote-k8s.outputs.head_sha }}
+          # build_sha is the PR branch head SHA baked into images — not the
+          # squash-merge commit on main (head_sha). See promote-k8s inputs.
+          EXPECTED_BUILDSHA: ${{ needs.promote-k8s.outputs.build_sha }}
           NODES: ${{ needs.promote-k8s.outputs.promoted_apps }}
         run: bash app-src/scripts/ci/verify-buildsha.sh
 
@@ -769,7 +794,7 @@ jobs:
       always() &&
       needs.promote-k8s.outputs.environment == 'preview' &&
       (needs.promote-k8s.result != 'success' ||
-       needs.deploy-infra.result != 'success' ||
+       (needs.deploy-infra.result != 'success' && needs.deploy-infra.result != 'skipped') ||
        needs.verify.result != 'success' ||
        needs.verify-deploy.result != 'success' ||
        needs.e2e.result != 'success')
