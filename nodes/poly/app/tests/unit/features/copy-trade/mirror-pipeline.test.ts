@@ -286,6 +286,54 @@ describe("mirror-pipeline.runMirrorTick — empty source page", () => {
     expect(ledger.decisions).toHaveLength(0);
     expect(cursor).toBe(9_999);
   });
+
+  it("runs redeemSweep after the tick when provided", async () => {
+    const redeemSweep = vi.fn<() => Promise<void>>().mockResolvedValue();
+
+    await runMirrorTick({
+      source: {
+        async fetchSince() {
+          return { fills: [], newSince: 101 };
+        },
+      },
+      ledger: new FakeOrderLedger(),
+      placeIntent: vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>(),
+      target: BASE_TARGET,
+      getCursor: () => undefined,
+      setCursor: () => {},
+      logger: noopLogger,
+      metrics: createRecordingMetrics(),
+      redeemSweep,
+    });
+
+    expect(redeemSweep).toHaveBeenCalledTimes(1);
+  });
+
+  it("swallows redeemSweep errors so one bad redeem does not fail the tick", async () => {
+    const redeemSweep = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValue(new Error("redeem failed"));
+
+    await expect(
+      runMirrorTick({
+        source: {
+          async fetchSince() {
+            return { fills: [], newSince: 202 };
+          },
+        },
+        ledger: new FakeOrderLedger(),
+        placeIntent: vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>(),
+        target: BASE_TARGET,
+        getCursor: () => undefined,
+        setCursor: () => {},
+        logger: noopLogger,
+        metrics: createRecordingMetrics(),
+        redeemSweep,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(redeemSweep).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
