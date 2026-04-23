@@ -177,6 +177,14 @@ else
         # bug.0343: pair app+migrator — see poly case above.
         add_target resy-migrator
         ;;
+      nodes/canary/app/src/shared/db/* | \
+      nodes/canary/app/src/adapters/server/db/migrations/*)
+        add_target canary
+        add_target canary-migrator
+        ;;
+      nodes/canary/*)
+        add_target canary
+        ;;
       services/scheduler-worker/*)
         add_target scheduler-worker
         ;;

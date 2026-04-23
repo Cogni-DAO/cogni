@@ -1,0 +1,182 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# gitcogni rule: ai-only-repo-policy
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Root spec: docs/spec/ai-only-repo-policy.md
+# Contract:  docs/spec/node-ci-cd-contract.md (§ AI_RULES_FEDERATED invariant)
+# Task:      work/items/task.0342.gitcogni-ai-only-repo-policy.md
+#
+# ──── Model ────────────────────────────────────────────────────────────────
+#
+# The operator node owns repo-wide infrastructure scope. Each child node owns
+# its own AI-authorship rules via its `nodes/<name>/.cogni/repo-spec.yaml`.
+# git-cogni routes enforcement based on **CI-affected paths**:
+#
+#   PR touches only `nodes/canary/**` → read `nodes/canary/.cogni/...` gates
+#   PR touches `infra/**` or `scripts/ci/**` → read THIS file (operator scope)
+#   PR touches `nodes/operator/**`           → read THIS file (operator scope)
+#   PR touches multiple node scopes          → union; strictest rule wins
+#
+# ──── Enforcer ─────────────────────────────────────────────────────────────
+#
+# Enforcement runs in the cogni-git-review app (operator node). The operator
+# is the single policy voice for anything outside a child node's tree. Child
+# nodes cannot weaken this rule for themselves; they can only add stricter
+# rules on their own scope.
+#
+# ──── Override: DAO vote ───────────────────────────────────────────────────
+#
+# Any blocked PR may be merged via a successful DAO vote on the operator
+# DAO's CogniSignal contract emitting a `merge-pr` CogniAction for that PR
+# number + head SHA. The signal-execution handler (see
+# `docs/spec/governance-signal-execution.md`) will then merge the PR,
+# bypassing this rule. This is the ONLY override path — no admin shortcut.
+#
+# This enforcement shape lets AI-run nodes act autonomously within their
+# fence, while preserving human governance for anything touching shared
+# infrastructure. FORK_FREEDOM + POLICY_STAYS_LOCAL + NODE_OWNS_AI_RULES.
+# ═══════════════════════════════════════════════════════════════════════════
+
+id: cogni-git-review-ai-only-repo-policy
+schema_version: "0.3"
+blocking: true
+workflow_id: ai-only-repo
+
+# Which node scope does this rule own?
+# Operator = repo-wide infrastructure authority. Only operator-level rules
+# can gate changes to `infra/**`, `.github/workflows/**`, `scripts/ci/**`.
+scope:
+  owner_node: operator
+  owns_paths:
+    - ".github/workflows/**"
+    - "scripts/ci/**"
+    - "infra/**"
+    - "work/charters/**"
+    - "work/projects/**"
+    - ".cogni/rules/**"
+    - ".cogni/repo-spec.yaml"
+    - "packages/**"
+    - "services/**"
+    - "nodes/operator/**"
+
+# ═══════════════════════════════════════════════════════════════
+# When does this rule fire?
+#
+# 1. PR author is an allowlisted AI bot, AND
+# 2. PR diff touches any `owns_paths` above.
+#
+# Human PRs SKIP this rule entirely and fall through to standard
+# review. Bot PRs that touch only a child node's scope are routed
+# to that node's rule file instead (CI-affected routing).
+# ═══════════════════════════════════════════════════════════════
+applies_when:
+  all_of:
+    - author_in:
+        - canary-bot[bot]
+        - canary-4omini[bot]
+        # extensibility: future AI-run nodes register their bot identity here
+    - affects_owned_paths: true
+
+evaluations:
+  # 1. Scope fence — PR must NOT touch paths this rule's scope forbids.
+  #    These are the hard denies regardless of CI state.
+  - scope_fence:
+      description: PR does not modify paths outside the canary's allowed tree.
+      enforcement_rationale: CANARY_SCOPE_FENCE (proj.cogni-canary), POLICY_STAYS_LOCAL (node-ci-cd-contract)
+      denied_paths:
+        - ".github/workflows/**"
+        - "scripts/ci/**"
+        - "infra/**"
+        - "work/charters/**"
+        - "work/projects/**"
+        - ".cogni/rules/**"
+        - ".cogni/repo-spec.yaml"
+        - "packages/**"
+        - "services/**"
+        - "nodes/operator/**"
+        - "nodes/poly/**"
+        - "nodes/resy/**"
+        - "nodes/node-template/**"
+
+  # 2. CI merge gate green (per node-ci-cd-contract § Merge Gate).
+  - ci_green:
+      description: Standard CI merge gate passed.
+      enforcement_rationale: LOCAL_GATE_PARITY (node-ci-cd-contract)
+      required_checks:
+        - ci/typecheck
+        - ci/lint
+        - ci/unit
+        - ci/component
+        - ci/stack-test
+
+  # 3. Candidate flight proven — BUILD_ONCE_PROMOTE_DIGEST means the exact
+  #    image under review has been promoted to candidate-a and reached
+  #    Argo Healthy + verify-buildsha.
+  - candidate_flight_green:
+      description: candidate-flight.yml promoted this PR's digest to candidate-a, Argo Healthy, verify-buildsha passed.
+      enforcement_rationale: BUILD_ONCE_PROMOTE_DIGEST (node-ci-cd-contract)
+      required_checks:
+        - candidate-flight/verify-buildsha
+
+  # 4. Budget — the bot's cumulative LiteLLM spend for this PR's agent
+  #    session is under the node's per-day cap. Enforced at key level in
+  #    LiteLLM; this check is a read-only confirmation.
+  - budget_within_cap:
+      description: Agent spend for this PR stays under node budget.
+      enforcement_rationale: Canary § Budget ceiling (proj.cogni-canary)
+
+  # 5. DAO-vote override — if a merge-pr CogniAction exists on the operator
+  #    DAO's CogniSignal for this (pr_number, head_sha), enforcement is
+  #    bypassed entirely. Human governance > bot policy.
+  - dao_override_or_clean:
+      description: Either no active override OR all other checks pass.
+      enforcement_rationale: governance-signal-execution (docs/spec)
+      override_source:
+        type: cogni_signal
+        dao: "${operator.cogni_dao.dao_contract}"
+        signal: "${operator.cogni_dao.signal_contract}"
+        action: merge-pr
+        key_fields: [pr_number, head_sha]
+
+success_criteria:
+  # Bypass path — DAO vote wins even if other checks fail.
+  any_of:
+    - metric: dao_override_or_clean
+      matches_override: true
+    - all_of:
+        - metric: scope_fence
+          eq: true
+        - metric: ci_green
+          eq: true
+        - metric: candidate_flight_green
+          eq: true
+        - metric: budget_within_cap
+          eq: true
+
+# When all criteria (or override) pass, auto-merge via GitHub's --auto flag.
+# Human reviewer approval NOT required for AI-authored PRs on this policy.
+auto_merge: true
+
+# Failure mode — comment the failed criterion + remediation path.
+# Including the override instruction is deliberate: it makes the DAO-vote
+# path discoverable from the PR UI itself.
+on_failure:
+  action: comment_and_block
+  comment_template: |
+    **ai-only-repo-policy blocked this PR.**
+
+    Failed check: `{failed_metric}`
+    {failure_details}
+
+    **Remediation options:**
+    1. **Narrow the PR scope** to only `nodes/canary/**`, `work/items/**`, or `docs/research/**`.
+    2. **Fix the failing check** (CI, flight, budget) and push a new commit.
+    3. **Open a DAO vote** to override this rule for this PR. The canary cannot
+       do this itself — a human DAO member must initiate. See:
+       `{operator_propose_merge_url}?pr={pr_number}&sha={head_sha}`
+
+    This rule's spec: `docs/spec/ai-only-repo-policy.md`.
+    Rule owner: operator node (`.cogni/rules/ai-only-repo-policy.yaml`).

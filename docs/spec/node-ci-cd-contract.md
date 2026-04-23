@@ -48,6 +48,8 @@ Define the CI/CD invariants, merge gate, and file ownership boundaries that ensu
 
 7. **SINGLE_RESPONSIBILITY**: Each workflow file owns one concern (build, promote+deploy, E2E+release). No monoliths.
 
+8. **AI_RULES_FEDERATED**: Each node owns its AI-authorship rules under its own tree. The operator node owns repo-wide infrastructure scope (`infra/`, `.github/workflows/`, `scripts/ci/`, `packages/`, `services/`, `work/charters/`, `.cogni/rules/`, `.cogni/repo-spec.yaml`, `nodes/operator/`). Child nodes own `nodes/<name>/**`. cogni-git-review routes enforcement by CI-affected paths and applies the union of matching rules; strictest wins. Any blocked PR may be overridden by a successful DAO vote emitting a `merge-pr` CogniAction on the operator DAO's CogniSignal (see [governance-signal-execution](./governance-signal-execution.md)). There is no admin-level override. Full spec: [ai-only-repo-policy](./ai-only-repo-policy.md).
+
 ---
 
 ## Design
@@ -157,4 +159,6 @@ Centralizing lint/depcruise configs causes fork friction, policy fights, and los
 
 - [ci-cd.md](./ci-cd.md) — CI/CD pipeline specification
 - [check-full.md](./check-full.md) — check:full CI-parity gate
+- [ai-only-repo-policy.md](./ai-only-repo-policy.md) — AI_RULES_FEDERATED enforcement spec
+- [governance-signal-execution.md](./governance-signal-execution.md) — DAO-vote override path
 - [Project: Reusable CI/CD Rails](../../work/projects/proj.ci-cd-reusable.md)

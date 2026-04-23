@@ -1,0 +1,89 @@
+# Canary — repo-spec (scaffold, pre-DAO-formation)
+# Status: pending_activation — Derek will run formation wizard and paste real DAO addresses.
+# See: work/items/task.0339.canary-dao-formation.md, docs/runbooks/CANARY_DAO_FORMATION.md
+
+schema_version: "0.1.4"
+
+# Canary-specific UUIDs — generated 2026-04-20, never rotate for this node.
+node_id: "89612f02-114d-460d-87a5-c2ab212ccf6f"
+# scope_id derivation: uuidv5(node_id, "default") — computed below at first boot by @cogni/repo-spec
+# Placeholder until derivation is wired; derived value will be written back by setup flow.
+scope_id: "00000000-0000-5000-a000-000000000000" # TODO: replace with uuidv5(node_id, "default")
+scope_key: "default"
+
+intent:
+  name: canary
+
+# Activity ledger — canary gets its OWN epoch accounting, separate from operator DAO.
+activity_ledger:
+  epoch_length_days: 7
+  approvers: [] # TODO: add Derek + canary Privy wallet after DAO formation (task.0339)
+  pool_config:
+    base_issuance_credits: "10000"
+  activity_sources:
+    github:
+      attribution_pipeline: cogni-v0.0
+      source_refs: ["Cogni-DAO/cogni-template"] # canary lives in the parent monorepo for v0
+      excluded_logins: []
+
+# Gates run against canary PRs in addition to the root gates.
+# ai-only-repo-policy is REQUIRED for canary to have scope-fenced autonomy.
+# See: work/items/task.0342.gitcogni-ai-only-repo-policy.md
+gates:
+  - type: ai-rule
+    with:
+      rule_file: ai-only-repo-policy.yaml
+
+# Cogni DAO — TODO after task.0339 formation. Leave empty block until then so
+# schema validation doesn't reject this file, but payments.status=pending_activation
+# keeps any accidental deploy from treating this as a real DAO.
+cogni_dao:
+  chain_id: "8453" # Base mainnet
+  # dao_contract: "0x..." # set by task.0339
+  # plugin_contract: "0x..." # set by task.0339
+  # signal_contract: "0x..." # set by task.0339
+  # base_url: "https://proposal.cognidao.org"
+
+# Operator wallet — TODO: canary-owned Privy wallet address (task.0339).
+# operator_wallet:
+#   address: "0x..."
+
+# Payments — activated in task.0339 Step 7 after Split contract is deployed.
+payments:
+  status: pending_activation
+
+# payments_in:
+#   credits_topup:
+#     provider: cogni-usdc-backend-v1
+#     receiving_address: "0x..." # Split contract, 100% canary wallet
+#     allowed_chains: [Base]
+#     allowed_tokens: [USDC]
+
+# Model providers — canary is 4o-mini-first. Claude disallowed on the brain path
+# until CP5 revenue threshold clears (see proj.cogni-canary.md § Constraints).
+providers:
+  openrouter:
+    api_host: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+
+llm_proxy:
+  host_env: LITELLM_PROXY_URL
+  master_key_env: LITELLM_MASTER_KEY
+
+secrets:
+  manager:
+    type: env
+
+# Governance charters — task.0340 + task.0341 will wire these up.
+# SINGULARITY_SCORE_DAILY lands first; CANARY_BRAIN_LOOP is gated on scope-fence
+# enforcement being proven in task.0341.
+governance:
+  schedules: []
+  # - charter: SINGULARITY_SCORE_DAILY
+  #   cron: "0 12 * * *"
+  #   timezone: UTC
+  #   entrypoint: SINGULARITY_SCORE_DAILY
+  # - charter: CANARY_BRAIN_LOOP
+  #   cron: "0 * * * *"
+  #   timezone: UTC
+  #   entrypoint: CANARY_BRAIN_LOOP

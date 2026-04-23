@@ -1,0 +1,137 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Canary node candidate-a overlay.
+# Mirrors operator overlay pattern with canary-specific values:
+#   - NodePort 30400 (canary's reserved slot in the 34xx range)
+#   - Secret ref canary-node-app-secrets
+#   - NEXTAUTH_URL https://canary-preview.cognidao.org
+#
+# WARNING: image digests are placeholders — they are rewritten by
+# candidate-flight.yml's promote step once the first canary build lands in
+# GHCR. Do NOT manually bump these; the flight is the sole writer.
+# WARNING: EndpointSlice IPs must match the VM's public IP. 0.0.0.0 is a
+# placeholder that provision-test-vm.sh rewrites via sed during Phase 4c.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: cogni-preview
+
+resources:
+  - ../../../base/node-app
+
+namePrefix: canary-
+
+images:
+  - name: ghcr.io/cogni-dao/cogni-template
+    newName: ghcr.io/cogni-dao/cogni-template
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  - name: ghcr.io/cogni-dao/cogni-template-migrate
+    newName: ghcr.io/cogni-dao/cogni-template
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+patches:
+  - target:
+      kind: ConfigMap
+      name: node-app-config
+    patch: |
+      - op: replace
+        path: /data/APP_ENV
+        value: "production"
+      - op: replace
+        path: /data/NODE_NAME
+        value: "canary"
+      - op: replace
+        path: /data/TEMPORAL_NAMESPACE
+        value: "cogni-preview"
+      - op: replace
+        path: /data/LITELLM_BASE_URL
+        value: "http://canary-litellm-external:4000"
+      - op: replace
+        path: /data/TEMPORAL_ADDRESS
+        value: "canary-temporal-external:7233"
+      - op: replace
+        path: /data/REDIS_URL
+        value: "redis://canary-redis-external:6379"
+      - op: add
+        path: /data/NEXTAUTH_URL
+        value: "https://canary-preview.cognidao.org"
+      - op: add
+        path: /data/AUTH_TRUST_HOST
+        value: "true"
+  - target:
+      kind: Service
+      name: node-app
+    patch: |
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30400
+      - op: replace
+        path: /spec/ports/0/targetPort
+        value: 3400
+      - op: add
+        path: /spec/selector/app.kubernetes.io~1instance
+        value: "canary"
+  - target:
+      kind: Deployment
+      name: node-app
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/envFrom/1/secretRef/name
+        value: "canary-node-app-secrets"
+      - op: replace
+        path: /spec/template/spec/containers/0/ports/0/containerPort
+        value: 3400
+      - op: add
+        path: /spec/selector/matchLabels/app.kubernetes.io~1instance
+        value: "canary"
+      - op: add
+        path: /spec/template/metadata/labels/app.kubernetes.io~1instance
+        value: "canary"
+  - target:
+      kind: Job
+      name: migrate-node-app
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
+        value: "canary-node-app-secrets"
+  - target:
+      kind: EndpointSlice
+      name: postgres-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["0.0.0.0"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "canary-postgres-external"
+  - target:
+      kind: EndpointSlice
+      name: temporal-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["0.0.0.0"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "canary-temporal-external"
+  - target:
+      kind: EndpointSlice
+      name: litellm-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["0.0.0.0"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "canary-litellm-external"
+  - target:
+      kind: EndpointSlice
+      name: redis-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["0.0.0.0"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "canary-redis-external"
