@@ -280,7 +280,17 @@ clear_stale_missing_hook_operation() {
   fi
 
   op_revision=$(get_operation_revision "$app_name")
-  echo "    🛑 ${app_name}: clearing stale Running operation at ${op_revision:0:8} waiting on missing hook job ${namespace}/${hook_job}"
+  echo "    🛑 ${app_name}: terminating stale Running operation at ${op_revision:0:8} waiting on missing hook job ${namespace}/${hook_job}"
+
+  # Argo's own terminate-op path is the authoritative way to stop a wedged
+  # sync operation. The argocd CLI is available in the argocd-server pod on
+  # candidate-a; `--core` talks directly to the cluster without needing server
+  # auth config. Fall back to clearing spec.operation only if exec/CLI fails.
+  if out=$(kubectl -n argocd exec deploy/argocd-server -- argocd app terminate-op --core "$app_name" 2>&1); then
+    return 0
+  fi
+  echo "    ⚠️  argocd terminate-op failed for ${app_name}, falling back to spec.operation reset: $out" >&2
+
   if ! out=$(kubectl -n argocd patch application "$app_name" --type=merge -p '{"operation":null}' 2>&1); then
     echo "    ⚠️  failed to clear stale operation for ${app_name}: $out" >&2
     return 1
