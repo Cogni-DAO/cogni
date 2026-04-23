@@ -5,7 +5,7 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2026-04-21
+- **Last reviewed:** 2026-04-23
 - **Status:** draft
 
 ## Purpose
@@ -68,6 +68,7 @@ HTTP API endpoints using Next.js App Router. Contract-validated entry points tha
   - `/api/v1/poly/wallet/status` [GET] - read whether the calling user already has a resolvable dedicated Polymarket trading wallet (session auth)
   - `/api/v1/poly/wallet/balances` [GET] - read USDC.e + POL balances on the calling user's dedicated Polymarket trading wallet (session auth, distinct from legacy operator-only `/balance`)
   - `/api/v1/poly/wallet/overview` [GET] - current dashboard wallet summary plus Polymarket-native P/L history for the calling user's dedicated Polymarket trading wallet (session auth)
+  - `/api/v1/poly/wallets/[addr]` [GET] - any-wallet analysis slices (`snapshot`, `trades`, `balance`, `pnl`) with optional `interval` for the P/L slice (session auth)
   - `/api/v1/poly/internal/sync-health` [GET] - aggregate sync-freshness stats for the reconciler (no auth; aggregate-only)
 - **Files considered API:** v1/_/route.ts, admin/_/route.ts
 

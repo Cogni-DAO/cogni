@@ -9,7 +9,7 @@
  *   - REUSE_PACKAGE_CLIENTS: all upstream HTTP goes through `@cogni/market-provider` clients — no fetch in this file.
  *   - DETERMINISTIC_METRICS: snapshot math is identical to `computeWalletMetrics` (spike.0323 v3).
  *   - PARTIAL_FAILURE_NEVER_THROWS: each slice returns a `{ value | warning }` result; the route surfaces warnings without 5xx-ing.
- * Side-effects: IO (Polymarket Data API + Polymarket CLOB public).
+ * Side-effects: IO (Polymarket Data API + Polymarket CLOB public + Polymarket user-pnl).
  * Notes: Cache is process-scoped — see `instrumentation.ts` single-replica boot assert.
  * Links: docs/design/wallet-analysis-components.md, packages/market-provider/src/analysis/wallet-metrics.ts, packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts
  * @public

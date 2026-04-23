@@ -29,7 +29,7 @@ export const PolyAddressSchema = z
   .transform((s) => s.toLowerCase());
 export type PolyAddress = z.infer<typeof PolyAddressSchema>;
 
-/** The three independently-requestable slices. */
+/** The independently-requestable slices. */
 export const WalletAnalysisSliceSchema = z.enum([
   "snapshot",
   "trades",

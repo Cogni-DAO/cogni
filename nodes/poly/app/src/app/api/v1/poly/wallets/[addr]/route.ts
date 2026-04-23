@@ -3,10 +3,10 @@
 
 /**
  * Module: `@app/api/v1/poly/wallets/[addr]/route`
- * Purpose: HTTP GET — wallet analysis for any 0x Polymarket wallet, slice-scoped via `?include=`.
+ * Purpose: HTTP GET — wallet analysis for any 0x Polymarket wallet, slice-scoped via `?include=` with optional `interval` for the P/L slice.
  * Scope: Thin handler. Auth via getSessionUser, Zod validation via the wallet-analysis v1 contract, then dispatch to per-slice service helpers. Returns Zod-validated response shape; partial slice failures surface in `warnings`, not in HTTP status.
  * Invariants: Any 0x address → 200 (slice availability decides what's populated). 401 when unauthenticated. Address normalized to lowercase by the contract before any handler logic runs.
- * Side-effects: IO (Polymarket Data API + CLOB public via the service layer).
+ * Side-effects: IO (Polymarket Data API + CLOB public + public user-pnl via the service layer).
  * Notes: Cache + concurrency + reuse-mandate live in the service module.
  * Links: docs/design/wallet-analysis-components.md, packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts
  * @public
