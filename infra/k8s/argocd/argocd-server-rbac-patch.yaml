@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# ArgoCD terminate-op calls list/watch services in the argocd namespace during
+# operation teardown. The upstream v2.13.4 ClusterRole omits this, causing
+# terminate-op to fail and leaving Applications stuck in phase=Running.
+# See: https://github.com/argoproj/argo-cd/issues/...
+# Workaround until upstream ships the fix: grant the missing verb via a Role.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argocd-server-terminate-op
+  namespace: argocd
+rules:
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-server-terminate-op
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argocd-server-terminate-op
+subjects:
+  - kind: ServiceAccount
+    name: argocd-server
+    namespace: argocd
