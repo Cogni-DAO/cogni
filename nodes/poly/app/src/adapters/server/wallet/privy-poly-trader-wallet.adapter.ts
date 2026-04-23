@@ -11,7 +11,7 @@
  *   `getBalances` (DB address + optional Polygon RPC via `POLYGON_RPC_URL`
  *   for USDC.e + POL display on the Money page), `authorizeIntent` (trading-
  *   readiness + scope + cap + active-grant checks; mints the branded
- *   `AuthorizedSigningContext`), `ensureTradingApprovals` (idempotent 5-step
+ *   `AuthorizedSigningContext`), `ensureTradingApprovals` (idempotent 6-step
  *   Polymarket onboarding: 3× USDC.e `approve` + 3× CTF `setApprovalForAll`
  *   signed by Privy HSM; stamps the `trading_approvals_ready_at` readiness
  *   column on success), `revoke` (cascades across `poly_wallet_grants` in
@@ -54,11 +54,11 @@
  *   - APPROVALS_BEFORE_PLACE: `authorizeIntent` reads
  *     `trading_approvals_ready_at` AFTER the active-grant check and fails
  *     closed with `trading_not_ready` when null. Prevents silent CLOB
- *     empty-rejects on freshly-funded wallets that haven't run the 5
+ *     empty-rejects on freshly-funded wallets that haven't run the 6
  *     Polymarket on-chain approvals yet. The stamp is only written by
  *     `ensureTradingApprovals` after every target reaches MaxUint256 /
  *     approved on-chain, verified at the submission block.
- *   - APPROVAL_TARGETS_PINNED: the 3 USDC.e spenders + 2 CTF operators are
+ *   - APPROVAL_TARGETS_PINNED: the 3 USDC.e spenders + 3 CTF operators are
  *     Polymarket mainnet addresses HARDCODED in this module. No env, no
  *     user input. Matches `scripts/experiments/approve-polymarket-allowances.ts`.
  * Side-effects: IO (Privy API, DB reads/writes, AEAD crypto).
@@ -154,10 +154,11 @@ const USDC_E_SPENDERS: readonly { label: string; address: Address }[] = [
   { label: "USDC.e → Neg-Risk Adapter", address: NEG_RISK_ADAPTER_POLYMARKET },
 ];
 
-/** 2 CTF operators that need `setApprovalForAll(true)` (enables SELL). */
+/** 3 CTF operators that need `setApprovalForAll(true)` (enables SELL). */
 const CTF_OPERATORS: readonly { label: string; address: Address }[] = [
   { label: "CTF → Exchange", address: EXCHANGE_POLYMARKET },
   { label: "CTF → Neg-Risk Exchange", address: NEG_RISK_EXCHANGE_POLYMARKET },
+  { label: "CTF → Neg-Risk Adapter", address: NEG_RISK_ADAPTER_POLYMARKET },
 ];
 
 const CTF_SET_APPROVAL_ABI = parseAbi([
@@ -167,7 +168,7 @@ const CTF_SET_APPROVAL_ABI = parseAbi([
 
 /**
  * Minimum POL balance required before we start submitting approval txs.
- * Empirically each tx is ~35k gas @ ~30 gwei ≈ 0.001 POL; 5 txs + headroom
+ * Empirically each tx is ~35k gas @ ~30 gwei ≈ 0.001 POL; 6 txs + headroom
  * for gas-price spikes ≈ 0.02 POL. We gate on 0.02 to keep the UX error
  * ("insufficient gas") fast and loud instead of letting a mid-sequence tx
  * fail and leave the wallet half-approved.
@@ -1021,7 +1022,7 @@ export class PrivyPolyTraderWalletAdapter implements PolyTraderWalletPort {
   }
 
   /**
-   * Idempotent 5-step Polymarket approvals ceremony for a single tenant.
+   * Idempotent 6-step Polymarket approvals ceremony for a single tenant.
    * See APPROVALS_BEFORE_PLACE + APPROVAL_TARGETS_PINNED invariants on the
    * module header. Logic mirrors
    * `scripts/experiments/approve-polymarket-allowances.ts` — pinned
@@ -1256,7 +1257,7 @@ export class PrivyPolyTraderWalletAdapter implements PolyTraderWalletPort {
     }
 
     // Any failure aborts mid-sequence — don't stamp; pad remaining steps as
-    // skipped so the UI renders the full 5-pill row.
+    // skipped so the UI renders the full 6-pill row.
     while (steps.length < USDC_E_SPENDERS.length + CTF_OPERATORS.length) {
       const idx = steps.length;
       if (idx < USDC_E_SPENDERS.length) {

@@ -42,7 +42,7 @@ import { generateTestWallet } from "@tests/_fixtures/auth/db-helpers";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { and, eq, isNull } from "drizzle-orm";
 import pino from "pino";
-import { getAddress } from "viem";
+import { getAddress, maxUint256 } from "viem";
 import {
   afterAll,
   beforeAll,
@@ -71,9 +71,23 @@ const { createViemAccountMock } = vi.hoisted(() => ({
   ),
 }));
 
+const { createPublicClientMock, createWalletClientMock } = vi.hoisted(() => ({
+  createPublicClientMock: vi.fn(),
+  createWalletClientMock: vi.fn(),
+}));
+
 vi.mock("@privy-io/node/viem", () => ({
   createViemAccount: createViemAccountMock,
 }));
+
+vi.mock("viem", async () => {
+  const actual = await vi.importActual<typeof import("viem")>("viem");
+  return {
+    ...actual,
+    createPublicClient: createPublicClientMock,
+    createWalletClient: createWalletClientMock,
+  };
+});
 
 interface TestTenant {
   userId: string;
@@ -165,6 +179,8 @@ describe("PrivyPolyTraderWalletAdapter (component, RLS)", () => {
 
   beforeEach(async () => {
     createViemAccountMock.mockClear();
+    createPublicClientMock.mockReset();
+    createWalletClientMock.mockReset();
     for (const tenant of [tenantA, tenantB]) {
       await seedDb
         .delete(polyCopyTradeFills)
@@ -549,7 +565,10 @@ describe("PrivyPolyTraderWalletAdapter.authorizeIntent + provisionWithGrant (com
     actorId: "",
   };
 
-  function makeAdapter(walletMock = USER_WALLET_A) {
+  function makeAdapter(
+    walletMock = USER_WALLET_A,
+    options?: { polygonRpcUrl?: string }
+  ) {
     const createWalletMock = vi.fn().mockResolvedValue(walletMock);
     const clobCredsFactory = vi.fn(async () => ({
       key: "k",
@@ -565,6 +584,7 @@ describe("PrivyPolyTraderWalletAdapter.authorizeIntent + provisionWithGrant (com
       encryptionKey: ENCRYPTION_KEY,
       encryptionKeyId: ENCRYPTION_KEY_ID,
       clobCredsFactory,
+      polygonRpcUrl: options?.polygonRpcUrl,
       logger: log,
     });
     return { adapter, createWalletMock, clobCredsFactory };
@@ -911,5 +931,110 @@ describe("PrivyPolyTraderWalletAdapter.authorizeIntent + provisionWithGrant (com
     );
     if (result.ok) throw new Error("expected deny");
     expect(result.reason).toBe("trading_not_ready");
+  });
+
+  it("ensureTradingApprovals repairs a legacy 5-step wallet by adding the neg-risk adapter CTF approval", async () => {
+    const approvalState = {
+      usdc: [maxUint256, maxUint256, maxUint256] as const,
+      ctf: [true, true, false] as [boolean, boolean, boolean],
+    };
+
+    const walletWriteContract = vi.fn(
+      async (input: { functionName: string; args: readonly unknown[] }) => {
+        if (input.functionName !== "setApprovalForAll") {
+          throw new Error(`unexpected function ${input.functionName}`);
+        }
+        const operator = String(input.args[0]).toLowerCase();
+        if (operator !== "0xd91e80cf2e7be2e162c6513ced06f1dd0da35296") {
+          throw new Error(`unexpected operator ${operator}`);
+        }
+        approvalState.ctf[2] = true;
+        return "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+      }
+    );
+
+    createPublicClientMock.mockReturnValue({
+      getBalance: vi.fn().mockResolvedValue(100000000000000000n),
+      readContract: vi.fn(
+        async (input: { functionName: string; args: readonly unknown[] }) => {
+          if (input.functionName === "allowance") {
+            const spender = String(input.args[1]).toLowerCase();
+            if (spender === "0x4bfb41d5b3570defd03c39a9a4d8de6bd8b8982e") {
+              return approvalState.usdc[0];
+            }
+            if (spender === "0xc5d563a36ae78145c45a50134d48a1215220f80a") {
+              return approvalState.usdc[1];
+            }
+            if (spender === "0xd91e80cf2e7be2e162c6513ced06f1dd0da35296") {
+              return approvalState.usdc[2];
+            }
+          }
+          if (input.functionName === "isApprovedForAll") {
+            const operator = String(input.args[1]).toLowerCase();
+            if (operator === "0x4bfb41d5b3570defd03c39a9a4d8de6bd8b8982e") {
+              return approvalState.ctf[0];
+            }
+            if (operator === "0xc5d563a36ae78145c45a50134d48a1215220f80a") {
+              return approvalState.ctf[1];
+            }
+            if (operator === "0xd91e80cf2e7be2e162c6513ced06f1dd0da35296") {
+              return approvalState.ctf[2];
+            }
+          }
+          throw new Error(`unexpected read ${input.functionName}`);
+        }
+      ),
+      waitForTransactionReceipt: vi.fn().mockResolvedValue({
+        status: "success",
+        blockNumber: 123n,
+      }),
+    });
+    createWalletClientMock.mockReturnValue({
+      writeContract: walletWriteContract,
+    });
+
+    const { adapter } = makeAdapter(USER_WALLET_A, {
+      polygonRpcUrl: "https://polygon.example",
+    });
+    await adapter.provisionWithGrant({
+      billingAccountId: tenant.billingAccountId,
+      createdByUserId: tenant.userId,
+      custodialConsent: { ...consent, actorId: tenant.userId },
+      defaultGrant: { perOrderUsdcCap: 5, dailyUsdcCap: 20 },
+    });
+
+    const result = await adapter.ensureTradingApprovals(
+      tenant.billingAccountId
+    );
+
+    expect(result.ready).toBe(true);
+    expect(result.steps).toHaveLength(6);
+    expect(walletWriteContract).toHaveBeenCalledTimes(1);
+    expect(walletWriteContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionName: "setApprovalForAll",
+        args: ["0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296", true],
+      })
+    );
+    expect(
+      result.steps.find(
+        (step) =>
+          step.label === "CTF → Neg-Risk Adapter" && step.state === "set"
+      )
+    ).toBeTruthy();
+
+    const [connection] = await seedDb
+      .select({
+        tradingApprovalsReadyAt: polyWalletConnections.tradingApprovalsReadyAt,
+      })
+      .from(polyWalletConnections)
+      .where(
+        and(
+          eq(polyWalletConnections.billingAccountId, tenant.billingAccountId),
+          isNull(polyWalletConnections.revokedAt)
+        )
+      )
+      .limit(1);
+    expect(connection?.tradingApprovalsReadyAt).toBeInstanceOf(Date);
   });
 });

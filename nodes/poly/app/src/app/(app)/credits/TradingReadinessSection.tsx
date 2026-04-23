@@ -6,7 +6,7 @@
  * Purpose: One-click "Enable Trading" surface on the Money page. Mirrors
  *   Polymarket's own onboarding modal (Deploy ✓ / Sign ✓ / Approve ⬜) but
  *   collapses step 1 (Deploy) and step 2 (Sign) — our adapter already covers
- *   them on /connect — leaving only the 5-target Approve Tokens ceremony
+ *   them on /connect — leaving only the 6-target Approve Tokens ceremony
  *   rendered as per-pill progress.
  * Scope: Client component. POSTs /api/v1/poly/wallet/enable-trading via
  *   React Query mutation; invalidates `poly-wallet-status` on success so
@@ -100,7 +100,7 @@ export function TradingReadinessSection(
           <span className="text-muted-foreground text-xs leading-snug">
             {derivedReady
               ? "Polymarket approvals are on-chain. We signed them from your trading wallet—no browser wallet."
-              : "~5 approval txs from this wallet, server-signed. No extension popup."}
+              : "~6 approval txs from this wallet, server-signed. No extension popup."}
           </span>
         </div>
         <button

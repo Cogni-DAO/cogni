@@ -141,7 +141,7 @@ export interface TradingApprovalStep {
  * Shape is JSON-friendly so the route can serialize it directly.
  */
 export interface TradingApprovalsState {
-  /** True iff all 5 targets ended the run at `satisfied` | `set`. */
+  /** True iff all 6 targets ended the run at `satisfied` | `set`. */
   readonly ready: boolean;
   readonly address: `0x${string}`;
   /** Decimal POL balance used for gas. `null` when RPC unconfigured. */
