@@ -21,6 +21,7 @@ import type {
   CheckInfo,
   CiStatusResult,
   CreateBranchResult,
+  CreatePrResult,
   DispatchCandidateFlightResult,
   MergeResult,
   PrSummary,
@@ -317,6 +318,26 @@ export class GitHubVcsAdapter implements VcsCapability {
       ref: refData.ref,
       sha: refData.object.sha,
     };
+  }
+
+  async createPr(params: {
+    owner: string;
+    repo: string;
+    branch: string;
+    title: string;
+    body: string;
+    base?: string;
+  }): Promise<CreatePrResult> {
+    const octokit = await this.getOctokit(params.owner, params.repo);
+    const { data } = await octokit.request("POST /repos/{owner}/{repo}/pulls", {
+      owner: params.owner,
+      repo: params.repo,
+      title: params.title,
+      body: params.body,
+      head: params.branch,
+      base: params.base ?? "main",
+    });
+    return { prNumber: data.number, url: data.html_url, status: "open" };
   }
 
   // ---------------------------------------------------------------------------

@@ -67,6 +67,13 @@ export interface CreateBranchResult {
   readonly sha: string;
 }
 
+/** Result of creating a pull request. */
+export interface CreatePrResult {
+  readonly prNumber: number;
+  readonly url: string;
+  readonly status: "open";
+}
+
 /**
  * Result of dispatching a candidate-a flight.
  *
@@ -145,4 +152,14 @@ export interface VcsCapability {
     prNumber: number;
     headSha?: string;
   }): Promise<DispatchCandidateFlightResult>;
+
+  /** Open a pull request from an existing branch. Branch must already exist on remote. */
+  createPr(params: {
+    owner: string;
+    repo: string;
+    branch: string;
+    title: string;
+    body: string;
+    base?: string;
+  }): Promise<CreatePrResult>;
 }

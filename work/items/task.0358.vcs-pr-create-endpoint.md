@@ -3,14 +3,21 @@ id: task.0358
 type: task
 title: "POST /api/v1/vcs/pr — VCS create-PR endpoint for external agents"
 status: needs_implement
+priority: 1
 rank: 1
-est: 2
+estimate: 2
+summary: "Add POST /api/v1/vcs/pr so external AI agents can open a GitHub PR from an existing remote branch, closing the autonomous contribution loop."
+outcome: "External agents (e.g. OpenClaw/Coco) can push a branch and open a PR via a single authenticated REST call. Combined with pr-manager, this enables the full loop: push → create PR → flight → self-validate."
+spec_refs:
+  - architecture-spec
+assignees: [derekg1729]
+credit:
 owner: derekg1729
 created: 2026-04-23
 updated: 2026-04-23
 branch: feat/vcs-pr-create
 tags: [operator, vcs, agent-api]
-project: proj.agentic-granted-trading
+project: proj.agentic-interop
 ---
 
 # task.0358 — POST /api/v1/vcs/pr — VCS create-PR endpoint for external agents
@@ -72,15 +79,17 @@ External AI agents can push a branch and open a PR via a single authenticated RE
 **Solution**: Add `createPr` to `VcsCapability` + `GithubVcsAdapter`, expose via a thin route in the operator node. No feature service needed — the capability is already the domain boundary.
 
 **Reuses**:
+
 - `GithubVcsAdapter` (Octokit + GitHub App auth already wired, same pattern as `createBranch`)
 - `wrapRouteHandlerWithLogging` + `auth: { mode: "required", getSessionUser }` (accepts Bearer or session)
 - `packages/node-contracts` contract pattern (Zod in/out, `as const`)
 - `stubVcsCapability` (extend with throwing `createPr` stub)
 
 **Rejected**:
-- *Feature service layer* — overkill for a single-adapter delegation; route facade is sufficient and matches the existing `vcs-flight` route pattern
-- *AI tool (`core__vcs_create_pr`)* — task.0278 scope; external agents call HTTP directly, not via graph tool
-- *Patch/diff application server-side* — agents push their own branch first; server only opens the PR
+
+- _Feature service layer_ — overkill for a single-adapter delegation; route facade is sufficient and matches the existing `vcs-flight` route pattern
+- _AI tool (`core__vcs_create_pr`)_ — task.0278 scope; external agents call HTTP directly, not via graph tool
+- _Patch/diff application server-side_ — agents push their own branch first; server only opens the PR
 
 ### Invariants
 
@@ -107,6 +116,7 @@ External AI agents can push a branch and open a PR via a single authenticated RE
 ### Implementation notes
 
 `GithubVcsAdapter.createPr` is a one-shot Octokit call — same shape as `createBranch`:
+
 ```ts
 const { data } = await this.octokit(owner, repo).request(
   "POST /repos/{owner}/{repo}/pulls",
