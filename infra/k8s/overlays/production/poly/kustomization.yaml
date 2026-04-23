@@ -7,7 +7,6 @@ namespace: cogni-production
 
 resources:
   - ../../../base/node-app
-  - env-state.yaml
 
 namePrefix: poly-
 
@@ -88,58 +87,91 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/command
         value: ["sh", "-c", "echo 'poly: no dedicated migrate image yet (task.0260)' && exit 0"]
-  - target:
-      kind: EndpointSlice
-      name: postgres-external-1
-    patch: |
-      - op: replace
-        path: /metadata/labels/kubernetes.io~1service-name
-        value: "poly-postgres-external"
-  - target:
-      kind: EndpointSlice
-      name: temporal-external-1
-    patch: |
-      - op: replace
-        path: /metadata/labels/kubernetes.io~1service-name
-        value: "poly-temporal-external"
-  - target:
-      kind: EndpointSlice
-      name: litellm-external-1
-    patch: |
-      - op: replace
-        path: /metadata/labels/kubernetes.io~1service-name
-        value: "poly-litellm-external"
-  - target:
-      kind: EndpointSlice
-      name: redis-external-1
-    patch: |
-      - op: replace
-        path: /metadata/labels/kubernetes.io~1service-name
-        value: "poly-redis-external"
 
-replacements:
-  - source:
-      kind: ConfigMap
-      name: env-state
-      fieldPath: data.VM_IP
-    targets:
-      - select:
-          kind: EndpointSlice
-          name: postgres-external-1
-        fieldPaths:
-          - endpoints.0.addresses.0
-      - select:
-          kind: EndpointSlice
-          name: temporal-external-1
-        fieldPaths:
-          - endpoints.0.addresses.0
-      - select:
-          kind: EndpointSlice
-          name: litellm-external-1
-        fieldPaths:
-          - endpoints.0.addresses.0
-      - select:
-          kind: EndpointSlice
-          name: redis-external-1
-        fieldPaths:
-          - endpoints.0.addresses.0
+  # bug.0295: VM discovery via DNS (production.vm.cognidao.org).
+  # Convert base headless Services → ExternalName; delete EndpointSlices.
+  - target: { kind: Service, name: postgres-external }
+    patch: |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: postgres-external
+      spec:
+        type: ExternalName
+        externalName: production.vm.cognidao.org
+        clusterIP: null
+  - target: { kind: Service, name: temporal-external }
+    patch: |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: temporal-external
+      spec:
+        type: ExternalName
+        externalName: production.vm.cognidao.org
+        clusterIP: null
+  - target: { kind: Service, name: litellm-external }
+    patch: |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: litellm-external
+      spec:
+        type: ExternalName
+        externalName: production.vm.cognidao.org
+        clusterIP: null
+  - target: { kind: Service, name: redis-external }
+    patch: |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: redis-external
+      spec:
+        type: ExternalName
+        externalName: production.vm.cognidao.org
+        clusterIP: null
+  - target: { kind: Service, name: doltgres-external }
+    patch: |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: doltgres-external
+      spec:
+        type: ExternalName
+        externalName: production.vm.cognidao.org
+        clusterIP: null
+  - target: { kind: EndpointSlice, name: postgres-external-1 }
+    patch: |
+      $patch: delete
+      apiVersion: discovery.k8s.io/v1
+      kind: EndpointSlice
+      metadata:
+        name: postgres-external-1
+  - target: { kind: EndpointSlice, name: temporal-external-1 }
+    patch: |
+      $patch: delete
+      apiVersion: discovery.k8s.io/v1
+      kind: EndpointSlice
+      metadata:
+        name: temporal-external-1
+  - target: { kind: EndpointSlice, name: litellm-external-1 }
+    patch: |
+      $patch: delete
+      apiVersion: discovery.k8s.io/v1
+      kind: EndpointSlice
+      metadata:
+        name: litellm-external-1
+  - target: { kind: EndpointSlice, name: redis-external-1 }
+    patch: |
+      $patch: delete
+      apiVersion: discovery.k8s.io/v1
+      kind: EndpointSlice
+      metadata:
+        name: redis-external-1
+  - target: { kind: EndpointSlice, name: doltgres-external-1 }
+    patch: |
+      $patch: delete
+      apiVersion: discovery.k8s.io/v1
+      kind: EndpointSlice
+      metadata:
+        name: doltgres-external-1
