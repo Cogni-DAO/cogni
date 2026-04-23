@@ -3,11 +3,11 @@
 
 /**
  * Module: `@app/api/v1/poly/wallet/positions/close`
- * Purpose: HTTP POST — tenant-scoped CLOB SELL that closes an open outcome position while the market still trades (pre-resolution exit).
- * Scope: Validates body with `polyWalletClosePositionOperation`, resolves session billing account, delegates to `PolyTradeExecutor.closePosition`. Does not implement new CLOB client code or target wallets.
+ * Purpose: HTTP POST — tenant-scoped market SELL that fully exits an open outcome position while the market still trades (pre-resolution exit).
+ * Scope: Validates body with `polyWalletClosePositionOperation`, resolves session billing account, delegates to `PolyTradeExecutor.exitPosition`. Does not implement new CLOB client code or target wallets.
  * Invariants:
  *   - TENANT_SCOPED — the funder address always comes from the caller's trading connection, never from the request body.
- *   - AUTHORIZE_ON_PATH — `closePosition` runs `authorizeIntent` inside the executor before any order is signed.
+ *   - EXIT_ON_PATH — `exitPosition` sells the caller's full share balance for the token via a market order; grant caps never block user exits.
  * Side-effects: Polymarket CLOB HTTPS, possible on-chain fill when the order matches.
  * Links: packages/node-contracts/src/poly.wallet.position-actions.v1.contract.ts,
  *        nodes/poly/app/src/bootstrap/capabilities/poly-trade-executor.ts
@@ -93,23 +93,8 @@ export const POST = wrapRouteHandlerWithLogging(
       const executor = await executorFactory.getPolyTradeExecutorFor(
         account.id
       );
-      const positions = await executor.listPositions();
-      const match = positions.find((p) => p.asset === parsed.data.token_id);
-      if (!match || match.size <= 0) {
-        return NextResponse.json(
-          { error: "no_open_position", token_id: parsed.data.token_id },
-          { status: 409 }
-        );
-      }
-      const positionCap = match.size * match.curPrice;
-      const max_size_usdc =
-        parsed.data.max_size_usdc !== undefined
-          ? Math.min(parsed.data.max_size_usdc, positionCap)
-          : positionCap;
-
-      const receipt = await executor.closePosition({
+      const receipt = await executor.exitPosition({
         tokenId: parsed.data.token_id,
-        max_size_usdc,
         client_order_id: randomClientOrderId(),
       });
 

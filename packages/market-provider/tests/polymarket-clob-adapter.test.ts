@@ -305,6 +305,7 @@ describe("PolymarketClobAdapter", () => {
   function makeAdapter(
     stub: {
       createAndPostOrder?: ReturnType<typeof vi.fn>;
+      createAndPostMarketOrder?: ReturnType<typeof vi.fn>;
       cancelOrder?: ReturnType<typeof vi.fn>;
       getOrder?: ReturnType<typeof vi.fn>;
       getTickSize?: ReturnType<typeof vi.fn>;
@@ -456,6 +457,73 @@ describe("PolymarketClobAdapter", () => {
     const adapter = makeAdapter({ cancelOrder });
     await adapter.cancelOrder("0xorder");
     expect(cancelOrder).toHaveBeenCalledWith({ orderID: "0xorder" });
+  });
+
+  it("sellPositionAtMarket posts a market SELL using the exact share balance", async () => {
+    const createAndPostMarketOrder = vi.fn().mockResolvedValue({
+      orderID: "0xmarket",
+      status: "matched",
+      takingAmount: "1.25",
+    });
+    const getTickSize = vi.fn().mockResolvedValue("0.001");
+    const getNegRisk = vi.fn().mockResolvedValue(true);
+    const getFeeRateBps = vi.fn().mockResolvedValue(1000);
+    const adapter = makeAdapter({
+      createAndPostMarketOrder,
+      getTickSize,
+      getNegRisk,
+      getFeeRateBps,
+    });
+
+    const receipt = await adapter.sellPositionAtMarket({
+      tokenId: "0xtoken",
+      shares: 5,
+      client_order_id: "0xclientid",
+      orderType: "FAK",
+    });
+
+    expect(createAndPostMarketOrder).toHaveBeenCalledOnce();
+    const [userOrder, opts, orderType] = createAndPostMarketOrder.mock
+      .calls[0] as [
+      { tokenID: string; amount: number; side: string; feeRateBps: number },
+      { tickSize: string; negRisk: boolean },
+      string,
+    ];
+    expect(userOrder).toEqual({
+      tokenID: "0xtoken",
+      amount: 5,
+      side: "SELL",
+      feeRateBps: 1000,
+    });
+    expect(opts).toEqual({ tickSize: "0.001", negRisk: true });
+    expect(orderType).toBe("FAK");
+    expect(receipt.order_id).toBe("0xmarket");
+    expect(receipt.client_order_id).toBe("0xclientid");
+    expect(receipt.filled_size_usdc).toBe(1.25);
+  });
+
+  it("sellPositionAtMarket rejects a share balance below the market minimum", async () => {
+    const createAndPostMarketOrder = vi.fn();
+    const getOrderBook = vi.fn().mockResolvedValue({
+      min_order_size: "5",
+      tick_size: "0.01",
+    });
+    const adapter = makeAdapter({ createAndPostMarketOrder, getOrderBook });
+
+    let caught: unknown;
+    try {
+      await adapter.sellPositionAtMarket({
+        tokenId: "0xtoken",
+        shares: 2,
+        client_order_id: "0xclientid",
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as { code?: string }).code).toBe("BELOW_MARKET_MIN");
+    expect(createAndPostMarketOrder).not.toHaveBeenCalled();
   });
 
   it("getOrder maps OpenOrder response to { found: receipt } (GETORDER_NEVER_NULL, task.0328 CP1)", async () => {
@@ -625,6 +693,7 @@ describe("PolymarketClobAdapter — observability", () => {
   function makeAdapter(
     stub: {
       createAndPostOrder?: ReturnType<typeof vi.fn>;
+      createAndPostMarketOrder?: ReturnType<typeof vi.fn>;
       cancelOrder?: ReturnType<typeof vi.fn>;
       getOrder?: ReturnType<typeof vi.fn>;
       getTickSize?: ReturnType<typeof vi.fn>;
