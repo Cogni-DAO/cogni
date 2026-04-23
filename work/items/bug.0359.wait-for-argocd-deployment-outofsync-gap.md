@@ -2,7 +2,7 @@
 id: bug.0359
 type: bug
 title: "candidate-flight false-green: wait-for-argocd accepts revision-advanced apps whose Deployment stays OutOfSync"
-status: needs_implement
+status: needs_review
 priority: 1
 rank: 2
 estimate: 1
@@ -18,7 +18,7 @@ credit:
 project: proj.cicd-services-gitops
 initiative:
 branch: fix/bug-0359-wait-for-argocd-deployment-sync
-pr:
+pr: 1003
 reviewer:
 revision: 0
 blocked_by: []
