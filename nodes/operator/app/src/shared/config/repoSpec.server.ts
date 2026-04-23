@@ -185,3 +185,31 @@ export function getDaoTreasuryAddress(): string | undefined {
   cachedDaoTreasuryAddress = extractDaoTreasuryAddress(spec);
   return cachedDaoTreasuryAddress;
 }
+
+let cachedGithubRepo: { owner: string; repo: string } | null = null;
+
+/**
+ * GitHub repo identity from repo-spec (activity_ledger.activity_sources.github.source_refs[0]).
+ * Returns the operator's own GitHub repo as { owner, repo }.
+ * Throws if not configured — required for VCS operations.
+ */
+export function getGithubRepo(): { owner: string; repo: string } {
+  if (cachedGithubRepo) return cachedGithubRepo;
+
+  const spec = loadRepoSpec();
+  const slug =
+    spec.activity_ledger?.activity_sources?.["github"]?.source_refs?.[0];
+  if (!slug) {
+    throw new Error(
+      "repo-spec missing activity_ledger.activity_sources.github.source_refs — required for VCS operations"
+    );
+  }
+  const [owner, repo] = slug.split("/");
+  if (!owner || !repo) {
+    throw new Error(
+      `repo-spec github source_ref has unexpected format: "${slug}" (expected "owner/repo")`
+    );
+  }
+  cachedGithubRepo = { owner, repo };
+  return cachedGithubRepo;
+}

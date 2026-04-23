@@ -55,6 +55,7 @@ export async function GET(request: Request) {
       graphs: `${origin}/api/v1/ai/agents`,
       runs: `${origin}/api/v1/agent/runs`,
       runStream: `${origin}/api/v1/agent/runs/{runId}/stream`,
+      contribute: `${origin}/api/v1/vcs/pr`,
     },
     defaults: {
       model: "gpt-4o-mini",
