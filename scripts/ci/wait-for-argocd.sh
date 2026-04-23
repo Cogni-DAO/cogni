@@ -185,10 +185,18 @@ rollout_check() {
   return 1
 }
 
-# Kick a manual sync on an Application by patching an operation into its spec.
+# Kick a manual sync on an Application by replacing the operation in its spec.
 # Argo CD's application-controller picks this up within the reconciliation loop
 # and runs it even if automated sync is disabled or misconfigured. This MUST
 # use hook sync (not apply sync) so PreSync migration jobs still execute.
+#
+# bug.0360 follow-up: merge-patching only the nested sync strategy was enough
+# to advance status.sync.revision to the new deploy SHA, but not enough to
+# clear a stale Running operation that was still waiting on a missing hook Job.
+# Rebuild the full operation payload on each kick so the controller gets an
+# explicit sync request for EXPECTED_SHA, and clear obviously-stale operations
+# that reference a hook job that no longer exists.
+#
 # Named hook Jobs are sticky: if a prior no-hook sync left them in-cluster as
 # obj->obj, Argo can decide the first out-of-sync wave is Sync/0 and never
 # recreate the PreSync Jobs even with hook sync enabled. Remove those stale
@@ -245,11 +253,61 @@ request_hard_refresh() {
   fi
 }
 
+get_operation_message() {
+  kubectl -n argocd get application "$1" -o jsonpath='{.status.operationState.message}' 2>/dev/null || true
+}
+
+get_operation_revision() {
+  local r=""
+  r=$(kubectl -n argocd get application "$1" -o jsonpath='{.status.operationState.syncResult.revision}' 2>/dev/null || true)
+  printf '%s' "$r" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]'
+}
+
+clear_stale_missing_hook_operation() {
+  local app_name="$1"
+  local namespace op_phase op_message op_revision hook_job out
+
+  op_phase=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.phase}' 2>/dev/null || true)
+  [ "$op_phase" = "Running" ] || return 0
+
+  op_message=$(get_operation_message "$app_name")
+  hook_job=$(printf '%s' "$op_message" | sed -n 's/.*hook batch\/Job\/\([^ ]*\).*/\1/p')
+  [ -n "$hook_job" ] || return 0
+
+  namespace="cogni-${DEPLOY_ENVIRONMENT}"
+  if kubectl -n "$namespace" get job "$hook_job" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  op_revision=$(get_operation_revision "$app_name")
+  echo "    🛑 ${app_name}: clearing stale Running operation at ${op_revision:0:8} waiting on missing hook job ${namespace}/${hook_job}"
+  if ! out=$(kubectl -n argocd patch application "$app_name" --type=merge -p '{"operation":null}' 2>&1); then
+    echo "    ⚠️  failed to clear stale operation for ${app_name}: $out" >&2
+    return 1
+  fi
+  return 0
+}
+
 patch_sync_operation() {
   local app_name="$1"
   local out
+  local patch
+
+  patch=$(cat <<EOF
+{"operation":{
+  "initiatedBy":{"username":"candidate-flight"},
+  "sync":{
+    "prune":true,
+    "revision":"$EXPECTED_SHA",
+    "syncOptions":["CreateNamespace=true"],
+    "syncStrategy":{"hook":{"force":false}}
+  }
+}}
+EOF
+)
+
   if ! out=$(kubectl -n argocd patch application "$app_name" --type=merge -p \
-    '{"operation":{"sync":{"syncStrategy":{"hook":{"force":false}}}}}' 2>&1); then
+    "$patch" 2>&1); then
     echo "    ⚠️  sync operation patch failed for ${app_name}: $out" >&2
     return 1
   fi
@@ -324,6 +382,7 @@ wait_for_app() {
       if [ "$kick_count" -eq 1 ]; then
         delete_stale_hook_jobs "$app_name"
       fi
+      clear_stale_missing_hook_operation "$app_name" || true
       patch_sync_operation "$app_name" || true
       next_kick=$((SECONDS + SYNC_KICK_INTERVAL))
     fi
