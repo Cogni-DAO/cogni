@@ -131,7 +131,7 @@
 | 1 | 10 | 1 | needs_review | task.0210 | BYO-AI ChatGPT v0 — OAuth hardening + security review fixes | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 1 | 10 | 1 | needs_implement | spike.0220 | Validate AiMo Network x402 passthrough — 402 flow, model coverage, E2E feasibility | x402 E2E Migration: Hyperbolic + Per-Request Settlement | proj.x402-e2e-migration |
 | 1 | 10 | 3 | needs_design | task.0332 | Poly mirror — shared batched poller (N wallets, 1 loop) replacing per-wallet setInterval | Cogni Poly | proj.poly-copy-trading |
-| 1 | 10 | 5 | needs_implement | task.0355 | Poly trading wallet — Enable Trading (token approvals + readiness gate) | Cogni Poly | proj.poly-copy-trading |
+| 1 | 10 | 5 | needs_review | task.0355 | Poly trading wallet — Enable Trading (token approvals + readiness gate) | Cogni Poly | proj.poly-copy-trading |
 | 1 | 11 | 3 | needs_design | task.0045 | Enable OpenClaw subagent spawning — upstream header fix + Cogni config + delegation instructions | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 12 | 2 | needs_design | task.0034 | Wire OpenClaw memory search + bootstrap files for cogni-template repo context | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 13 | 1 | needs_design | task.0018 | Dynamic agent catalog in UI + OpenClaw model sync | OpenClaw Capabilities Integration | proj.openclaw-capabilities |

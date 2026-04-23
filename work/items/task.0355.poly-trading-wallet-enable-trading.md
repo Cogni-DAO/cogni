@@ -2,13 +2,12 @@
 id: task.0355
 type: task
 title: "Poly trading wallet — Enable Trading (token approvals + readiness gate)"
-status: needs_implement
-revision: 1
+status: needs_review
 priority: 1
 rank: 10
 estimate: 5
 created: 2026-04-22
-updated: 2026-04-23
+updated: 2026-04-22
 summary: "Productize the missing third onboarding step — Polymarket token approvals — as a first-class multi-tenant backend capability + Money-page UI. Today the 3× USDC.e `approve` + 2× CTF `setApprovalForAll` calls only exist in the raw-PK experiment script `scripts/experiments/approve-polymarket-allowances.ts`, making Phase B3 (task.0318) untestable by any real user and leaving `deploy_verified: true` unreachable. This task adds a `PolyTraderWalletPort.ensureTradingApprovals` method signed via Privy HSM, a `POST /api/v1/poly/wallet/enable-trading` route, a readiness signal on `poly.wallet.status.v1`, an `APPROVALS_BEFORE_PLACE` invariant on `authorizeIntent`, and an Enable-Trading flow on the Money page that mirrors Polymarket's own 3-step modal (Deploy ✓ / Sign ✓ / Approve ⬜)."
 outcome: "A freshly provisioned + funded tenant clicks one button on the Money page, signs nothing manually, and ends with a wallet that can BUY and SELL on Polymarket — confirmed by placing a real mirror trade on candidate-a, observed in Loki at the deployed SHA. `authorizeIntent` fail-closes with `trading_not_ready` for any tenant whose approvals haven't completed, so no placement can reach the CLOB and silently empty-reject."
 spec_refs:
@@ -21,6 +20,7 @@ project: proj.poly-copy-trading
 branch: design/task-0355-enable-trading-approvals
 pr:
 reviewer:
+revision: 0
 blocked_by: []
 labels:
   [poly, wallet, onboarding, approvals, privy, ui, blocker-for-deploy-verified]
@@ -180,24 +180,3 @@ Subsidized gas, Safe+4337, approval revocation UI, lazy on-chain re-check, agent
 - **Reuse the experiment logic verbatim.** `scripts/experiments/approve-polymarket-allowances.ts` already has the correct contract addresses, ABIs, idempotency reads, block-pinned post-verification, and sequencing. Port the on-chain calls as-is into the adapter; change only the caller (Privy backend-wallet viem account instead of raw-PK account) and the return-state shape. "Port, don't rewrite" applies.
 - **Why `maxUint256` and not per-order caps?** Polymarket's own onboarding does maxUint256. Granular approvals force a second approval tx every time a user adjusts caps, which means every grant rotation becomes two on-chain txs. Since the wallet is Privy-custodied and revoke-cascades, the blast radius is already bounded by grant caps and connection lifetime. Documented tradeoff.
 - **Deploy impact on PR.** New migration; needs `candidate-flight-infra`. New env: none (all constants are pinned).
-
-## Review Feedback
-
-**revision: 1 — REQUEST CHANGES**
-
-### Blocking
-
-**`poly-trade-executor.ts` ~L468–503 — Silent consent violation in `authorizeWalletExit`**
-
-`authorizeWalletExit` silently invokes `ensureTradingApprovals` (up to 5 Privy-signed on-chain transactions that consume the user's POL for gas) as a side effect when a user clicks "Close Position" and their `trading_approvals_ready_at` is NULL. The user initiated an exit, not an onboarding step. This is a consent-surface violation.
-
-Additional risk: if POL balance is borderline, the approval transactions can exhaust the balance before the SELL executes — user spends gas, position is not closed.
-
-**Fix**: Remove `ensureTradingApprovals` from `authorizeWalletExit`. When `requireTradingReady && !tradingApprovalsReadyAt`, throw `PolyTradeExecutorError("not_authorized", ..., "trading_not_ready")` and let the Enable Trading UI own the onboarding path. Update the unit test `"self-heals trading approvals when readiness stamp is missing"` to assert the error is thrown.
-
-### Non-blocking
-
-1. `enable-trading/route.ts` — duck-typed `(err as { code? }).code` catch; replace with typed narrowing against `EnableTradingPreflightError`.
-2. `ensureTradingApprovals` — call `getConnectionSummary` before `resolve` to skip Privy round-trip in pre-flight checks.
-3. Unit test for `authorizeIntent` ordering (`trading_not_ready` before `no_active_grant`) is listed as required in the spec's Tests section; present only at component level.
-4. `TradingReadinessSection.tsx` — raw `<button>` vs design-system `<Button>` component.
