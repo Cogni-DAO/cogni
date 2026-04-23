@@ -214,6 +214,8 @@ jobs:
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           # PR branch head SHA — the SHA baked into images at build time.
           # Differs from HEAD_SHA on squash-merge (HEAD_SHA = new main commit).
+          # Passed as positional arg 5 so the contract is explicit; a silent
+          # env-var fallback reintroduces the bug.0361 SHA-mismatch regression.
           BUILD_SHA: ${{ steps.pr.outputs.pr_head_sha }}
           REPOSITORY: ${{ github.repository }}
         run: |
@@ -221,7 +223,8 @@ jobs:
             "$HEAD_SHA" \
             "$REPOSITORY" \
             "deploy/preview" \
-            "$GH_TOKEN"
+            "$GH_TOKEN" \
+            "$BUILD_SHA"
         continue-on-error: true
 
       - name: Propagate flight failure

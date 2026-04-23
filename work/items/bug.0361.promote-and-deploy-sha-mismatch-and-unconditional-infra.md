@@ -2,7 +2,7 @@
 id: bug.0361
 type: bug
 title: "promote-and-deploy: EXPECTED_BUILDSHA uses merge commit SHA; deploy-infra always runs"
-status: needs_implement
+status: needs_merge
 revision: 1
 priority: 1
 rank: 1
@@ -92,3 +92,29 @@ from repo` step lives inside `deploy-infra`. With `skip_infra=true`, that reconc
 - Short runbook for prod dispatch (the exact `gh workflow run` invocation + how to find
   `source_sha` and `build_sha`).
 - Consider `type: boolean` for `skip_infra` with `!inputs.skip_infra` comparisons.
+
+## Resolution (revision 1)
+
+Blockers 1–3 addressed in-PR:
+
+1. **Skip cascade fixed.** `verify-deploy`, `verify`, `e2e`, and (implicitly via
+   `e2e.result == 'success'`) `lock-preview-on-success` now use explicit result
+   guards instead of GHA's implicit `success()`. Each tolerates
+   `deploy-infra.result in {success, skipped}`. `e2e` tightens the gate to
+   require verify + verify-deploy to have actually succeeded (not skipped) so the
+   empty-promotion path still cascades to unlock correctly.
+2. **AppSet reconcile moved** out of `deploy-infra` into `verify-deploy` (after
+   Setup SSH, before Wait for ArgoCD sync). Runs on every non-empty promotion
+   regardless of `skip_infra`. Template-drift (bug.0312) stays closed.
+3. **Prod silent-green** closed by the same skip-cascade fix: prod dispatches
+   now run `verify-deploy` even when `skip_infra=true`, so `verify-buildsha`
+   always gates the deploy.
+
+Reviewer's second blocker (BUILD_SHA implicit env-only) also addressed:
+
+- `flight-preview.sh` takes `build_sha` as positional arg 5 with explicit
+  contract (arg > env > SHA fallback). `flight-preview.yml` passes `$BUILD_SHA`
+  explicitly. Future callers must pass it or regress bug.0361.
+
+Non-blocking items (prod runbook, boolean type for `skip_infra`) deferred to
+PR 2 (full env unification).
