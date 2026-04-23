@@ -57,6 +57,11 @@ jobs:
       deploy_branch_sha: ${{ steps.push-deploy.outputs.deploy_branch_sha }}
       acquired: ${{ steps.acquire-summary.outputs.acquired }}
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          path: ci-src
+
       - name: Resolve PR metadata
         id: meta
         env:
@@ -89,7 +94,7 @@ jobs:
           STATE: pending
           DESCRIPTION: Candidate flight in progress
           TARGET_URL: ${{ steps.meta.outputs.status_url }}
-        run: bash app-src/scripts/ci/report-candidate-status.sh
+        run: bash ci-src/scripts/ci/report-candidate-status.sh
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -106,7 +111,7 @@ jobs:
         env:
           IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
           OUTPUT_FILE: ${{ runner.temp }}/resolved-pr-images.json
-        run: bash app-src/scripts/ci/resolve-pr-build-images.sh
+        run: bash ci-src/scripts/ci/resolve-pr-build-images.sh
 
       - name: Require at least one built image
         if: steps.images.outputs.has_images != 'true'
@@ -145,7 +150,7 @@ jobs:
           HEAD_SHA: ${{ steps.meta.outputs.head_sha }}
           RUN_ID: ${{ github.run_id }}
           STATUS_URL: ${{ steps.meta.outputs.status_url }}
-        run: bash ../app-src/scripts/ci/acquire-candidate-slot.sh
+        run: bash ../ci-src/scripts/ci/acquire-candidate-slot.sh
 
       - name: Record acquire outcome
         id: acquire-summary
@@ -171,7 +176,7 @@ jobs:
         env:
           PAYLOAD_FILE: ${{ runner.temp }}/resolved-pr-images.json
           OVERLAY_ENV: candidate-a
-        run: bash ../app-src/scripts/ci/promote-build-payload.sh
+        run: bash ../ci-src/scripts/ci/promote-build-payload.sh
 
       - name: Commit and push deploy/candidate-a
         id: push-deploy
@@ -232,7 +237,11 @@ jobs:
           VM_HOST: ${{ secrets.VM_HOST }}
           SSH_OPTS: "-i /home/runner/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
         run: |
-          APPSET_FILE="app-src/infra/k8s/argocd/candidate-a-applicationset.yaml"
+          # The workflow ref owns the CI control plane. App content still
+          # comes from the target PR checkout (`app-src`), but the
+          # ApplicationSet used by this workflow should track the branch that
+          # dispatched the run so workflow / Argo-wait fixes are self-validating.
+          APPSET_FILE="ci-src/infra/k8s/argocd/candidate-a-applicationset.yaml"
           if [ ! -f "$APPSET_FILE" ]; then
             echo "⚠️  No ApplicationSet file at ${APPSET_FILE} — skipping"
             exit 0
@@ -257,6 +266,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: candidate-a
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          path: ci-src
+
       - name: Checkout app source
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
@@ -303,27 +317,27 @@ jobs:
           DEPLOY_ENVIRONMENT: candidate-a
           EXPECTED_SHA: ${{ needs.flight.outputs.deploy_branch_sha }}
           PROMOTED_APPS: ${{ needs.flight.outputs.promoted_apps }}
-        run: bash app-src/scripts/ci/wait-for-argocd.sh
+        run: bash ci-src/scripts/ci/wait-for-argocd.sh
 
       - name: Wait for candidate readiness
         if: steps.ssh-setup.outputs.has_vm == 'true'
         env:
           DOMAIN: ${{ vars.DOMAIN }}
-        run: bash app-src/scripts/ci/wait-for-candidate-ready.sh
+        run: bash ci-src/scripts/ci/wait-for-candidate-ready.sh
 
       - name: Wait for in-cluster services
         if: steps.ssh-setup.outputs.has_vm == 'true'
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           DEPLOY_ENVIRONMENT: candidate-a
-        run: bash app-src/scripts/ci/wait-for-in-cluster-services.sh
+        run: bash ci-src/scripts/ci/wait-for-in-cluster-services.sh
 
       - name: Run candidate smoke checks
         if: steps.ssh-setup.outputs.has_vm == 'true'
         env:
           DOMAIN: ${{ vars.DOMAIN }}
           PROMOTED_APPS: ${{ needs.flight.outputs.promoted_apps }}
-        run: bash app-src/scripts/ci/smoke-candidate.sh
+        run: bash ci-src/scripts/ci/smoke-candidate.sh
 
       # Authoritative contract probe: promoted pods serve the SHA that built
       # their overlay digest. SOURCE_SHA_MAP mode (bug.0321 Fix 4) reads
@@ -337,7 +351,7 @@ jobs:
           SOURCE_SHA_MAP: deploy-branch/.promote-state/source-sha-by-app.json
           EXPECTED_BUILDSHA: ${{ needs.flight.outputs.head_sha }}
           NODES: ${{ needs.flight.outputs.promoted_apps }}
-        run: bash app-src/scripts/ci/verify-buildsha.sh
+        run: bash ci-src/scripts/ci/verify-buildsha.sh
 
   # ── Release + report — always() on flight acquisition. Decides lease
   # STATE and commit status from verify-candidate.result. Skipped entirely
@@ -348,6 +362,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: candidate-a
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          path: ci-src
+
       - name: Checkout app source
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
@@ -409,7 +428,7 @@ jobs:
         working-directory: deploy-branch
         env:
           STATE: ${{ steps.decide.outputs.state }}
-        run: bash ../app-src/scripts/ci/release-candidate-slot.sh
+        run: bash ../ci-src/scripts/ci/release-candidate-slot.sh
 
       - name: Commit and push released candidate slot
         working-directory: deploy-branch
@@ -430,7 +449,7 @@ jobs:
           STATE: ${{ steps.decide.outputs.status }}
           DESCRIPTION: ${{ steps.decide.outputs.description }}
           TARGET_URL: ${{ needs.flight.outputs.status_url }}
-        run: bash app-src/scripts/ci/report-candidate-status.sh
+        run: bash ci-src/scripts/ci/report-candidate-status.sh
 
       # bug.0328: when Decide chose STATUS=failure, the commit status has
       # been reported and the lease released; now fail the job itself so
@@ -452,6 +471,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: candidate-a
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          path: ci-src
+
       - name: Checkout app source
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
@@ -466,4 +490,4 @@ jobs:
           STATE: failure
           DESCRIPTION: Candidate flight failed before slot acquisition
           TARGET_URL: ${{ needs.flight.outputs.status_url }}
-        run: bash app-src/scripts/ci/report-candidate-status.sh
+        run: bash ci-src/scripts/ci/report-candidate-status.sh
