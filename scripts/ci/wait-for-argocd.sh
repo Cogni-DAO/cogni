@@ -20,10 +20,11 @@
 # soon as enough pods are Ready, which includes the OLD ReplicaSet's pods
 # during the window between sync and rollout completion. /version from those
 # pods serves the prior BUILD_SHA, so downstream verify-buildsha.sh fails
-# on a green flight. After Argo reports Healthy for an app, this script now
-# also runs `kubectl rollout status` on the app's Deployment — that command
-# only returns 0 when the new ReplicaSet is fully available AND the old
-# pods are torn down. Only then is the app considered done.
+# on a green flight. This script therefore waits for the promoted app's
+# Deployment resource inside the Argo Application to report `status=Synced`
+# before trusting rollout status. That closes the "revision advanced but
+# live Deployment never adopted the new spec" class seen on candidate-a,
+# where app-level health was green while operator/resy stayed OutOfSync.
 #
 # Belt-and-suspenders active sync: if an app's reported revision has not
 # caught up to EXPECTED_SHA, we (1) request a hard git refresh on the
@@ -48,7 +49,7 @@
 #                       Empty → fall back to full catalog. Apps not promoted
 #                       in this run may legitimately be pinned at prior digest
 #                       (e.g. sandbox-openclaw placeholder) and would false-fail.
-#   ARGOCD_TIMEOUT      (optional, default 300) overall timeout in seconds
+#   ARGOCD_TIMEOUT      (optional, default 300) per-app timeout in seconds
 #   ACTIVE_SYNC_AFTER   (optional, default 30) seconds before the first Argo kick
 #   SYNC_KICK_INTERVAL  (optional, default 45) seconds between subsequent kicks
 #                       while revision still mismatches (hard refresh + sync op)
@@ -123,10 +124,45 @@ resolve_deployment() {
   esac
 }
 
+get_deployment_resource_sync_status() {
+  local app_name="$1"
+  local deployment
+
+  deployment=$(resolve_deployment "$app_name")
+  if [ -z "$deployment" ]; then
+    printf ''
+    return 0
+  fi
+
+  kubectl -n argocd get application "$app_name" \
+    -o jsonpath='{range .status.resources[*]}{.kind}{"\t"}{.name}{"\t"}{.status}{"\n"}{end}' \
+    2>/dev/null | awk -F '\t' -v deployment="$deployment" '
+      $1 == "Deployment" && $2 == deployment {
+        print $3
+        found = 1
+        exit
+      }
+      END {
+        if (!found) {
+          print ""
+        }
+      }
+    '
+}
+
+deployment_sync_ready() {
+  local deployment="$1"
+  local status="$2"
+  if [ -z "$deployment" ]; then
+    return 0
+  fi
+  [ "$status" = "Synced" ]
+}
+
 # Block until the Deployment's new ReplicaSet is fully available AND the old
 # ReplicaSet's pods are gone. Called AFTER sync.revision + Healthy to close
-# bug.0326 (Argo-level Healthy ≠ pods-serving-new-image). Uses the remaining
-# overall deadline so we don't double-budget the wait.
+# bug.0326 (Argo-level Healthy ≠ pods-serving-new-image). Uses the per-app
+# deadline so later apps are not starved by earlier reconciles.
 rollout_check() {
   local app_name="$1"
   local deadline="$2"
@@ -149,10 +185,18 @@ rollout_check() {
   return 1
 }
 
-# Kick a manual sync on an Application by patching an operation into its spec.
+# Kick a manual sync on an Application by replacing the operation in its spec.
 # Argo CD's application-controller picks this up within the reconciliation loop
 # and runs it even if automated sync is disabled or misconfigured. This MUST
 # use hook sync (not apply sync) so PreSync migration jobs still execute.
+#
+# bug.0360 follow-up: merge-patching only the nested sync strategy was enough
+# to advance status.sync.revision to the new deploy SHA, but not enough to
+# clear a stale Running operation that was still waiting on a missing hook Job.
+# Rebuild the full operation payload on each kick so the controller gets an
+# explicit sync request for EXPECTED_SHA, and clear obviously-stale operations
+# that reference a hook job that no longer exists.
+#
 # Named hook Jobs are sticky: if a prior no-hook sync left them in-cluster as
 # obj->obj, Argo can decide the first out-of-sync wave is Sync/0 and never
 # recreate the PreSync Jobs even with hook sync enabled. Remove those stale
@@ -209,11 +253,57 @@ request_hard_refresh() {
   fi
 }
 
+# Clear a stale Running operation waiting on a hook Job that no longer exists.
+# Uses direct Application spec.operation = null — no argocd CLI exec, no RBAC
+# expansion (patch on applications.argoproj.io is already held by the SA).
+clear_stale_missing_hook_operation() {
+  local app_name="$1"
+  local namespace op_phase op_message hook_job out
+  local op_revision=""
+
+  op_phase=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.phase}' 2>/dev/null || true)
+  [ "$op_phase" = "Running" ] || return 0
+
+  op_message=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.message}' 2>/dev/null || true)
+  hook_job=$(printf '%s' "$op_message" | sed -n 's/.*hook batch\/Job\/\([^ ]*\).*/\1/p')
+  [ -n "$hook_job" ] || return 0
+
+  namespace="cogni-${DEPLOY_ENVIRONMENT}"
+  if kubectl -n "$namespace" get job "$hook_job" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  op_revision=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.syncResult.revision}' 2>/dev/null || true)
+  op_revision=$(printf '%s' "$op_revision" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+  echo "    🛑 ${app_name}: clearing stale Running operation at ${op_revision:0:8} (missing hook job ${namespace}/${hook_job})"
+
+  if ! out=$(kubectl -n argocd patch application "$app_name" --type=merge -p '{"operation":null}' 2>&1); then
+    echo "    ⚠️  failed to clear stale operation for ${app_name}: $out" >&2
+    return 1
+  fi
+  return 0
+}
+
 patch_sync_operation() {
   local app_name="$1"
   local out
+  local patch
+
+  patch=$(cat <<EOF
+{"operation":{
+  "initiatedBy":{"username":"candidate-flight"},
+  "sync":{
+    "prune":true,
+    "revision":"$EXPECTED_SHA",
+    "syncOptions":["CreateNamespace=true"],
+    "syncStrategy":{"hook":{"force":false}}
+  }
+}}
+EOF
+)
+
   if ! out=$(kubectl -n argocd patch application "$app_name" --type=merge -p \
-    '{"operation":{"sync":{"syncStrategy":{"hook":{"force":false}}}}}' 2>&1); then
+    "$patch" 2>&1); then
     echo "    ⚠️  sync operation patch failed for ${app_name}: $out" >&2
     return 1
   fi
@@ -221,17 +311,25 @@ patch_sync_operation() {
 }
 
 # Poll a single app until it reports EXPECTED_SHA on sync.revision AND is Healthy,
-# OR until the overall deadline is hit. Re-kicks Argo periodically while mismatched.
+# OR until its per-app deadline is hit. Re-kicks Argo periodically while mismatched.
 wait_for_app() {
   local app_name="$1"
-  local deadline="$2"
+  local timeout_seconds="$2"
+  local deadline=$((SECONDS + timeout_seconds))
   local next_kick=$((SECONDS + ACTIVE_SYNC_AFTER))
   local kick_count=0
+  local deployment deployment_status
+
+  deployment=$(resolve_deployment "$app_name")
 
   while [ $SECONDS -lt "$deadline" ]; do
     REV=$(get_app_revision "$app_name")
     HEALTH=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "Unknown")
     SYNC_PHASE=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.phase}' 2>/dev/null || echo "")
+    deployment_status=""
+    if [ -n "$deployment" ]; then
+      deployment_status=$(get_deployment_resource_sync_status "$app_name")
+    fi
 
     # Decide whether to proceed to the authoritative kubectl rollout check.
     # Only accept: Healthy, OR Progressing when sync operation completed.
@@ -244,8 +342,11 @@ wait_for_app() {
       return 1
     }
 
-    # First verify revision matches, then check if we can proceed to rollout
-    if [ "$REV" = "$EXPECTED_SHA" ] && can_proceed_to_rollout_check "$HEALTH" "$SYNC_PHASE"; then
+    # First verify revision matches, then ensure Argo reports the promoted
+    # Deployment resource itself as Synced before trusting rollout status.
+    if [ "$REV" = "$EXPECTED_SHA" ] &&
+       can_proceed_to_rollout_check "$HEALTH" "$SYNC_PHASE" &&
+       deployment_sync_ready "$deployment" "$deployment_status"; then
       # bug.0326: sync.revision + health.status are Argo-Application-level
       # signals. During a rolling update, "Healthy" fires as soon as enough
       # pods are Ready — which includes the OLD ReplicaSet's pods. /version
@@ -260,15 +361,24 @@ wait_for_app() {
       echo "  ❌ ${app_name} rollout did not complete (sync.revision=${REV:0:8} Healthy but stale ReplicaSet still present)"
       return 1
     fi
-    echo "    ${app_name}: rev=${REV:0:8} expected=${EXPECTED_SHA:0:8} health=${HEALTH} phase=${SYNC_PHASE} (waiting...)"
 
-    if [ $SECONDS -ge "$next_kick" ]; then
+    if [ -n "$deployment" ]; then
+      echo "    ${app_name}: rev=${REV:0:8} expected=${EXPECTED_SHA:0:8} health=${HEALTH} phase=${SYNC_PHASE} deployment=${deployment} deploymentStatus=${deployment_status:-<missing>} (waiting...)"
+    else
+      echo "    ${app_name}: rev=${REV:0:8} expected=${EXPECTED_SHA:0:8} health=${HEALTH} phase=${SYNC_PHASE} (waiting...)"
+    fi
+
+    if [ $SECONDS -ge "$next_kick" ] &&
+       { [ "$REV" != "$EXPECTED_SHA" ] ||
+         ! can_proceed_to_rollout_check "$HEALTH" "$SYNC_PHASE" ||
+         ! deployment_sync_ready "$deployment" "$deployment_status"; }; then
       kick_count=$((kick_count + 1))
       echo "    ⚡ ${app_name}: Argo reconcile kick #${kick_count} (hard refresh + hook sync)"
       request_hard_refresh "$app_name"
       if [ "$kick_count" -eq 1 ]; then
         delete_stale_hook_jobs "$app_name"
       fi
+      clear_stale_missing_hook_operation "$app_name" || true
       patch_sync_operation "$app_name" || true
       next_kick=$((SECONDS + SYNC_KICK_INTERVAL))
     fi
@@ -282,11 +392,10 @@ wait_for_app() {
 }
 
 FAILED=0
-DEADLINE=$((SECONDS + ARGOCD_TIMEOUT))
 for app in "${APPS[@]}"; do
   APP_NAME="${DEPLOY_ENVIRONMENT}-${app}"
   echo "  Waiting for ${APP_NAME}..."
-  if ! wait_for_app "$APP_NAME" "$DEADLINE"; then
+  if ! wait_for_app "$APP_NAME" "$ARGOCD_TIMEOUT"; then
     FAILED=1
   fi
 done
