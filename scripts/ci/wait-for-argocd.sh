@@ -253,24 +253,18 @@ request_hard_refresh() {
   fi
 }
 
-get_operation_message() {
-  kubectl -n argocd get application "$1" -o jsonpath='{.status.operationState.message}' 2>/dev/null || true
-}
-
-get_operation_revision() {
-  local r=""
-  r=$(kubectl -n argocd get application "$1" -o jsonpath='{.status.operationState.syncResult.revision}' 2>/dev/null || true)
-  printf '%s' "$r" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]'
-}
-
+# Clear a stale Running operation waiting on a hook Job that no longer exists.
+# Uses direct Application spec.operation = null — no argocd CLI exec, no RBAC
+# expansion (patch on applications.argoproj.io is already held by the SA).
 clear_stale_missing_hook_operation() {
   local app_name="$1"
-  local namespace op_phase op_message op_revision hook_job out
+  local namespace op_phase op_message hook_job out
+  local op_revision=""
 
   op_phase=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.phase}' 2>/dev/null || true)
   [ "$op_phase" = "Running" ] || return 0
 
-  op_message=$(get_operation_message "$app_name")
+  op_message=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.message}' 2>/dev/null || true)
   hook_job=$(printf '%s' "$op_message" | sed -n 's/.*hook batch\/Job\/\([^ ]*\).*/\1/p')
   [ -n "$hook_job" ] || return 0
 
@@ -279,17 +273,9 @@ clear_stale_missing_hook_operation() {
     return 0
   fi
 
-  op_revision=$(get_operation_revision "$app_name")
-  echo "    🛑 ${app_name}: terminating stale Running operation at ${op_revision:0:8} waiting on missing hook job ${namespace}/${hook_job}"
-
-  # Argo's own terminate-op path is the authoritative way to stop a wedged
-  # sync operation. The argocd CLI is available in the argocd-server pod on
-  # candidate-a; `--core` talks directly to the cluster without needing server
-  # auth config. Fall back to clearing spec.operation only if exec/CLI fails.
-  if out=$(kubectl -n argocd exec deploy/argocd-server -- argocd app terminate-op --core "$app_name" 2>&1); then
-    return 0
-  fi
-  echo "    ⚠️  argocd terminate-op failed for ${app_name}, falling back to spec.operation reset: $out" >&2
+  op_revision=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.syncResult.revision}' 2>/dev/null || true)
+  op_revision=$(printf '%s' "$op_revision" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+  echo "    🛑 ${app_name}: clearing stale Running operation at ${op_revision:0:8} (missing hook job ${namespace}/${hook_job})"
 
   if ! out=$(kubectl -n argocd patch application "$app_name" --type=merge -p '{"operation":null}' 2>&1); then
     echo "    ⚠️  failed to clear stale operation for ${app_name}: $out" >&2
