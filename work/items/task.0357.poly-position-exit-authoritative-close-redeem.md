@@ -2,14 +2,14 @@
 id: task.0357
 type: task
 title: "Poly position exits — authoritative close/redeem semantics + live approval readiness"
-status: needs_implement
+status: needs_merge
 priority: 1
 rank: 2
 estimate: 3
 created: 2026-04-23
 updated: 2026-04-23
-summary: "Fix the user exit path so Polymarket close/redeem flows are driven by authoritative provider and chain state instead of stale DB/Data-API hints. Revalidate trading approvals live on exit, refresh Polymarket's own balance/allowance cache before market SELL, stop treating one immediate `/positions` reread as truth, and return typed exit outcomes that distinguish provider rejection, accepted/pending reconciliation, flat exit, and irreducible liquidity/min-size cases."
-outcome: "A user can click Close or Redeem and the system either exits/redeems the position or returns a typed provider-grounded reason. Internal grant caps, stale `tradingApprovalsReadyAt` stamps, and one-shot lagging `/positions` reads never strand user funds."
+summary: "Fix the user exit path so Polymarket close/redeem flows are driven by authoritative provider and chain state instead of stale DB/Data-API hints. This PR ships the Phase 1 correctness fixes: live approval repair, provider balance/allowance refresh, market close, bounded reconciliation, and dashboard cache invalidation. The typed exit contract and readonly-first position-state surface are explicitly defined as follow-on design."
+outcome: "A user can click Close or Redeem and the system does not strand funds behind our own caps, stale `tradingApprovalsReadyAt` stamps, stale provider cache, one-shot lagging `/positions` reads, or stale execution-cache rows. The next design step is a readonly-first split between `live_positions`, `closed_positions`, and `pending_actions` for HTTP and MCP consumers."
 spec_refs:
   - poly-trader-wallet-port
   - architecture-spec
@@ -18,7 +18,7 @@ assignees: []
 credit:
 project: proj.poly-copy-trading
 branch: feat/poly-exit-path-dashboard
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/999
 reviewer:
 revision: 0
 blocked_by:
@@ -65,7 +65,7 @@ Users can systematically exit or redeem their own positions without our code fab
 
 **Reuses**:
 
-- `PrivyPolyTraderWalletAdapter.ensureTradingApprovals(...)` for the pinned 5-step approval ceremony
+- `PrivyPolyTraderWalletAdapter.ensureTradingApprovals(...)` for the pinned 6-approval ceremony
 - `PolymarketClobAdapter.sellPositionAtMarket(...)` as the market-sell primitive
 - `MarketProviderPort.getOrder(...)` and existing CLOB logging/metrics surface
 - Existing route/auth/container wiring for tenant-scoped wallet actions
@@ -99,6 +99,22 @@ The clean boundary is:
    Orchestrate approval readiness, exit retries/backoff, and route-level response mapping.
 3. HTTP contract
    Return typed exit states instead of collapsing provider acceptance + stale reconciliation into `close_failed`.
+
+### Current vs Next Scope
+
+This PR completes the correctness hotfix layer. It does **not** yet ship the fully typed close/redeem response contract from the longer design. What is now true on the branch:
+
+- close is market-based and uncapped
+- exit readiness is live and self-healing
+- provider balance/allowance cache is refreshed before sell
+- provider success is not negated by one stale `/positions` reread
+- successful close/redeem invalidates stale wallet-analysis execution cache keys
+
+What remains as next-step work:
+
+- readonly-first position-state split: `live_positions`, `closed_positions`, `pending_actions`
+- typed close/redeem states for HTTP and tool consumers
+- MCP exposure of that readonly position-state shape once the MCP/tooling projects land the infrastructure
 
 ### Close Semantics
 
@@ -165,6 +181,13 @@ The clean boundary is:
 - [ ] Update close/redeem HTTP contracts and route responses to typed states
 - [ ] Add tests for allowance drift, provider cache drift, stale `/positions`, partial fills, and redeem uncapped behavior
 
+## Next Tasks
+
+- [task.0354](./task.0354.poly-trading-hardening-followups.md) — follow-on hardening bucket for executor/read-model cleanup and agent tool surfaces
+- [task.0356](./task.0356.poly-wallet-onboarding-trading-e2e-test-suite.md) — automated end-to-end proof for connect → enable trading → open/close/redeem
+- [task.0355](./task.0355.poly-trading-wallet-enable-trading.md) — prerequisite approval/readiness surface that this task now relies on
+- [proj.agentic-interop](../projects/proj.agentic-interop.md) and [proj.tool-use-evolution](../projects/proj.tool-use-evolution.md) — future MCP/tooling infrastructure for the readonly position-state tool surface
+
 ## Validation
 
 - **exercise:** on `candidate-a`, with a tenant wallet that has two live positions and at least one resolved redeemable position:
@@ -183,6 +206,7 @@ The clean boundary is:
 ## PR / Links
 
 - Split from the broader hardening bucket in `task.0354`
+- Position-state model and future readonly tool shape: [poly-position-exit](../../docs/spec/poly-position-exit.md)
 
 ## Attribution
 

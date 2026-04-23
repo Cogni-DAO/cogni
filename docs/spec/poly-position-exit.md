@@ -1,12 +1,12 @@
 ---
 id: poly-position-exit
 type: spec
-title: "Poly Position Exit — authoritative close/redeem semantics"
-status: draft
-spec_state: proposed
+title: "Poly Position Exit — authoritative close/redeem semantics + position state model"
+status: active
+spec_state: active
 trust: draft
-summary: User close/redeem flows for Polymarket must be grounded in authoritative provider and chain state. Close uses market SELL plus provider balance/allowance cache refresh plus bounded reconciliation; redeem is on-chain; internal caps never block either path.
-read_when: Designing or reviewing `POST /api/v1/poly/wallet/positions/close`, `.../redeem`, market exit retries, approval readiness, or the Polymarket read/write boundary.
+summary: "User close/redeem flows for Polymarket are grounded in provider and chain authority. This PR ships the Phase 1 correctness path: market close, live approval repair, provider balance/allowance refresh, bounded reconciliation, and dashboard cache eviction. It also defines the position-state split needed for a future readonly MCP tool."
+read_when: Designing or reviewing `POST /api/v1/poly/wallet/positions/close`, `.../redeem`, dashboard execution-state refresh, market exit retries, approval readiness, or the future readonly Polymarket position MCP surface.
 implements: proj.poly-copy-trading
 owner: derekg1729
 created: 2026-04-23
@@ -16,7 +16,7 @@ tags: [poly, exit, wallet, polymarket, clob, integration]
 
 # Poly Position Exit
 
-> Proposed spec for user-owned position exits. The goal is not to make Polymarket synchronous; the goal is to stop our code from inventing failures when the provider has already accepted or filled the exit.
+> User-owned position exits are not made synchronous. The contract is: trust the write path for acceptance, treat read models as lagging, and expose position state in a shape that can later map cleanly to a readonly MCP tool.
 
 ## Goal
 
@@ -37,8 +37,14 @@ The system must use authoritative external state for writes, treat read models a
 
 - [Poly Trader Wallet Port](./poly-trader-wallet-port.md)
 - [Architecture](./architecture.md)
+- [MCP Control Plane](./mcp-control-plane.md)
+- [Tool Use](./tool-use.md)
 - [task.0355](../../work/items/task.0355.poly-trading-wallet-enable-trading.md)
 - [task.0357](../../work/items/task.0357.poly-position-exit-authoritative-close-redeem.md)
+- [task.0354](../../work/items/task.0354.poly-trading-hardening-followups.md)
+- [task.0356](../../work/items/task.0356.poly-wallet-onboarding-trading-e2e-test-suite.md)
+- [proj.agentic-interop](../../work/projects/proj.agentic-interop.md)
+- [proj.tool-use-evolution](../../work/projects/proj.tool-use-evolution.md)
 
 ## Design
 
@@ -50,6 +56,40 @@ There are four different truth sources, and they are not equal:
 2. **Polymarket balance/allowance cache (`/balance-allowance`)** — authoritative for what the CLOB currently believes is spendable/approved for the session. This can lag the chain and must sometimes be actively refreshed.
 3. **Public Data API** — a lagging read model; useful for discovery and UI refresh, but not for negating a just-accepted write.
 4. **Local DB readiness stamp** — a cache/UI signal only; never sufficient as sole proof that live approvals still exist.
+
+### Position State Model
+
+The UI and any future readonly tool must stop treating "position" as one overloaded status flag. There are three different state families:
+
+1. **`live_positions`**
+   - Question answered: "What does the wallet currently hold?"
+   - Authority: current positions snapshot from Polymarket reads
+   - Consumer: dashboard Open positions, close/redeem eligibility checks, wallet totals
+
+2. **`closed_positions`**
+   - Question answered: "What positions were opened and later exited?"
+   - Authority: trade-derived history, not the current positions endpoint
+   - Consumer: future history/analytics views, realized lifecycle reporting
+
+3. **`pending_actions`**
+   - Question answered: "What write did our app just submit, and has the lagging read model caught up yet?"
+   - Authority: app-owned action state plus provider receipt
+   - Consumer: button spinners, reconcile-pending UI, eventual readonly tool status
+
+`live_positions` is the only valid source for an "Open" row. A successful close may leave a short-lived `pending_actions` row, but it must not keep rendering the old holding as open.
+
+### Current As-Built Behavior
+
+This PR ships the Phase 1 correctness path:
+
+1. close is a market `FAK` sell of the wallet's current share balance
+2. exits ignore grant caps
+3. exits re-run `ensureTradingApprovals(...)` and repair the missing neg-risk adapter approval when needed
+4. exits refresh Polymarket's `/balance-allowance` cache before sell
+5. provider-accepted exits no longer fail just because one immediate `/positions` reread is stale
+6. successful close/redeem evicts wallet-scoped execution/read-model cache keys so the next dashboard refetch sees fresh state
+
+The current HTTP route still returns the receipt-shaped contract already on the wire. It does not yet expose typed `exited/submitted/partial` states.
 
 ### Close Flow
 
@@ -101,7 +141,36 @@ Redeem is a separate path:
 
 ## API Shape
 
-The user route contract should distinguish result states rather than flatten everything into a single receipt:
+### Current HTTP Shape
+
+`POST /api/v1/poly/wallet/positions/close` currently returns the existing receipt shape:
+
+```ts
+interface CloseReceipt {
+  order_id: string;
+  status: string;
+  client_order_id: string;
+  filled_size_usdc: number;
+}
+```
+
+`POST /api/v1/poly/wallet/positions/redeem` currently returns:
+
+```ts
+interface RedeemReceipt {
+  tx_hash: string;
+}
+```
+
+The important Phase 1 contract is behavioral:
+
+- close/redeem do not self-deny on our own caps
+- close does not self-fail on stale Data API rereads
+- dashboard refetch after a successful action sees fresh holdings instead of a warm 30 s cache entry
+
+### Follow-On HTTP Shape
+
+The future user route contract should distinguish result states rather than flatten everything into a single receipt:
 
 ```ts
 type CloseState = "exited" | "submitted" | "partial";
@@ -126,6 +195,55 @@ Provider-grounded failures should map to a small typed taxonomy, e.g.:
 - `provider_error`
 - `network_error`
 
+### Future Readonly MCP Surface
+
+The position-state split above is intentionally readonly-first so it can map directly onto a future MCP tool once the MCP control plane work lands.
+
+Proposed eventual tool id:
+
+```txt
+mcp:cogni:poly-wallet-position-state
+```
+
+Proposed output shape:
+
+```ts
+interface PolyWalletPositionStateToolOutput {
+  capturedAt: string;
+  sourceAuthority: {
+    livePositions: "data-api";
+    closedPositions: "trade-history";
+    pendingActions: "app-write-model";
+  };
+  live_positions: ReadonlyArray<{
+    token_id: string;
+    condition_id: string;
+    outcome: string;
+    shares: number;
+    current_value_usdc: number;
+    close_allowed: boolean;
+    redeem_allowed: boolean;
+  }>;
+  closed_positions: ReadonlyArray<{
+    position_id: string;
+    condition_id: string;
+    opened_at: string;
+    closed_at: string;
+    realized_pnl_usdc: number;
+  }>;
+  pending_actions: ReadonlyArray<{
+    kind: "close" | "redeem";
+    state: "submitted" | "reconciling";
+    token_id?: string;
+    condition_id?: string;
+    provider_ref: string;
+  }>;
+  warnings: ReadonlyArray<{ code: string; message: string }>;
+}
+```
+
+This tool shape depends on the general MCP infrastructure from [MCP Control Plane](./mcp-control-plane.md) and [Tool Use](./tool-use.md), but the domain split belongs here so the future tool does not have to rediscover the semantics.
+
 ## Implementation Notes
 
 - Prefer reusing `ensureTradingApprovals(...)` for user exits because it already performs live reads and is idempotent.
@@ -133,6 +251,7 @@ Provider-grounded failures should map to a small typed taxonomy, e.g.:
 - Keep Data API for position discovery and follow-up UI refresh, but do not let it serve as the single write acknowledgement.
 - If the common case can be collapsed to `state=exited` with a short bounded reconciliation window, do that. Otherwise return `state=submitted`.
 - For redeem, the eventual target is an on-chain preflight/read instead of a pure Data API `redeemable` gate.
+- The readonly/MCP-facing position model should be implemented as a projection over `live_positions`, `closed_positions`, and `pending_actions`, not as one merged `status` field.
 
 ## Test Matrix
 
@@ -143,3 +262,4 @@ Provider-grounded failures should map to a small typed taxonomy, e.g.:
 - partial fill with real progress
 - partial/no-progress due no bid liquidity or market minimum
 - redeem success with POL gas present and no cap interference
+- dashboard refetch after successful close/redeem showing the updated `live_positions` set instead of a stale execution cache row
