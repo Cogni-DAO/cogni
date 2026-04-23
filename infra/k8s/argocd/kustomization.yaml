@@ -25,8 +25,6 @@ resources:
   - candidate-a-applicationset.yaml
   - preview-applicationset.yaml
   - production-applicationset.yaml
-  # RBAC supplement: terminate-op needs list/watch services in argocd ns (v2.13.4 gap)
-  - argocd-server-rbac-patch.yaml
 
 patches:
   # Add ksops sidecar to repo-server for SOPS/age secret decryption
