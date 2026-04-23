@@ -77,6 +77,7 @@
 | 1 | 1 | 0 | needs_closeout | task.0345 | candidate-flight-infra: default to dispatch ref so PR branches can be flown | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 3 | needs_implement | task.0349 | CI-owned preview digest promotion; demote Image Updater to freshness-only |  |  |
 | 1 | 1 | 1 | needs_merge | bug.0358 | candidate-flight false-red: wait-for-argocd shares one timeout budget across all promoted apps | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 1 | 2 | needs_implement | task.0360 | POST /api/v1/vcs/pr — VCS create-PR endpoint for external agents | Agentic Interoperability | proj.agentic-interop |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -94,7 +95,6 @@
 | 1 | 2 | 3 | needs_design | bug.0312 | Purge canary and staging legacy naming from docs, workflows, and scorecards; document the e2e CI/CD flow | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 3 | needs_merge | task.0357 | Poly position exits — authoritative close/redeem semantics + live approval readiness | Cogni Poly | proj.poly-copy-trading |
 | 1 | 2 | 1 | needs_review | bug.0359 | candidate-flight false-green: wait-for-argocd accepts revision-advanced apps whose Deployment stays OutOfSync | CI/CD Pipeline | proj.cicd-services-gitops |
-| 1 | 2 | 2 | needs_implement | task.0360 | POST /api/v1/vcs/pr — VCS create-PR endpoint for external agents | Agentic Interoperability | proj.agentic-interop |
 | 1 | 3 | 1 | needs_design | bug.0011 | Gateway streaming truncates output mid-sentence in UI | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 3 | 3 | needs_design | task.0099 | Node + scope identity infra: repo-spec, DB persistence, scope_id columns, boot-time drift protection |  |  |
 | 1 | 3 | 3 | needs_research | spike.0119 | Quarterly people-centric attribution review — evaluation payload, governance input, and signal collection | Transparent Credit Payouts | proj.transparent-credit-payouts |
