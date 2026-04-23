@@ -18,7 +18,7 @@ assignees: []
 credit:
 project: proj.poly-copy-trading
 branch: design/task-0358-position-history-ui
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/1009
 reviewer:
 revision: 0
 blocked_by:
