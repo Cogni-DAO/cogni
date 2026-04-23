@@ -30,6 +30,8 @@ const EMPTY = (params: FetchTopWalletsParams): WalletTopTradersOutput => ({
   totalCount: 0,
 });
 
+const FETCH_TIMEOUT_MS = 10_000;
+
 export async function fetchTopWallets(
   params: FetchTopWalletsParams
 ): Promise<WalletTopTradersOutput> {
@@ -37,8 +39,13 @@ export async function fetchTopWallets(
   if (params.orderBy) qs.set("orderBy", params.orderBy);
   if (params.limit) qs.set("limit", String(params.limit));
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
   try {
-    const res = await fetch(`/api/v1/poly/top-wallets?${qs.toString()}`);
+    const res = await fetch(`/api/v1/poly/top-wallets?${qs.toString()}`, {
+      signal: controller.signal,
+    });
     if (res.ok) {
       return (await res.json()) as WalletTopTradersOutput;
     }
@@ -49,5 +56,7 @@ export async function fetchTopWallets(
   } catch (err) {
     if (err instanceof TypeError) return EMPTY(params);
     throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
