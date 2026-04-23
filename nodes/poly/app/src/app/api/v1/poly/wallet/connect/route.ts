@@ -8,7 +8,8 @@
  *   of task.0318 Phase B; allows exercising the Privy-per-user plumbing on
  *   candidate-a before the full onboarding UX ships.
  * Scope: Thin validator; delegates to the adapter. No on-chain allowances
- *   here (B3), no grant issuance here (B4), no withdraw here (follow-up).
+ *   here; default execution-cap grant issuance is delegated to
+ *   `provisionWithGrant`; no withdraw here (follow-up).
  * Invariants:
  *   - CUSTODIAL_CONSENT: request must carry `custodialConsentAcknowledged:
  *     true`; backend persists the acceptance on the row.
