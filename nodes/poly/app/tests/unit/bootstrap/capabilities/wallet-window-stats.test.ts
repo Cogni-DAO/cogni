@@ -332,4 +332,35 @@ describe("getWalletWindowStats", () => {
 
     expect(result.proxyWallet).toBe(upperWallet.toLowerCase());
   });
+
+  it("cache hit: second call for same address+period does not invoke fetch again", async () => {
+    const wallet = freshWallet();
+    const mockFetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/trades"))
+        return Promise.resolve(jsonResponse([makeTrade()]));
+      if (url.includes("/positions")) return Promise.resolve(jsonResponse([]));
+      return Promise.resolve(jsonResponse([]));
+    });
+
+    const cap = createWalletCapability({
+      baseUrl: "https://test.example",
+      fetch: mockFetch as unknown as typeof fetch,
+    });
+
+    const first = await cap.getWalletWindowStats({
+      address: wallet,
+      timePeriod: "WEEK",
+    });
+    const callCountAfterFirst = mockFetch.mock.calls.length;
+
+    const second = await cap.getWalletWindowStats({
+      address: wallet,
+      timePeriod: "WEEK",
+    });
+
+    // fetch must not have been called again — result came from cache
+    expect(mockFetch.mock.calls.length).toBe(callCountAfterFirst);
+    expect(second.numTrades).toBe(first.numTrades);
+    expect(second.computedAt).toBe(first.computedAt);
+  });
 });

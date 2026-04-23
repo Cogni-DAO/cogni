@@ -23,7 +23,12 @@ import type { BoundTool, ToolContract, ToolImplementation } from "../types";
 // Capability interface (injected at runtime)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Per-wallet windowed stats — returned by getWalletWindowStats. */
+/**
+ * Per-wallet windowed stats — returned by getWalletWindowStats.
+ * DI interface copy: keep in sync with WalletWindowStats in @cogni/node-contracts
+ * (poly.wallet-window-stats.v1.contract.ts). The canonical Zod schema lives there;
+ * this interface exists here because @cogni/ai-tools cannot depend on @cogni/node-contracts.
+ */
 export interface WalletWindowStats {
   proxyWallet: string;
   timePeriod: "DAY" | "WEEK" | "MONTH" | "ALL";

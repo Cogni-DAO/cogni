@@ -23,6 +23,7 @@ import type {
   WalletWindowStats,
 } from "@cogni/ai-tools";
 import { PolymarketDataApiClient } from "@cogni/market-provider/adapters/polymarket";
+import pLimit from "p-limit";
 import { makeLogger } from "@/shared/observability";
 
 const log = makeLogger({ component: "wallet-capability" });
@@ -182,7 +183,6 @@ export function createWalletCapability(config?: {
       // Enrich each leaderboard entry with windowed numTrades from /trades.
       // Uses the module-level cache — repeated calls within 60s are free.
       // Concurrency bounded to ENRICH_CONCURRENCY to avoid fan-out spikes.
-      const pLimit = (await import("p-limit")).default;
       const limiter = pLimit(ENRICH_CONCURRENCY);
 
       const withTrades = await Promise.all(
