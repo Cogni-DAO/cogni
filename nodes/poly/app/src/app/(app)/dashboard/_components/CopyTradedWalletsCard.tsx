@@ -138,18 +138,6 @@ export function CopyTradedWalletsCard(): ReactElement {
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <p className="border-warning/30 border-b bg-warning/5 px-5 py-2 text-muted-foreground text-xs">
-          Mirror execution is shared across all operators in this node. Per-user
-          wallets and isolated execution ship in Phase B (task.0318). Discover
-          new wallets on{" "}
-          <a
-            href="/research"
-            className="underline underline-offset-2 hover:text-foreground"
-          >
-            Research
-          </a>
-          .
-        </p>
         <WalletsTable
           rows={rows}
           variant="copy-traded"
