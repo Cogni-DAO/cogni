@@ -20,10 +20,14 @@
 
 "use client";
 
-import type { PolyWalletOverviewOutput } from "@cogni/node-contracts";
+import type {
+  PolyWalletOverviewInterval,
+  PolyWalletOverviewOutput,
+} from "@cogni/node-contracts";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import type { ReactElement } from "react";
+import { useState } from "react";
 import {
   AddressChip,
   Card,
@@ -31,7 +35,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components";
-import { BalanceBar } from "@/features/wallet-analysis";
+import { BalanceBar, WalletProfitLossCard } from "@/features/wallet-analysis";
 import { cn } from "@/shared/util/cn";
 import { fetchTradingWallet } from "../_api/fetchTradingWallet";
 
@@ -52,9 +56,10 @@ function formatUsd(n: number | null): string {
 }
 
 export function TradingWalletCard(): ReactElement {
+  const [interval, setInterval] = useState<PolyWalletOverviewInterval>("ALL");
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["dashboard-trading-wallet"],
-    queryFn: fetchTradingWallet,
+    queryKey: ["dashboard-trading-wallet", interval],
+    queryFn: () => fetchTradingWallet(interval),
     refetchInterval: 15_000,
     staleTime: 10_000,
     gcTime: 60_000,
@@ -113,9 +118,9 @@ export function TradingWalletCard(): ReactElement {
       </CardHeader>
       <CardContent className="px-5 pt-1 pb-4">
         {isLoading ? (
-          <div className="flex animate-pulse flex-col gap-3">
-            <div className="h-4 w-2/3 rounded bg-muted" />
-            <div className="h-2 w-full rounded-full bg-muted" />
+          <div className="space-y-4">
+            <div className="h-12 animate-pulse rounded bg-muted" />
+            <div className="h-48 animate-pulse rounded bg-muted" />
           </div>
         ) : isError || !data ? (
           <p className="py-2 text-muted-foreground text-sm">
@@ -137,26 +142,38 @@ export function TradingWalletCard(): ReactElement {
               Connect →
             </Link>
           </div>
-        ) : fullBreakdown ? (
-          <div className="space-y-3">
-            <BalanceBar balance={fullBreakdown ?? undefined} />
-            <div className="flex flex-wrap items-center justify-between gap-3 text-muted-foreground text-xs">
-              <span>
-                {data.open_orders ?? 0} open order
-                {(data.open_orders ?? 0) === 1 ? "" : "s"}
-              </span>
-              <span>POL gas {formatDecimal(data.pol_gas, 4)}</span>
-            </div>
-          </div>
         ) : (
-          <div className="grid gap-3 md:grid-cols-4">
-            <Metric label="Available" value={formatUsd(data.usdc_available)} />
-            <Metric label="Locked" value={formatUsd(data.usdc_locked)} />
-            <Metric
-              label="Positions"
-              value={formatUsd(data.usdc_positions_mtm)}
+          <div className="space-y-5 py-1">
+            {fullBreakdown ? (
+              <div className="space-y-3">
+                <BalanceBar balance={fullBreakdown ?? undefined} />
+                <div className="flex flex-wrap items-center justify-between gap-3 text-muted-foreground text-xs">
+                  <span>
+                    {data.open_orders ?? 0} open order
+                    {(data.open_orders ?? 0) === 1 ? "" : "s"}
+                  </span>
+                  <span>POL gas {formatDecimal(data.pol_gas, 4)}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-4">
+                <Metric
+                  label="Available"
+                  value={formatUsd(data.usdc_available)}
+                />
+                <Metric label="Locked" value={formatUsd(data.usdc_locked)} />
+                <Metric
+                  label="Positions"
+                  value={formatUsd(data.usdc_positions_mtm)}
+                />
+                <Metric label="Total" value={formatUsd(data.usdc_total)} />
+              </div>
+            )}
+            <WalletProfitLossCard
+              history={data.pnlHistory}
+              interval={interval}
+              onIntervalChange={setInterval}
             />
-            <Metric label="Total" value={formatUsd(data.usdc_total)} />
           </div>
         )}
       </CardContent>

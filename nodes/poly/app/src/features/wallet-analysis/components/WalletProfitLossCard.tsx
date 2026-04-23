@@ -1,0 +1,235 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
+/**
+ * Module: `@features/wallet-analysis/components/WalletProfitLossCard`
+ * Purpose: Shared Polymarket-style profit/loss panel used by the dashboard
+ *          trading wallet and the reusable wallet-analysis drawer/page.
+ * Scope: Presentational only. Accepts props + callback; does not fetch.
+ * Invariants:
+ *   - PNL_NOT_NAV: plots Polymarket P/L, not wallet balance.
+ *   - ZERO_BASELINE_WHEN_EMPTY: funded or watched wallets with no realized P/L
+ *     render a flat zero-state panel instead of a null chart hole.
+ * Side-effects: none
+ * Links: docs/design/wallet-analysis-components.md
+ * @public
+ */
+
+"use client";
+
+import type { PolyWalletOverviewInterval } from "@cogni/node-contracts";
+import type { ReactElement } from "react";
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import {
+  type ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/components";
+import type { WalletPnlHistoryPoint } from "../types/wallet-analysis";
+
+const CHART_CONFIG = {
+  pnl: {
+    label: "Profit/Loss",
+    color: "hsl(var(--chart-1))",
+  },
+} satisfies ChartConfig;
+
+const INTERVALS: readonly PolyWalletOverviewInterval[] = [
+  "1D",
+  "1W",
+  "1M",
+  "1Y",
+  "YTD",
+  "ALL",
+];
+
+export type WalletProfitLossCardProps = {
+  history?: readonly WalletPnlHistoryPoint[] | undefined;
+  interval: PolyWalletOverviewInterval;
+  onIntervalChange?:
+    | ((interval: PolyWalletOverviewInterval) => void)
+    | undefined;
+  isLoading?: boolean | undefined;
+};
+
+export function WalletProfitLossCard({
+  history,
+  interval,
+  onIntervalChange,
+  isLoading = false,
+}: WalletProfitLossCardProps): ReactElement {
+  if (isLoading) {
+    return (
+      <div className="space-y-4 rounded-xl border border-border/60 bg-muted/10 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="h-4 w-28 animate-pulse rounded bg-muted" />
+          <div className="h-11 w-full animate-pulse rounded bg-muted sm:w-72" />
+        </div>
+        <div className="space-y-2">
+          <div className="h-4 w-28 animate-pulse rounded bg-muted" />
+          <div className="h-14 w-48 animate-pulse rounded bg-muted" />
+        </div>
+        <div className="h-48 animate-pulse rounded-xl bg-muted" />
+      </div>
+    );
+  }
+
+  const latestPnl = history?.at(-1)?.pnl ?? 0;
+  const accentClass =
+    latestPnl > 0
+      ? "text-success"
+      : latestPnl < 0
+        ? "text-destructive"
+        : "text-muted-foreground";
+
+  return (
+    <div className="space-y-4 rounded-xl border border-border/60 bg-muted/10 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
+          Profit/Loss
+        </div>
+        <ToggleGroup
+          type="single"
+          value={interval}
+          onValueChange={(value) => {
+            if (value && onIntervalChange) {
+              onIntervalChange(value as PolyWalletOverviewInterval);
+            }
+          }}
+          className="justify-start rounded-lg border border-border/70 p-1 sm:justify-end"
+        >
+          {INTERVALS.map((value) => (
+            <ToggleGroupItem key={value} value={value} className="px-3 text-xs">
+              {value}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </div>
+
+      <div className="space-y-1">
+        <div className={`font-medium text-sm ${accentClass}`}>Profit/Loss</div>
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
+          <div className="font-semibold text-4xl tabular-nums tracking-tight">
+            {formatUsd(latestPnl)}
+          </div>
+          <div className="pb-1 text-muted-foreground text-sm">
+            {rangeLabel(interval)}
+          </div>
+        </div>
+      </div>
+
+      {history && history.length >= 2 ? (
+        <ChartContainer config={CHART_CONFIG} className="h-48 w-full">
+          <AreaChart
+            data={history.map((point) => ({ ...point, ts: point.ts }))}
+            margin={{ top: 8, right: 8, left: 8, bottom: 0 }}
+          >
+            <defs>
+              <linearGradient
+                id="wallet-profit-loss-fill"
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop
+                  offset="5%"
+                  stopColor="var(--color-pnl)"
+                  stopOpacity={0.28}
+                />
+                <stop
+                  offset="95%"
+                  stopColor="var(--color-pnl)"
+                  stopOpacity={0.04}
+                />
+              </linearGradient>
+            </defs>
+            <CartesianGrid vertical={false} />
+            <XAxis
+              dataKey="ts"
+              tickLine={false}
+              axisLine={false}
+              minTickGap={28}
+              tickMargin={8}
+              tickFormatter={formatDateTick}
+            />
+            <YAxis hide domain={["dataMin", "dataMax"]} />
+            <ChartTooltip
+              cursor={false}
+              content={
+                <ChartTooltipContent
+                  labelFormatter={(value) => formatDateLabel(String(value))}
+                  formatter={(value) => formatUsd(Number(value))}
+                  indicator="line"
+                />
+              }
+            />
+            <Area
+              dataKey="pnl"
+              type="linear"
+              stroke="var(--color-pnl)"
+              strokeWidth={3}
+              fill="url(#wallet-profit-loss-fill)"
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+          </AreaChart>
+        </ChartContainer>
+      ) : (
+        <div className="relative h-48 overflow-hidden rounded-xl border border-border/70 bg-card">
+          <div className="absolute inset-x-6 bottom-16 h-px bg-border/60" />
+          <div className="absolute inset-x-6 bottom-14 h-10 rounded-md bg-primary/15 blur-xl" />
+          <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-primary/10 to-transparent" />
+          <div className="absolute right-4 bottom-4 text-muted-foreground text-xs">
+            No realized P/L yet.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatUsd(value: number): string {
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  const abs = Math.abs(value);
+  return `${sign}$${abs.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function formatDateTick(value: string): string {
+  return new Date(value).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatDateLabel(value: string): string {
+  return new Date(value).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function rangeLabel(interval: PolyWalletOverviewInterval): string {
+  switch (interval) {
+    case "1D":
+      return "Past day";
+    case "1W":
+      return "Past week";
+    case "1M":
+      return "Past month";
+    case "1Y":
+      return "Past year";
+    case "YTD":
+      return "Year to date";
+    case "ALL":
+      return "All time";
+  }
+}

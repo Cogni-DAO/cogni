@@ -9,7 +9,7 @@
 
 ## Purpose
 
-Reusable wallet-analysis surface — one organism (`WalletAnalysisView`) and reusable molecules for any Polymarket wallet's analysis (identity, snapshot metrics, balance bar, balance-over-time chart, trades-per-day chart, recent trades, positions table, top markets, edge hypothesis).
+Reusable wallet-analysis surface for any Polymarket wallet. Exposes the pure `WalletAnalysisView` organism + molecules, and the shared `WalletAnalysisSurface` client container that owns the standardized page / drawer fetch path, including Polymarket-native P/L.
 
 Shared shape `WalletAnalysisData` mirrors the v1 wallet-analysis HTTP contract that ships in Checkpoint B.
 
@@ -31,19 +31,19 @@ Shared shape `WalletAnalysisData` mirrors the v1 wallet-analysis HTTP contract t
 
 ## Public Surface
 
-- **Exports:** `WalletAnalysisView`, `WalletIdentityHeader`, `StatGrid`, `BalanceBar`, `BalanceOverTimeChart`, `TradesPerDayChart`, `RecentTradesTable`, `PositionsTable`, `PositionTimelineChart`, `TopMarketsList`, `EdgeHypothesis`, type `WalletAnalysisData` and supporting types.
+- **Exports:** `WalletAnalysisView`, `WalletAnalysisSurface`, `WalletIdentityHeader`, `StatGrid`, `BalanceBar`, `BalanceOverTimeChart`, `WalletProfitLossCard`, `TradesPerDayChart`, `RecentTradesTable`, `PositionsTable`, `PositionTimelineChart`, `TopMarketsList`, `EdgeHypothesis`, type `WalletAnalysisData` and supporting types.
 - **Routes:** none directly; consumed by `/research`, `/research/w/[addr]` (Checkpoint B), and the dashboard drawer (Checkpoint C).
 - **Files considered API:** `index.ts`, `types/wallet-analysis.ts`.
 
 ## Responsibilities
 
-- This directory **does**: render wallet-analysis UI from pure props; expose loading skeletons per molecule.
-- This directory **does not**: fetch data, talk to APIs, hold state beyond pure prop derivation.
+- This directory **does**: render wallet-analysis UI from pure props; expose loading skeletons per molecule; provide the shared client container that fetches wallet-analysis slices for page + drawer consumers.
+- This directory **does not**: define HTTP routes, talk to adapters directly, or hold state outside the shared client fetch boundary.
 
 ## Standards
 
 - Each molecule accepts `{ data, isLoading }` and renders its own skeleton.
-- No molecule fetches on its own. The owning page or `useWalletAnalysis` hook (Checkpoint B) is the single fetch source.
+- No molecule fetches on its own. `WalletAnalysisSurface` + `useWalletAnalysis` are the single fetch source for the reusable surface.
 - All Polymarket Data-API calls flow through `packages/market-provider/src/adapters/polymarket/polymarket.data-api.client.ts`. Adding a second client is a review-blocking violation.
 - Follow the no-arbitrary-Tailwind-values lint rule: stick to standard utilities or wrap custom values in `var(--token)`.
 
@@ -54,6 +54,5 @@ Shared shape `WalletAnalysisData` mirrors the v1 wallet-analysis HTTP contract t
 
 ## Notes
 
-- `useWalletAnalysis` hook + the data plane (snapshot table, API route, dynamic page) ship in Checkpoint B. Today some components are still fed via hardcoded or derived data on `/research`.
-- Drawer + compact variants ship in Checkpoint C.
+- `useWalletAnalysis` now fans out to `snapshot`, `trades`, `balance`, and `pnl` slices; `WalletAnalysisSurface` threads the selected interval through the page and drawer.
 - Position lifecycle visuals are reusable UI primitives first. Dashboard-specific execution fetching belongs in app routes/services, not on the wallet-analysis public barrel.

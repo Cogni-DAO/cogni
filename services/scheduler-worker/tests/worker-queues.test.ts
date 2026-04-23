@@ -57,7 +57,7 @@ describe("nodeTaskQueueName", () => {
     ).toBe("scheduler-tasks-5ed2d64f-2745-4676-983b-2fb7e05b2eba");
   });
 
-  it("must match what node-app submitters produce (${prefix}-${getNodeId()})", () => {
+  it(`must match what node-app submitters produce (\${prefix}-\${getNodeId()})`, () => {
     // This is the load-bearing invariant: if this spec breaks, dev/prod chat
     // stalls because submitter queue names no longer match worker queue names.
     const prefix = "scheduler-tasks";

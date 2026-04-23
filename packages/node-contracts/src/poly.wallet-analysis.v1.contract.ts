@@ -4,7 +4,7 @@
 /**
  * Module: `@contracts/poly.wallet-analysis.v1.contract`
  * Purpose: Contract for the wallet-analysis HTTP route — single route, slice-scoped via `include`, covers any 0x Polymarket wallet.
- * Scope: GET /api/v1/poly/wallets/:addr?include=snapshot|trades|balance. Read-only; does not place orders, does not mutate state. Each request returns the subset of slices named in `include`. Never throws on partial-failure of one slice — surfaces it via `warnings`.
+ * Scope: GET /api/v1/poly/wallets/:addr?include=snapshot|trades|balance|pnl. Read-only; does not place orders, does not mutate state. Each request returns the subset of slices named in `include`. Never throws on partial-failure of one slice — surfaces it via `warnings`.
  * Invariants:
  *   - Any 0x address accepted; `addr` lowercased before handler logic.
  *   - Snapshot metric fields are `null` until the resolved-position count meets the minimum (research doc threshold, default 5).
@@ -17,6 +17,10 @@
  */
 
 import { z } from "zod";
+import {
+  PolyWalletOverviewIntervalSchema,
+  PolyWalletOverviewPnlPointSchema,
+} from "./poly.wallet.overview.v1.contract";
 
 /** Lowercased 0x address. Contract lowercases before any handler logic runs. */
 export const PolyAddressSchema = z
@@ -25,11 +29,12 @@ export const PolyAddressSchema = z
   .transform((s) => s.toLowerCase());
 export type PolyAddress = z.infer<typeof PolyAddressSchema>;
 
-/** The three independently-requestable slices. */
+/** The independently-requestable slices. */
 export const WalletAnalysisSliceSchema = z.enum([
   "snapshot",
   "trades",
   "balance",
+  "pnl",
 ]);
 export type WalletAnalysisSlice = z.infer<typeof WalletAnalysisSliceSchema>;
 
@@ -108,6 +113,13 @@ export const WalletAnalysisBalanceSchema = z.object({
 });
 export type WalletAnalysisBalance = z.infer<typeof WalletAnalysisBalanceSchema>;
 
+export const WalletAnalysisPnlSchema = z.object({
+  interval: PolyWalletOverviewIntervalSchema,
+  history: z.array(PolyWalletOverviewPnlPointSchema),
+  computedAt: z.string(),
+});
+export type WalletAnalysisPnl = z.infer<typeof WalletAnalysisPnlSchema>;
+
 /** Surfaced when a slice fetch fails but others succeeded — UI shows "trades unavailable, retrying". */
 export const WalletAnalysisWarningSchema = z.object({
   slice: WalletAnalysisSliceSchema,
@@ -121,6 +133,7 @@ export const WalletAnalysisResponseSchema = z.object({
   snapshot: WalletAnalysisSnapshotSchema.optional(),
   trades: WalletAnalysisTradesSchema.optional(),
   balance: WalletAnalysisBalanceSchema.optional(),
+  pnl: WalletAnalysisPnlSchema.optional(),
   warnings: z.array(WalletAnalysisWarningSchema),
 });
 export type WalletAnalysisResponse = z.infer<
@@ -135,6 +148,7 @@ export type WalletAnalysisResponse = z.infer<
  */
 export const WalletAnalysisQuerySchema = z.object({
   include: z.array(WalletAnalysisSliceSchema).nonempty().default(["snapshot"]),
+  interval: PolyWalletOverviewIntervalSchema.optional().default("ALL"),
 });
 export type WalletAnalysisQuery = z.infer<typeof WalletAnalysisQuerySchema>;
 
@@ -142,7 +156,7 @@ export const polyWalletAnalysisOperation = {
   id: "poly.wallet-analysis.v1",
   summary: "Wallet analysis — deterministic metrics, trades, and balance",
   description:
-    "Single route covering any 0x Polymarket wallet. Slice-scoped via `include` (snapshot, trades, balance). Numbers computed on demand from public Polymarket Data-API + CLOB resolutions; no storage layer. Balance is positions-only for non-operator wallets. Each slice is independently optional in the response; partial failure surfaces via `warnings`.",
+    "Single route covering any 0x Polymarket wallet. Slice-scoped via `include` (snapshot, trades, balance, pnl). Numbers computed on demand from public Polymarket Data-API + CLOB resolutions plus Polymarket's public user-pnl service; no storage layer. Balance is positions-only for non-operator wallets. Each slice is independently optional in the response; partial failure surfaces via `warnings`.",
   input: z.object({
     addr: PolyAddressSchema,
     query: WalletAnalysisQuerySchema,

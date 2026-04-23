@@ -20,6 +20,18 @@ import { z } from "zod";
 
 const walletAddressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/);
 
+export const PolyWalletOverviewIntervalSchema = z.enum([
+  "1D",
+  "1W",
+  "1M",
+  "1Y",
+  "YTD",
+  "ALL",
+]);
+export type PolyWalletOverviewInterval = z.infer<
+  typeof PolyWalletOverviewIntervalSchema
+>;
+
 export const PolyWalletOverviewWarningSchema = z.object({
   code: z.string(),
   message: z.string(),
@@ -28,22 +40,36 @@ export type PolyWalletOverviewWarning = z.infer<
   typeof PolyWalletOverviewWarningSchema
 >;
 
+export const PolyWalletOverviewPnlPointSchema = z.object({
+  ts: z.string(),
+  pnl: z.number(),
+});
+export type PolyWalletOverviewPnlPoint = z.infer<
+  typeof PolyWalletOverviewPnlPointSchema
+>;
+
 export const polyWalletOverviewOperation = {
   id: "poly.wallet.overview.v1",
-  summary: "Read the calling user's trading-wallet dashboard summary",
+  summary:
+    "Read the calling user's trading-wallet dashboard summary and Polymarket P/L history",
   description:
-    "Returns the signed-in user's current trading-wallet snapshot: address, POL gas, available USDC.e, locked open-order notional, position MTM, total, and warning metadata.",
-  input: z.object({}),
+    "Returns the signed-in user's current trading-wallet snapshot plus a Polymarket-native P/L chart history for the requested interval.",
+  input: z.object({
+    interval: PolyWalletOverviewIntervalSchema.optional(),
+  }),
   output: z.object({
     configured: z.boolean(),
     connected: z.boolean(),
     address: walletAddressSchema.nullable(),
+    interval: PolyWalletOverviewIntervalSchema,
+    capturedAt: z.string(),
     pol_gas: z.number().nullable(),
     usdc_available: z.number().nullable(),
     usdc_locked: z.number().nullable(),
     usdc_positions_mtm: z.number().nullable(),
     usdc_total: z.number().nullable(),
     open_orders: z.number().int().nonnegative().nullable(),
+    pnlHistory: z.array(PolyWalletOverviewPnlPointSchema),
     warnings: z.array(PolyWalletOverviewWarningSchema),
   }),
 } as const;

@@ -28,6 +28,7 @@ WalletAnalysisView(address, variant, size)
 ├─ WalletIdentityHeader   ─ name · wallet · Polymarket / Polygonscan · category chip
 ├─ StatGrid               ─ WR · ROI · PnL · DD · hold · avg/day     [snapshot · 30 s]
 ├─ BalanceBar             ─ Available · Locked · Positions           [balance  · 30 s]
+├─ WalletProfitLossCard   ─ Polymarket P/L + interval tabs           [pnl      · 30 s]
 ├─ TradesPerDayChart      ─ last 14 d bars                           [trades   · 30 s · lazy]
 ├─ RecentTradesTable      ─ last N trades                            [trades   · 30 s · lazy]
 ├─ TopMarketsList         ─ top 4 derived from trades                [derived]
@@ -53,6 +54,7 @@ Three slices, three independent fetches.
 | `snapshot` | compute: `PolymarketDataApiClient` trades + CLOB resolutions                                 | any addr (metrics `null` until enough resolved positions) | 30 s      |
 | `trades`   | `PolymarketDataApiClient` `/trades?user=`                                                    | any addr                                                  | 30 s      |
 | `balance`  | `PolymarketDataApiClient` `/positions?user=` (any addr) + operator CLOB USDC (operator only) | any addr (positions-only) · operator (full breakdown)     | 30 s      |
+| `pnl`      | `PolymarketUserPnlClient` `user-pnl-api.polymarket.com/user-pnl`                             | any addr (empty array for funded/no-trade wallets)        | 30 s      |
 
 **No Postgres snapshot table.** No `poly_wallet_screen_snapshots`. No seed script. No migration. Numbers are deterministic `f(trades × resolutions)` — compute every request, cache the result. Research fixtures remain documentation.
 
@@ -75,13 +77,13 @@ Three slices, three independent fetches.
 One route. Contract owns the shape.
 
 ```
-GET /api/v1/poly/wallets/{addr}?include=snapshot|trades|balance
+GET /api/v1/poly/wallets/{addr}?include=snapshot|trades|balance|pnl&interval=1D|1W|1M|1Y|YTD|ALL
 ```
 
 Contract: [`nodes/poly/app/src/contracts/http/poly.wallet-analysis.v1.contract.ts`](../../nodes/poly/app/src/contracts/http/poly.wallet-analysis.v1.contract.ts) (Zod). Enforces:
 
 - `addr` matches `^0x[a-f0-9]{40}$` then lowercased before any handler logic.
-- `include` repeated query params parsed as a Zod array subset of `{snapshot, trades, balance}`; default `["snapshot"]`.
+- `include` repeated query params parsed as a Zod array subset of `{snapshot, trades, balance, pnl}`; default `["snapshot"]`.
 - Each slice independently optional in the response. `warnings: Array<{ slice, code, message }>` surfaces partial failures — UI renders "trades unavailable, retrying" instead of silently empty.
 - Any 0x address returns 200. Snapshot metrics null until resolved positions count is large enough for meaningful math (≥5 resolved).
 - `balance` has two modes: operator addr → `{ available, locked, positions, total }`; any other addr → `{ positions, total }` only. Contract response shape makes `available` / `locked` optional.
@@ -117,7 +119,7 @@ Blocked on two decisions: where the Harvard-flagged dataset lives, what "admin" 
 ## Invariants
 
 - Numbers are compute, not store. No `poly_wallet_screen_snapshots` table ever. Follow-ups that need versioned judgment go to Dolt via [task.0333](../../work/items/task.0329.wallet-analysis-component-extraction.md).
-- The `/research/w/[addr]` page fetches the three slices server-side in parallel via `getBalanceSlice` / `getSnapshotSlice` / `getTradesSlice`. A client React Query hook with three independent loading states lands when Checkpoint C needs prefetch; until then server-parallel fetch is the simpler primitive.
+- The `/research/w/[addr]` page and the drawer now share one client container (`WalletAnalysisSurface`) that fans out to the route's slices, including `pnl`, via independent React Query keys.
 - Address validation in the Zod contract, not the handler.
 - Any 0x address → 200. Auth enforced at the route via `resolveRequestIdentity` (Bearer OR session cookie, unified by the existing wrapper).
 - Coalesce dedups same `(slice, addr)`; `p-limit(4)` caps cross-key fan-out. Both at the handler, not the client.

@@ -35,6 +35,11 @@ export type WalletBalanceHistoryPoint = {
   positions?: number;
 };
 
+export type WalletPnlHistoryPoint = {
+  ts: string;
+  pnl: number;
+};
+
 export type WalletPositionStatus = "open" | "closed" | "redeemable";
 
 export type WalletPositionTimelinePoint = {
@@ -119,6 +124,11 @@ export type WalletIdentity = {
   isPrimaryTarget?: boolean;
 };
 
+export type WalletPnl = {
+  interval: "1D" | "1W" | "1M" | "1Y" | "YTD" | "ALL";
+  history: readonly WalletPnlHistoryPoint[];
+};
+
 export type WalletAnalysisData = {
   address: string;
   identity: WalletIdentity;
@@ -126,6 +136,7 @@ export type WalletAnalysisData = {
   trades?: WalletTrades;
   balance?: WalletBalance;
   balanceHistory?: readonly WalletBalanceHistoryPoint[];
+  pnl?: WalletPnl;
   positions?: readonly WalletPosition[];
 };
 

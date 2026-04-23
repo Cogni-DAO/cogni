@@ -4,9 +4,9 @@
 /**
  * Module: `@features/wallet-analysis/components/WalletDetailDrawer`
  * Purpose: Side-sheet drawer that renders `WalletAnalysisView` for any 0x address. Opens instantly with skeletons; per-slice React Query data fills in as it lands. Used from the /research wallets table to keep users in flow instead of jumping pages.
- * Scope: Client component. Hooks `useWalletAnalysis(addr)` for the three slices. Includes a "Open in page →" link for users who want a shareable URL.
+ * Scope: Client component. Renders the shared `WalletAnalysisSurface`, which fetches the wallet-analysis slices. Includes a "Open in page →" link for users who want a shareable URL.
  * Invariants: SKELETON_FIRST — Sheet animates in immediately; molecules render their own loading skeletons via `WalletAnalysisView`'s `isLoading` prop. PAUSED_WHEN_CLOSED — `useWalletAnalysis` is `enabled=false` when the drawer is closed so we don't background-fetch for nothing.
- * Side-effects: IO (the hook fetches three slices over HTTP).
+ * Side-effects: IO (via `WalletAnalysisSurface`).
  * Links: docs/design/wallet-analysis-components.md, work/items/task.0344.wallet-row-drawer.md
  * @public
  */
@@ -18,8 +18,7 @@ import Link from "next/link";
 import type { ReactElement } from "react";
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components";
-import { useWalletAnalysis } from "../client/use-wallet-analysis";
-import { WalletAnalysisView } from "./WalletAnalysisView";
+import { WalletAnalysisSurface } from "./WalletAnalysisSurface";
 
 export type WalletDetailDrawerProps = {
   /** 0x address to render. `null` keeps the sheet closed. */
@@ -34,8 +33,6 @@ export function WalletDetailDrawer({
   open,
   onOpenChange,
 }: WalletDetailDrawerProps): ReactElement {
-  const { data, isLoading } = useWalletAnalysis(addr, open);
-
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -68,15 +65,11 @@ export function WalletDetailDrawer({
 
         <div className="px-4 py-4 md:px-6 md:py-6">
           {addr ? (
-            <WalletAnalysisView
-              data={data}
+            <WalletAnalysisSurface
+              addr={addr}
+              enabled={open}
               variant="page"
               size="default"
-              isLoading={isLoading}
-              capturedAt={new Date()
-                .toISOString()
-                .slice(0, 16)
-                .replace("T", " ")}
             />
           ) : null}
         </div>

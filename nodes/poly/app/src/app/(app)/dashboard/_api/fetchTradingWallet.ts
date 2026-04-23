@@ -11,12 +11,20 @@
  * @public
  */
 
-import type { PolyWalletOverviewOutput } from "@cogni/node-contracts";
+import type {
+  PolyWalletOverviewInterval,
+  PolyWalletOverviewOutput,
+} from "@cogni/node-contracts";
 
-export async function fetchTradingWallet(): Promise<PolyWalletOverviewOutput> {
-  const response = await fetch("/api/v1/poly/wallet/overview", {
-    credentials: "include",
-  });
+export async function fetchTradingWallet(
+  interval: PolyWalletOverviewInterval
+): Promise<PolyWalletOverviewOutput> {
+  const response = await fetch(
+    `/api/v1/poly/wallet/overview?interval=${interval}`,
+    {
+      credentials: "include",
+    }
+  );
   if (!response.ok) {
     throw new Error(
       `Failed to fetch trading wallet overview: ${response.status} ${response.statusText}`

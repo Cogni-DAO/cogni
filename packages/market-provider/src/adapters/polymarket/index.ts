@@ -79,3 +79,15 @@ export {
   type PolymarketRawMarket,
   PolymarketRawMarketSchema,
 } from "./polymarket.types.js";
+export {
+  type GetUserPnlParams,
+  PolymarketUserPnlClient,
+  type PolymarketUserPnlClientConfig,
+  type PolymarketUserPnlFidelity,
+  PolymarketUserPnlFidelitySchema,
+  type PolymarketUserPnlInterval,
+  PolymarketUserPnlIntervalSchema,
+  type PolymarketUserPnlPoint,
+  PolymarketUserPnlPointSchema,
+  PolymarketUserPnlResponseSchema,
+} from "./polymarket.user-pnl.client.js";

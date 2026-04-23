@@ -3,9 +3,9 @@
 
 /**
  * Module: `@features/wallet-analysis/client/use-wallet-analysis`
- * Purpose: React Query hook fanning out to the three wallet-analysis slices on `GET /api/v1/poly/wallets/{addr}` — snapshot, trades, balance — each with its own loading state so molecules can render the moment their slice arrives.
+ * Purpose: React Query hook fanning out to the wallet-analysis slices on `GET /api/v1/poly/wallets/{addr}` — snapshot, trades, balance, and pnl — each with its own loading state so molecules can render the moment their slice arrives.
  * Scope: Client-side data hook. Maps the contract response to `WalletAnalysisData`. Does not render UI; does not perform mutations.
- * Invariants: Three independent React Query keys (`["wallet", addr, "snapshot"|"trades"|"balance"]`). Skeleton-first behaviour: callers receive `isLoading: true` immediately and a partial `data` shape that fills in as slices land.
+ * Invariants: Independent React Query keys per slice. Skeleton-first behaviour: callers receive `isLoading: true` immediately and a partial `data` shape that fills in as slices land.
  * Side-effects: IO (HTTP fetch).
  * Notes: The address is lowercased before fetch; coalesce + p-limit live server-side in `wallet-analysis-service`.
  * Links: docs/design/wallet-analysis-components.md, work/items/task.0344.wallet-row-drawer.md
@@ -15,7 +15,9 @@
 "use client";
 
 import type {
+  PolyWalletOverviewInterval,
   WalletAnalysisBalance,
+  WalletAnalysisPnl,
   WalletAnalysisResponse,
   WalletAnalysisSnapshot,
   WalletAnalysisTrades,
@@ -27,11 +29,14 @@ import type { WalletAnalysisData } from "../types/wallet-analysis";
 /** 30s cache mirrors the server-side coalesce TTL — refetches naturally on window focus. */
 const SLICE_STALE_MS = 30_000;
 
-async function fetchSlice<TKey extends "snapshot" | "trades" | "balance">(
+async function fetchSlice<
+  TKey extends "snapshot" | "trades" | "balance" | "pnl",
+>(
   addr: string,
-  slice: TKey
+  slice: TKey,
+  interval: PolyWalletOverviewInterval
 ): Promise<WalletAnalysisResponse> {
-  const url = `/api/v1/poly/wallets/${addr.toLowerCase()}?include=${slice}`;
+  const url = `/api/v1/poly/wallets/${addr.toLowerCase()}?include=${slice}&interval=${interval}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${slice} fetch failed: ${res.status}`);
   return (await res.json()) as WalletAnalysisResponse;
@@ -40,12 +45,22 @@ async function fetchSlice<TKey extends "snapshot" | "trades" | "balance">(
 export type UseWalletAnalysisResult = {
   /** Always non-null — partial fields stream in as slices arrive. */
   data: WalletAnalysisData;
-  isLoading: { snapshot: boolean; trades: boolean; balance: boolean };
-  isError: { snapshot: boolean; trades: boolean; balance: boolean };
+  isLoading: {
+    snapshot: boolean;
+    trades: boolean;
+    balance: boolean;
+    pnl: boolean;
+  };
+  isError: {
+    snapshot: boolean;
+    trades: boolean;
+    balance: boolean;
+    pnl: boolean;
+  };
 };
 
 /**
- * Three independent React Query calls keyed by addr + slice. Returns a
+ * Independent React Query calls keyed by addr + slice. Returns a
  * `WalletAnalysisData` whose fields populate as each slice resolves.
  *
  * @param addr  0x wallet (lowercased internally)
@@ -53,31 +68,44 @@ export type UseWalletAnalysisResult = {
  */
 export function useWalletAnalysis(
   addr: string | null,
-  enabled = true
+  enabled = true,
+  interval: PolyWalletOverviewInterval = "ALL"
 ): UseWalletAnalysisResult {
   const lower = addr?.toLowerCase() ?? "";
   const active = enabled && Boolean(lower);
 
   const snapshot = useQuery({
     queryKey: ["wallet", lower, "snapshot"],
-    queryFn: () => fetchSlice(lower, "snapshot"),
+    queryFn: () => fetchSlice(lower, "snapshot", interval),
     enabled: active,
     staleTime: SLICE_STALE_MS,
   });
   const trades = useQuery({
     queryKey: ["wallet", lower, "trades"],
-    queryFn: () => fetchSlice(lower, "trades"),
+    queryFn: () => fetchSlice(lower, "trades", interval),
     enabled: active,
     staleTime: SLICE_STALE_MS,
   });
   const balance = useQuery({
     queryKey: ["wallet", lower, "balance"],
-    queryFn: () => fetchSlice(lower, "balance"),
+    queryFn: () => fetchSlice(lower, "balance", interval),
+    enabled: active,
+    staleTime: SLICE_STALE_MS,
+  });
+  const pnl = useQuery({
+    queryKey: ["wallet", lower, "pnl", interval],
+    queryFn: () => fetchSlice(lower, "pnl", interval),
     enabled: active,
     staleTime: SLICE_STALE_MS,
   });
 
-  const data = mapToView(lower, snapshot.data, trades.data, balance.data);
+  const data = mapToView(
+    lower,
+    snapshot.data,
+    trades.data,
+    balance.data,
+    pnl.data
+  );
 
   return {
     data,
@@ -85,11 +113,13 @@ export function useWalletAnalysis(
       snapshot: snapshot.isLoading,
       trades: trades.isLoading,
       balance: balance.isLoading,
+      pnl: pnl.isLoading,
     },
     isError: {
       snapshot: snapshot.isError,
       trades: trades.isError,
       balance: balance.isError,
+      pnl: pnl.isError,
     },
   };
 }
@@ -98,11 +128,13 @@ function mapToView(
   addr: string,
   snapResp: WalletAnalysisResponse | undefined,
   tradesResp: WalletAnalysisResponse | undefined,
-  balanceResp: WalletAnalysisResponse | undefined
+  balanceResp: WalletAnalysisResponse | undefined,
+  pnlResp: WalletAnalysisResponse | undefined
 ): WalletAnalysisData {
   const snapshot = mapSnapshot(snapResp?.snapshot);
   const trades = mapTrades(tradesResp?.trades);
   const balance = mapBalance(balanceResp?.balance);
+  const pnl = mapPnl(pnlResp?.pnl);
   const inferredCategory = trades
     ? inferCategoryFromMarkets(trades.topMarkets)
     : undefined;
@@ -120,6 +152,7 @@ function mapToView(
     ...(snapshot && { snapshot }),
     ...(trades && { trades }),
     ...(balance && { balance: pickBalance(balance) }),
+    ...(pnl && { pnl }),
   };
 }
 
@@ -172,6 +205,16 @@ function pickBalance(b: WalletAnalysisBalance) {
     locked: b.locked ?? 0,
     positions: b.positions,
     total: b.total,
+  };
+}
+
+function mapPnl(
+  pnl: WalletAnalysisPnl | undefined
+): WalletAnalysisData["pnl"] | undefined {
+  if (!pnl) return undefined;
+  return {
+    interval: pnl.interval,
+    history: pnl.history,
   };
 }
 

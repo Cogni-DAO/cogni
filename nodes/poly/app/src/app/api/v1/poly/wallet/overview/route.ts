@@ -20,6 +20,7 @@
 import { toUserId } from "@cogni/ids";
 import { noopMetrics } from "@cogni/market-provider";
 import {
+  PolyWalletOverviewIntervalSchema,
   type PolyWalletOverviewOutput,
   polyWalletOverviewOperation,
 } from "@cogni/node-contracts";
@@ -35,24 +36,30 @@ import {
   getPolyTraderWalletAdapter,
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
+import { getTradingWalletPnlHistory } from "@/features/wallet-analysis/server/trading-wallet-overview-service";
 import { getBalanceSlice } from "@/features/wallet-analysis/server/wallet-analysis-service";
 import { serverEnv } from "@/shared/env/server-env";
 
 export const dynamic = "force-dynamic";
 
 function emptyPayload(
+  interval: PolyWalletOverviewOutput["interval"],
+  capturedAt: string,
   overrides: Partial<PolyWalletOverviewOutput>
 ): PolyWalletOverviewOutput {
   return polyWalletOverviewOperation.output.parse({
     configured: true,
     connected: false,
     address: null,
+    interval,
+    capturedAt,
     pol_gas: null,
     usdc_available: null,
     usdc_locked: null,
     usdc_positions_mtm: null,
     usdc_total: null,
     open_orders: null,
+    pnlHistory: [],
     warnings: [],
     ...overrides,
   });
@@ -63,8 +70,13 @@ export const GET = wrapRouteHandlerWithLogging(
     routeId: "poly.wallet.overview",
     auth: { mode: "required", getSessionUser },
   },
-  async (ctx, _request, sessionUser) => {
+  async (ctx, request, sessionUser) => {
     if (!sessionUser) throw new Error("sessionUser required");
+    const url = new URL(request.url);
+    const interval = PolyWalletOverviewIntervalSchema.parse(
+      url.searchParams.get("interval") ?? "1W"
+    );
+    const capturedAt = new Date().toISOString();
 
     const container = getContainer();
     const account = await container
@@ -77,7 +89,7 @@ export const GET = wrapRouteHandlerWithLogging(
     } catch (err) {
       if (err instanceof WalletAdapterUnconfiguredError) {
         return NextResponse.json(
-          emptyPayload({
+          emptyPayload(interval, capturedAt, {
             configured: false,
             warnings: [
               {
@@ -95,7 +107,7 @@ export const GET = wrapRouteHandlerWithLogging(
     const balances = await adapter.getBalances(account.id);
     if (!balances) {
       return NextResponse.json(
-        emptyPayload({
+        emptyPayload(interval, capturedAt, {
           warnings: [
             {
               code: "no_trading_wallet",
@@ -153,17 +165,32 @@ export const GET = wrapRouteHandlerWithLogging(
       balances.usdcE !== null && positionsMtm !== null && lockedUsdc !== null
         ? roundToCents(balances.usdcE + positionsMtm + lockedUsdc)
         : null;
+    let pnlHistory: PolyWalletOverviewOutput["pnlHistory"] = [];
+    try {
+      pnlHistory = await getTradingWalletPnlHistory({
+        address: balances.address,
+        interval,
+        capturedAt,
+      });
+    } catch (err) {
+      warnings.push({
+        code: "pnl_history_unavailable",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
 
     ctx.log.info(
       {
         billing_account_id: account.id,
         funder_address: balances.address,
+        interval,
         usdc_available: balances.usdcE,
         usdc_locked: lockedUsdc,
         usdc_positions_mtm: positionsMtm,
         usdc_total: total,
         pol_gas: balances.pol,
         open_orders: openOrders,
+        pnl_points: pnlHistory.length,
         warning_count: warnings.length,
       },
       "poly.wallet.overview"
@@ -174,12 +201,15 @@ export const GET = wrapRouteHandlerWithLogging(
         configured: true,
         connected: true,
         address: balances.address,
+        interval,
+        capturedAt,
         pol_gas: balances.pol,
         usdc_available: balances.usdcE,
         usdc_locked: lockedUsdc,
         usdc_positions_mtm: positionsMtm,
         usdc_total: total,
         open_orders: openOrders,
+        pnlHistory,
         warnings,
       })
     );
