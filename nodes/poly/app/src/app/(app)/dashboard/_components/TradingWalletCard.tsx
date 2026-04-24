@@ -3,18 +3,24 @@
 
 /**
  * Module: `@app/(app)/dashboard/_components/TradingWalletCard`
- * Purpose: Dashboard tile — caller's own per-tenant trading-wallet summary:
- *          address, gas, and one coherent live balance model across
- *          available cash, locked open orders, and live positions.
- * Scope: Client component. React Query poll against `/api/v1/poly/wallet/overview`.
- *        Read-only.
+ * Purpose: Dashboard tile — caller's own per-tenant trading-wallet summary
+ *   (address, gas, live balance model) plus first-user onboarding nudges:
+ *   renders "Connect →" → `/credits` when no wallet exists, and
+ *   "Enable trading →" → `/credits` when connected but `trading_ready=false`.
+ * Scope: Client component. Two React Query reads — `/api/v1/poly/wallet/overview`
+ *   for the balance snapshot and `/api/v1/poly/wallet/status` (shared cache key
+ *   with `/credits` via `poly-wallet-status`, deduped across routes) to drive
+ *   the onboarding CTA branch. Read-only.
  * Invariants:
  *   - TENANT_SCOPED: the backing route resolves the caller's own wallet from
  *     the session — no address plumbing at the UI boundary.
  *   - NO_TOMBSTONE_ROUTE: never reads the legacy `/api/v1/poly/wallet/balance`
  *     route.
  *   - NO_FAKE_HISTORY: this card renders current wallet truth only.
+ *   - STATE_DRIVEN_UI (task.0361): the onboarding CTA is derived from
+ *     `poly.wallet.status.v1`; no persisted onboarding-progress.
  * Side-effects: IO (via React Query).
+ * Links: work/items/task.0361.poly-first-user-onboarding-flow-v0.md
  * @public
  */
 

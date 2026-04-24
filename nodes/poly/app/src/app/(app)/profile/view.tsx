@@ -3,11 +3,22 @@
 
 /**
  * Module: `@app/(app)/profile/view`
- * Purpose: Client component for user profile settings — display name, avatar color, and linked accounts.
- * Scope: Reads/updates user profile via /api/v1/users/me; does not handle OAuth flow directly or manage session persistence.
- * Invariants: Requires authenticated session (enforced by parent layout); avatar color updates reflected in session via update().
- * Side-effects: IO (fetch API, session update, navigation for OAuth linking)
- * Links: src/contracts/users.profile.v1.contract.ts, src/app/api/v1/users/me/route.ts
+ * Purpose: Identity-only profile settings — display name, avatar color, linked
+ *   OAuth accounts (Ethereum / GitHub / Discord / Google), BYO-AI providers
+ *   (ChatGPT / Ollama), and ownership/attribution summary.
+ * Scope: Reads/updates user profile via `/api/v1/users/me`; does not handle
+ *   OAuth flow directly or manage session persistence. Polymarket trading-
+ *   wallet lifecycle lives on `/credits` — this view intentionally does not
+ *   read `/api/v1/poly/wallet/status` or render a wallet creation row.
+ * Invariants:
+ *   - Requires authenticated session (enforced by parent layout); avatar
+ *     color updates reflect in session via `update()`.
+ *   - PROFILE_IS_IDENTITY_ONLY (task.0361): no trading-wallet UI here.
+ * Side-effects: IO (fetch API, session update, navigation for OAuth linking).
+ * Links: src/contracts/users.profile.v1.contract.ts,
+ *        src/app/api/v1/users/me/route.ts,
+ *        src/app/(app)/credits/TradingWalletPanel.tsx,
+ *        work/items/task.0361.poly-first-user-onboarding-flow-v0.md
  * @public
  */
 

@@ -3,24 +3,30 @@
 
 /**
  * Module: `@app/(app)/credits/TradingWalletPanel`
- * Purpose: Money page panel for the user's Polymarket trading wallet —
- *   funder address, USDC.e | POL readout, the 1-click `TradingReadinessSection`
- *   Enable Trading call-to-action (task.0355), and stubbed Fund | Withdraw
+ * Purpose: Money page panel hosting the whole trading-wallet lifecycle —
+ *   create (inline `TradingWalletConnectFlow` when `configured && !connected`),
+ *   fund (USDC.e / POL readout + Polygon bridge link), enable trading
+ *   (`TradingReadinessSection`, task.0355), and stubbed fund/withdraw
  *   (task.0351 / task.0352).
- * Scope: Client component. React Query fetches `/wallet/status` + `/wallet/balances`.
- *   Delegates the Enable Trading ceremony to `TradingReadinessSection`. Funding
- *   and withdrawal remain stubbed.
+ * Scope: Client component. React Query fetches `/wallet/status` + `/wallet/balances`;
+ *   reads the session via `next-auth/react` only to surface `userId` to the
+ *   inline connect flow. On `onConnected`, invalidates `poly-wallet-status`
+ *   so the panel flips from "create" to "balances" without a reload.
  * Invariants:
  *   - ENABLE_TRADING_VISIBLE: when connected AND `trading_ready=false`, the
  *     readiness section is the primary above-the-fold CTA on this card.
  *     Without it the user cannot reach the CLOB — APPROVALS_BEFORE_PLACE
  *     blocks `authorizeIntent`. Losing this CTA bricks every trade.
+ *   - PROFILE_IS_IDENTITY_ONLY (task.0361): this panel owns the "create a
+ *     trading wallet" action; `/profile` no longer has a wallet row.
  *   - PARTIAL_FAILURE_VISIBLE: render USDC.e/POL as "—" when the RPC errored.
- * Side-effects: IO (fetch API via React Query).
+ * Side-effects: IO (fetch API via React Query; `onConnected` triggers
+ *   `poly-wallet-status` invalidation).
  * Links: packages/node-contracts/src/poly.wallet.connection.v1.contract.ts,
  *        packages/node-contracts/src/poly.wallet.balances.v1.contract.ts,
  *        packages/node-contracts/src/poly.wallet.enable-trading.v1.contract.ts,
  *        work/items/task.0355.poly-trading-wallet-enable-trading.md,
+ *        work/items/task.0361.poly-first-user-onboarding-flow-v0.md,
  *        work/items/task.0351.poly-trading-wallet-withdrawal.md,
  *        work/items/task.0352.poly-trading-wallet-fund-flow.md
  * @public
