@@ -13,10 +13,10 @@ namePrefix: operator-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:ce0eef627672af00b4cb575a1b6a9e2e8f5b065e2cb9bd1af3874279708d2b58"
+    digest: "sha256:380cb6f280c07cb9386c99128618dbb5bb5cef1ef70e21d470433e33dd8821f6"
   - name: ghcr.io/cogni-dao/cogni-template-migrate
     newName: ghcr.io/cogni-dao/cogni-template-migrate
-    digest: "sha256:1d67148356488a4ad3681ec14ea4e12e7116af96d293818ceb56bffc549f34e6"
+    digest: "sha256:e9bd7c3c76d6c30885a37047a1cf9403c6e0b5e4b943a8d523c13ac69ee1ea8b"
 
 patches:
   - target:
