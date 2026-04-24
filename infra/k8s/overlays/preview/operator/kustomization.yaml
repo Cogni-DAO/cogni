@@ -13,10 +13,10 @@ namePrefix: operator-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:2c926af05d361dcf0d314eb9487d14d51108eff282a54b6d7c146fd1a1235235"
+    digest: "sha256@sha256:2c926af05d361dcf0d314eb9487d14d51108eff282a54b6d7c146fd1a1235235"
   - name: ghcr.io/cogni-dao/cogni-template-migrate
     newName: ghcr.io/cogni-dao/cogni-template-migrate
-    digest: "sha256:6d7019205a88722f9cf04166b20c6ecb867329308c5c41a9b7924ef4fe5ea3ef"
+    digest: "sha256@sha256:6d7019205a88722f9cf04166b20c6ecb867329308c5c41a9b7924ef4fe5ea3ef"
 
 patches:
   # Node-specific ConfigMap values.
