@@ -30,7 +30,6 @@ import type {
 import { BalanceBar } from "./BalanceBar";
 import { EdgeHypothesis } from "./EdgeHypothesis";
 import { RecentTradesTable } from "./RecentTradesTable";
-import { StatGrid } from "./StatGrid";
 import { TopMarketsList } from "./TopMarketsList";
 import { TradesPerDayChart } from "./TradesPerDayChart";
 import { WalletIdentityHeader } from "./WalletIdentityHeader";
@@ -147,7 +146,6 @@ function PageVariant({
           address={data.address}
           identity={data.identity}
           size={size}
-          resolvedCount={data.snapshot?.n}
         />
       </CardHeader>
 
@@ -156,8 +154,6 @@ function PageVariant({
           stats={windowStats}
           isLoading={windowStatsLoading}
         />
-
-        <StatGrid snapshot={data.snapshot} isLoading={isLoading?.snapshot} />
 
         {(data.balance || isLoading?.balance) && (
           <BalanceBar balance={data.balance} isLoading={isLoading?.balance} />
