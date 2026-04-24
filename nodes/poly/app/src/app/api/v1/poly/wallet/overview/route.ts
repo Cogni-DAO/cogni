@@ -161,9 +161,23 @@ export const GET = wrapRouteHandlerWithLogging(
       });
     }
 
+    // `balances.usdcE` is the wallet's single on-chain USDC.e balance.
+    // Polymarket's CLOB does not escrow BUY-side USDC on-chain — open orders
+    // are software-level reservations against the wallet's allowance, so
+    // `lockedUsdc` is already part of `balances.usdcE`. The dashboard wants
+    // three non-overlapping buckets that sum to total portfolio value:
+    //   available = truly free USDC (on-chain total − locked)
+    //   locked    = USDC reserved by open BUY orders
+    //   positions = mark-to-market value of CTF share holdings
+    // Previously `usdc_available` aliased to `balances.usdcE` (total on-chain)
+    // and `usdc_total` summed all three, double-counting locked.
+    const usdcAvailable =
+      balances.usdcE !== null && lockedUsdc !== null
+        ? roundToCents(Math.max(0, balances.usdcE - lockedUsdc))
+        : balances.usdcE;
     const total =
-      balances.usdcE !== null && positionsMtm !== null && lockedUsdc !== null
-        ? roundToCents(balances.usdcE + positionsMtm + lockedUsdc)
+      balances.usdcE !== null && positionsMtm !== null
+        ? roundToCents(balances.usdcE + positionsMtm)
         : null;
     let pnlHistory: PolyWalletOverviewOutput["pnlHistory"] = [];
     try {
@@ -184,7 +198,7 @@ export const GET = wrapRouteHandlerWithLogging(
         billing_account_id: account.id,
         funder_address: balances.address,
         interval,
-        usdc_available: balances.usdcE,
+        usdc_available: usdcAvailable,
         usdc_locked: lockedUsdc,
         usdc_positions_mtm: positionsMtm,
         usdc_total: total,
@@ -204,7 +218,7 @@ export const GET = wrapRouteHandlerWithLogging(
         interval,
         capturedAt,
         pol_gas: balances.pol,
-        usdc_available: balances.usdcE,
+        usdc_available: usdcAvailable,
         usdc_locked: lockedUsdc,
         usdc_positions_mtm: positionsMtm,
         usdc_total: total,
