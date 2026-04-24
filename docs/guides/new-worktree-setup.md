@@ -46,6 +46,8 @@ Error: Failed to resolve entry for package "@cogni/scheduler-core"
 
 The main checkout usually has these built already. A fresh worktree does not.
 
+`packages:build` is incremental via `.tsbuildinfo`. If a rebase or merge leaves declarations out of sync, run `pnpm packages:build:clean` to wipe all `dist/` and `.tsbuildinfo` state and rebuild from scratch.
+
 ## Cleanup
 
 ```bash
