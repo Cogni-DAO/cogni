@@ -58,7 +58,9 @@ import { cn } from "@/shared/util/cn";
 import { fetchActivity } from "../activity/_api/fetchActivity";
 import { WorkItemDetail } from "../work/_components/WorkItemDetail";
 import { StatusPill, TypeIcon } from "../work/_components/work-item-icons";
+import { fetchActivePrs } from "./_api/fetchActivePrs";
 import { fetchRuns } from "./_api/fetchRuns";
+import { ActivePullRequestsPanel } from "./_components/pr-panel/ActivePullRequestsPanel";
 
 type Tab = "user" | "system";
 
@@ -188,6 +190,14 @@ export function DashboardView(): ReactElement {
     gcTime: 60_000,
   });
 
+  const { data: prsData } = useQuery({
+    queryKey: ["dashboard-active-prs"],
+    queryFn: fetchActivePrs,
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+    gcTime: 60_000,
+  });
+
   const { data: workData, isLoading: workLoading } = useQuery({
     queryKey: ["dashboard-work"],
     queryFn: fetchWorkItems,
@@ -288,6 +298,11 @@ export function DashboardView(): ReactElement {
 
       {/* Node health from live stream */}
       <NodeHealthCard />
+
+      {/* Active Pull Requests — operator's core PR → CI → flight → deploy_verified loop */}
+      {prsData && prsData.entries.length > 0 && (
+        <ActivePullRequestsPanel entries={prsData.entries} />
+      )}
 
       {/* Two-column top section: Agents + Work */}
       <div className="grid gap-6 lg:grid-cols-2">
