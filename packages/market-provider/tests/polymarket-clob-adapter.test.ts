@@ -629,6 +629,33 @@ describe("PolymarketClobAdapter", () => {
     expect(createAndPostOrder).not.toHaveBeenCalled();
   });
 
+  it("placeOrder tolerates float-lossy round-trip at the USDC-notional floor (bug.0342 regression)", async () => {
+    // size_usdc=1, price=0.09 → shareSize=11.11…, effectiveUsdc=0.9999999999999999.
+    // The round-trip loses precision but the intent clears the floor by
+    // design; without epsilon tolerance the adapter bounced prod mirror
+    // placements.
+    const createAndPostOrder = vi.fn().mockResolvedValue({
+      orderID: "0xresp",
+      status: "live",
+      makingAmount: "11.11",
+    });
+    const getOrderBook = vi.fn().mockResolvedValue({
+      min_order_size: "5",
+      tick_size: "0.01",
+    });
+    const adapter = makeAdapter({ createAndPostOrder, getOrderBook });
+
+    await expect(
+      adapter.placeOrder({
+        ...BASE_INTENT,
+        size_usdc: 1,
+        limit_price: 0.09,
+        side: "BUY",
+      })
+    ).resolves.toMatchObject({ order_id: "0xresp" });
+    expect(createAndPostOrder).toHaveBeenCalled();
+  });
+
   it("placeOrder proceeds when shareSize >= min_order_size", async () => {
     const createAndPostOrder = vi.fn().mockResolvedValue({
       orderID: "0xresp",
