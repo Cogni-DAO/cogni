@@ -13,10 +13,10 @@ namePrefix: poly-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:64ebcef9078c75c126ecfaa514c740119938300d9c2c44c9835f9490a274542c"
+    newTag: "prod-placeholder-poly"
   - name: ghcr.io/cogni-dao/cogni-template-migrate
-    newName: ghcr.io/cogni-dao/cogni-template-migrate
-    digest: "sha256:be69d742030e51b478b59e5805f5a83845131aa2f0413e3dc4d3a1612a2cc7a6"
+    newName: ghcr.io/cogni-dao/cogni-template
+    newTag: "prod-placeholder-poly"
 
 patches:
   # Node-specific ConfigMap values.
@@ -84,9 +84,6 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
         value: "poly-node-app-secrets"
-      - op: add
-        path: /spec/template/spec/containers/0/command
-        value: ["sh", "-c", "echo 'poly: no dedicated migrate image yet (task.0260)' && exit 0"]
 
   # bug.0295: VM discovery via DNS (production.vm.cognidao.org).
   # Convert base headless Services → ExternalName; delete EndpointSlices.
