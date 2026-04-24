@@ -1,6 +1,25 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [
+    "pnpm-lock.yaml",
+    "tsconfig.base.json",
+    "biome.json",
+    ".env.local.example",
+    ".env.test.example",
+    ".env.docker.example"
+  ],
   "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "src/**",
+        "tsconfig*.json",
+        "tsup.config.*",
+        "next.config.*",
+        "package.json"
+      ],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+    },
     "typecheck": {
       "inputs": ["src/**", "tests/**", "tsconfig*.json", "package.json"]
     },
