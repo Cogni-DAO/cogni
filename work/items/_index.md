@@ -58,6 +58,8 @@
 | 0 | 23 | 2 | needs_design | task.0078 | OpenClaw reasoning token streaming — display model thinking in collapsible UI | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 0 | 24 | 4 | needs_design | task.0001 | Docs Migration Tracker | Docs + Work System Infrastructure | proj.docs-system-infrastructure |
 | 0 | 25 | 2 | needs_implement | task.0090 | Keep Cogni Alive - direct system account funding on credits page | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
+| 0 | 99 | 2 | needs_closeout | task.0320 | Per-node flighting substrate — per-env deploy branches + per-node AppSets (candidate-a + preview + production) | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | 99 | 4 | needs_implement | task.0372 | Per-node cutover — refactor 3 AppSets + matrix fan-out across all flight workflows | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 0 | 2 | needs_triage | task.0108 | Collection completeness verification for epoch ingestion | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 1 | 2 | needs_design | bug.0060 | Cost authority bug: OpenRouter billed cost not flowing through LiteLLM callback (response_cost=0) | Reliability & Uptime | proj.reliability |
 | 1 | 1 | 4 | needs_implement | task.0119 | Epoch approver UI — EIP-712 signing, review/edit/finalize admin panel | Transparent Credit Payouts | proj.transparent-credit-payouts |
@@ -78,10 +80,12 @@
 | 1 | 1 | 0 | needs_closeout | task.0345 | candidate-flight-infra: default to dispatch ref so PR branches can be flown | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 3 | needs_implement | task.0349 | CI-owned preview digest promotion; demote Image Updater to freshness-only |  |  |
 | 1 | 1 | 1 | needs_merge | bug.0358 | candidate-flight false-red: wait-for-argocd shares one timeout budget across all promoted apps | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 1 | 2 | needs_implement | task.0360 | POST /api/v1/vcs/pr — VCS create-PR endpoint for external agents | Agentic Interoperability | proj.agentic-interop |
 | 1 | 1 | 1 | needs_merge | bug.0361 | promote-and-deploy: EXPECTED_BUILDSHA uses merge commit SHA; deploy-infra always runs | CI/CD Pipeline | proj.cicd-services-gitops |
-| 1 | 1 | 2 | needs_implement | task.0363 | Operator dashboard: Active Pull Requests + CI/flight/deploy_verified loop |  |  |
+| 1 | 1 | 2 | needs_closeout | task.0363 | Operator dashboard: Active Pull Requests + CI/flight/deploy_verified loop |  |  |
 | 1 | 1 | 1 | needs_review | bug.0364 | promote-and-deploy: production can't promote heterogeneous preview (single source_sha assumption) | CI/CD Pipeline | proj.cicd-services-gitops |
-| 1 | 1 | 3 | needs_merge | task.0370 | POST /api/v1/vcs/flight — CI-gated candidate-a flight endpoint + vcs/pr cleanup | Agentic Interoperability | proj.agentic-interop |
+| 1 | 1 | 1 | needs_review | task.0370 | Rebase every node's migrator stage on its runtime image | Database Operations | proj.database-ops |
+| 1 | 1 | 2 | needs_review | task.0371 | Kill PreSync migration hook + migrator image — step 1 hotfix | Database Operations | proj.database-ops |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -99,7 +103,7 @@
 | 1 | 2 | 3 | needs_design | bug.0312 | Purge canary and staging legacy naming from docs, workflows, and scorecards; document the e2e CI/CD flow | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 3 | needs_merge | task.0357 | Poly position exits — authoritative close/redeem semantics + live approval readiness | Cogni Poly | proj.poly-copy-trading |
 | 1 | 2 | 1 | needs_review | bug.0359 | candidate-flight false-green: wait-for-argocd accepts revision-advanced apps whose Deployment stays OutOfSync | CI/CD Pipeline | proj.cicd-services-gitops |
-| 1 | 2 | 3 | needs_design | task.0365 | Poly onboarding UX polish (v0.1) — Money page layout, funding tip, approval-state design | Cogni Poly | proj.poly-copy-trading |
+| 1 | 2 | 3 | needs_merge | task.0365 | Poly onboarding UX polish (v0.1) — Money page layout, funding tip, approval-state design | Cogni Poly | proj.poly-copy-trading |
 | 1 | 3 | 1 | needs_design | bug.0011 | Gateway streaming truncates output mid-sentence in UI | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 3 | 3 | needs_design | task.0099 | Node + scope identity infra: repo-spec, DB persistence, scope_id columns, boot-time drift protection |  |  |
 | 1 | 3 | 3 | needs_research | spike.0119 | Quarterly people-centric attribution review — evaluation payload, governance input, and signal collection | Transparent Credit Payouts | proj.transparent-credit-payouts |
@@ -184,6 +188,7 @@
 | 2 | 0 | 2 | needs_triage | task.0109 | Expand GitHub adapter — PR comments, review comments, issue creation | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 2 | 2 | 3 | needs_design | task.0238 | Agent avatars — Rive/Lottie animated characters on run cards and chat | Premium Frontend UX | proj.premium-frontend-ux |
 | 2 | 2 | 1 | needs_review | bug.0367 | verify-buildsha.sh hostname convention breaks production verify | CI/CD Pipeline | proj.cicd-services-gitops |
+| 2 | 2 | 2 | needs_review | bug.0368 | candidate-flight verify wait is ~4min of migrator image pull, not migration work | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 3 | 1 | needs_triage | bug.0012 | pre-commit check:docs validates all files, not just staged — blocks unrelated commits |  |  |
 | 2 | 3 | 3 | needs_design | story.0128 | Governance ops: manual workflow triggers, run history, and admin role gating | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
 | 2 | 3 | 5 | needs_design | story.0263 | Doltgres Node Lifecycle — clone/pull from remotes, repo-spec linking, permission model | Cogni Poly | proj.poly-prediction-bot |
@@ -252,7 +257,6 @@
 | 3 | 99 | 2 | needs_triage | spike.0239 | Three.js agent observatory — prototype + performance budget | Premium Frontend UX | proj.premium-frontend-ux |
 | 3 | 99 | 2 | needs_review | task.0316 | Wire per-node test:external lanes + move Ollama specs | System Test Architecture | proj.system-test-architecture |
 | 3 | 99 | 3 | needs_triage | bug.0318 | Rename canary → candidate-a across .local/ artifacts, provision scripts, and any lingering references | CI/CD Pipeline | proj.cicd-services-gitops |
-| 3 | 99 | 3 | needs_triage | task.0320 | Per-node candidate flighting (partial promotion + per-node leases) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 3 | 99 | 2 | needs_review | task.0321 | Parallelize pr-build.yml via per-target matrix | CI/CD Pipeline | proj.cicd-services-gitops |
 
 > Sort: priority ASC → rank ASC
@@ -391,7 +395,6 @@
 | 1 | bug.0338 | Phase A targets never copy-trade — POST doesn't upsert kill-switch config, enumerator is boot-time only | Cogni Poly | proj.poly-copy-trading |
 | 1 | task.0358 | Poly dashboard — open vs closed positions, position history replaces order history | Cogni Poly | proj.poly-copy-trading |
 | 1 | bug.0360 | Poly research Day tab hangs indefinitely — no timeout, no error state | Cogni Poly | proj.poly-prediction-bot |
-| 1 | task.0360 | POST /api/v1/vcs/pr — VCS create-PR endpoint for external agents | Agentic Interoperability | proj.agentic-interop |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 2 | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |
