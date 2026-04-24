@@ -14,10 +14,10 @@ namePrefix: poly-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:cc86de2d9614b20d8401d704ff4da61a21691a2763b523ed5346e2290ae58527"
+    digest: "sha256:66d489f8fc678e56512ded93acb52fddd945e775c933ee857bba409d73a96246"
   - name: ghcr.io/cogni-dao/cogni-template-migrate
     newName: ghcr.io/cogni-dao/cogni-template-migrate
-    digest: "sha256:f07023d35f8e57edbe75276536be3d0dbd17da19bd8f1929c68c14788f524d8f"
+    digest: "sha256:9d28a69bedd0d283a2fdf0dd87f8073f4937c67c56b0d670d53318ae6af4d8dd"
 
 patches:
   - target:
