@@ -2,7 +2,7 @@
 id: task.0361
 type: task
 title: "Poly — first-user onboarding flow v0 (sign-on → provision → fund → select targets)"
-status: needs_merge
+status: done
 priority: 0
 rank: 1
 estimate: 3
