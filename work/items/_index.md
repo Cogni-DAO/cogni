@@ -58,6 +58,7 @@
 | 0 | 23 | 2 | needs_design | task.0078 | OpenClaw reasoning token streaming — display model thinking in collapsible UI | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 0 | 24 | 4 | needs_design | task.0001 | Docs Migration Tracker | Docs + Work System Infrastructure | proj.docs-system-infrastructure |
 | 0 | 25 | 2 | needs_implement | task.0090 | Keep Cogni Alive - direct system account funding on credits page | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
+| 0 | 99 | 2 | needs_implement | task.0320 | Per-node candidate flighting (partial promotion + per-node leases) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 0 | 2 | needs_triage | task.0108 | Collection completeness verification for epoch ingestion | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 1 | 2 | needs_design | bug.0060 | Cost authority bug: OpenRouter billed cost not flowing through LiteLLM callback (response_cost=0) | Reliability & Uptime | proj.reliability |
 | 1 | 1 | 4 | needs_implement | task.0119 | Epoch approver UI — EIP-712 signing, review/edit/finalize admin panel | Transparent Credit Payouts | proj.transparent-credit-payouts |
@@ -251,7 +252,6 @@
 | 3 | 99 | 2 | needs_triage | spike.0239 | Three.js agent observatory — prototype + performance budget | Premium Frontend UX | proj.premium-frontend-ux |
 | 3 | 99 | 2 | needs_review | task.0316 | Wire per-node test:external lanes + move Ollama specs | System Test Architecture | proj.system-test-architecture |
 | 3 | 99 | 3 | needs_triage | bug.0318 | Rename canary → candidate-a across .local/ artifacts, provision scripts, and any lingering references | CI/CD Pipeline | proj.cicd-services-gitops |
-| 3 | 99 | 3 | needs_triage | task.0320 | Per-node candidate flighting (partial promotion + per-node leases) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 3 | 99 | 2 | needs_review | task.0321 | Parallelize pr-build.yml via per-target matrix | CI/CD Pipeline | proj.cicd-services-gitops |
 
 > Sort: priority ASC → rank ASC
