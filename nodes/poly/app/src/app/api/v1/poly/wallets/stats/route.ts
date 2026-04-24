@@ -24,9 +24,9 @@ import {
 } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
 import pLimit from "p-limit";
+import { getSessionUser } from "@/app/_lib/auth/session";
 import { createWalletCapability } from "@/bootstrap/capabilities/wallet";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { getServerSessionUser } from "@/lib/auth/server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30; // seconds — 50 wallets × p-limit(4) × ~300ms each
@@ -42,7 +42,7 @@ const limiter = pLimit(4);
 export const POST = wrapRouteHandlerWithLogging(
   {
     routeId: "poly.wallets.stats",
-    auth: { mode: "required", getSessionUser: getServerSessionUser },
+    auth: { mode: "required", getSessionUser },
   },
   async (_ctx, request) => {
     const body: unknown = await request.json();

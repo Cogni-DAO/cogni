@@ -2,12 +2,12 @@
 id: task.0361
 type: task
 title: "WalletDetailDrawer — wire windowed stats strip using POST /wallets/stats"
-status: needs_implement
+status: done
 priority: 2
 rank: 6
 estimate: 2
 created: 2026-04-23
-updated: 2026-04-23
+updated: 2026-04-24
 summary: "The WalletDetailDrawer shows garbage stats: avg-trades/day is computed from 500 all-time activity events (TRADE_FETCH_LIMIT cap), ignores the selected timePeriod, and 'n= resolved positions' only covers those 500 rows. POST /api/v1/poly/wallets/stats (task.0346) already returns accurate windowed numTrades/volumeUsdc/pnlUsdc — the drawer just needs a hook + header strip to call it."
 outcome: "The drawer shows a windowed stats strip (numTrades, volume, PnL) driven by POST /wallets/stats with a DAY/WEEK/MONTH/ALL toggle. The strip reflects the selected period accurately; the existing snapshot/trades/pnl slices below remain unchanged."
 spec_refs:

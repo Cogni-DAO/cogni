@@ -192,7 +192,6 @@
 | 2 | 5 | 5 | needs_design | task.0333 | Wallet analyst agent — AI qualitative judgments, Dolt-stored, DAO-funded | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 5 | 1 | needs_implement | task.0335 | Wallet analysis — clickable Monitored Wallets rows + paste-any-wallet search | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 6 | 5 | needs_design | task.0334 | Poly niche-research engine — skill-creator + research graph + Dolt store + EDO evidence | Cogni Poly | proj.poly-prediction-bot |
-| 2 | 6 | 2 | needs_implement | task.0361 | WalletDetailDrawer — wire windowed stats strip using POST /wallets/stats | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 8 | 1 | needs_design | task.0064 | OpenClaw preflight cost estimate 10x audit — real token consumption | Reliability & Uptime | proj.reliability |
 | 2 | 9 | 2 | needs_design | task.0039 | Billing reconciler — LiteLLM spend/logs polling in scheduler worker | Unified Graph Launch | proj.unified-graph-launch |
 | 2 | 10 | 2 | needs_triage | task.0055 | Dedicated DB migrator role — separate DDL from runtime DML | Database Operations | proj.database-ops |
@@ -391,6 +390,7 @@
 | 2 | task.0344 | Wallet row → side drawer (skeleton-first, no page jump) | Cogni Poly | proj.poly-prediction-bot |
 | 2 | task.0346 | Poly wallet stats: Data-API-first windowed stats + batched endpoint | Cogni Poly | proj.poly-prediction-bot |
 | 2 | task.0353 | Poly Money page v0 — hybrid AI credits + trading wallet panel | Cogni Poly | proj.poly-copy-trading |
+| 2 | task.0361 | WalletDetailDrawer — wire windowed stats strip using POST /wallets/stats | Cogni Poly | proj.poly-prediction-bot |
 | 3 | bug.0193 | scheduler-worker houses workflow definitions — should be thin composition root | Unified Graph Launch | proj.unified-graph-launch |
 | 3 | bug.0194 | Internal graph API conflates stateKey with runId — headless runs create phantom threads | Unified Graph Launch | proj.unified-graph-launch |
 

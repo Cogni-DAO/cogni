@@ -153,6 +153,8 @@ function PageVariant({
         <WindowedStatsStrip
           stats={windowStats}
           isLoading={windowStatsLoading}
+          interval={pnlInterval}
+          onIntervalChange={onPnlIntervalChange}
         />
 
         {(data.balance || isLoading?.balance) && (
