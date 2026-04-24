@@ -108,6 +108,18 @@ await page.goto("https://poly-test.cognidao.org");
 - **Captured state has no cookies for the expected domain:** you signed in before the capture script could see the tab. Make sure the tab is still open at the target URL when you run the script.
 - **Playwright runs but site redirects to signin:** cookie expired — recapture. *Or:* the site stores auth in `localStorage` rather than cookies, and CDP-attach export reports `origins: 0`. In that case the captured `storageState.json` is insufficient; a dedicated Playwright authfile step (using `browser.newContext({ storageState })` against a Playwright-launched browser + manual signin inside Playwright) may be needed. Tracked as a known gap — update this guide when resolved.
 
+## Done for the session — getting back to your normal browser
+
+When you're finished capturing state:
+
+1. **Fully quit** the debuggable Chrome window: ⌘Q inside that window (closing via the red dot does not quit the process). The agent can also kill it by PID: `pgrep -f "remote-debugging-port" | xargs kill`.
+2. Open Chrome normally from Applications / Spotlight / Dock — it launches with your real default profile (bookmarks, extensions, history all there).
+
+Notes:
+
+- The macOS "default browser" setting is **app-level**, not profile-level. If macOS prompted "Make Chrome your default browser" when the debug profile launched, nothing meaningful changed — Chrome-the-app is still the default either way.
+- You **can run both at once**: the debug profile and your normal profile coexist as separate Chrome processes because they point at different `--user-data-dir`s. Launch one with the debug flag + `.cogni/auth/chrome-profile/`, open the other from the Dock. The only conflict is two processes sharing one profile dir (Chrome refuses that with a lock-file error). When both are running, macOS may open new-window link clicks in whichever Chrome launched most recently — keep that in mind while automating.
+
 ## Scope / non-goals
 
 - Per-developer primitive. Multi-tenant / credential-broker flows for production agents are tracked separately (see `spike.0230`).
