@@ -15,7 +15,6 @@
 import type { CreateReactAgentGraphOptions } from "@cogni/langgraph-graphs/graphs";
 import { MessagesAnnotation } from "@langchain/langgraph";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
-import { PolyResearchReportSchema } from "./output-schema";
 import { POLY_RESEARCH_SYSTEM_PROMPT } from "./prompts";
 
 export const POLY_RESEARCH_GRAPH_NAME = "poly-research" as const;
@@ -23,8 +22,12 @@ export const POLY_RESEARCH_GRAPH_NAME = "poly-research" as const;
 /**
  * Create the poly-research ReAct agent graph.
  *
- * Structured output (`responseFormat`) is pinned to `PolyResearchReportSchema`
- * so the final message is always a parseable report, not free text.
+ * v0 does NOT use LangGraph `responseFormat` — the system prompt instructs the
+ * agent to emit a JSON `PolyResearchReport` as its final message, and the
+ * caller parses `choices[0].message.content` against `PolyResearchReportSchema`
+ * (exported from `@cogni/node-contracts`). This keeps the graph resilient to
+ * early-stop / recursion-limit cases where the structured-output node would
+ * otherwise reject a partial response with an opaque ZodError.
  *
  * NOTE: Return type intentionally NOT annotated (TYPE_TRANSPARENT_RETURN).
  */
@@ -36,10 +39,5 @@ export function createPolyResearchGraph(opts: CreateReactAgentGraphOptions) {
     tools: [...tools],
     messageModifier: POLY_RESEARCH_SYSTEM_PROMPT,
     stateSchema: MessagesAnnotation,
-    responseFormat: {
-      prompt:
-        "Return the final `PolyResearchReport` object. No prose, no markdown — JSON only.",
-      schema: PolyResearchReportSchema,
-    },
   });
 }
