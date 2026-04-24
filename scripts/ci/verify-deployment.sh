@@ -16,9 +16,15 @@ DOMAIN="${DOMAIN:?DOMAIN is required}"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-30}"
 SLEEP="${SLEEP:-15}"
 
+if [[ "$DOMAIN" == *.*.* ]]; then
+  NODE_JOIN="-"
+else
+  NODE_JOIN="."
+fi
+
 OPERATOR_URL="https://${DOMAIN}"
-POLY_URL="https://poly-${DOMAIN}"
-RESY_URL="https://resy-${DOMAIN}"
+POLY_URL="https://poly${NODE_JOIN}${DOMAIN}"
+RESY_URL="https://resy${NODE_JOIN}${DOMAIN}"
 
 # ── Health polls ─────────────────────────────────────────────────────────────
 
