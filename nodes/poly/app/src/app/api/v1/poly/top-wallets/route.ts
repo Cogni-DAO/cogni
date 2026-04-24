@@ -32,6 +32,7 @@ const QuerySchema = z.object({
 });
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 10; // seconds — bounds the Polymarket Data API leaderboard fetch
 
 export const GET = wrapRouteHandlerWithLogging(
   {

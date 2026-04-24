@@ -6,17 +6,28 @@ name: Promote and Deploy
 # deploy-branch SHA as Healthy, deploys Compose infra via SSH, verifies health,
 # runs E2E, and drives the preview review-state lease.
 #
-# Job graph (bug.0321):
+# Job graph (bug.0321 + bug.0361):
 #
-#   promote-k8s ─► deploy-infra ─┬─► verify-deploy ─┐
-#                                └─► verify         ┴─► e2e ─┬─► lock-on-success
-#                                                            └─► unlock-on-failure
+#   promote-k8s ─► deploy-infra* ─┬─► verify-deploy ─┐
+#                                 └─► verify         ┴─► e2e ─┬─► lock-on-success
+#                                                             └─► unlock-on-failure
 #
-# verify-deploy is job-level gated on promote-k8s.outputs.promoted_apps != ''
-# (Axiom 11). Empty-promotion runs visibly skip it → e2e skipped →
+#   * deploy-infra is gated on `skip_infra != 'true'` (bug.0361). When
+#     skipped (the normal app-only flight-preview path), downstream jobs
+#     (verify, verify-deploy, e2e, lock-preview) use an explicit
+#     `deploy-infra.result in {success, skipped}` guard instead of GHA's
+#     implicit success() — otherwise the whole chain cascade-skips and
+#     the preview lease would never transition to `reviewing`.
+#
+# verify-deploy is also job-level gated on promote-k8s.outputs.promoted_apps
+# != '' (Axiom 11). Empty-promotion runs visibly skip it → e2e skipped →
 # lock-preview-on-success skipped → unlock-preview-on-failure fires. Preview
 # lease stays unlocked instead of silently advancing against an unchanged
 # overlay.
+#
+# AppSet-reconcile-from-repo (bug.0312) runs inside verify-deploy, NOT
+# inside deploy-infra, so template-drift on the VM is caught on every
+# non-empty promotion regardless of skip_infra.
 #
 # Job outputs that downstream jobs care about:
 #   promote-k8s.deploy_branch_sha  — tip SHA of deploy/{env} after promote
@@ -57,6 +68,15 @@ on:
       source_sha:
         description: "SHA of source images (PR head SHA — images must exist as preview-{sha} in GHCR)"
         required: false
+      build_sha:
+        description: "SHA baked into images at build time (PR branch head). Defaults to source_sha. Needed on squash-merge where source_sha is the merge commit but containers report the branch SHA."
+        required: false
+      skip_infra:
+        description: "Skip deploy-infra (Compose) step — use for app-only changes; infra has its own lever (candidate-flight-infra.yml)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["true", "false"]
 
 permissions:
   contents: write
@@ -78,6 +98,7 @@ jobs:
       environment: ${{ steps.env.outputs.environment }}
       overlay: ${{ steps.env.outputs.overlay }}
       head_sha: ${{ steps.env.outputs.head_sha }}
+      build_sha: ${{ steps.env.outputs.build_sha }}
       deploy_branch: ${{ steps.env.outputs.deploy_branch }}
       deploy_branch_sha: ${{ steps.deploy-push.outputs.deploy_branch_sha }}
       promoted_apps: ${{ steps.deploy-push.outputs.promoted_apps }}
@@ -87,6 +108,12 @@ jobs:
         run: |
           ENV="${{ inputs.environment }}"
           SHA="${{ inputs.source_sha || github.sha }}"
+          # build_sha is the SHA baked into images at pr-build time (PR branch head).
+          # On squash-merge, source_sha is the new main commit SHA but containers
+          # report the PR branch SHA. Callers (flight-preview.sh) pass this
+          # explicitly. Falls back to source_sha when not supplied (direct-push or
+          # production promotion where the same image is re-used).
+          BUILD_SHA="${{ inputs.build_sha || inputs.source_sha || github.sha }}"
 
           case "$ENV" in
             preview)    OVERLAY=preview;    DEPLOY_BRANCH=deploy/preview ;;
@@ -97,8 +124,9 @@ jobs:
           echo "environment=$ENV" >> $GITHUB_OUTPUT
           echo "overlay=$OVERLAY" >> $GITHUB_OUTPUT
           echo "head_sha=$SHA" >> $GITHUB_OUTPUT
+          echo "build_sha=$BUILD_SHA" >> $GITHUB_OUTPUT
           echo "deploy_branch=$DEPLOY_BRANCH" >> $GITHUB_OUTPUT
-          echo "Promoting to $ENV (overlay: $OVERLAY, deploy branch: $DEPLOY_BRANCH, sha: ${SHA:0:8})"
+          echo "Promoting to $ENV (overlay: $OVERLAY, deploy branch: $DEPLOY_BRANCH, source: ${SHA:0:8}, build: ${BUILD_SHA:0:8})"
 
       # Checkout app source for scripts and overlay templates
       - name: Checkout app source
@@ -224,7 +252,9 @@ jobs:
           # also records its source_sha into .promote-state/source-sha-by-app.json
           # for cross-env contract verification (bug.0321 Fix 4).
           PROMOTED=()
-          SOURCE_SHA="${{ steps.env.outputs.head_sha }}"
+          # Use build_sha (PR branch head) not head_sha (merge commit) so
+          # verify-buildsha.sh compares against the SHA actually in the image.
+          SOURCE_SHA="${{ steps.env.outputs.build_sha }}"
 
           promote_app() {
             local app="$1" digest="$2" migrator="${3:-}"
@@ -334,7 +364,11 @@ jobs:
           echo "✅ Direct push to ${DEPLOY_BRANCH} for ${OVERLAY_ENV} ${SHORT_SHA} (deploy-branch SHA: ${DEPLOY_SHA:0:8}, promoted: ${PROMOTED_CSV})"
 
   # ── Deploy Compose infrastructure ────────────────────────────────
+  # Skipped when skip_infra=true (app-only changes). Infra has its own
+  # lever: candidate-flight-infra.yml for candidate-a, or dispatch this
+  # workflow with skip_infra=false when compose config changes.
   deploy-infra:
+    if: inputs.skip_infra != 'true'
     runs-on: ubuntu-latest
     needs: promote-k8s
     environment: ${{ needs.promote-k8s.outputs.environment }}
@@ -453,29 +487,8 @@ jobs:
           fi
           echo "✅ SSH connection successful"
 
-      # Reconcile the ApplicationSet on the VM BEFORE waiting for sync. This
-      # is the fix for the bug.0312 preview-stuck-on-deploy/staging incident:
-      # the live AppSet template can drift behind the repo (e.g. when the
-      # deploy branch name was retired in a repo-only change), and no CD step
-      # was re-applying it. Running this every deploy makes the CD path self-
-      # healing against future template drift.
-      - name: Reconcile ArgoCD ApplicationSet from repo
-        if: env.VM_HOST != ''
-        env:
-          SSH_OPTS: "-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
-          DEPLOY_ENVIRONMENT: ${{ needs.promote-k8s.outputs.environment }}
-        run: |
-          APPSET_FILE="infra/k8s/argocd/${DEPLOY_ENVIRONMENT}-applicationset.yaml"
-          if [ ! -f "$APPSET_FILE" ]; then
-            echo "⚠️  No ApplicationSet file for ${DEPLOY_ENVIRONMENT} (${APPSET_FILE}) — skipping"
-            exit 0
-          fi
-          echo "📤 SCPing ${APPSET_FILE} to VM and applying..."
-          # shellcheck disable=SC2086
-          scp $SSH_OPTS "$APPSET_FILE" root@"$VM_HOST":/tmp/appset.yaml
-          # shellcheck disable=SC2086
-          ssh $SSH_OPTS root@"$VM_HOST" "kubectl apply -f /tmp/appset.yaml -n argocd && rm -f /tmp/appset.yaml"
-          echo "✅ ApplicationSet reconciled"
+      # AppSet reconcile (bug.0312) moved to verify-deploy so it runs on
+      # every non-empty promotion regardless of skip_infra (bug.0361).
 
       - name: Deploy infrastructure
         if: env.VM_HOST != ''
@@ -517,7 +530,14 @@ jobs:
   verify-deploy:
     runs-on: ubuntu-latest
     needs: [promote-k8s, deploy-infra]
-    if: needs.promote-k8s.outputs.promoted_apps != ''
+    # Explicit result guard, not GHA's implicit success(). Without the
+    # `|| deploy-infra.result == 'skipped'` leg, this job cascade-skips
+    # every time flight-preview dispatches with skip_infra=true (bug.0361).
+    if: |
+      always() &&
+      needs.promote-k8s.result == 'success' &&
+      (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped') &&
+      needs.promote-k8s.outputs.promoted_apps != ''
     environment: ${{ needs.promote-k8s.outputs.environment }}
     env:
       VM_HOST: ${{ secrets.VM_HOST }}
@@ -546,6 +566,31 @@ jobs:
           echo "$SSH_DEPLOY_KEY" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      # Reconcile the ApplicationSet on the VM BEFORE waiting for sync. This
+      # is the fix for the bug.0312 preview-stuck-on-deploy/staging incident:
+      # the live AppSet template can drift behind the repo (e.g. when the
+      # deploy branch name was retired in a repo-only change), and no CD step
+      # was re-applying it. Runs in verify-deploy (not deploy-infra) so the
+      # reconcile still happens on every non-empty promotion when skip_infra
+      # is true (bug.0361).
+      - name: Reconcile ArgoCD ApplicationSet from repo
+        if: env.VM_HOST != ''
+        env:
+          SSH_OPTS: "-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
+          DEPLOY_ENVIRONMENT: ${{ needs.promote-k8s.outputs.environment }}
+        run: |
+          APPSET_FILE="app-src/infra/k8s/argocd/${DEPLOY_ENVIRONMENT}-applicationset.yaml"
+          if [ ! -f "$APPSET_FILE" ]; then
+            echo "⚠️  No ApplicationSet file for ${DEPLOY_ENVIRONMENT} (${APPSET_FILE}) — skipping"
+            exit 0
+          fi
+          echo "📤 SCPing ${APPSET_FILE} to VM and applying..."
+          # shellcheck disable=SC2086
+          scp $SSH_OPTS "$APPSET_FILE" root@"$VM_HOST":/tmp/appset.yaml
+          # shellcheck disable=SC2086
+          ssh $SSH_OPTS root@"$VM_HOST" "kubectl apply -f /tmp/appset.yaml -n argocd && rm -f /tmp/appset.yaml"
+          echo "✅ ApplicationSet reconciled"
 
       - name: Wait for ArgoCD sync
         if: env.VM_HOST != ''
@@ -577,7 +622,9 @@ jobs:
         if: env.VM_HOST != ''
         env:
           SOURCE_SHA_MAP: deploy-branch/.promote-state/source-sha-by-app.json
-          EXPECTED_BUILDSHA: ${{ needs.promote-k8s.outputs.head_sha }}
+          # build_sha is the PR branch head SHA baked into images — not the
+          # squash-merge commit on main (head_sha). See promote-k8s inputs.
+          EXPECTED_BUILDSHA: ${{ needs.promote-k8s.outputs.build_sha }}
           NODES: ${{ needs.promote-k8s.outputs.promoted_apps }}
         run: bash app-src/scripts/ci/verify-buildsha.sh
 
@@ -594,6 +641,11 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     needs: [promote-k8s, deploy-infra]
+    # Explicit result guard — see verify-deploy note. bug.0361.
+    if: |
+      always() &&
+      needs.promote-k8s.result == 'success' &&
+      (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped')
     environment: ${{ needs.promote-k8s.outputs.environment }}
     env:
       VM_HOST: ${{ secrets.VM_HOST }}
@@ -648,6 +700,13 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     needs: [promote-k8s, verify, verify-deploy]
+    # e2e requires real verification — verify and verify-deploy must have
+    # actually succeeded (not skipped). Empty-promotion path (promoted_apps
+    # empty) correctly cascades to skipped because verify-deploy is skipped.
+    if: |
+      needs.promote-k8s.result == 'success' &&
+      needs.verify.result == 'success' &&
+      needs.verify-deploy.result == 'success'
     timeout-minutes: 10
     environment: ${{ needs.promote-k8s.outputs.environment }}
     env:
@@ -769,7 +828,7 @@ jobs:
       always() &&
       needs.promote-k8s.outputs.environment == 'preview' &&
       (needs.promote-k8s.result != 'success' ||
-       needs.deploy-infra.result != 'success' ||
+       (needs.deploy-infra.result != 'success' && needs.deploy-infra.result != 'skipped') ||
        needs.verify.result != 'success' ||
        needs.verify-deploy.result != 'success' ||
        needs.e2e.result != 'success')

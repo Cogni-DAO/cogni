@@ -37,7 +37,7 @@ set -euo pipefail
 #       should surface as a visibly-skipped deploy in the workflow UI, not
 #       as a green success.
 #
-# Usage: flight-preview.sh <sha> <repo> <deploy-branch> <gh-token>
+# Usage: flight-preview.sh <sha> <repo> <deploy-branch> <gh-token> <build-sha>
 #
 # GH Actions integration: when invoked inside a GitHub Actions step, the
 # runner sets $GITHUB_OUTPUT and $GITHUB_STEP_SUMMARY. This script writes
@@ -45,11 +45,22 @@ set -euo pipefail
 # banner to $GITHUB_STEP_SUMMARY at every terminal path, so the workflow
 # can gate downstream jobs on the output and operators get a visible
 # outcome in the job summary. Workflow step becomes pure orchestration.
+#
+# Positional args 1–4 are required; arg 5 (build-sha = PR branch head SHA)
+# is required for squash-merge correctness but has an env + arg-1 fallback
+# to keep CLI/test callers working. If you add a new caller, pass build-sha
+# explicitly — the bug.0361 SHA-mismatch regression returns if it silently
+# falls back to SHA (the main merge commit).
 
-SHA="${1:?Usage: flight-preview.sh <sha> <repo> <deploy-branch> <gh-token>}"
+SHA="${1:?Usage: flight-preview.sh <sha> <repo> <deploy-branch> <gh-token> <build-sha>}"
 REPO="${2:?}"
 DEPLOY_BRANCH="${3:-deploy/preview}"
 GH_TOKEN="${4:-${GH_TOKEN:-}}"
+# Explicit positional arg > env var > SHA fallback. The env-var leg keeps
+# flight-preview.yml's current `BUILD_SHA:` step env working during migration;
+# the SHA fallback is only correct on direct-push-to-main where source_sha
+# and build_sha are the same commit.
+BUILD_SHA="${5:-${BUILD_SHA:-$SHA}}"
 
 # Emit `status=<value>` to $GITHUB_OUTPUT when running under Actions.
 # No-op from a plain shell so CLI/test callers aren't surprised.
@@ -166,7 +177,9 @@ if [ "${WILL_DISPATCH:-0}" = "1" ] && [ "$FLIGHT_LEASE_LOST" = "0" ]; then
     --repo "$REPO" \
     --ref main \
     -f environment=preview \
-    -f source_sha="$SHA"
+    -f source_sha="$SHA" \
+    -f build_sha="$BUILD_SHA" \
+    -f skip_infra=true
   echo "✅ Preview flight dispatched for ${SHORT_SHA}"
   emit_status "dispatched"
   emit_summary "dispatched" "promote-and-deploy kicked off; \`deploy-preview\` job in this workflow will run."

@@ -98,21 +98,14 @@ The main lane is authoritative for promotion, not for pre-merge acceptance.
 4. Production promotion happens from the same digest by policy:
    - `release.yml` (manual dispatch) cuts a `release/*` PR from the preview
      current-sha into `main`; merging it is the code-truth gate.
-   - `promote-to-production.yml` (manual dispatch) opens a review PR
-     `promote-prod/* → deploy/production` carrying preview's overlay
-     digests and base/catalog synced from `main`, plus a commit-delta
-     and validation block in the body.
-   - `require-pinned-promote-prod-prs.yml` gates that PR —
-     branch name must match `promote-prod/YYYYMMDD-<8-char>`, the pin
-     must equal `.promote-state/source-sha`, that SHA must equal
-     `deploy/preview` current-sha, and the diff must touch only
-     `.promote-state/`, `infra/k8s/`, `infra/catalog/`.
-   - When the PR merges, `auto-deploy-promote-prod.yml` (on
-     `pull_request: closed`, running on `main` because `deploy/production`
-     is state-only and carries no workflows) dispatches
-     `promote-and-deploy.yml` with `environment=production` and
-     `source_sha` read from `deploy/production:.promote-state/source-sha`.
-   - Argo CD reconciles production pods from `deploy/production`.
+   - A human directly dispatches `promote-and-deploy.yml` with
+     `environment=production`, `source_sha=<preview current-sha>`, and
+     `build_sha=<PR branch head SHA>`. `skip_infra=true` unless
+     `infra/compose/**` changed. No intermediate PR: the dispatch IS the
+     human gate, same entry point as preview uses. Same workflow, same
+     verify-deploy contract, same e2e — just a different env input.
+   - `promote-and-deploy.yml` promotes overlay digests on
+     `deploy/production` and Argo CD reconciles production pods.
 
 If a post-merge soak lane is retained later, it must be modeled as an explicitly named environment with a distinct purpose. The term `canary` must not be reused for pre-merge acceptance.
 
@@ -242,7 +235,7 @@ Every deploy branch carries `.promote-state/source-sha-by-app.json` — a merge-
 - `scripts/ci/update-source-sha-map.sh` — shared primitive that merges a single `app → sha` entry into the file. Untouched apps retain their prior entry (merge, not overwrite).
 - `scripts/ci/promote-build-payload.sh` — calls the primitive after each promoted app (candidate-flight path).
 - `.github/workflows/promote-and-deploy.yml` promote-k8s loop — calls the primitive after each promoted app (preview + production path).
-- `scripts/ci/promote-to-production.sh` — copies the map forward from `deploy/preview` → `deploy/production` alongside the overlay digests (digest-only promotion preserves the provenance).
+- Production promotion: a human dispatches `promote-and-deploy.yml` with `environment=production`, `source_sha=<preview current-sha>`, `build_sha=<PR branch head SHA>`. The `promote-k8s` job reads preview's overlay digests through the shared `preview-{sha}` tag convention, copies them onto `deploy/production`, and carries `.promote-state/source-sha-by-app.json` forward so `verify-buildsha.sh` can assert cross-PR mixed-SHA contract.
 
 **Reader**: `scripts/ci/verify-buildsha.sh` in `SOURCE_SHA_MAP` mode. When `NODES` is set (candidate-flight / promote-and-deploy pass `promoted_apps`), verifies only those apps' map entries — not every key in the file — so affected-only runs do not false-fail untouched apps (task.0349). When `NODES` is unset, every Ingress-probeable key in the map is checked. Each probe curls `/version` and asserts `.buildSha == map[app]`. (The probe is the dedicated `/version` endpoint, not `/readyz` — task.0345 / PR #978.)
 
@@ -272,7 +265,7 @@ Track these explicitly during the spec rewrite, following the CI/CD scorecard st
 - [ ] **Git-manager agent as a first-class control-plane actor**
       Define whether a git-manager style agent owns PR build tracking, candidate slot coordination, deploy-branch promotion, and status reporting, or whether those responsibilities stay in plain workflows with agent assistance around them.
 - [ ] **Candidate-a + production seed freshness**
-      Preview overlay seeds on `main` are CI-owned (task.0349); candidate-flight overwrites `deploy/candidate-a` digests on slot acquisition; production overlays on `main` stay human-gated via `promote-to-production.yml`. Still open: a detection signal for candidate-a + production seed staleness (Loki/Grafana query on overlay-digest age), and a design for write-rate-minimized candidate-a auto-updates if that path is ever revisited (e.g. only write when the seed is ≥N days stale).
+      Preview overlay seeds on `main` are CI-owned (task.0349); candidate-flight overwrites `deploy/candidate-a` digests on slot acquisition; production overlays on `main` stay human-gated via direct `promote-and-deploy.yml` dispatch (env=production). Still open: a detection signal for candidate-a + production seed staleness (Loki/Grafana query on overlay-digest age), and a design for write-rate-minimized candidate-a auto-updates if that path is ever revisited (e.g. only write when the seed is ≥N days stale).
 - [ ] **Rollout-status health check to replace task.0341 polling (bug.0345)**
       Argo reporting Healthy before the old ReplicaSet drains is a health-check-semantics bug, not a polling-interval bug. Bumping the poll window doesn't fix it. Fix: `kubectl rollout status deployment/X --timeout=5m` (observes `observedGeneration`, `updatedReplicas == replicas`, `Progressing=NewReplicaSetAvailable`) OR a proper Argo Deployment health check with correctly-wired probes. task.0341 solved at the wrong layer; replacement is bug.0345.
 - [ ] **OpenFeature flags**

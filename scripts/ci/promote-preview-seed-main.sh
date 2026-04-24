@@ -73,7 +73,7 @@ import sys
 path, role = sys.argv[1], sys.argv[2]
 text = open(path, encoding="utf-8").read()
 # Split images: list items (rough but stable for our kustomize shape)
-blocks = re.split(r"\n- name: ", "\n" + text)
+blocks = re.split(r"\n[ \t]*-\s+name:\s*", "\n" + text)
 want_migrate = role == "migrator"
 for block in blocks[1:]:
     line = block.split("\n", 1)[0].strip()

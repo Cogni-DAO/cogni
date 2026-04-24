@@ -29,6 +29,7 @@
 | 0 | 1 | 1 | needs_implement | bug.0307 | Operator OOM on candidate-a — memory limit too low, manual canary bump never landed in overlay | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 1 | 4 | needs_design | task.0309 | QA agent — reads work item, exercises feature, confirms observability post-flight | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 1 | 3 | needs_merge | bug.0334 | Overlay EndpointSlice IPs via env-state.yaml + workflow rsync — establish INFRA_K8S_MAIN_DERIVED | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | 1 | 1 | needs_review | bug.0363 | wait-for-argocd `delete_stale_hook_jobs` kills live migration jobs → infinite stuck-Running loop | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
 | 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -77,6 +78,8 @@
 | 1 | 1 | 0 | needs_closeout | task.0345 | candidate-flight-infra: default to dispatch ref so PR branches can be flown | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 3 | needs_implement | task.0349 | CI-owned preview digest promotion; demote Image Updater to freshness-only |  |  |
 | 1 | 1 | 1 | needs_merge | bug.0358 | candidate-flight false-red: wait-for-argocd shares one timeout budget across all promoted apps | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 1 | 2 | needs_implement | task.0360 | POST /api/v1/vcs/pr — VCS create-PR endpoint for external agents | Agentic Interoperability | proj.agentic-interop |
+| 1 | 1 | 1 | needs_merge | bug.0361 | promote-and-deploy: EXPECTED_BUILDSHA uses merge commit SHA; deploy-infra always runs | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -380,6 +383,7 @@
 | 1 | bug.0335 | Polymarket CLOB rejects every operator BUY on candidate-a with empty error — mirror pipeline boots clean but places zero orders | Cogni Poly | proj.poly-copy-trading |
 | 1 | bug.0338 | Phase A targets never copy-trade — POST doesn't upsert kill-switch config, enumerator is boot-time only | Cogni Poly | proj.poly-copy-trading |
 | 1 | task.0358 | Poly dashboard — open vs closed positions, position history replaces order history | Cogni Poly | proj.poly-copy-trading |
+| 1 | bug.0360 | Poly research Day tab hangs indefinitely — no timeout, no error state | Cogni Poly | proj.poly-prediction-bot |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 2 | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |

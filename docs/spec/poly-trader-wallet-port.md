@@ -5,7 +5,7 @@ title: "Poly Trader Wallet Port: per-tenant signing + credential broker for Poly
 status: active
 spec_state: active
 trust: reviewed
-summary: Port/adapter contract for per-tenant Polymarket trading wallets. `PolyTraderWalletPort` exposes `provisionWithGrant`, `getConnectionSummary`, `getBalances`, `ensureTradingApprovals`, `authorizeIntent`, and `revoke`. `authorizeIntent` is the only producer of the branded `AuthorizedSigningContext` that `PolymarketClobAdapter.placeOrder` requires; it fail-closes with `trading_not_ready` until `ensureTradingApprovals` stamps `trading_approvals_ready_at` (task.0355). Phase B3 shipped `PrivyPolyTraderWalletAdapter` using a Privy app dedicated to user wallets (separate from the system / operator-wallet Privy app). Future adapters (Safe+4337, Turnkey) plug into the same port.
+summary: Port/adapter contract for per-tenant Polymarket trading wallets. `PolyTraderWalletPort` exposes `provisionWithGrant`, `getConnectionSummary`, `getBalances`, `ensureTradingApprovals`, `authorizeIntent`, and `revoke`. `authorizeIntent` is the only producer of the branded `AuthorizedSigningContext` that `PolymarketClobAdapter.placeOrder` requires; it fail-closes with `trading_not_ready` until `ensureTradingApprovals` stamps `trading_approvals_ready_at` (task.0355). In today's v0 product, the grant is an app-issued, connection-bound execution-cap row, not yet a user-managed delegated-agent grant UX. Phase B3 shipped `PrivyPolyTraderWalletAdapter` using a Privy app dedicated to user wallets (separate from the system / operator-wallet Privy app). Future adapters (Safe+4337, Turnkey) plug into the same port.
 read_when: Wiring per-user Polymarket trading, adding a new signing backend, provisioning per-tenant wallets, or reviewing the separation between system and user Privy credentials.
 implements: proj.poly-copy-trading
 owner: derekg1729
@@ -20,7 +20,9 @@ tags: [poly, polymarket, wallets, multi-tenant, privy, port-adapter]
 
 ## Goal
 
-Define the contract for a per-tenant Polymarket CLOB signing-context port — `PolyTraderWalletPort` — that resolves `(billing_account_id) → { signer, clob_creds, funder_address }`, enforces grant-scope + caps via a branded `AuthorizedSigningContext`, and isolates user-wallet Privy credentials from the system / operator-wallet Privy app.
+Define the contract for a per-tenant Polymarket CLOB signing-context port — `PolyTraderWalletPort` — that resolves `(billing_account_id) → { signer, clob_creds, funder_address }`, enforces execution scopes + caps via a branded `AuthorizedSigningContext`, and isolates user-wallet Privy credentials from the system / operator-wallet Privy app.
+
+Today the grant model is intentionally narrow: one active wallet connection per tenant and, in normal operation, one app-issued default grant row that gates execution for that connection. It should be read as a signing-boundary authorization record, not yet as a full delegated-actor product surface.
 
 ## Non-Goals
 

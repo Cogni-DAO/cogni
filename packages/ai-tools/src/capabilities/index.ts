@@ -63,6 +63,7 @@ export type {
   CheckInfo,
   CiStatusResult,
   CreateBranchResult,
+  CreatePrResult,
   DispatchCandidateFlightResult,
   MergeResult,
   PrSummary,

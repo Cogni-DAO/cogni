@@ -17,6 +17,7 @@ import type {
   KnowledgeCapability,
   MetricsCapability,
   RepoCapability,
+  VcsCapability,
   WebSearchCapability,
 } from "@cogni/ai-tools";
 import type { AttributionStore } from "@cogni/attribution-ledger";
@@ -202,6 +203,8 @@ export interface Container {
   webSearchCapability: WebSearchCapability;
   /** Repo capability for AI tools - requires COGNI_REPO_PATH */
   repoCapability: RepoCapability;
+  /** VCS capability for GitHub operations - requires GH_REVIEW_APP_ID */
+  vcsCapability: VcsCapability;
   /** Tool source with real implementations for AI tool execution */
   toolSource: ToolSourcePort;
   /** Thread persistence scoped to a user (RLS enforced) */
@@ -773,6 +776,7 @@ function createContainer(): Container {
     metricsCapability,
     webSearchCapability,
     repoCapability,
+    vcsCapability,
     toolSource,
     threadPersistenceForUser: (userId: UserId) =>
       new DrizzleThreadPersistenceAdapter(db, userActor(userId)),

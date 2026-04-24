@@ -2,7 +2,7 @@
 
 > Installed by bug.0344 to retire hand-curated overlay-digest maintenance on `main`.
 > Manifests: `infra/k8s/argocd/image-updater/`
-> Watches: **preview** ApplicationSet's Applications → writes to `main`'s `infra/k8s/overlays/preview/<app>/kustomization.yaml` (MVP scope). Candidate-a was descoped post-#974 merge (write rate vs. seed-value trade-off — see `candidate-a-applicationset.yaml` docstring). Production is human-gated via `promote-to-production.yml`. Scope is enforced by an allowlist in `scripts/ci/check-image-updater-scope.sh`.
+> Watches: **preview** ApplicationSet's Applications → writes to `main`'s `infra/k8s/overlays/preview/<app>/kustomization.yaml` (MVP scope). Candidate-a was descoped post-#974 merge (write rate vs. seed-value trade-off — see `candidate-a-applicationset.yaml` docstring). Production is human-gated via direct `promote-and-deploy.yml` dispatch (env=production; bug.0361 deleted the PR-dance workflows). Scope is enforced by an allowlist in `scripts/ci/check-image-updater-scope.sh`.
 
 ## What it does
 
@@ -29,7 +29,7 @@ The Argo CD Image Updater bootstrap is **not** a standalone runbook step you run
 The two GitHub-Environment secrets that feed this path (same ones that already power other automated pushes to main):
 
 - `GHCR_DEPLOY_TOKEN` — GHCR `read:packages` PAT, shared with every other pull consumer.
-- `ACTIONS_AUTOMATION_BOT_PAT` — git push PAT (`Cogni-1729`), shared with `release.yml`, `promote-to-production.yml`, `promote-and-deploy.yml`, and `flight-preview.yml`.
+- `ACTIONS_AUTOMATION_BOT_PAT` — git push PAT (`Cogni-1729`), shared with `release.yml`, `promote-and-deploy.yml`, and `flight-preview.yml`.
 
 Adding the image-updater controller or rotating either PAT is therefore a **workflow dispatch**, not a kubectl session:
 
@@ -117,7 +117,7 @@ If step 4 shows no commit after 10 minutes:
 | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `main:infra/k8s/overlays/preview/`        | Image updater — preview AppSet annotations                                                                                                                                                         |
 | `main:infra/k8s/overlays/candidate-a/`    | **Nobody.** Developer-reference artifact only; `candidate-flight.yml` unconditionally overwrites `deploy/candidate-a`. Guardrail: `check-image-updater-scope.sh` (allowlist excludes candidate-a). |
-| `main:infra/k8s/overlays/production/`     | Human-gated only. `promote-to-production.yml` reads from `deploy/preview` and opens a review PR to `deploy/production`. Guardrail: same script as candidate-a.                                     |
+| `main:infra/k8s/overlays/production/`     | Human-gated only. Operator directly dispatches `promote-and-deploy.yml` with env=production (bug.0361). Guardrail: same script as candidate-a.                                                     |
 | `deploy/{preview,candidate-a,production}` | Flight workflows (`flight-preview.yml`, `candidate-flight.yml`, `promote-and-deploy.yml`) via `promote-k8s-image.sh`                                                                               |
 
 Per-node migrator digests (`-operator-migrate`, `-poly-migrate`, `-resy-migrate`) are covered via the `migrator` image alias pointing at the split `cogni-template-migrate` GHCR package (bug.0344 B8). `scheduler-worker` has no migrator and silently no-ops.

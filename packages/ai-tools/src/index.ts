@@ -17,6 +17,7 @@ export type {
   CiStatusResult,
   ClockCapability,
   CreateBranchResult,
+  CreatePrResult,
   DispatchCandidateFlightResult,
   KnowledgeCapability,
   KnowledgeEntry,

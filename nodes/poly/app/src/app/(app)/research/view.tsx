@@ -122,7 +122,11 @@ export function ResearchView() {
   );
 
   // ── Data ──────────────────────────────────────────────────────────
-  const { data: walletsData, isLoading: walletsLoading } = useQuery({
+  const {
+    data: walletsData,
+    isLoading: walletsLoading,
+    isError: walletsError,
+  } = useQuery({
     queryKey: ["research-top-wallets", period],
     queryFn: () => fetchTopWallets({ timePeriod: period, limit: TOP_N }),
     staleTime: 60_000,
@@ -299,7 +303,11 @@ export function ResearchView() {
         isLoading={walletsLoading}
         onRowClick={(row) => setSelectedAddr(row.proxyWallet.toLowerCase())}
         renderActions={renderActions}
-        emptyMessage="No wallets match the current filters."
+        emptyMessage={
+          walletsError
+            ? "Failed to load wallets — Polymarket may be slow. Try refreshing."
+            : "No wallets match the current filters."
+        }
         fullState={{
           sorting,
           onSortingChange: (next) => {
