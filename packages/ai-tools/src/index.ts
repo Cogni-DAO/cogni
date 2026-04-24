@@ -38,7 +38,6 @@ export type {
   PolyDataMarketTradesOutput,
   PolyDataPositionsOutput,
   PolyDataResolveUsernameOutput,
-  PolyDataTradedEventsOutput,
   PolyDataValueOutput,
   PrSummary,
   RepoCapability,
@@ -265,18 +264,6 @@ export {
   polyDataResolveUsernameContract,
   polyDataResolveUsernameStubImplementation,
 } from "./tools/poly-data-resolve-username";
-export {
-  createPolyDataTradedEventsImplementation,
-  POLY_DATA_TRADED_EVENTS_NAME,
-  type PolyDataTradedEventsDeps,
-  type PolyDataTradedEventsInput,
-  PolyDataTradedEventsInputSchema,
-  PolyDataTradedEventsOutputSchema,
-  type PolyDataTradedEventsRedacted,
-  polyDataTradedEventsBoundTool,
-  polyDataTradedEventsContract,
-  polyDataTradedEventsStubImplementation,
-} from "./tools/poly-data-traded-events";
 export {
   createPolyDataTradesMarketImplementation,
   POLY_DATA_TRADES_MARKET_NAME,

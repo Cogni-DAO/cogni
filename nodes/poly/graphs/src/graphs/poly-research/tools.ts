@@ -18,7 +18,6 @@ import {
   POLY_DATA_HOLDERS_NAME,
   POLY_DATA_POSITIONS_NAME,
   POLY_DATA_RESOLVE_USERNAME_NAME,
-  POLY_DATA_TRADED_EVENTS_NAME,
   POLY_DATA_TRADES_MARKET_NAME,
   POLY_DATA_VALUE_NAME,
   WALLET_TOP_TRADERS_NAME,
@@ -28,7 +27,7 @@ import {
 /**
  * Tool bundle for the poly-research graph.
  *
- * 8 `core__poly_data_*` tools for Data-API research + the global leaderboard
+ * 7 `core__poly_data_*` tools for Data-API research + the global leaderboard
  * (`core__wallet_top_traders`) + market browsing (`core__market_list`) + event
  * context (`core__web_search`).
  */
@@ -40,7 +39,6 @@ export const POLY_RESEARCH_TOOL_IDS = [
   POLY_DATA_VALUE_NAME,
   POLY_DATA_POSITIONS_NAME,
   POLY_DATA_ACTIVITY_NAME,
-  POLY_DATA_TRADED_EVENTS_NAME,
   WALLET_TOP_TRADERS_NAME,
   MARKET_LIST_NAME,
   WEB_SEARCH_NAME,

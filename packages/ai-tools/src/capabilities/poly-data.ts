@@ -98,20 +98,6 @@ export interface PolyDataMarketTradesOutput {
   hasMore: boolean;
 }
 
-export interface PolyDataTradedEventsOutput {
-  user: string;
-  events: Array<{
-    eventId: string;
-    eventSlug: string;
-    title: string;
-    numTrades: number;
-    firstTradeAt: number;
-    lastTradeAt: number;
-  }>;
-  count: number;
-  hasMore: boolean;
-}
-
 export interface PolyDataResolveUsernameOutput {
   profiles: Array<{
     userName: string;
@@ -126,10 +112,10 @@ export interface PolyDataResolveUsernameOutput {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Shared capability for the 7 read-only wallet-research tools.
+ * Shared capability for the 6 read-only wallet-research tools.
  *
- * The 8th tool (`core__poly_data_help`) is static and does NOT consume this
- * capability — it returns a constants object from the tool module itself.
+ * `core__poly_data_help` is static and does NOT consume this capability — it
+ * returns a constants object from the tool module itself.
  */
 export interface PolyDataCapability {
   getPositions(params: {
@@ -166,12 +152,6 @@ export interface PolyDataCapability {
     limit?: number;
     offset?: number;
   }): Promise<PolyDataMarketTradesOutput>;
-
-  listTradedEvents(params: {
-    user: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<PolyDataTradedEventsOutput>;
 
   resolveUsername(params: {
     query: string;

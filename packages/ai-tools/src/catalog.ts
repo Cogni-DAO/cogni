@@ -26,7 +26,6 @@ import { polyDataHelpBoundTool } from "./tools/poly-data-help";
 import { polyDataHoldersBoundTool } from "./tools/poly-data-holders";
 import { polyDataPositionsBoundTool } from "./tools/poly-data-positions";
 import { polyDataResolveUsernameBoundTool } from "./tools/poly-data-resolve-username";
-import { polyDataTradedEventsBoundTool } from "./tools/poly-data-traded-events";
 import { polyDataTradesMarketBoundTool } from "./tools/poly-data-trades-market";
 import { polyDataValueBoundTool } from "./tools/poly-data-value";
 import { polyListOrdersBoundTool } from "./tools/poly-list-orders";
@@ -129,7 +128,6 @@ export const TOOL_CATALOG: ToolCatalog = createToolCatalog([
   polyDataHoldersBoundTool as CatalogBoundTool,
   polyDataPositionsBoundTool as CatalogBoundTool,
   polyDataResolveUsernameBoundTool as CatalogBoundTool,
-  polyDataTradedEventsBoundTool as CatalogBoundTool,
   polyDataTradesMarketBoundTool as CatalogBoundTool,
   polyDataValueBoundTool as CatalogBoundTool,
   polyListOrdersBoundTool as CatalogBoundTool,

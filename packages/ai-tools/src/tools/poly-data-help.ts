@@ -78,12 +78,6 @@ const ENDPOINTS: PolyDataHelpOutput["endpoints"] = [
       "Market-level trade stream — exposes taker + maker addresses for counterparty harvesting.",
   },
   {
-    name: "core__poly_data_traded_events",
-    path: "GET /traded-events",
-    params: ["user", "limit?", "offset?"],
-    notes: "Events a wallet has traded on — feeds category-focus analysis.",
-  },
-  {
     name: "core__poly_data_resolve_username",
     path: "Gamma GET /public-search?profile=true",
     params: ["query", "limit?"],

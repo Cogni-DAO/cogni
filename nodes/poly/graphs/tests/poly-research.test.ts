@@ -18,7 +18,6 @@ import {
   POLY_DATA_HOLDERS_NAME,
   POLY_DATA_POSITIONS_NAME,
   POLY_DATA_RESOLVE_USERNAME_NAME,
-  POLY_DATA_TRADED_EVENTS_NAME,
   POLY_DATA_TRADES_MARKET_NAME,
   POLY_DATA_VALUE_NAME,
   WALLET_TOP_TRADERS_NAME,
@@ -35,7 +34,7 @@ import {
 import { PolyResearchReportSchema } from "../src/graphs/poly-research/output-schema";
 
 describe("poly-research graph — tool bundle (POLY_RESEARCH_TOOL_IDS)", () => {
-  it("includes all 8 core__poly_data_* tools", () => {
+  it("includes all 7 core__poly_data_* tools (traded-events purged — endpoint 404)", () => {
     const ids = new Set<string>(POLY_RESEARCH_TOOL_IDS);
     expect(ids.has(POLY_DATA_HELP_NAME)).toBe(true);
     expect(ids.has(POLY_DATA_POSITIONS_NAME)).toBe(true);
@@ -43,7 +42,6 @@ describe("poly-research graph — tool bundle (POLY_RESEARCH_TOOL_IDS)", () => {
     expect(ids.has(POLY_DATA_VALUE_NAME)).toBe(true);
     expect(ids.has(POLY_DATA_HOLDERS_NAME)).toBe(true);
     expect(ids.has(POLY_DATA_TRADES_MARKET_NAME)).toBe(true);
-    expect(ids.has(POLY_DATA_TRADED_EVENTS_NAME)).toBe(true);
     expect(ids.has(POLY_DATA_RESOLVE_USERNAME_NAME)).toBe(true);
   });
 

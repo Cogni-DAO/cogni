@@ -410,6 +410,53 @@ Then flip `deploy_verified: true` via PR comment per AGENTS.md.
 - **Complements:** [task.0346](task.0346.poly-wallet-stats-data-api-first.md) — same client, different consumer (UI vs agent). Coordinate on any shared schema changes in `polymarket.data-api.types.ts`.
 - **Downstream consumer:** [proj.poly-copy-trading](../projects/proj.poly-copy-trading.md) — research output feeds copy-trade target selection.
 
+## Review Feedback (candidate-a validation @ buildSha fc1848f1, 2026-04-24)
+
+### 🔴 Live-fire finding: `/traded-events` endpoint does NOT exist
+
+First real candidate-a exercise (runId `df7175b6-65dd-4783-a87d-8c22a6d1d634`, poly-research graph, ~42s) ended in `GraphRecursionError: Recursion limit of 25`. Loki showed 16 consecutive failures of `core__poly_data_traded_events` before the agent blew the step budget:
+
+```
+safeMessage: "Polymarket Data API error: 404 Not Found (/traded-events)"
+```
+
+**Independently verified from laptop (no auth involved — Data API is public):**
+
+| Endpoint                                                                        | data-api.polymarket.com | gamma-api.polymarket.com |
+| ------------------------------------------------------------------------------- | ----------------------- | ------------------------ |
+| `/trades`                                                                       | 🟢 200                  | —                        |
+| `/positions`                                                                    | 🟢 200                  | —                        |
+| `/value`                                                                        | 🟢 200                  | —                        |
+| `/activity`                                                                     | 🟢 200                  | —                        |
+| `/holders?market=`                                                              | 🟢 200                  | —                        |
+| `/v1/leaderboard`                                                               | 🟢 200                  | —                        |
+| **`/traded-events`**                                                            | **🔴 404**              | **🔴 404**               |
+| `/v1/traded-events`, `/user-traded-events`, `/users/{addr}/traded-events`, etc. | all 🔴 404              | all 🔴 404               |
+
+Conclusion: the endpoint was hallucinated during task design (the original task body cites "shaunlebron data-api gist" as its source — it was not re-verified against live HTTP before shipping). The tool's unit test only exercises a mock, so the regression was not caught pre-flight. **`core__poly_data_traded_events` has never worked.**
+
+### Required follow-ups
+
+- [x] **R1: Purge `core__poly_data_traded_events`.** Delete the tool file, capability method, client method, types schema, index exports, tests, graph tool bundle, and tool-bindings in every node. Agent derives category focus from `/activity` aggregation instead. _(Done in this PR, commit `<pending>`.)_
+- [ ] **R2: Raise `recursionLimit` on `poly-research` graph.** The LangGraph default of 25 is too low for a research agent that iterates holders → filter → profile. Bump to 60+. Track: bug.0369 (to file).
+- [ ] **R3: Prompt-level loop breaker.** Instruct the agent to abandon a tool after 2 identical failures and switch strategies. Without this, any future endpoint regression is an outage. Track: bug.0369.
+- [ ] **R4: Real-HTTP smoke test in CI.** Every new `*.data-api.client.ts` method should have a nightly smoke test that hits the real endpoint (tagged, not blocking) to catch this class of regression. Currently we only have fixture-mocked unit tests. Track: separate task.
+
+### 4o-mini smoke probes — one-tool-per-message
+
+These are the precise messages to send to the deployed `poly-research` graph (model `gpt-4o-mini`) to confirm each tool is reachable end-to-end after R1 lands. Use a wallet from the live leaderboard (`0x9f2fe025f84839ca81dd8e0338892605702d2ca8`) and a live conditionId (`0xbd6aec3013ba4a88e99c696a468fc5dfff6194a92a670d7c429149e5e7993ba2`). Send them one at a time with `graph_name: "poly-research"`. Pass criterion: tool-call log line in Loki with `event="ai.tool_call"` (not `.error`).
+
+1. **`core__poly_data_help`** — `Call core__poly_data_help with topic="endpoints". Return the raw JSON only, no commentary.`
+2. **`core__poly_data_value`** — `Call core__poly_data_value for user 0x9f2fe025f84839ca81dd8e0338892605702d2ca8. Return the raw JSON response, no commentary.`
+3. **`core__poly_data_positions`** — `Call core__poly_data_positions for user 0x9f2fe025f84839ca81dd8e0338892605702d2ca8 with limit=5. Return the raw JSON, no commentary.`
+4. **`core__poly_data_activity`** — `Call core__poly_data_activity for user 0x9f2fe025f84839ca81dd8e0338892605702d2ca8 with type="TRADE" and limit=5. Return the raw JSON, no commentary.`
+5. **`core__poly_data_holders`** — `Call core__poly_data_holders for market=0xbd6aec3013ba4a88e99c696a468fc5dfff6194a92a670d7c429149e5e7993ba2 with limit=5. Return the raw JSON, no commentary.`
+6. **`core__poly_data_trades_market`** — `Call core__poly_data_trades_market for market=0xbd6aec3013ba4a88e99c696a468fc5dfff6194a92a670d7c429149e5e7993ba2 with limit=5 and takerOnly=true. Return the raw JSON, no commentary.`
+7. **`core__poly_data_resolve_username`** — `Call core__poly_data_resolve_username with query="polytrader" and limit=3. Return the raw JSON, no commentary.`
+8. **`core__wallet_top_traders`** (pre-existing, reused by poly-research) — `Call core__wallet_top_traders with timePeriod="WEEK" and limit=5. Return the raw JSON, no commentary.`
+
+Each probe is one turn. Tight, imperative, no-chain-of-thought — 4o-mini follows direct tool-name commands reliably; it invents paths when given open-ended research briefs.
+
 ## Review Checklist
 
 - [ ] **Work Item:** `task.0368` linked in PR body

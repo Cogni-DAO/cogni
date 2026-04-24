@@ -42,7 +42,6 @@ export type {
   PolyDataMarketTradesOutput,
   PolyDataPositionsOutput,
   PolyDataResolveUsernameOutput,
-  PolyDataTradedEventsOutput,
   PolyDataValueOutput,
 } from "./poly-data";
 // Repository capability (per COGNI_BRAIN_SPEC)

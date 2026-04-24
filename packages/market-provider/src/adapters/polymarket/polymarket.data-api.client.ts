@@ -3,7 +3,7 @@
 
 /**
  * Module: `@cogni/market-provider/adapters/polymarket/polymarket.data-api.client`
- * Purpose: Client for the public Polymarket Data API + Gamma handle resolver — leaderboard, user activity / trades / positions / value, market holders + trades, traded-events, username search.
+ * Purpose: Client for the public Polymarket Data API + Gamma handle resolver — leaderboard, user activity / trades / positions / value, market holders + trades, username search.
  * Scope: HTTP fetch + Zod validation. Does not load env, does not manage credentials, does not place orders, does not implement `MarketProviderPort`.
  * Invariants: PACKAGES_NO_ENV, READ_ONLY, CONTRACT_IS_SOT.
  * Side-effects: IO (HTTP fetch to https://data-api.polymarket.com and https://gamma-api.polymarket.com)
@@ -30,8 +30,6 @@ import {
   PolymarketUserPositionsResponseSchema,
   type PolymarketUserTrade,
   PolymarketUserTradesResponseSchema,
-  type TradedEvent,
-  TradedEventsResponseSchema,
   UserValueResponseSchema,
 } from "./polymarket.data-api.types.js";
 
@@ -152,13 +150,6 @@ export interface ListMarketTradesParams {
   /** When true, only include trades where the `proxyWallet` was the taker. */
   takerOnly?: boolean;
   /** Rows per page (1-500). */
-  limit?: number;
-  /** Pagination offset. */
-  offset?: number;
-}
-
-export interface ListTradedEventsParams {
-  /** Rows per page (1-100). */
   limit?: number;
   /** Pagination offset. */
   offset?: number;
@@ -349,27 +340,6 @@ export class PolymarketDataApiClient {
 
     const json = await this.fetchJson(url);
     return parseResponse(MarketTradesResponseSchema, json, "/trades?market=");
-  }
-
-  /**
-   * `GET /traded-events?user=<wallet>` — per-event aggregates for category analysis.
-   */
-  async listTradedEvents(
-    wallet: string,
-    params?: ListTradedEventsParams
-  ): Promise<TradedEvent[]> {
-    assertWallet(wallet);
-    const url = new URL("/traded-events", this.baseUrl);
-    url.searchParams.set("user", wallet);
-    if (params?.limit !== undefined) {
-      url.searchParams.set("limit", String(params.limit));
-    }
-    if (params?.offset !== undefined) {
-      url.searchParams.set("offset", String(params.offset));
-    }
-
-    const json = await this.fetchJson(url);
-    return parseResponse(TradedEventsResponseSchema, json, "/traded-events");
   }
 
   /**

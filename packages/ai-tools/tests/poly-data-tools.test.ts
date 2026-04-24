@@ -40,11 +40,6 @@ import {
   polyDataResolveUsernameContract,
 } from "../src/tools/poly-data-resolve-username";
 import {
-  createPolyDataTradedEventsImplementation,
-  POLY_DATA_TRADED_EVENTS_NAME,
-  polyDataTradedEventsContract,
-} from "../src/tools/poly-data-traded-events";
-import {
   createPolyDataTradesMarketImplementation,
   POLY_DATA_TRADES_MARKET_NAME,
   polyDataTradesMarketContract,
@@ -90,12 +85,6 @@ function mkCapability(
       count: 0,
       hasMore: false,
     })),
-    listTradedEvents: vi.fn(async () => ({
-      user: PROXY_WALLET,
-      events: [],
-      count: 0,
-      hasMore: false,
-    })),
     resolveUsername: vi.fn(async () => ({
       profiles: [],
       count: 0,
@@ -111,7 +100,6 @@ describe("poly-data tools — shared invariants", () => {
     polyDataValueContract,
     polyDataHoldersContract,
     polyDataTradesMarketContract,
-    polyDataTradedEventsContract,
     polyDataResolveUsernameContract,
     polyDataHelpContract,
   ];
@@ -148,9 +136,6 @@ describe("poly-data tools — shared invariants", () => {
     expect(polyDataTradesMarketContract.name).toBe(
       POLY_DATA_TRADES_MARKET_NAME
     );
-    expect(polyDataTradedEventsContract.name).toBe(
-      POLY_DATA_TRADED_EVENTS_NAME
-    );
     expect(polyDataResolveUsernameContract.name).toBe(
       POLY_DATA_RESOLVE_USERNAME_NAME
     );
@@ -162,7 +147,6 @@ describe("poly-data tools — shared invariants", () => {
       polyDataPositionsContract,
       polyDataActivityContract,
       polyDataValueContract,
-      polyDataTradedEventsContract,
     ];
     for (const c of userTools) {
       expect(c.description).toMatch(/proxy-wallet|EOA/);
@@ -281,27 +265,6 @@ describe("core__poly_data_trades_market", () => {
       market: "0xCONDITION",
       takerOnly: false,
       limit: 100,
-      offset: 0,
-    });
-  });
-});
-
-describe("core__poly_data_traded_events", () => {
-  it("rejects non-hex user", () => {
-    expect(() =>
-      polyDataTradedEventsContract.inputSchema.parse({ user: "alice" })
-    ).toThrow();
-  });
-
-  it("delegates with default limit=20", async () => {
-    const cap = mkCapability();
-    const impl = createPolyDataTradedEventsImplementation({
-      polyDataCapability: cap,
-    });
-    await impl.execute({ user: PROXY_WALLET });
-    expect(cap.listTradedEvents).toHaveBeenCalledWith({
-      user: PROXY_WALLET,
-      limit: 20,
       offset: 0,
     });
   });

@@ -3,7 +3,7 @@
 
 /**
  * Module: `@cogni/market-provider/adapters/polymarket/polymarket.data-api.types`
- * Purpose: Zod schemas for the Polymarket Data API + Gamma public-search — leaderboard, user trades / activity / positions / value, market holders + trades, traded-events, profiles.
+ * Purpose: Zod schemas for the Polymarket Data API + Gamma public-search — leaderboard, user trades / activity / positions / value, market holders + trades, profiles.
  * Scope: Pure type definitions for API response validation. Does not contain I/O or runtime logic.
  * Invariants: PACKAGES_NO_ENV.
  * Side-effects: none
@@ -227,26 +227,6 @@ export const MarketTradeSchema = z
 export type MarketTrade = z.infer<typeof MarketTradeSchema>;
 
 export const MarketTradesResponseSchema = z.array(MarketTradeSchema);
-
-/**
- * Aggregated per-event trading footprint from `GET /traded-events?user=<wallet>`.
- * Used to detect category specialization (sports, politics, crypto, etc).
- */
-export const TradedEventSchema = z
-  .object({
-    id: z.string().optional().nullable().default(""),
-    eventId: z.string().optional().nullable().default(""),
-    eventSlug: z.string().optional().nullable().default(""),
-    slug: z.string().optional().nullable().default(""),
-    title: z.string().optional().nullable().default(""),
-    numTrades: z.coerce.number().optional().default(0),
-    firstTradeAt: z.coerce.number().optional().default(0),
-    lastTradeAt: z.coerce.number().optional().default(0),
-  })
-  .passthrough();
-export type TradedEvent = z.infer<typeof TradedEventSchema>;
-
-export const TradedEventsResponseSchema = z.array(TradedEventSchema);
 
 /**
  * Gamma `/public-search?profile=true` — handle → proxyWallet resolution.

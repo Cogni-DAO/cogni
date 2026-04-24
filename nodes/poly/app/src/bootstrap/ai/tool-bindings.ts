@@ -39,7 +39,6 @@ import {
   createPolyDataHoldersImplementation,
   createPolyDataPositionsImplementation,
   createPolyDataResolveUsernameImplementation,
-  createPolyDataTradedEventsImplementation,
   createPolyDataTradesMarketImplementation,
   createPolyDataValueImplementation,
   createPolyListOrdersImplementation,
@@ -71,7 +70,6 @@ import {
   POLY_DATA_HOLDERS_NAME,
   POLY_DATA_POSITIONS_NAME,
   POLY_DATA_RESOLVE_USERNAME_NAME,
-  POLY_DATA_TRADED_EVENTS_NAME,
   POLY_DATA_TRADES_MARKET_NAME,
   POLY_DATA_VALUE_NAME,
   POLY_LIST_ORDERS_NAME,
@@ -212,9 +210,6 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
       polyDataCapability: deps.polyDataCapability,
     }) as AnyToolImplementation,
     [POLY_DATA_TRADES_MARKET_NAME]: createPolyDataTradesMarketImplementation({
-      polyDataCapability: deps.polyDataCapability,
-    }) as AnyToolImplementation,
-    [POLY_DATA_TRADED_EVENTS_NAME]: createPolyDataTradedEventsImplementation({
       polyDataCapability: deps.polyDataCapability,
     }) as AnyToolImplementation,
     [POLY_DATA_RESOLVE_USERNAME_NAME]:

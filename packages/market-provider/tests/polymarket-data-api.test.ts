@@ -362,30 +362,6 @@ describe("PolymarketDataApiClient.listMarketTrades", () => {
   });
 });
 
-describe("PolymarketDataApiClient.listTradedEvents", () => {
-  const wallet = "0x9f2fe025f84839ca81dd8e0338892605702d2ca8";
-
-  it("hits /traded-events?user=<wallet> and returns parsed events", async () => {
-    const body = [
-      {
-        eventId: "e1",
-        eventSlug: "slug",
-        title: "Some event",
-        numTrades: 5,
-      },
-    ];
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));
-    const client = new PolymarketDataApiClient({ fetch: fetchImpl });
-    const events = await client.listTradedEvents(wallet, {
-      limit: 20,
-      offset: 0,
-    });
-    expect(events).toHaveLength(1);
-    const call = fetchImpl.mock.calls[0]?.[0] as string;
-    expect(call).toContain("/traded-events?user=");
-  });
-});
-
 describe("PolymarketDataApiClient.resolveUsername", () => {
   it("hits Gamma /public-search with profile=true and returns profiles[]", async () => {
     const body = {

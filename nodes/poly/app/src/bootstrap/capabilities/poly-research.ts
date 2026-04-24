@@ -140,27 +140,6 @@ export function createPolyResearchCapability(
       };
     },
 
-    listTradedEvents: async (params) => {
-      const limit = params.limit ?? 20;
-      const events = await dataApiClient.listTradedEvents(params.user, {
-        limit,
-        ...(params.offset !== undefined && { offset: params.offset }),
-      });
-      return {
-        user: params.user,
-        events: events.map((e) => ({
-          eventId: e.eventId ?? e.id ?? "",
-          eventSlug: e.eventSlug ?? e.slug ?? "",
-          title: e.title ?? "",
-          numTrades: e.numTrades,
-          firstTradeAt: e.firstTradeAt,
-          lastTradeAt: e.lastTradeAt,
-        })),
-        count: events.length,
-        hasMore: events.length >= limit,
-      };
-    },
-
     resolveUsername: async (params) => {
       const profiles = await dataApiClient.resolveUsername(params.query, {
         ...(params.limit !== undefined && { limit: params.limit }),

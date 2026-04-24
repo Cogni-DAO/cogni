@@ -51,7 +51,6 @@ export {
   type ListActivityParams,
   type ListMarketTradesParams,
   type ListTopTradersParams,
-  type ListTradedEventsParams,
   type ListUserActivityParams,
   type ListUserPositionsParams,
   type ListUserTradesParams,
@@ -88,9 +87,6 @@ export {
   type PolymarketUserTrade,
   PolymarketUserTradeSchema,
   PolymarketUserTradesResponseSchema,
-  type TradedEvent,
-  TradedEventSchema,
-  TradedEventsResponseSchema,
   UserValueEntrySchema,
   UserValueResponseSchema,
 } from "./polymarket.data-api.types.js";
