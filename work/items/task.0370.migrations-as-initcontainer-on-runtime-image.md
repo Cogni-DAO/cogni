@@ -1,14 +1,14 @@
 ---
 id: task.0370
 type: task
-title: "Rebase migrator stage on runtime image; kill the per-flight migrator image pull"
-status: needs_implement
+title: "Rebase every node's migrator stage on its runtime image"
+status: needs_review
 revision: 3
 priority: 1
 rank: 1
 estimate: 1
-summary: "Change `FROM base AS migrator` to `FROM runner AS migrator` in each node's Dockerfile + swap pnpm/drizzle-kit invocation for a ~15-line `migrate.mjs` using drizzle-orm's already-prod-dep programmatic migrator. Migrator image layers now share 99.9% of content with the runtime image k3s already pulled for the app; per-flight image-pull drops from ~3m45s/node to ~1s. Keeps Argo PreSync hook, keeps one-Job-per-sync semantics, keeps credential separation, zero replica-race surface. Addresses bug.0368."
-outcome: "candidate-flight verify-candidate wait drops from 4–9min to ~30-60s. Migrator image < 5MB unique layers on top of runtime image. No change to Argo hook pattern, Job lifecycle, or credential scoping. No spec rewrite required (§4.1 note amendment only)."
+summary: "Universal per-node pattern: every node's Dockerfile migrator stage moves from `FROM base` to `FROM runner` and runs a ~15-line `migrate.mjs` using drizzle-orm's already-prod-dep programmatic migrator. Migrator image layers share 99.9% of content with the runtime image k3s already pulled for the app; per-flight image-pull drops from ~3m45s/node to ~1s. Keeps Argo PreSync hook, keeps one-Job-per-sync, keeps credential separation, zero replica-race surface. Addresses bug.0368."
+outcome: "Every deployed node (operator, resy, poly, any future node-next-X) inherits `FROM runner AS migrator`. candidate-flight verify-candidate wait drops from 4–9min to ~30-60s per affected node. Migrator image < 5MB unique layers on top of runtime. No spec rewrite required."
 spec_refs:
   - docs/spec/databases.md
 assignees: []
@@ -127,9 +127,15 @@ observability:
 - `/version.buildSha` on candidate-a-{operator,poly,resy} matches flown SHA within 2 min of dispatch.
 - Failure case: break a migration SQL file. Job fails; Argo sync Failed; app rollout blocked. `/readyz` from old pods keeps serving. Revert, re-flight; recovers.
 
+## Universality
+
+The rule is **every deployed node's Dockerfile has `FROM runner AS migrator` with the standard shape** (migrations + migrate.mjs COPY, CMD = `node /app/migrate.mjs /app/migrations`). Adding a new `node-next-X` inherits it by convention — copy the 14-line stanza, update the path prefix, done.
+
+This PR lands the pattern for **operator** and **resy**. Poly follows the same rule but requires a dual-target split because its migrator image is shared between two Jobs (Postgres `migrate-node-app` and Doltgres `migrate-poly-doltgres`, which needs the dolt_commit stamp). That split is task.0372 — not a deviation from the universal rule, just additional CI plumbing (new `poly-doltgres-migrator` target in `lib/image-tags.sh` + a second Dockerfile migrator stage + 4 overlay edits).
+
 ## Out of scope (explicit)
 
-- **poly** (both node-app Postgres migrator AND poly-doltgres migrator) — poly's current migrator image is shared between two Jobs: `migrate-node-app` (Postgres, `pnpm db:migrate:poly:container`) and `migrate-poly-doltgres` (Doltgres, `pnpm db:migrate:poly:doltgres:container` plus the trailing `dolt_commit('-Am', …)` stamp). Rebasing poly's migrator on `runner` drops pnpm + drizzle-kit, which breaks the Doltgres Job. Follow-up task.0372 applies the same pattern — either (a) split poly's migrator into two build targets (`poly-migrate` FROM runner + `poly-doltgres-migrate` FROM base), or (b) port the Doltgres migration to the programmatic migrator + raw `dolt_commit` SQL. This PR ships operator + resy only.
+- **Poly's split into two migrator images** — task.0372. The Postgres half will adopt the exact pattern in this PR; the Doltgres half either ports the dolt_commit stamp into a second `migrate-doltgres.mjs` or keeps the legacy FROM-base stage as `poly-doltgres-migrator`.
 - Atlas / declarative schema / CI-gated migrations — the endgame per /review feedback. Tracked in task.0325. Not blocked by or touched by this task.
 - Credential narrowing to `app_migrator` role — proj.database-ops P1 credential convergence. Unaffected.
 - Destructive-SQL CI lint for FORWARD_COMPAT_MIGRATIONS — follow-up task.0371. Good hygiene; not load-bearing on this task's correctness.

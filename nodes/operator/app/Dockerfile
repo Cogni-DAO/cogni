@@ -114,12 +114,7 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
 
 CMD ["node", "nodes/operator/app/server.js"]
 
-# Migrator — rebased on runner so k3s reuses the runtime image's cached layers
-# and the per-flight migrator image pull becomes a 1MB delta, not a 400MB blob.
-# See bug.0368 / task.0370. Uses the programmatic `drizzle-orm/postgres-js/migrator`
-# (shipped in runner via serverExternalPackages) so no drizzle-kit/pnpm/tsx in the
-# migrator image. Argo PreSync hook + one-Job-per-sync + DATABASE_URL secret binding
-# are unchanged — only what's inside the migrator image changes.
+# Migrator — rebased on runner so it shares layers with the runtime image. task.0370.
 FROM runner AS migrator
 USER root
 WORKDIR /app
