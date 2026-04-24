@@ -21,7 +21,7 @@ if (!migrationsFolder) {
 
 let sql;
 try {
-  sql = postgres(url, { max: 1, onnotice: () => {} });
+  sql = postgres(url, { max: 1, onnotice: (n) => console.log(n.message) });
   const t0 = Date.now();
   await migrate(drizzle(sql), { migrationsFolder });
   console.log(`✅ ${NODE} migrations applied in ${Date.now() - t0}ms`);

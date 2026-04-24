@@ -116,9 +116,6 @@ CMD ["node", "nodes/resy/app/server.js"]
 
 # Migrator — rebased on runner so it shares layers with the runtime image. task.0370.
 FROM runner AS migrator
-USER root
-WORKDIR /app
 COPY --from=builder --chown=nextjs:nodejs /app/nodes/resy/app/src/adapters/server/db/migrations /app/migrations
 COPY --from=builder --chown=nextjs:nodejs /app/nodes/resy/app/src/adapters/server/db/migrate.mjs /app/migrate.mjs
-USER nextjs
 CMD ["node", "/app/migrate.mjs", "/app/migrations"]
