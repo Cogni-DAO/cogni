@@ -17,7 +17,7 @@ assignees: []
 credit:
 project: proj.poly-copy-trading
 branch: design/task-0361-poly-first-user-onboarding-v0
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/1030
 reviewer:
 revision: 0
 blocked_by: []
