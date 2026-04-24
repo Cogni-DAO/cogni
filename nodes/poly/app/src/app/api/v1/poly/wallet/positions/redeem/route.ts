@@ -29,6 +29,7 @@ import {
   getPolyTraderWalletAdapter,
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
+import { invalidateWalletAnalysisCaches } from "@/features/wallet-analysis/server/wallet-analysis-service";
 import { serverEnv } from "@/shared/env/server-env";
 
 export const dynamic = "force-dynamic";
@@ -94,6 +95,19 @@ export const POST = wrapRouteHandlerWithLogging(
       const payload = polyWalletRedeemPositionOperation.output.parse({
         tx_hash: result.tx_hash,
       });
+
+      try {
+        const address = await adapter.getAddress(account.id);
+        if (address) invalidateWalletAnalysisCaches(address);
+      } catch (err) {
+        ctx.log.warn(
+          {
+            billing_account_id: account.id,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "poly.wallet.positions.redeem.cache_invalidate_failed"
+        );
+      }
 
       ctx.log.info(
         {
