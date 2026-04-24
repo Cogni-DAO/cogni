@@ -158,29 +158,17 @@ export function TradingWalletCard(): ReactElement {
             Trading-wallet adapter is not configured on this pod yet.
           </p>
         ) : !data.connected ? (
-          <div className="flex items-center justify-between gap-3 py-2 text-sm">
-            <p className="text-muted-foreground">
-              No trading wallet connected yet.
-            </p>
-            <Link
-              href="/credits"
-              className="rounded-md border border-border/60 bg-muted/40 px-3 py-1 font-medium hover:bg-muted"
-            >
-              Connect →
-            </Link>
-          </div>
+          <OnboardingCta
+            message="No trading wallet connected yet."
+            ctaLabel="Connect wallet →"
+            href="/credits"
+          />
         ) : statusData && statusData.connected && !statusData.trading_ready ? (
-          <div className="flex items-center justify-between gap-3 py-2 text-sm">
-            <p className="text-muted-foreground">
-              Trading not enabled — finish approvals to copy-trade.
-            </p>
-            <Link
-              href="/credits"
-              className="rounded-md border border-border/60 bg-muted/40 px-3 py-1 font-medium hover:bg-muted"
-            >
-              Enable trading →
-            </Link>
-          </div>
+          <OnboardingCta
+            message="Trading not enabled — finish approvals to copy-trade."
+            ctaLabel="Enable trading →"
+            href="/credits"
+          />
         ) : (
           <div className="space-y-5 py-1">
             {fullBreakdown ? (
@@ -234,6 +222,34 @@ function hasOverviewBreakdown(
     data.usdc_locked !== null &&
     data.usdc_positions_mtm !== null &&
     data.usdc_total !== null
+  );
+}
+
+/**
+ * Centered, primary-accented onboarding CTA shown when the caller hasn't yet
+ * reached the next step (no wallet / !trading_ready). Matches the login
+ * button's `bg-primary/10 border-primary/40 text-primary` treatment so it
+ * reads as the obvious next action.
+ */
+function OnboardingCta({
+  message,
+  ctaLabel,
+  href,
+}: {
+  message: string;
+  ctaLabel: string;
+  href: string;
+}): ReactElement {
+  return (
+    <div className="flex flex-col items-center gap-3 py-8 text-center">
+      <p className="text-muted-foreground text-sm">{message}</p>
+      <Link
+        href={href}
+        className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-5 py-2 font-semibold text-primary text-sm transition-colors hover:bg-primary/20"
+      >
+        {ctaLabel}
+      </Link>
+    </div>
   );
 }
 

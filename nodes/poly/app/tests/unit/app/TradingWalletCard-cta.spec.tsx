@@ -101,11 +101,11 @@ describe("TradingWalletCard onboarding CTAs", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders 'Connect →' CTA pointing at /credits when no wallet is connected", async () => {
+  it("renders 'Connect wallet →' CTA pointing at /credits when no wallet is connected", async () => {
     mockFetch({ connected: false });
     render(withClient(<TradingWalletCard />));
 
-    const link = await screen.findByRole("link", { name: /Connect →/ });
+    const link = await screen.findByRole("link", { name: /Connect wallet →/ });
     expect(link).toHaveAttribute("href", "/credits");
     expect(
       screen.getByText(/No trading wallet connected yet/i)
@@ -155,7 +155,7 @@ describe("TradingWalletCard onboarding CTAs", () => {
 
     await waitFor(() => {
       expect(
-        screen.queryByRole("link", { name: /Connect →/ })
+        screen.queryByRole("link", { name: /Connect wallet →/ })
       ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("link", { name: /Enable trading →/ })

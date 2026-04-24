@@ -5,8 +5,8 @@
  * Module: `@app/(public)/AuthRedirect`
  * Purpose: Client-side auth transition gate for SIWE sign-in on public pages.
  * Scope: Watches NextAuth session status; does not enforce auth policy or access control.
- *   When authenticated, renders a full-screen overlay and hard-navigates to /chat
- *   so middleware/RSC run on the new request. Server remains the routing authority.
+ *   When authenticated, renders a full-screen overlay and hard-navigates to /dashboard
+ *   (poly hub, task.0361) so middleware/RSC run on the new request. Server remains the routing authority.
  * Invariants: No-op when session is loading or unauthenticated; overlay prevents flash.
  * Side-effects: IO (hard navigation via window.location.replace)
  * Links: src/proxy.ts (server-side authority), src/app/(public)/page.tsx
@@ -25,7 +25,7 @@ export function AuthRedirect(): React.JSX.Element | null {
   useEffect(() => {
     if (status === "authenticated") {
       setRedirecting(true);
-      window.location.replace("/chat");
+      window.location.replace("/dashboard");
     }
   }, [status]);
 

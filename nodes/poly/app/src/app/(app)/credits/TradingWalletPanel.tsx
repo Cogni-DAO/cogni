@@ -39,7 +39,8 @@ import type {
   PolyWalletStatusOutput,
 } from "@cogni/node-contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Info } from "lucide-react";
+import { ArrowRight, Info } from "lucide-react";
+import Link from "next/link";
 import { useSession } from "next-auth/react";
 import type { ReactElement } from "react";
 import { AddressChip, Card, HintText } from "@/components";
@@ -165,6 +166,16 @@ export function TradingWalletPanel(): ReactElement {
             polBalance={balances?.pol ?? null}
             usdcBalance={balances?.usdc_e ?? null}
           />
+
+          {status.trading_ready ? (
+            <Link
+              href="/research"
+              className="inline-flex items-center justify-between gap-2 rounded-md border border-primary/40 bg-primary/10 px-4 py-3 font-medium text-primary text-sm transition-colors hover:bg-primary/20"
+            >
+              <span>Next — pick a wallet to copy on Research</span>
+              <ArrowRight size={16} />
+            </Link>
+          ) : null}
 
           <div className="grid grid-cols-2 gap-2">
             <button

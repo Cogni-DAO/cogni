@@ -113,7 +113,9 @@ export function SignInDialog({
                 key={provider.id}
                 variant="outline"
                 className="h-12 justify-start gap-3 text-sm"
-                onClick={() => signIn(provider.id, { callbackUrl: "/chat" })}
+                onClick={() =>
+                  signIn(provider.id, { callbackUrl: "/dashboard" })
+                }
               >
                 <provider.icon className="size-5" />
                 {provider.label}

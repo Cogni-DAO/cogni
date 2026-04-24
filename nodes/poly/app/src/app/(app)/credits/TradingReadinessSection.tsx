@@ -77,8 +77,11 @@ export function TradingReadinessSection(
     props.polBalance !== null &&
     props.polBalance < MIN_POL_FOR_ENABLE;
 
-  if (derivedReady && !result && !inFlight) {
-    // Happy steady state — compact confirmation chip, no call to action.
+  // Compact confirmation: either steady state (no mutation) OR the most recent
+  // mutation succeeded end-to-end (`result.ready === true`). Without the
+  // latter, a fresh successful "Enable trading" click would keep rendering the
+  // big authorize-box with step rows until the user hard-refreshed the page.
+  if (derivedReady && !inFlight && (!result || result.ready)) {
     return (
       <div className="flex items-center gap-2 rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
         <CheckCircle2 size={16} />
