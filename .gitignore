@@ -4,6 +4,9 @@
 node_modules
 /.pnp
 .pnp.*
+
+# turbo
+.turbo
 .yarn/*
 !.yarn/patches
 !.yarn/plugins
