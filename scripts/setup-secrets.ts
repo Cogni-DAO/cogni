@@ -212,7 +212,7 @@ const SECRETS: Secret[] = [
   },
   {
     name: "POLYGON_RPC_URL",
-    required: false,
+    required: true,
     category: "Polymarket / RPC",
     source: "human",
     description: "Polygon mainnet RPC endpoint for poly runtime reads",
