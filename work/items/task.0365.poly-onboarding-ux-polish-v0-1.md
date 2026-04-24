@@ -1,5 +1,5 @@
 ---
-id: task.0362
+id: task.0365
 type: task
 title: "Poly onboarding UX polish (v0.1) — Money page layout, funding tip, approval-state design"
 status: needs_design
@@ -22,7 +22,7 @@ blocked_by: [task.0361]
 labels: [poly, onboarding, ui, polish, frontend-design]
 ---
 
-# task.0362 — Poly onboarding UX polish (v0.1)
+# task.0365 — Poly onboarding UX polish (v0.1)
 
 ## Context
 
