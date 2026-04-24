@@ -1,0 +1,23 @@
+{
+  "skill_name": "git-app-expert",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "The pr-manager agent is failing to dispatch candidate-a flights. I see it call core__vcs_flight_candidate and get no error back (dispatched: true), but no workflow run ever appears on GitHub. The GH_REVIEW_APP_ID is set to 3062001. Walk me through what's wrong and how to fix it.",
+      "expected_output": "Identifies that cogni-node-template (3062001) org installation previously had actions:read not actions:write, gives the gh api audit command to verify current permission, explains the app definition vs installation permission divergence gotcha, and points to the GitHub org settings URL for installation 115515535 to approve the upgrade.",
+      "assertions": []
+    },
+    {
+      "id": 1,
+      "prompt": "I want to test PR #1003 (which fixes the Argo wait-for-argocd.sh Deployment sync check) by using its workflow version to flight PR #1004's app build. Does the current vcs_flight_candidate tool support specifying which branch's workflow to use? If not, tell me exactly what to change.",
+      "expected_output": "Confirms ref is hardcoded to 'main' in github-vcs.adapter.ts line 264. Lists the 4-5 files to change (tool schema, VcsCapability interface, adapter, tool description), gives the exact field name (workflowRef), shows the ref: params.workflowRef ?? 'main' change, and mentions running pnpm check:fast to catch missed call sites.",
+      "assertions": []
+    },
+    {
+      "id": 2,
+      "prompt": "A candidate-a flight just ran for PR #999 but verify-buildsha failed with: operator returns HTML at /version, resy SHA mismatch. The slot is now in state=failed. I want to flight PR #1001 (poly-only changes) right now. Will it work? What should I expect?",
+      "expected_output": "Confirms slot state=failed means it IS available for acquisition (only state=leased with unexpired TTL blocks). Explains poly-only PRs only promote poly images so promoted_apps='poly' and verify-buildsha only checks poly. The operator HTML issue and resy stale SHA won't affect a poly-only flight. Gives the lease check command to verify slot is free.",
+      "assertions": []
+    }
+  ]
+}

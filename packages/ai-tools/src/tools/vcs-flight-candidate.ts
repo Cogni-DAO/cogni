@@ -40,6 +40,15 @@ export const VcsFlightCandidateInputSchema = z.object({
       "Optional head SHA override. Defaults to the PR's current HEAD; only set " +
         "this when you explicitly want an older stable SHA instead of HEAD."
     ),
+  workflowRef: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Optional branch/ref from which to load candidate-flight.yml. Defaults to " +
+        "'main'. Set to a feature branch to test workflow changes before merging — " +
+        "e.g., flight PR #1004's app build using PR #1003's fixed workflow."
+    ),
 });
 export type VcsFlightCandidateInput = z.infer<
   typeof VcsFlightCandidateInputSchema
@@ -115,6 +124,7 @@ export function createVcsFlightCandidateImplementation(
         repo: input.repo,
         prNumber: input.prNumber,
         headSha: input.headSha,
+        workflowRef: input.workflowRef,
       });
     },
   };

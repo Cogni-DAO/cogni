@@ -10,8 +10,8 @@
  *   - INSTALLATION_CACHED: Installation ID resolved once per owner/repo and cached
  *   - TOKEN_AUTO_REFRESH: Octokit auth-app handles token caching and refresh automatically
  *   - ADAPTER_SWAPPABLE: Implements VcsCapability — can be swapped for gh CLI adapter later
- *   - FLIGHT_WORKFLOW_REF_MAIN: `candidate-flight.yml` is dispatched against `ref: main`.
- *     The workflow YAML lives on main; dispatching from a feature branch would fail.
+ *   - FLIGHT_WORKFLOW_REF: `candidate-flight.yml` is dispatched against `workflowRef ?? "main"`.
+ *     Defaults to main; pass workflowRef to test workflow changes on a feature branch.
  * Side-effects: IO (GitHub REST API)
  * Links: task.0242, task.0297, services/scheduler-worker/src/adapters/ingestion/github-auth.ts
  * @internal
@@ -240,6 +240,7 @@ export class GitHubVcsAdapter implements VcsCapability {
     repo: string;
     prNumber: number;
     headSha?: string;
+    workflowRef?: string;
   }): Promise<DispatchCandidateFlightResult> {
     const octokit = await this.getOctokit(params.owner, params.repo);
 
@@ -262,7 +263,7 @@ export class GitHubVcsAdapter implements VcsCapability {
         owner: params.owner,
         repo: params.repo,
         workflow_id: "candidate-flight.yml",
-        ref: "main",
+        ref: params.workflowRef ?? "main",
         inputs,
       }
     );

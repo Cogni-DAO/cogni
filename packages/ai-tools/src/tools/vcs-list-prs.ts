@@ -24,7 +24,7 @@ import type { BoundTool, ToolContract, ToolImplementation } from "../types";
 
 export const VcsListPrsInputSchema = z.object({
   owner: z.string().min(1).describe("Repository owner (e.g., 'Cogni-DAO')"),
-  repo: z.string().min(1).describe("Repository name (e.g., 'cogni-template')"),
+  repo: z.string().min(1).describe("Repository name (e.g., 'node-template')"),
   state: z
     .enum(["open", "closed", "all"])
     .optional()

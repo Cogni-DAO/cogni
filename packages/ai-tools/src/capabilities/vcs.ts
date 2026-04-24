@@ -151,6 +151,7 @@ export interface VcsCapability {
     repo: string;
     prNumber: number;
     headSha?: string;
+    workflowRef?: string;
   }): Promise<DispatchCandidateFlightResult>;
 
   /** Open a pull request from an existing branch. Branch must already exist on remote. Operator-only. */
