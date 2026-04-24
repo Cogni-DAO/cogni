@@ -2,7 +2,7 @@
 id: task.0368
 type: task
 title: "Poly agent wallet research v0 — Data-API tools + poly-research graph"
-status: needs_closeout
+status: needs_merge
 priority: 1
 rank: 4
 estimate: 3

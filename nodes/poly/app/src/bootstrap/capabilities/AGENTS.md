@@ -34,6 +34,8 @@ Capability factories bridging ai-tools interfaces to adapters. Creates environme
 
 **poly-trade-executor.ts** — `createPolyTradeExecutorFactory(config) → PolyTradeExecutorFactory`. The factory's `getPolyTradeExecutorFor(billingAccountId)` returns a per-tenant `PolyTradeExecutor` that wraps every `placeIntent` / `closePosition` through `PolyTraderWalletPort.authorizeIntent` (scope + cap + grant-revoke checks on the hot path). `getOrder` returns `GetOrderResult` (typed discriminated union; never null — GETORDER_NEVER_NULL, task.0328 CP1). Sole app-local `@polymarket/clob-client` dynamic-import boundary; also exports `createOrDerivePolymarketApiKeyForSigner({ signer, polygonRpcUrl?, host? })` for CLOB L2 cred derivation at provision time. The pre-Stage-4 single-operator `createPolyTradeCapability` + `PolyTradeBundle` + `FakePolymarketClobAdapter` have been purged (full cutover).
 
+**poly-research.ts** — `createPolyResearchCapability({ dataApiClient }) → PolyDataCapability` (task.0368). Thin shape-mappers over `PolymarketDataApiClient` backing the 7 IO-bound `core__poly_data_*` research tools. Adds `count` + `hasMore` derivation for paginated outputs and maps handle fields to `userName`. Read-only, no auth (public Data API), no DB writes. The eighth tool (`core__poly_data_help`) is static and bypasses this capability.
+
 ## Responsibilities
 
 - This directory **does**: Create capability instances, handle test/prod adapter selection

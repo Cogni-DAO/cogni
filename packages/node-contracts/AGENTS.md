@@ -54,6 +54,7 @@ All require `Authorization: Bearer ${SCHEDULER_API_TOKEN}`.
 - `poly.wallet.connection.v1.contract` — per-tenant Privy-backed trading wallet CRUD. `POST` body carries `custodialConsentAcceptedAt` + `defaultGrant { perOrderUsdcCap (0.5–20), dailyUsdcCap (2–200) }` with `dailyUsdcCap >= perOrderUsdcCap` refinement; server issues the wallet + the default `poly_wallet_grants` row atomically via `PrivyPolyTraderWalletAdapter.provisionWithGrant` (task.0318 Phase B3). `hourlyFillsCap` is server-side only.
 - `poly.wallet.overview.v1.contract` — `GET /api/v1/poly/wallet/overview`; current tenant wallet snapshot for the dashboard plus interval-scoped Polymarket-native P/L history.
 - `poly.sync-health.v1.contract` — `GET /api/v1/poly/internal/sync-health`; returns `{oldest_synced_row_age_ms, rows_stale_over_60s, rows_never_synced, reconciler_last_tick_at}` (task.0328 CP4)
+- `poly.research-report.v1.contract` — structured output for the `poly-research` LangGraph peer graph (task.0368). Consumed as `responseFormat` on the ReAct agent; serialized in the HTTP response body. Shapes: `PolyResearchReportSchema` (query, methodology, ranked candidates, caveats, recommendation), `PolyResearchCandidateSchema` (proxyWallet, userName, rank, confidence, stats, reasoning, evidenceUrls), `PolyResearchCandidateStatsSchema`.
 
 ## Responsibilities
 

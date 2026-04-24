@@ -10,7 +10,7 @@ summary: Build an autonomous prediction market bot that ingests live market data
 outcome: A self-improving prediction market intelligence system — from read-only market access through autonomous analysis to simulated trading with tracked P&L.
 assignees: derekg1729
 created: 2026-03-31
-updated: 2026-04-19
+updated: 2026-04-24
 child_projects:
   - proj.poly-copy-trading
 labels: [poly, prediction-markets, ai, langgraph, temporal, copy-trading]
@@ -65,6 +65,7 @@ Build a prediction market bot that starts by reading and searching live markets 
 | Enrichment sources — GDELT news, Metaculus expert forecasts                   | Not Started | 2   | (create at P1 start) |
 | Wallet analysis components — reusable view + live compute + shared BalanceBar | In Review   | 4   | task.0329 (PR #934)  |
 | Wallet analyst agent — AI qualitative judgments, Dolt-stored, DAO-funded      | Not Started | 5   | task.0333            |
+| Poly agent wallet research v0 — 8 Data-API tools + `poly-research` peer graph | In Review   | 3   | task.0368            |
 | Poly niche-research engine — skill-creator + research graph + EDO evidence    | Not Started | 5   | task.0334            |
 
 ### Run (P2+) — Autonomous Copy-Trading
@@ -99,6 +100,7 @@ Paper-trading infrastructure + DAO treasury integration + strategy backtesting +
 - [Data Streams](../../docs/spec/data-streams.md) — Redis live plane, selective Postgres persistence, SSE
 - [Knowledge Data Plane](../../docs/spec/knowledge-data-plane.md) — Doltgres knowledge plane, per-node DBs, agent tools (active)
 - [Poly Mirror v0](../../docs/spec/poly-copy-trade-phase1.md) — three-layer decomposition (trading / wallet-watch / copy-trade), order-ledger, placement invariants (task.0315)
+- [`poly.research-report.v1.contract`](../../packages/node-contracts/src/poly.research-report.v1.contract.ts) — structured output contract for the `poly-research` peer graph; feeds downstream ranking + task.0334 persistence (task.0368)
 - ~~AI Awareness & Decision Plane (`docs/spec/monitoring-engine.md`)~~ — referenced in the original roadmap but the file does not exist. Deleted from pointers until it's written.
 
 ## Design Notes

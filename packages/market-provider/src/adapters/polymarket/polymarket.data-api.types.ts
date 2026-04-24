@@ -3,11 +3,11 @@
 
 /**
  * Module: `@cogni/market-provider/adapters/polymarket/polymarket.data-api.types`
- * Purpose: Zod schemas for the Polymarket Data API — leaderboard, user trades, user positions.
+ * Purpose: Zod schemas for the Polymarket Data API + Gamma public-search — leaderboard, user trades / activity / positions / value, market holders + trades, traded-events, profiles.
  * Scope: Pure type definitions for API response validation. Does not contain I/O or runtime logic.
  * Invariants: PACKAGES_NO_ENV.
  * Side-effects: none
- * Links: work/items/task.0315.poly-copy-trade-prototype.md, docs/research/poly-copy-trading-wallets.md
+ * Links: work/items/task.0315.poly-copy-trade-prototype.md, work/items/task.0368.poly-agent-wallet-research-v0.md, docs/research/poly-copy-trading-wallets.md
  * @public
  */
 

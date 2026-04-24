@@ -113,7 +113,7 @@
 | 1 | 4 | 1 | needs_design | bug.0009 | Mock-LLM SSE streaming incompatible with OpenClaw pi-ai parser — gateway returns empty payloads | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 4 | 2 | needs_merge | bug.0197 | Scheduled runs accumulate messages in a single shared thread per schedule |  |  |
 | 1 | 4 | 5 | needs_design | task.0234 | Design: node repo creation + CI/CD onboarding pipeline | Node Formation & Launch | proj.node-formation-ui |
-| 1 | 4 | 3 | needs_closeout | task.0368 | Poly agent wallet research v0 — Data-API tools + poly-research graph | Cogni Poly | proj.poly-prediction-bot |
+| 1 | 4 | 3 | needs_merge | task.0368 | Poly agent wallet research v0 — Data-API tools + poly-research graph | Cogni Poly | proj.poly-prediction-bot |
 | 1 | 5 | 2 | needs_triage | bug.0044 | Gateway billing reader finds 0 entries in stale audit log — kills execution after graph switch | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 5 | 2 | needs_triage | bug.0069 | Stack tests flaky — all 5 waitForReceipts tests time out when run as full suite |  |  |
 | 1 | 5 | 2 | needs_design | bug.0200 | setup-secrets has no validation that generated secrets are deploy-safe | Database Operations | proj.database-ops |
