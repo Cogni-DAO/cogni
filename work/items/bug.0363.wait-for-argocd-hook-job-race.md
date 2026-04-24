@@ -1,5 +1,5 @@
 ---
-id: bug.0361
+id: bug.0363
 type: bug
 title: "wait-for-argocd `delete_stale_hook_jobs` kills live migration jobs → infinite stuck-Running loop"
 status: needs_review
