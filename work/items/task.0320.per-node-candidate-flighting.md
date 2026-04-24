@@ -2,7 +2,7 @@
 id: task.0320
 type: task
 title: "Per-node candidate flighting (partial promotion + per-node leases)"
-status: needs_implement
+status: needs_closeout
 priority: 0
 rank: 99
 estimate: 2
@@ -197,3 +197,37 @@ Address these in PR 1 and PR 2 respectively. Each is a code-review checkbox:
 - Templating `generator.git.revision` from a single catalog field (GR-1 — Argo doesn't support it; four generators is the real shape).
 - Flighting PR 2 on its own new model (GR-2 — chicken-and-egg; whole-slot flights PR 2).
 - Relying solely on rebase-retry for same-node concurrency (GR-3 — free GHA primitive exists, use it).
+
+## Plan (PR 1 — Substrate only; PR 2 tracked separately)
+
+Task.0320 scope is reduced to **PR 1 substrate only** for one-PR-per-task discipline. PR 2 (matrix cutover) is split out to **task.0371 — candidate-flight matrix cutover to per-node branches**.
+
+- [x] **Checkpoint 1 — Catalog fields** ✅
+  - Milestone: Each of the 4 node catalog files declares its per-node deploy branch.
+  - Invariants: GR-1 (field used by 4 generators, not templated into 1); ARCHITECTURE_ALIGNMENT (catalog stays the source of truth for per-node wiring).
+  - Todos:
+    - [ ] Add `candidate_a_branch: deploy/candidate-a-operator` to `infra/catalog/operator.yaml`
+    - [ ] Add `candidate_a_branch: deploy/candidate-a-poly` to `infra/catalog/poly.yaml`
+    - [ ] Add `candidate_a_branch: deploy/candidate-a-resy` to `infra/catalog/resy.yaml`
+    - [ ] Add `candidate_a_branch: deploy/candidate-a-scheduler-worker` to `infra/catalog/scheduler-worker.yaml`
+  - Validation: `pnpm check:docs` clean (catalog files pass existing validators).
+- [x] **Checkpoint 2 — ApplicationSet four-generator shape** ✅
+  - Milestone: `cogni-candidate-a` ApplicationSet has 4 git generators under one resource, each targeting one catalog file at one per-node branch.
+  - Invariants: NO_NEW_CONTROLLERS (still one AppSet); ONE_APPSET_SOURCE_OF_TRUTH; KARGO_ALIGNMENT (branch-per-stage-per-node).
+  - Todos:
+    - [ ] Rewrite `infra/k8s/argocd/candidate-a-applicationset.yaml` — replace the single git generator with 4 entries, each with `revision: deploy/candidate-a-<node>` and `files: [infra/catalog/<node>.yaml]`
+    - [ ] Template name stays `candidate-a-{{name}}` (no Application rename)
+    - [ ] `source.targetRevision` flips from `deploy/candidate-a` → `{{candidate_a_branch}}` (or equivalent per-generator param)
+  - Validation: YAML parses; `kubectl apply --dry-run=client -f` clean if available; manual diff review.
+- [x] **Checkpoint 3 — Deployment impact documented (no git push in this PR)** ✅
+  - Milestone: Closeout notes call out that before the AppSet change reaches Argo, the 4 per-node branches must be pushed (off current `deploy/candidate-a`).
+  - Invariants: VM_EDITS_NEED_GIT_CAPTURE (branch creation is a git-resident action, not a surprise ops step).
+  - Todos:
+    - [ ] PR body includes "Deployment impact" with branch-push instructions for humans merging this PR.
+    - [ ] Document does NOT push the 4 branches from this run — that's a shared-infra action tied to merge-time.
+- [x] **Checkpoint 4 — Split PR 2 into task.0371** ✅
+  - Milestone: Task.0320 is PR-1-only; task.0371 carries matrix cutover + GR-2/3/5 guardrails.
+  - Todos:
+    - [ ] Create `work/items/task.0371.candidate-flight-matrix-cutover.md` at `status: needs_closeout` (design complete — inherits from task.0320 design + review).
+    - [ ] Cross-link: task.0371 depends_on task.0320 (and bug.0368 via PR #1041 per GR-4).
+    - [ ] Update `work/items/_index.md`.

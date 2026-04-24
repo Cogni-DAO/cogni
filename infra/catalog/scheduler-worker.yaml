@@ -10,3 +10,5 @@ dockerfile: services/scheduler-worker/Dockerfile
 # (which has no cogni-template-migrate entry anyway).
 image_tag_suffix: "-scheduler-worker"
 migrator_tag_suffix: "-scheduler-worker-migrate"
+# task.0320 — per-node candidate-a deploy branch (see operator.yaml).
+candidate_a_branch: deploy/candidate-a-scheduler-worker

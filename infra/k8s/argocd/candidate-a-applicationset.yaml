@@ -2,7 +2,19 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 #
 # ApplicationSet for candidate-a environment.
-# Single-slot pre-merge validation lane.
+#
+# task.0320 — per-node candidate flighting. Each node has its own deploy
+# branch (deploy/candidate-a-<node>, declared in infra/catalog/<node>.yaml
+# as candidate_a_branch) so one node's failed verify cannot block another
+# node's lane. Argo's git generator applies one revision to all matched
+# files, so per-node revisions require one git generator per node — not
+# one templated generator. See task.0320 GR-1.
+#
+# Applications produced (names unchanged vs. the pre-task.0320 shape):
+#   candidate-a-operator          tracking deploy/candidate-a-operator
+#   candidate-a-poly              tracking deploy/candidate-a-poly
+#   candidate-a-resy              tracking deploy/candidate-a-resy
+#   candidate-a-scheduler-worker  tracking deploy/candidate-a-scheduler-worker
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -12,9 +24,24 @@ spec:
   generators:
     - git:
         repoURL: https://github.com/cogni-dao/cogni-template.git
-        revision: deploy/candidate-a
+        revision: deploy/candidate-a-operator
         files:
-          - path: "infra/catalog/*.yaml"
+          - path: "infra/catalog/operator.yaml"
+    - git:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        revision: deploy/candidate-a-poly
+        files:
+          - path: "infra/catalog/poly.yaml"
+    - git:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        revision: deploy/candidate-a-resy
+        files:
+          - path: "infra/catalog/resy.yaml"
+    - git:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        revision: deploy/candidate-a-scheduler-worker
+        files:
+          - path: "infra/catalog/scheduler-worker.yaml"
   template:
     metadata:
       name: "candidate-a-{{name}}"
@@ -25,7 +52,7 @@ spec:
       project: default
       source:
         repoURL: https://github.com/cogni-dao/cogni-template.git
-        targetRevision: deploy/candidate-a
+        targetRevision: "{{candidate_a_branch}}"
         path: "infra/k8s/overlays/candidate-a/{{name}}"
       destination:
         server: https://kubernetes.default.svc
