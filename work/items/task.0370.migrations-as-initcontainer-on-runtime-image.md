@@ -3,7 +3,7 @@ id: task.0370
 type: task
 title: "Rebase every node's migrator stage on its runtime image"
 status: needs_review
-revision: 3
+revision: 4
 priority: 1
 rank: 1
 estimate: 1
@@ -133,9 +133,20 @@ The rule is **every deployed node's Dockerfile has `FROM runner AS migrator` wit
 
 This PR lands the pattern for **operator** and **resy**. Poly follows the same rule but requires a dual-target split because its migrator image is shared between two Jobs (Postgres `migrate-node-app` and Doltgres `migrate-poly-doltgres`, which needs the dolt_commit stamp). That split is task.0372 — not a deviation from the universal rule, just additional CI plumbing (new `poly-doltgres-migrator` target in `lib/image-tags.sh` + a second Dockerfile migrator stage + 4 overlay edits).
 
-## Out of scope (explicit)
+## Poly: single image, two scripts (rev 4)
 
-- **Poly's split into two migrator images** — task.0372. The Postgres half will adopt the exact pattern in this PR; the Doltgres half either ports the dolt_commit stamp into a second `migrate-doltgres.mjs` or keeps the legacy FROM-base stage as `poly-doltgres-migrator`.
+Rev 3 scoped poly out. Rev 4 folds it in because "both" was wrong scope — the universal pattern demands all three nodes adopt it, not two.
+
+Poly's constraint: its migrator image is shared between `migrate-node-app` Job (Postgres) and `migrate-poly-doltgres` Job (Doltgres with a trailing `dolt_commit` stamp). Rev-3 thinking was a dual-target CI surface split (~10 files of `lib/image-tags.sh` + `build-and-push-images.sh` + promote-chain plumbing). Rev 4 uses a much smaller surface:
+
+- **One poly migrator image**, `FROM runner AS migrator`, carrying both `migrate.mjs` (Postgres, default CMD) and `migrate-doltgres.mjs` (Doltgres, reached via Job `command:` override in `infra/k8s/base/poly-doltgres/doltgres-migration-job.yaml`).
+- Both scripts use `drizzle-orm/postgres-js/migrator` — identical code path. `migrate-doltgres.mjs` adds a single trailing `SELECT dolt_commit('-Am', 'migration: drizzle-orm batch')` to stamp DDL into `dolt_log` (same behavior as today's `pnpm db:migrate:poly:doltgres:container` trailing-commit step).
+- Doltgres compatibility: the programmatic migrator is the *same* function drizzle-kit calls internally. Existing production Doltgres migrations (via drizzle-kit CLI) already exercise this path. The only new thing in this PR is invoking it directly instead of via the CLI wrapper.
+- Zero new CI targets, zero `lib/image-tags.sh` edits, zero overlay edits.
+
+## Runtime image bloat — bug.0369 (separate)
+
+`docker history mig-operator` reveals the runtime image is ~920 MB with ~285 MB (31%) being `@openai/codex` SDK + platform-binary workaround (bug.0224). The codex weight is pre-existing, not introduced by task.0370. Layer-share still works: migrator adds ~2 MB on top of runner, k3s pulls the shared layers once. But the runner's own first-pull cost remains ~920 MB per node per promote, which is still a lot. File `bug.0369.runtime-image-codex-bloat` as follow-up — out of scope here.
 - Atlas / declarative schema / CI-gated migrations — the endgame per /review feedback. Tracked in task.0325. Not blocked by or touched by this task.
 - Credential narrowing to `app_migrator` role — proj.database-ops P1 credential convergence. Unaffected.
 - Destructive-SQL CI lint for FORWARD_COMPAT_MIGRATIONS — follow-up task.0371. Good hygiene; not load-bearing on this task's correctness.
