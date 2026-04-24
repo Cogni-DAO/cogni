@@ -7,7 +7,7 @@ priority: 0
 rank: 1
 estimate: 3
 created: 2026-04-23
-updated: 2026-04-23
+updated: 2026-04-24
 summary: "Stitch the disjoint poly pieces (sign-on, Privy wallet provisioning via task.0318, funding, Enable Trading approvals via task.0355, target selection via /research) into one continuous, scrappy end-to-end onboarding flow that an external aspiring user can walk through without Derek on the call. No new capabilities — only flow, routing, copy, empty states, and missing glue UI. Poly-specific; do NOT extract reusable primitives for other nodes yet (Node #2 consumer does not exist)."
 outcome: "One real non-Derek user — the aspiring poly user Derek has lined up — completes the full flow unaided: signs in, provisions a Privy trading wallet, funds it with USDC.e + POL, enables trading (token approvals), selects at least one target wallet to copy-trade, and sees their first mirrored fill appear in their dashboard. Observed by Derek (concierge) for the first run, confirmed in Loki at the deployed candidate-a SHA. This is the project's MVP validation gate — the first time anything Cogni has built is used end-to-end by someone other than Derek."
 spec_refs:
@@ -50,27 +50,33 @@ Every individual piece works. None of them point to the next one.
 
 ## Scope
 
+> **Superseded by `## Design` below.** The original scope (a dedicated `/onboarding` route with 5 wizard-style steps, auto-advance polling, QR codes, and post-sign-on redirect middleware) was rejected during design in favor of in-place progressive disclosure on `/credits` + `/dashboard`. The original text is retained below for historical context — do NOT use it as a build spec. Read `## Design`.
+
+<details>
+<summary>Original (rejected) scope — historical</summary>
+
 **In (poly-specific, not reusable):**
 
-- **Single `/onboarding` entry point** (Next.js route in `apps/operator/app/onboarding/` or wherever fits existing route structure): one page that renders the current step based on wallet state, with clear copy, a single CTA per step, and next/prev forward-only progression. No wizard framework — one component with 5 conditional blocks is fine.
-- **Step state derived from real wallet state**, not a separate onboarding-progress table. Use existing `poly.wallet.status.v1` signal + `TradingApprovalsState` + tracked-wallet count to compute current step. No new DB tables.
-- **Funding step copy + checklist.** Clear instructions: "Send USDC.e to `0x…` on Polygon. You also need ~0.2 POL for gas. Here's a Bridge link ([Polygon Portal](https://portal.polygon.technology/bridge)). We'll detect the funds and advance automatically." Include pasteable address + QR code. Poll wallet balance every 10s; auto-advance when USDC.e > $1 and POL > 0.1.
+- **Single `/onboarding` entry point** — one page rendering current step based on wallet state, 5 conditional blocks.
+- **Step state derived from real wallet state**, not a separate onboarding-progress table.
+- **Funding step copy + checklist** with Bridge link, pasteable address + QR code, 10s poll, auto-advance on balance threshold.
 - **Enable Trading step** reuses task.0355 1-click modal verbatim.
-- **Target selection step** is a thin wrapper around existing `/research` wallet browse: user picks ≥1 wallet, clicks "Copy these wallets", we register copy-trade targets, advance.
-- **Confirmation step**: "You're live. Watch for your first fill on the [Dashboard](/dashboard)." Link directly to dashboard.
-- **Dashboard empty state** update: when user has copy-targets but zero fills yet, show "Waiting for your first mirrored fill. Targets: [list]. This can take minutes to hours depending on target activity." — so the user isn't staring at a blank page.
-- **Post-sign-on routing**: if user has no wallet connected, redirect to `/onboarding`. If wallet exists but not all steps complete, deep-link to the right step.
-- **One-line copy/content pass** across all 5 steps so it reads as one voice, not disjoint page titles. Derek can sharpen the copy; this task's author should write a first pass.
+- **Target selection step** — thin wrapper around existing `/research` wallet browse.
+- **Confirmation step** + dashboard "waiting for first fill" empty state.
+- **Post-sign-on routing** — redirect to `/onboarding` when wallet missing.
+- **One-line copy/content pass** across all 5 steps.
 
-**Explicitly OUT of scope:**
+**Explicitly OUT of scope** (still holds under the new design):
 
-- Reusable onboarding components for other nodes (resy, ai-only canary). Wait for Node #2 consumer to exist (per `proj.ci-cd-reusable` Paused gate applied generally).
-- Any polish beyond "a non-technical user can finish without assistance."
-- Tracking/analytics instrumentation (deferred to post-first-user).
-- Multi-user onboarding concurrency concerns.
-- Password reset / account recovery / edge cases.
-- New capabilities — if something doesn't work today, file a separate bug, don't fix it in this task.
-- Funding UX that actually does the bridge (just pointer + polling is enough for v0).
+- Reusable onboarding components for other nodes.
+- Polish beyond "non-technical user can finish without assistance."
+- Analytics instrumentation.
+- Multi-user onboarding concurrency.
+- Password reset / account recovery.
+- New capabilities (new API routes, port methods, DB columns).
+- Funding UX that actually does the bridge.
+
+</details>
 
 ## Validation
 
@@ -108,16 +114,17 @@ Concretely:
 
 3. **Tighten funding copy on `TradingWalletPanel`.** After connect, the USDC.e/POL balance row gets a one-line sub-caption with two external links: "Send USDC.e on Polygon (any wallet or [Polygon Portal bridge](https://portal.polygon.technology/bridge)). Needs ~0.2 POL for gas." Polls already in place (20s `refetchInterval`). No new API, no auto-advance logic — the CTAs on the page already gate correctly (Enable Trading needs POL ≥ 0.1; trade execution needs USDC.e; both enforced by existing components).
 
-4. **Dashboard = hub.** Add a single `OnboardingHint` strip at the top of `DashboardView` that renders conditionally on the same `poly-wallet-status` + `poly-wallet-balances` + `dashboard-copy-targets` React Queries already in flight:
-   - no wallet → "Set up your trading wallet →" → `/credits`
-   - wallet but `!trading_ready` → "Enable trading →" → `/credits`
-   - trading-ready but 0 copy-targets → "Pick a wallet to copy →" → `/research`
-   - copy-targets but 0 fills → "Waiting on your first mirrored fill from [targets]…" (no link, informational)
-   - otherwise: hide. One component, five branches, ~60 LOC. Sits above `TradingWalletCard` so it's the first thing a first-time user sees.
+4. **Dashboard = hub, via extending existing cards (no new components).** The dashboard already has two cards that cover the user's wallet + copy-trade state; extend them instead of stacking a separate hint strip above them:
+   - `TradingWalletCard` (`dashboard/_components/TradingWalletCard.tsx`) already renders "No trading wallet connected yet → [Connect →]" → `/credits` when `!connected`. Add one branch: when `connected && !trading_ready`, render "Trading not enabled → [Enable trading →]" → `/credits`. Same card, same visual slot, one extra conditional.
+   - `CopyTradedWalletsCard` already renders on the dashboard. Add two empty-state branches driven off existing `dashboard-copy-targets` query: `trading_ready && 0 targets` → "Pick a wallet to copy →" linking to `/research`; `targets > 0 && 0 fills` → "Waiting for your first mirrored fill. Targets: […]" (no link, informational). Verify the card's current empty state during implement; replace or add, don't duplicate.
 
-5. **No post-sign-on redirect.** Users land on `/dashboard` as today; the hint strip pulls them to the right page. Simpler than routing middleware; keeps the dashboard as the "home" affordance.
+5. **No separate `OnboardingHint` component.** Considered during design; rejected — it would stack a second "Connect →" CTA directly above `TradingWalletCard`'s existing one. Extending the two cards that already own those states is strictly fewer moving parts.
 
-6. **No new `/onboarding` route, no wizard component, no onboarding-progress table, no poll-and-advance state machine.** Wallet state already IS the onboarding state; the UI just reads it.
+6. **No post-sign-on redirect.** Users land on `/dashboard` as today; the extended cards pull them to the right page. Simpler than routing middleware; keeps the dashboard as the "home" affordance.
+
+7. **`/research` target-selection path verified.** Each wallet row has a dedicated `+` (follow) control that registers a copy-trade target; the row body opens a research drawer for that wallet. No wrapper UI needed — the link target from `CopyTradedWalletsCard`'s empty state takes the user to a page where the primary action is one click on a `+`. No change to `/research` in this task.
+
+8. **No new `/onboarding` route, no wizard component, no onboarding-progress table, no poll-and-advance state machine.** Wallet state already IS the onboarding state; the UI just reads it.
 
 **Reuses**:
 
@@ -130,9 +137,10 @@ Concretely:
 **Rejected**:
 
 - **Dedicated `/onboarding` route with 5-step conditional render (the task's original scope).** Duplicates state the Money page already computes; adds a route and component shell for zero user-visible value. The whole point of MVP-scrappy is not building a second surface.
-- **Wizard framework (e.g. `react-stepper`).** Two steps (create, enable) plus informational fund-waiting state. Not five. Not a wizard.
+- **Wizard framework (e.g. `react-stepper`).** Two interactive steps (create, enable) plus informational fund-waiting state. Not five. Not a wizard.
 - **New `poly_onboarding_progress` table + server state machine.** Wallet state already answers "what step are you on?" via `status.v1` + `balances.v1` + copy-targets count. Adding a table re-derives state that already exists in the DB.
-- **Post-sign-on redirect middleware** (`/dashboard` → `/credits` when no wallet). Pulls users away from the hub before they see the rest of the product; makes /dashboard feel gated. The hint strip is the softer, more legible nudge.
+- **Post-sign-on redirect middleware** (`/dashboard` → `/credits` when no wallet). Pulls users away from the hub before they see the rest of the product; makes /dashboard feel gated. The extended cards are the softer, more legible nudge.
+- **Dedicated `OnboardingHint` dashboard strip.** Would stack a second "Connect →" CTA above `TradingWalletCard`'s existing one and a second "Waiting for fills…" line above `CopyTradedWalletsCard`'s empty state. Extending those two cards in place is strictly fewer components and avoids on-screen duplication.
 - **Reusable `<OnboardingChecklist />` primitive for other nodes.** Explicitly out of scope (Node #2 consumer does not exist; per project charter).
 
 ### Invariants
@@ -152,14 +160,13 @@ Concretely:
 
 - **Create**: `nodes/poly/app/src/app/(app)/credits/TradingWalletConnectFlow.tsx` — moved from `profile/view.tsx`; exports `TradingWalletConnectFlow` and its internal `GrantCapSlider`. ~130 LOC relocation, no logic change.
 - **Modify**: `nodes/poly/app/src/app/(app)/credits/TradingWalletPanel.tsx` — replace the `!connected` branch (currently a link to `/profile`) with an inline render of `TradingWalletConnectFlow`; on `onConnected`, invalidate `poly-wallet-status` so the panel flips to the balances/enable-trading view without a reload. Add funding sub-caption with Bridge + USDC.e links beneath the balance grid.
-- **Modify**: `nodes/poly/app/src/app/(app)/profile/view.tsx` — delete `TradingWalletConnectFlow`, `GrantCapSlider`, the Polymarket Trading Wallet `SettingRow`, and all related `tradingWallet*` state + fetch. Profile drops to identity + OAuth + AI providers + ownership.
-- **Create**: `nodes/poly/app/src/app/(app)/dashboard/_components/OnboardingHint.tsx` — single 5-branch strip reading wallet status + balances + copy-target count; renders one CTA or hides. ~60 LOC.
-- **Modify**: `nodes/poly/app/src/app/(app)/dashboard/view.tsx` — mount `<OnboardingHint />` at the top of the flex column, above `TradingWalletCard`.
-- **Modify**: `nodes/poly/app/src/app/(app)/dashboard/_components/CopyTradedWalletsCard.tsx` — if already has a "no copy-trades yet" empty state, tighten copy to "Waiting for your first mirrored fill. Targets: […]"; if not, add one. (Verify during implement — don't add duplicate state.)
+- **Modify**: `nodes/poly/app/src/app/(app)/profile/view.tsx` — delete `TradingWalletConnectFlow`, `GrantCapSlider`, the Polymarket Trading Wallet `SettingRow`, and all related `tradingWallet*` state + fetch. Profile drops to identity + OAuth + AI providers + ownership. Pre-delete: `grep -r` for component/stack tests asserting on the trading-wallet row in profile and update/remove.
+- **Modify**: `nodes/poly/app/src/app/(app)/dashboard/_components/TradingWalletCard.tsx` — add a `connected && !trading_ready` branch alongside the existing `!connected` branch. Text: "Trading not enabled"; CTA: "Enable trading →" linking to `/credits`. Reuses the same layout/classes as the existing `!connected` branch. Reads `trading_ready` off the existing `fetchTradingWallet` response (if not already exposed there, off `poly-wallet-status` query — check first).
+- **Modify**: `nodes/poly/app/src/app/(app)/dashboard/_components/CopyTradedWalletsCard.tsx` — extend the empty/zero-state branches: `trading_ready && 0 targets` → "Pick a wallet to copy →" linking to `/research`; `targets > 0 && 0 fills` → "Waiting for your first mirrored fill. Targets: […]" (informational, no link). Read wallet readiness off the existing `poly-wallet-status` query. Verify current empty state during implement — replace, don't duplicate.
 - **Test**: `nodes/poly/app/src/app/(app)/credits/TradingWalletPanel.test.tsx` (component) — disconnected state renders the connect flow inline; after mocked `onConnected`, balances branch renders. Keep small; this is a smoke test, not a re-test of the moved component.
-- **Test**: `nodes/poly/app/src/app/(app)/dashboard/_components/OnboardingHint.test.tsx` — five-state snapshot: no-wallet / not-trading-ready / no-targets / awaiting-first-fill / hidden.
+- **Test**: `nodes/poly/app/src/app/(app)/dashboard/_components/TradingWalletCard.test.tsx` — three-state render check: `!connected`, `connected && !trading_ready`, `connected && trading_ready`. Only the CTA label / link target needs assertion.
 
-Out-of-scope deletions (file on sight, don't fix here): funding auto-advance polling, bridge-UX inside app, target-selection wrapper on `/research` (the existing clickable rows on `/research` are good enough for v0 — user picks a wallet row, that adds a copy-target, they come back to `/dashboard`).
+Out-of-scope deletions (file on sight, don't fix here): funding auto-advance polling, bridge-UX inside app, target-selection wrapper on `/research` (the existing `+ (follow)` control on each row is the one-click register; no wrapper needed).
 
 ## Worktree
 
