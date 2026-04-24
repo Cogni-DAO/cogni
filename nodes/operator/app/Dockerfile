@@ -115,7 +115,9 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
 CMD ["node", "nodes/operator/app/server.js"]
 
 # Migrator — rebased on runner so it shares layers with the runtime image. task.0370.
+# migrate.mjs + migrations live inside the standalone app dir so Node resolves
+# drizzle-orm from standalone's own node_modules.
 FROM runner AS migrator
-COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/src/adapters/server/db/migrations /app/migrations
-COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/src/adapters/server/db/migrate.mjs /app/migrate.mjs
-CMD ["node", "/app/migrate.mjs", "/app/migrations"]
+COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/src/adapters/server/db/migrations /app/nodes/operator/app/migrations
+COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/src/adapters/server/db/migrate.mjs /app/nodes/operator/app/migrate.mjs
+CMD ["node", "/app/nodes/operator/app/migrate.mjs", "/app/nodes/operator/app/migrations"]
