@@ -120,7 +120,7 @@ export function OnboardingProgress(): ReactElement | null {
 
   return (
     <nav aria-label="Onboarding progress" className="mb-5 overflow-x-auto pb-1">
-      <ol className="flex min-w-full items-center gap-3 whitespace-nowrap font-mono text-[11px] uppercase tracking-[0.18em] sm:gap-4">
+      <ol className="flex min-w-full items-center gap-3 whitespace-nowrap font-mono text-xs uppercase tracking-widest sm:gap-4">
         {steps.map((step, idx) => (
           <li key={step.label} className="flex items-center gap-3 sm:gap-4">
             <StepDot status={step.status} index={idx + 1} />
@@ -175,7 +175,7 @@ function StepDot({
       <span
         role="img"
         aria-label={`Step ${index} in progress`}
-        className="relative inline-flex size-5 items-center justify-center rounded-full border border-foreground font-semibold text-[10px]"
+        className="relative inline-flex size-5 items-center justify-center rounded-full border border-foreground font-semibold text-xs"
       >
         {index}
         <span className="-inset-0.5 absolute animate-ping rounded-full border border-foreground/30" />
@@ -186,7 +186,7 @@ function StepDot({
     <span
       role="img"
       aria-label={`Step ${index} not started`}
-      className="inline-flex size-5 items-center justify-center rounded-full border border-muted-foreground/30 text-[10px] text-muted-foreground/60"
+      className="inline-flex size-5 items-center justify-center rounded-full border border-muted-foreground/30 text-muted-foreground/60 text-xs"
     >
       {index}
     </span>

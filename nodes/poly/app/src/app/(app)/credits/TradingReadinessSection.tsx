@@ -104,7 +104,7 @@ export function TradingReadinessSection(
       className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4"
     >
       <div className="flex flex-col gap-1">
-        <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-[0.22em]">
+        <span className="font-mono text-muted-foreground text-xs uppercase tracking-widest">
           Step — Authorize
         </span>
         <h3 className="font-semibold text-base leading-tight">
@@ -176,7 +176,7 @@ function TradingReadyCheckpoint({
           <span className="font-semibold text-sm text-success">
             Trading enabled
           </span>
-          <span className="font-mono text-[11px] text-success/80 tabular-nums">
+          <span className="font-mono text-success/80 text-xs tabular-nums">
             {signedCount}/{totalSteps} approvals signed · Polymarket ready
           </span>
         </div>
@@ -185,7 +185,7 @@ function TradingReadyCheckpoint({
             type="button"
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
-            className="inline-flex items-center gap-1 rounded-md border border-success/30 bg-background/40 px-2 py-1 font-mono text-[10px] text-success uppercase tracking-wider transition-colors hover:border-success/60"
+            className="inline-flex items-center gap-1 rounded-md border border-success/30 bg-background/40 px-2 py-1 font-mono text-success text-xs uppercase tracking-wider transition-colors hover:border-success/60"
           >
             {open ? "Hide" : "Approvals"}
             <ChevronDown
@@ -237,7 +237,7 @@ function StepRows({
               href={`https://polygonscan.com/tx/${step.tx_hash}`}
               target="_blank"
               rel="noreferrer noopener"
-              className="truncate font-mono text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              className="truncate font-mono text-muted-foreground text-xs underline-offset-2 hover:text-foreground hover:underline"
             >
               {step.tx_hash.slice(0, 10)}…
             </a>

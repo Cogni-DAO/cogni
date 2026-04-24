@@ -117,7 +117,7 @@ export function TradingWalletPanel(): ReactElement {
   return (
     <Card className="flex flex-col gap-5 p-5 md:p-6">
       <header className="flex flex-wrap items-center justify-between gap-2 border-border/60 border-b pb-3">
-        <span className="font-mono text-[11px] text-muted-foreground uppercase tracking-[0.22em]">
+        <span className="font-mono text-muted-foreground text-xs uppercase tracking-widest">
           Trading wallet
         </span>
         <StatusBadge status={status} />
@@ -163,20 +163,20 @@ function StatusBadge({
   if (!status?.configured) return null;
   if (!status.connected) {
     return (
-      <span className="rounded-full border border-border px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
+      <span className="rounded-full border border-border px-2.5 py-0.5 font-mono text-muted-foreground text-xs uppercase tracking-wider">
         Not created
       </span>
     );
   }
   if (!status.trading_ready) {
     return (
-      <span className="rounded-full border border-primary/40 bg-primary/10 px-2.5 py-0.5 font-mono text-[10px] text-primary uppercase tracking-wider">
+      <span className="rounded-full border border-primary/40 bg-primary/10 px-2.5 py-0.5 font-mono text-primary text-xs uppercase tracking-wider">
         Setup in progress
       </span>
     );
   }
   return (
-    <span className="rounded-full border border-success/40 bg-success/10 px-2.5 py-0.5 font-mono text-[10px] text-success uppercase tracking-wider">
+    <span className="rounded-full border border-success/40 bg-success/10 px-2.5 py-0.5 font-mono text-success text-xs uppercase tracking-wider">
       Live
     </span>
   );
@@ -233,10 +233,10 @@ function DepositHero({ address }: { address: string }): ReactElement {
   return (
     <section
       aria-label="Deposit address"
-      className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-gradient-to-br from-primary/[0.06] via-transparent to-transparent p-4"
+      className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-gradient-to-br from-primary/5 via-transparent to-transparent p-4"
     >
       <div className="flex flex-col gap-1">
-        <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-[0.22em]">
+        <span className="font-mono text-muted-foreground text-xs uppercase tracking-widest">
           Step — Deposit
         </span>
         <h3 className="font-semibold text-base leading-tight sm:text-lg">
@@ -250,14 +250,14 @@ function DepositHero({ address }: { address: string }): ReactElement {
 
       <div className="flex flex-col gap-2 rounded-md border border-border/80 bg-background/60 p-3">
         <div className="flex items-center justify-between gap-2">
-          <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
+          <span className="font-mono text-muted-foreground text-xs uppercase tracking-wider">
             Your trading-wallet address
           </span>
           <a
             href={`https://polygonscan.com/address/${address}`}
             target="_blank"
             rel="noreferrer noopener"
-            className="inline-flex items-center gap-1 font-mono text-[10px] text-muted-foreground uppercase tracking-wider hover:text-foreground"
+            className="inline-flex items-center gap-1 font-mono text-muted-foreground text-xs uppercase tracking-wider hover:text-foreground"
           >
             Polygonscan
             <ExternalLink size={10} />
@@ -265,7 +265,7 @@ function DepositHero({ address }: { address: string }): ReactElement {
         </div>
         <div className="flex items-center gap-2">
           <code
-            className="flex-1 break-all font-mono text-[13px] text-foreground leading-snug sm:text-sm"
+            className="flex-1 break-all font-mono text-foreground text-sm leading-snug sm:text-sm"
             data-testid="deposit-address"
           >
             {address}
@@ -311,7 +311,7 @@ function BalanceLine({
   return (
     <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-sm tabular-nums">
       <span className="inline-flex items-baseline gap-1.5">
-        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+        <span className="text-muted-foreground text-xs uppercase tracking-wider">
           USDC.e
         </span>
         <span
@@ -328,7 +328,7 @@ function BalanceLine({
         ·
       </span>
       <span className="inline-flex items-baseline gap-1.5">
-        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+        <span className="text-muted-foreground text-xs uppercase tracking-wider">
           POL
         </span>
         <span className="text-foreground">{formatDecimal(pol, 4)}</span>
@@ -336,8 +336,8 @@ function BalanceLine({
           <span
             className={
               gasOk
-                ? "text-[10px] text-success uppercase tracking-wider"
-                : "text-[10px] text-warning uppercase tracking-wider"
+                ? "text-success text-xs uppercase tracking-wider"
+                : "text-warning text-xs uppercase tracking-wider"
             }
           >
             {gasOk ? "· gas ok" : "· low gas"}
@@ -350,7 +350,7 @@ function BalanceLine({
 
 function NextStepNudge(): ReactElement {
   return (
-    <div className="rounded-md border border-border/80 border-dashed bg-muted/30 px-3 py-2 text-muted-foreground text-xs leading-snug">
+    <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-muted-foreground text-xs leading-snug">
       Once USDC.e lands and trading is enabled, you'll pick a wallet to mirror
       on <span className="font-medium text-foreground">/research</span>.
     </div>

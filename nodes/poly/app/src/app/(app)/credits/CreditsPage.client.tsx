@@ -77,7 +77,7 @@ export function CreditsPageClient(): ReactElement {
 
       {/* Two columns only at lg+ — wallet first so the deposit hero is the
           page's anchor point on desktop too. */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className={cn(narrowTab === "wallet" ? "" : "hidden lg:block")}>
           <TradingWalletPanel />
         </div>
