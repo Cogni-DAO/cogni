@@ -49,7 +49,13 @@
 #                       Empty → fall back to full catalog. Apps not promoted
 #                       in this run may legitimately be pinned at prior digest
 #                       (e.g. sandbox-openclaw placeholder) and would false-fail.
-#   ARGOCD_TIMEOUT      (optional, default 300) per-app timeout in seconds
+#   ARGOCD_TIMEOUT      (optional, default 600) per-app timeout in seconds.
+#                       600s covers poly's two serial pre-sync migration hooks
+#                       (poly-migrate-node-app + poly-migrate-poly-doltgres) +
+#                       rolling-update drain — observed 300s ceiling breach on
+#                       PR #1012 flight (run 24873868016). kubectl rollout
+#                       status exits on completion, so the extra budget is pure
+#                       headroom — fast rollouts still exit in <60s.
 #   ACTIVE_SYNC_AFTER   (optional, default 30) seconds before the first Argo kick
 #   SYNC_KICK_INTERVAL  (optional, default 45) seconds between subsequent kicks
 #                       while revision still mismatches (hard refresh + sync op)
@@ -65,7 +71,7 @@ VM_HOST="${VM_HOST:?VM_HOST is required}"
 DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT:?DEPLOY_ENVIRONMENT is required}"
 EXPECTED_SHA="${EXPECTED_SHA:?EXPECTED_SHA is required (deploy-branch tip SHA)}"
 SSH_OPTS="${SSH_OPTS:--i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6}"
-ARGOCD_TIMEOUT="${ARGOCD_TIMEOUT:-300}"
+ARGOCD_TIMEOUT="${ARGOCD_TIMEOUT:-600}"
 ACTIVE_SYNC_AFTER="${ACTIVE_SYNC_AFTER:-30}"
 SYNC_KICK_INTERVAL="${SYNC_KICK_INTERVAL:-45}"
 PROMOTED_APPS="${PROMOTED_APPS:-}"
