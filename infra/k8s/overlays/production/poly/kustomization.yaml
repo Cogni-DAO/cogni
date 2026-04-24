@@ -84,9 +84,6 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
         value: "poly-node-app-secrets"
-      - op: add
-        path: /spec/template/spec/containers/0/command
-        value: ["sh", "-c", "echo 'poly: no dedicated migrate image yet (task.0260)' && exit 0"]
 
   # bug.0295: VM discovery via DNS (production.vm.cognidao.org).
   # Convert base headless Services → ExternalName; delete EndpointSlices.
