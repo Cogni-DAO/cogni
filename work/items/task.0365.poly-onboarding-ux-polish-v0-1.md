@@ -2,7 +2,7 @@
 id: task.0365
 type: task
 title: "Poly onboarding UX polish (v0.1) — Money page layout, funding tip, approval-state design"
-status: done
+status: needs_merge
 priority: 1
 rank: 2
 estimate: 3
