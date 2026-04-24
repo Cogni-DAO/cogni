@@ -17,8 +17,15 @@
 #      GitHub Actions bot so `git log --author='github-actions\[bot\]' --
 #      infra/k8s/overlays/` is a single consistent audit filter.
 #   3. git.commit-message-template — stable `chore(deps): argocd-image-updater`
-#      prefix so `git log --grep='argocd-image-updater'` is the narrower audit
-#      filter specifically for controller-authored commits.
+#      prefix (load-bearing: `flight-preview.yml` skips its flight job when the
+#      head-commit message starts with this exact prefix — see `COMMIT_PROVENANCE_
+#      VIA_MESSAGE_PREFIX` in bug.0344 — and `git log --grep='argocd-image-
+#      updater'` is the controller-audit filter). Subject is fixed-length
+#      (≤72 chars, commitlint-compliant); per-image {old -> new} detail lives in
+#      the body so `git log --oneline` stays readable even at ~4 commits/merge.
+#      DO NOT inline `{{ .Image }}` or the digest tags into the subject line —
+#      preview tags are `preview-<40-char-sha>-<node>` and two of them plus the
+#      prefix push header-length past 180 chars (the pre-fix shape).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -48,9 +55,10 @@ data:
   git.user: github-actions[bot]
   git.email: github-actions[bot]@users.noreply.github.com
   git.commit-message-template: |
-    chore(deps): argocd-image-updater update {{ range .AppChanges -}}
-    - {{ .Image }}: {{ .OldTag }} -> {{ .NewTag }}
-    {{ end }}
+    chore(deps): argocd-image-updater bump preview digest
 
+    {{ range .AppChanges -}}
+    - {{ .Image }}: {{ .OldTag }} -> {{ .NewTag }}
+    {{ end -}}
     Automated digest refresh by argocd-image-updater (bug.0344).
     See docs/runbooks/image-updater-bootstrap.md for rollback.
