@@ -2,7 +2,7 @@
 id: task.0361
 type: task
 title: "Poly — first-user onboarding flow v0 (sign-on → provision → fund → select targets)"
-status: needs_implement
+status: needs_closeout
 priority: 0
 rank: 1
 estimate: 3
@@ -167,6 +167,33 @@ Concretely:
 - **Test**: `nodes/poly/app/src/app/(app)/dashboard/_components/TradingWalletCard.test.tsx` — three-state render check: `!connected`, `connected && !trading_ready`, `connected && trading_ready`. Only the CTA label / link target needs assertion.
 
 Out-of-scope deletions (file on sight, don't fix here): funding auto-advance polling, bridge-UX inside app, target-selection wrapper on `/research` (the existing `+ (follow)` control on each row is the one-click register; no wrapper needed).
+
+## Plan
+
+- [ ] **Checkpoint 1 — Wallet creation on /credits, /profile slimmed**
+  - Milestone: user can create a trading wallet from `/credits` without bouncing to `/profile`; `/profile` no longer owns wallet lifecycle.
+  - Invariants: NO_URL_RENAME, ENABLE_TRADING_VISIBLE, PROFILE_IS_IDENTITY_ONLY, NO_NEW_CAPABILITIES.
+  - Todos:
+    - [ ] Create `nodes/poly/app/src/app/(app)/credits/TradingWalletConnectFlow.tsx` (moved from `profile/view.tsx`).
+    - [ ] Modify `nodes/poly/app/src/app/(app)/credits/TradingWalletPanel.tsx` — replace `!connected` "go to Profile" branch with inline render of the moved component; invalidate `poly-wallet-status` on success; add funding sub-caption with Polygon bridge link.
+    - [ ] Modify `nodes/poly/app/src/app/(app)/profile/view.tsx` — delete the Polymarket Trading Wallet `SettingRow`, the `TradingWalletConnectFlow` + `GrantCapSlider` functions, and all `tradingWallet*` state + fetch.
+  - Validation: `pnpm check:fast`; manual smoke optional in dev.
+
+- [ ] **Checkpoint 2 — Dashboard nudges**
+  - Milestone: dashboard guides first-time users toward `/credits` (enable trading) and `/research` (pick targets) via in-place card extensions.
+  - Invariants: STATE_DRIVEN_UI, SIMPLE_SOLUTION.
+  - Todos:
+    - [ ] Modify `nodes/poly/app/src/app/(app)/dashboard/_components/TradingWalletCard.tsx` — add `connected && !trading_ready` branch, CTA "Enable trading →" to `/credits`.
+    - [ ] Widen `nodes/poly/app/src/app/(app)/_components/wallets-table/WalletsTable.tsx` `emptyMessage` prop to `ReactNode`.
+    - [ ] Modify `nodes/poly/app/src/app/(app)/dashboard/_components/CopyTradedWalletsCard.tsx` — empty-state message becomes a real clickable link to `/research` ("Pick a wallet to copy — browse top traders →").
+  - Validation: component tests below + `pnpm check:fast`.
+
+- [ ] **Checkpoint 3 — Tests + finalize**
+  - Milestone: guard-rail tests for the two extended cards; `pnpm check` green; status flipped to `needs_closeout`.
+  - Todos:
+    - [ ] Add `nodes/poly/app/src/app/(app)/credits/TradingWalletPanel.test.tsx` (disconnected renders connect flow inline; connected + trading_ready renders readiness branch).
+    - [ ] Add `nodes/poly/app/src/app/(app)/dashboard/_components/TradingWalletCard.test.tsx` (three CTA-state render check).
+    - [ ] `pnpm check`; flip frontmatter `status: needs_closeout`, bump `updated`, push.
 
 ## Worktree
 

@@ -23,6 +23,7 @@
 import type {
   PolyWalletOverviewInterval,
   PolyWalletOverviewOutput,
+  PolyWalletStatusOutput,
 } from "@cogni/node-contracts";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
@@ -55,6 +56,16 @@ function formatUsd(n: number | null): string {
   })}`;
 }
 
+async function fetchWalletStatus(): Promise<PolyWalletStatusOutput> {
+  const res = await fetch("/api/v1/poly/wallet/status", {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new Error(`wallet status failed: ${res.status}`);
+  }
+  return (await res.json()) as PolyWalletStatusOutput;
+}
+
 export function TradingWalletCard(): ReactElement {
   const [interval, setInterval] = useState<PolyWalletOverviewInterval>("ALL");
   const { data, isLoading, isError } = useQuery({
@@ -64,6 +75,16 @@ export function TradingWalletCard(): ReactElement {
     staleTime: 10_000,
     gcTime: 60_000,
     retry: 1,
+  });
+  // Shares the "poly-wallet-status" key with /credits, so navigating between
+  // pages hits the cache rather than refetching.
+  const { data: statusData } = useQuery({
+    queryKey: ["poly-wallet-status"],
+    queryFn: fetchWalletStatus,
+    staleTime: 10_000,
+    gcTime: 60_000,
+    retry: 1,
+    enabled: data?.connected === true,
   });
 
   const lowGas = data?.connected === true && (data.pol_gas ?? 0) <= 0.1;
@@ -140,6 +161,18 @@ export function TradingWalletCard(): ReactElement {
               className="rounded-md border border-border/60 bg-muted/40 px-3 py-1 font-medium hover:bg-muted"
             >
               Connect →
+            </Link>
+          </div>
+        ) : statusData && statusData.connected && !statusData.trading_ready ? (
+          <div className="flex items-center justify-between gap-3 py-2 text-sm">
+            <p className="text-muted-foreground">
+              Trading not enabled — finish approvals to copy-trade.
+            </p>
+            <Link
+              href="/credits"
+              className="rounded-md border border-border/60 bg-muted/40 px-3 py-1 font-medium hover:bg-muted"
+            >
+              Enable trading →
             </Link>
           </div>
         ) : (

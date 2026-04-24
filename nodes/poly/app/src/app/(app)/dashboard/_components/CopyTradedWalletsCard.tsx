@@ -33,6 +33,7 @@
 import type { WalletTopTraderItem } from "@cogni/ai-tools";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Radio } from "lucide-react";
+import Link from "next/link";
 import type { ReactElement } from "react";
 import { useMemo, useState } from "react";
 
@@ -144,7 +145,17 @@ export function CopyTradedWalletsCard(): ReactElement {
           isLoading={targetsLoading}
           onRowClick={(row) => setSelectedAddr(row.proxyWallet.toLowerCase())}
           renderActions={renderActions}
-          emptyMessage="No copy-traded wallets yet. Track some from Research."
+          emptyMessage={
+            <span>
+              No copy-traded wallets yet.{" "}
+              <Link
+                href="/research"
+                className="underline decoration-muted-foreground/50 hover:decoration-foreground"
+              >
+                Pick a wallet to copy — browse top traders →
+              </Link>
+            </span>
+          }
         />
       </CardContent>
 
