@@ -47,7 +47,7 @@ const nextConfig: NextConfig = {
   // stage can `import "drizzle-orm/postgres-js/migrator"` — nft would otherwise
   // prune it because the app itself only imports the driver.
   outputFileTracingIncludes: {
-    "/**": ["**/node_modules/drizzle-orm/postgres-js/migrator.js"],
+    "/**": ["**/node_modules/drizzle-orm/**/*", "**/node_modules/postgres/**/*"],
   },
   // Temporary containment (bug.0157): WalletConnect pulls pino@7 → thread-stream
   // which ships test files requiring 'tape'/'tap'. Stub thread-stream for Turbopack
