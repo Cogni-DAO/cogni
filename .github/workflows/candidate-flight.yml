@@ -47,23 +47,7 @@ env:
   OVERLAY_ENV: candidate-a
 
 jobs:
-  decide:
-    runs-on: ubuntu-latest
-    outputs:
-      targets_json: ${{ steps.read.outputs.targets_json }}
-      apps_csv: ${{ steps.read.outputs.apps_csv }}
-    steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
-      - id: read
-        run: |
-          targets_json=$(yq ea -o=json -I=0 '[.name]' infra/catalog/*.yaml)
-          apps_csv=$(yq -N '.name' infra/catalog/*.yaml | paste -sd, -)
-          echo "targets_json=$targets_json" >> "$GITHUB_OUTPUT"
-          echo "apps_csv=$apps_csv"          >> "$GITHUB_OUTPUT"
-          echo "ℹ️  catalog targets: $apps_csv"
-
   flight:
-    needs: decide
     runs-on: ubuntu-latest
     environment: candidate-a
     outputs:
