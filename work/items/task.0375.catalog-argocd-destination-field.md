@@ -55,8 +55,8 @@ OSS Argo CD already models "where does this app deploy" with `spec.destination.{
 
 ```yaml
 # infra/catalog/operator.yaml
-argocd_destination_server: https://kubernetes.default.svc  # default; in-cluster
-argocd_destination_namespace: operator                      # default: <name>
+argocd_destination_server: https://kubernetes.default.svc # default; in-cluster
+argocd_destination_namespace: operator # default: <name>
 ```
 
 **AppSet change** (one template substitution per env file):
@@ -65,8 +65,8 @@ argocd_destination_namespace: operator                      # default: <name>
 # infra/k8s/argocd/{candidate-a,preview,production}-applicationset.yaml
 spec:
   destination:
-    server: '{{argocd_destination_server}}'
-    namespace: '{{argocd_destination_namespace}}'
+    server: "{{argocd_destination_server}}"
+    namespace: "{{argocd_destination_namespace}}"
 ```
 
 The four existing nodes get the in-cluster defaults — Argo reconciles a no-op (same destination, same digest).
@@ -74,12 +74,14 @@ The four existing nodes get the in-cluster defaults — Argo reconciles a no-op 
 **Verify change** — `scripts/ci/wait-for-argocd.sh`:
 
 Today (excerpt):
+
 ```bash
 ssh -i .local/$ENV-vm-key root@$(cat .local/$ENV-vm-ip) \
   "kubectl rollout status deployment/$app -n $app --timeout=${ARGOCD_TIMEOUT}s"
 ```
 
 After:
+
 ```bash
 argocd app wait "$ENV-$app" \
   --health --sync \
