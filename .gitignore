@@ -117,3 +117,4 @@ services/sandbox-openclaw/gateway-workspace/ideas/work/items/_index.md
 .playwright-cli/
 infra/provision/cherry/base/tfplan
 docs/research/fixtures/market-cache/
+/.local-auth/
