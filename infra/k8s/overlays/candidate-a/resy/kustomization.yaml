@@ -13,7 +13,10 @@ namePrefix: resy-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:1dbad0e5fecc6918d797fa732ec1822c121eede46d1547b5794e80301f5323a9"
+    digest: "sha256:b14b35c4090680401e8a3809a39ee5027f29f1bd912390ae31aedbcdc6470a20"
+  - name: ghcr.io/cogni-dao/cogni-template-migrate
+    newName: ghcr.io/cogni-dao/cogni-template-migrate
+    digest: "sha256:627bcd0df9cc92f33923a5132660596d30245b840667c6a34856f7235c630b92"
 
 patches:
   - target:
@@ -59,12 +62,6 @@ patches:
         path: /spec/template/spec/containers/0/envFrom/1/secretRef/name
         value: "resy-node-app-secrets"
       - op: replace
-        path: /spec/template/spec/initContainers/0/envFrom/1/secretRef/name
-        value: "resy-node-app-secrets"
-      - op: replace
-        path: /spec/template/spec/initContainers/0/envFrom/1/secretRef/name
-        value: "resy-node-app-secrets"
-      - op: replace
         path: /spec/template/spec/containers/0/ports/0/containerPort
         value: 3300
       - op: add
@@ -73,6 +70,13 @@ patches:
       - op: add
         path: /spec/template/metadata/labels/app.kubernetes.io~1instance
         value: "resy"
+  - target:
+      kind: Job
+      name: migrate-node-app
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
+        value: "resy-node-app-secrets"
   # bug.0295: VM discovery via DNS (candidate-a.vm.cognidao.org).
   # Convert base headless Services → ExternalName; delete EndpointSlices.
   - target: { kind: Service, name: postgres-external }
