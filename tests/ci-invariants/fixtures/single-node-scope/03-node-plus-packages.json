@@ -1,0 +1,9 @@
+{
+  "name": "node + infra: poly + packages/",
+  "paths": ["nodes/poly/app/foo.ts", "packages/repo-spec/src/x.ts"],
+  "expected": {
+    "domains": ["operator", "poly"],
+    "pass": false,
+    "lockfileInheritsApplied": false
+  }
+}

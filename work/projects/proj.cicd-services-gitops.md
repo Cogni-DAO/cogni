@@ -108,7 +108,7 @@ Project is complete when one work item achieves `deploy_verified=true` via fully
 | task.0309 | QA agent — reads task, exercises feature, confirms observability     | needs_design | 0        |
 | task.0308 | Deployment observability scorecard (getCandidateHealth, SHA in logs) | needs_design | 1        |
 | task.0297 | Add candidate-flight tool to VCS capability (flightCandidate)        | needs_design | 1        |
-| task.0381 | **Single-node-scope CI gate (P0, node sovereignty)**                 | needs_design | 0        |
+| task.0381 | **Single-node-scope CI gate (P0, node sovereignty)**                 | done         | 0        |
 
 ## Roadmap
 

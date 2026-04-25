@@ -1,0 +1,14 @@
+{
+  "name": "operator-domain only: spans operator/ + packages + .github + docs",
+  "paths": [
+    "nodes/operator/app/src/foo.ts",
+    "packages/repo-spec/src/x.ts",
+    ".github/workflows/ci.yaml",
+    "docs/spec/architecture.md"
+  ],
+  "expected": {
+    "domains": ["operator"],
+    "pass": true,
+    "lockfileInheritsApplied": false
+  }
+}
