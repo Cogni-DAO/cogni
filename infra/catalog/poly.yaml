@@ -10,3 +10,4 @@ migrator_tag_suffix: "-poly-migrate"
 candidate_a_branch: deploy/candidate-a-poly
 preview_branch: deploy/preview-poly
 production_branch: deploy/production-poly
+path_prefix: nodes/poly/

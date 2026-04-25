@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Cogni-DAO/node-template/infra/catalog/_schema.json",
+  "title": "Cogni node/service catalog entry",
+  "description": "task.0374 — single declaration site for nodes and node-shaped services. Consumed by image-tags.sh, detect-affected.sh, ApplicationSet generators, and per-workflow decide jobs. See docs/spec/ci-cd.md axiom 16 (CATALOG_IS_SSOT).",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "name",
+    "type",
+    "port",
+    "dockerfile",
+    "image_tag_suffix",
+    "migrator_tag_suffix",
+    "path_prefix",
+    "candidate_a_branch",
+    "preview_branch",
+    "production_branch"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": { "type": { "const": "node" } },
+        "required": ["type"]
+      },
+      "then": { "required": ["node_id"] }
+    }
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Catalog entry name. Used as image-tag suffix base, Argo Application name suffix, and deploy-branch suffix. Filename must match name.yaml."
+    },
+    "type": {
+      "type": "string",
+      "enum": ["node", "service"],
+      "description": "node = full node app (operator/poly/resy); service = supporting service (scheduler-worker)."
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "node_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "UUID v4 — bound at provision time, persisted in repo-spec lookups."
+    },
+    "dockerfile": {
+      "type": "string",
+      "pattern": "^[a-z0-9._/-]+/Dockerfile$",
+      "description": "Repo-relative path to the build Dockerfile."
+    },
+    "image_tag_suffix": {
+      "type": "string",
+      "pattern": "^(-[a-z0-9-]+)?$",
+      "description": "Tag suffix appended to base tags in GHCR. Empty for the historically-unsuffixed operator target; '-<name>' otherwise."
+    },
+    "migrator_tag_suffix": {
+      "type": "string",
+      "pattern": "^(-[a-z0-9-]+)?$",
+      "description": "Tag suffix for the per-node migrator image alias. Empty if this entry has no migrator."
+    },
+    "path_prefix": {
+      "type": "string",
+      "pattern": "^[a-z0-9._/-]+/$",
+      "description": "task.0374 — repo path prefix that maps changed files to this target. detect-affected.sh uses this to compute the matrix shape. Must end with /."
+    },
+    "candidate_a_branch": {
+      "type": "string",
+      "pattern": "^deploy/candidate-a-[a-z0-9-]+$"
+    },
+    "preview_branch": {
+      "type": "string",
+      "pattern": "^deploy/preview-[a-z0-9-]+$"
+    },
+    "production_branch": {
+      "type": "string",
+      "pattern": "^deploy/production-[a-z0-9-]+$"
+    }
+  }
+}
