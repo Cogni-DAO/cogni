@@ -2,7 +2,7 @@
 id: task.0374
 type: task
 title: "Node base-path resolver — `extractNodePath(spec, nodeId)` accessor + unit tests"
-status: needs_implement
+status: needs_closeout
 priority: 1
 rank: 1
 estimate: 1
@@ -15,7 +15,7 @@ project: proj.vcs-integration
 branch: feat/task-0374-node-base-path-resolver
 pr:
 reviewer:
-revision: 0
+revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-04-25
@@ -50,8 +50,16 @@ Same gate-ladder discipline as task.0368: build the test before the refactor.
 ```ts
 /**
  * Resolve a node UUID to its relative path declared in the operator's nodes[] registry.
+ *
  * Returns null if the registry has no entry for nodeId (caller decides fallback policy).
  * Empty/missing nodes[] → always null.
+ *
+ * Duplicate-tolerance: if multiple entries share the same node_id, the first match wins
+ * (registry uniqueness is not this function's job; tighten via schema refinement upstream).
+ *
+ * Path safety: returns the path string from the registry verbatim — no normalization,
+ * no traversal sanitization. The caller MUST validate before joining to a filesystem
+ * root (e.g., reject paths containing "..", absolute paths, or null bytes).
  */
 export function extractNodePath(spec: RepoSpec, nodeId: string): string | null {
   const entry = (spec.nodes ?? []).find((n) => n.node_id === nodeId);
@@ -67,8 +75,10 @@ That's the whole production change. ~6 lines + the existing `NodeRegistryEntry` 
 2. **Miss** — registry has entries but none match the supplied `nodeId`; returns `null`.
 3. **Empty registry** — `nodes[]` is `[]`; returns `null` for any `nodeId`.
 4. **Missing registry** — `spec.nodes` is undefined (non-operator repo-spec, where the field is optional); returns `null`.
-5. **Operator self-match** — registry includes the operator's own `node_id` with `path: "nodes/operator"`; resolver returns `"nodes/operator"` (does NOT special-case the operator). Caller decides whether to map that to `repoRoot/.cogni` or `nodes/operator/.cogni`.
-6. **Fallback composition** — assert the documented usage pattern `extractNodePath(spec, missingId) ?? "."` evaluates to `"."`. Locks the intended composition without baking the fallback into the function itself.
+5. **Operator self-match** — registry includes the operator's own `node_id` with `path: "nodes/operator"`; resolver returns `"nodes/operator"` (does NOT special-case the operator).
+6. **Empty-string nodeId** — returns `null`. Locks no spurious match against any entry.
+7. **Verbatim path return** — registry path is `"nodes/poly"` (no leading slash, no trailing slash); function returns the exact string with no normalization. Locks that this is a thin lookup, not a path normalizer.
+8. **Duplicate node_id — first match wins** — registry contains two entries with the same `node_id` but different `path` values; function returns the first entry's path. Locks `Array.find` semantics so future schema-uniqueness refinement is an observable change, not a silent one.
 
 ### Boundary placement
 
@@ -97,8 +107,10 @@ Lives in `packages/repo-spec/` (shared package). Per packages-architecture.md:
 <!-- CODE REVIEW CRITERIA -->
 
 - [ ] **PURE_ACCESSOR**: `extractNodePath` performs no I/O, no env reads, no logging. `(RepoSpec, string) → string | null` and nothing else.
-- [ ] **NULL_ON_MISS**: Returns `null` (not `"."`, not `""`, not `undefined`) when no registry entry matches. Locked by test scenarios 2, 3, 4.
+- [ ] **NULL_ON_MISS**: Returns `null` (not `"."`, not `""`, not `undefined`) when no registry entry matches. Locked by scenarios 2, 3, 4, 6.
 - [ ] **NO_OPERATOR_SPECIAL_CASE**: The function does not treat the operator's own `node_id` differently from any other node. If the operator is in the registry with `path: "nodes/operator"`, that's what comes back. Locked by scenario 5.
+- [ ] **VERBATIM_PATH**: No normalization, trimming, or sanitization of the returned path string. Locked by scenario 7. Path-safety is a caller responsibility (see TSDoc).
+- [ ] **FIRST_MATCH_WINS**: On duplicate `node_id` entries, returns the first match (`Array.prototype.find` semantics). Locked by scenario 8.
 - [ ] **REGISTRY_IS_AUTHORITATIVE**: Resolution uses only `spec.nodes[]`. Does not read `spec.node_id` (which identifies _the spec's owner_, not a child).
 - [ ] **SHARED_PACKAGE_HOME**: Lives in `packages/repo-spec/src/accessors.ts` next to `extractNodes`, exported via `packages/repo-spec/src/index.ts` (spec: packages-architecture).
 - [ ] **GATE_BEFORE_CONSUMER**: This PR ships alone — no factory change, no workflow change, no review-handler change. The next task (factory + workflow threading) consumes the function.
@@ -109,13 +121,18 @@ Lives in `packages/repo-spec/` (shared package). Per packages-architecture.md:
 
 - Modify: `packages/repo-spec/src/accessors.ts` — add `extractNodePath` function (~6 lines body + TSDoc).
 - Modify: `packages/repo-spec/src/index.ts` — export `extractNodePath`.
-- Modify: `tests/unit/packages/repo-spec/accessors.test.ts` — add `describe("extractNodePath", …)` block with 6 scenarios (~80 lines).
+- Modify: `tests/unit/packages/repo-spec/accessors.test.ts` — add `describe("extractNodePath", …)` block with 8 scenarios (~100 lines).
 - Modify: none in `nodes/operator/app/`. (No consumer change.)
 - No spec changes. `docs/spec/vcs-integration.md` updates land with the consumer task that actually changes review-handler behavior.
 
 ### Follow-on work
 
 The factory parameterization (`createReviewAdapterDeps` accepts `nodeBasePath`), the `PrReviewWorkflowInput.nodeId` threading through the activity payload, the per-node `review.model` field, and the L4 convention test all land as separate `task.*` items at `needs_design` after this gate is green. Each consumes `extractNodePath` directly; none re-derive registry lookup logic.
+
+**Open questions surfaced for the consumer task** (don't answer here; flag so the next implementer doesn't quietly choose):
+
+- **Operator-PR resolution semantics** — the root `.cogni/repo-spec.yaml` registers the operator with `path: "nodes/operator"`, but operator review-rules currently live at root `.cogni/rules/`, **not** at `nodes/operator/.cogni/rules/` (the latter directory does not exist on main). When the consumer calls `extractNodePath(rootSpec, OPERATOR_NODE_ID)`, it gets `"nodes/operator"` — and resolves to a directory with no rules. The consumer must consciously choose: (a) follow the registry path and require operator rules to move/duplicate to `nodes/operator/.cogni/rules/`, (b) special-case the operator nodeId and fall back to `.` (root), or (c) introduce a `path: "."` registry entry for the operator. This resolver does not pre-empt the choice.
+- **Path-safety enforcement** — `nodeRegistryEntrySchema` validates `path: z.string().min(1)`. Nothing prevents `path: "../../../etc"`. The TSDoc note above instructs callers to validate; a stronger fix is a Zod refinement on the schema. File a follow-on task to tighten `nodeRegistryEntrySchema` with a safe-relative-path regex before any consumer uses the path for `fs.readFile`.
 
 ## Validation
 

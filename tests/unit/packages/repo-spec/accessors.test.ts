@@ -17,6 +17,7 @@ import {
   extractLedgerApprovers,
   extractLedgerConfig,
   extractNodeId,
+  extractNodePath,
   extractPaymentConfig,
   extractScopeId,
   parseRepoSpec,
@@ -286,5 +287,97 @@ describe("extractLedgerApprovers", () => {
       },
     });
     expect(extractLedgerApprovers(spec)).toEqual([]);
+  });
+});
+
+describe("extractNodePath", () => {
+  const NODE_OPERATOR = "00000000-0000-4000-8000-000000000010";
+  const NODE_POLY = "00000000-0000-4000-8000-000000000011";
+  const NODE_RESY = "00000000-0000-4000-8000-000000000012";
+  const NODE_UNREGISTERED = "00000000-0000-4000-8000-0000000000ff";
+
+  function specWithNodes(
+    nodes: Array<{ node_id: string; node_name: string; path: string }>
+  ): RepoSpec {
+    return parseRepoSpec({
+      node_id: TEST_NODE_ID,
+      cogni_dao: { chain_id: String(TEST_CHAIN_ID) },
+      nodes,
+    });
+  }
+
+  it("scenario 1: returns the registered path on match", () => {
+    const spec = specWithNodes([
+      { node_id: NODE_POLY, node_name: "Poly", path: "nodes/poly" },
+      { node_id: NODE_RESY, node_name: "Resy", path: "nodes/resy" },
+    ]);
+    expect(extractNodePath(spec, NODE_POLY)).toBe("nodes/poly");
+    expect(extractNodePath(spec, NODE_RESY)).toBe("nodes/resy");
+  });
+
+  it("scenario 2: returns null when nodeId is not in the registry", () => {
+    const spec = specWithNodes([
+      { node_id: NODE_POLY, node_name: "Poly", path: "nodes/poly" },
+    ]);
+    expect(extractNodePath(spec, NODE_UNREGISTERED)).toBeNull();
+  });
+
+  it("scenario 3: returns null when nodes[] is empty", () => {
+    const spec = specWithNodes([]);
+    expect(extractNodePath(spec, NODE_POLY)).toBeNull();
+  });
+
+  it("scenario 4: returns null when nodes[] is missing entirely", () => {
+    const spec = parseRepoSpec({
+      node_id: TEST_NODE_ID,
+      cogni_dao: { chain_id: String(TEST_CHAIN_ID) },
+    });
+    expect(extractNodePath(spec, NODE_POLY)).toBeNull();
+  });
+
+  it("scenario 5: does NOT special-case the operator's own node_id", () => {
+    const spec = specWithNodes([
+      {
+        node_id: NODE_OPERATOR,
+        node_name: "Cogni Operator",
+        path: "nodes/operator",
+      },
+      { node_id: NODE_POLY, node_name: "Poly", path: "nodes/poly" },
+    ]);
+    // Locks: registry path is returned verbatim even when nodeId is the operator's.
+    // Caller decides whether to map "nodes/operator" to repoRoot/.cogni or nodes/operator/.cogni.
+    expect(extractNodePath(spec, NODE_OPERATOR)).toBe("nodes/operator");
+  });
+
+  it("scenario 6: returns null for an empty-string nodeId (no spurious match)", () => {
+    const spec = specWithNodes([
+      { node_id: NODE_POLY, node_name: "Poly", path: "nodes/poly" },
+    ]);
+    expect(extractNodePath(spec, "")).toBeNull();
+  });
+
+  it("scenario 7: returns the registered path verbatim — no normalization", () => {
+    // Registry can declare any min(1) string. The function must not trim, normalize,
+    // strip slashes, or modify the result. Path-safety is a caller responsibility.
+    const cases = [
+      "nodes/poly",
+      "nodes/poly/",
+      "./nodes/poly",
+      "  spaced-path  ",
+    ];
+    for (const path of cases) {
+      const spec = specWithNodes([
+        { node_id: NODE_POLY, node_name: "Poly", path },
+      ]);
+      expect(extractNodePath(spec, NODE_POLY)).toBe(path);
+    }
+  });
+
+  it("scenario 8: on duplicate node_id, returns the first match (Array.find semantics)", () => {
+    const spec = specWithNodes([
+      { node_id: NODE_POLY, node_name: "Poly A", path: "nodes/poly-a" },
+      { node_id: NODE_POLY, node_name: "Poly B", path: "nodes/poly-b" },
+    ]);
+    expect(extractNodePath(spec, NODE_POLY)).toBe("nodes/poly-a");
   });
 });

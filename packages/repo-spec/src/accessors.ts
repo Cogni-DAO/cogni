@@ -285,3 +285,21 @@ export function extractDaoTreasuryAddress(spec: RepoSpec): string | undefined {
 export function extractNodes(spec: RepoSpec): readonly NodeRegistryEntry[] {
   return spec.nodes ?? [];
 }
+
+/**
+ * Resolve a node UUID to its relative path declared in the operator's nodes[] registry.
+ *
+ * Returns null if the registry has no entry for nodeId (caller decides fallback policy).
+ * Empty/missing nodes[] → always null.
+ *
+ * Duplicate-tolerance: if multiple entries share the same node_id, the first match wins
+ * (registry uniqueness is not this function's job; tighten via schema refinement upstream).
+ *
+ * Path safety: returns the path string from the registry verbatim — no normalization,
+ * no traversal sanitization. The caller MUST validate before joining to a filesystem
+ * root (e.g., reject paths containing "..", absolute paths, or null bytes).
+ */
+export function extractNodePath(spec: RepoSpec, nodeId: string): string | null {
+  const entry = (spec.nodes ?? []).find((n) => n.node_id === nodeId);
+  return entry?.path ?? null;
+}
