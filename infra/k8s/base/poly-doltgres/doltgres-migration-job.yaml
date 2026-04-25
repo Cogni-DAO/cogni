@@ -42,7 +42,7 @@ spec:
           # → digest of the per-PR poly migrator image built from
           # nodes/poly/app/Dockerfile AS migrator).
           image: ghcr.io/cogni-dao/cogni-template-migrate:placeholder
-          command: ["node", "/app/nodes/poly/app/migrate-doltgres.mjs", "/app/nodes/poly/app/doltgres-migrations"]
+          command: ["pnpm", "db:migrate:poly:doltgres:container"]
           env:
             - name: DATABASE_URL
               valueFrom:
