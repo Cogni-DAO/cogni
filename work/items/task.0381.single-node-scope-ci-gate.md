@@ -63,7 +63,15 @@ domain(path) = X   if path matches  nodes/<X>/**  for X in {poly, resy, node-tem
              = operator   otherwise   (i.e., path is under nodes/operator/** OR anywhere else)
 ```
 
-Let `S` = the set of distinct domains over the changed paths. The gate fails iff `|S| > 1`. Empty diffs and single-domain diffs (including operator-only diffs that span operator/ + infra/ + packages/ + .github/) all pass.
+Let `S` = the set of distinct domains over the changed paths. The gate fails iff `|S| > 1`, with one bounded exception (see below). Empty diffs and single-domain diffs (including operator-only diffs that span operator/ + infra/ + packages/ + .github/) all pass.
+
+### Lockfile-inherits exception (load-bearing)
+
+Root `pnpm-lock.yaml` is a mechanical side-effect of node-level `package.json` changes — it always co-changes with a node dep bump and cannot be split into a separate PR. Without an exception, the most routine node change (bumping a dependency) would fail this gate, and the gate would get disabled within a week.
+
+The exception: **if `|S| = 2`, `operator ∈ S`, and the only path matched by the operator filter is `pnpm-lock.yaml`, treat the lockfile as part of the other domain and pass.** Bounded — it applies only to `pnpm-lock.yaml` at repo root, no other operator-domain paths inherit. Any other operator-matching path (a `packages/` edit, a `.github/` change, etc.) defeats the exception and the gate fails.
+
+The long-term fix is per-node lockfiles via pnpm `shared-workspace-lockfile=false` — captured as a follow-up below.
 
 The "everything else is operator" formulation eliminates the rotting infra-allow-list problem: there is no enumeration of infra paths to maintain. Adding a new top-level directory (`tools/`, `e2e/`, etc.) automatically belongs to the operator domain. The only enumeration is the small set of non-operator nodes — which is `nodes/*` minus `operator`, i.e., the directory listing.
 
@@ -80,6 +88,7 @@ single-node-scope:
     - id: domains
       uses: dorny/paths-filter@<sha>
       with:
+        list-files: json # exposes <filter>_files outputs so we can inspect which paths matched
         filters: |
           poly:          ['nodes/poly/**']
           resy:          ['nodes/resy/**']
@@ -89,15 +98,28 @@ single-node-scope:
             - '!nodes/poly/**'
             - '!nodes/resy/**'
             - '!nodes/node-template/**'
+    # Intentionally inline — single-workflow gate, no logic duplicated across
+    # workflows. SCRIPTS_ARE_THE_API targets cross-workflow drift, not this.
+    # See docs/spec/node-ci-cd-contract.md (clarified in this PR).
     - name: Enforce single-domain scope
       env:
         MATCHED: ${{ steps.domains.outputs.changes }} # JSON array of matched filter names
+        OPERATOR_FILES: ${{ steps.domains.outputs.operator_files }} # JSON array of paths matching operator filter
       run: |
         count=$(jq 'length' <<<"$MATCHED")
-        if [ "$count" -gt 1 ]; then
-          echo "::error::PR spans $count node domains: $(jq -r 'join(", ")' <<<"$MATCHED"). Each node owns its directory; operator owns nodes/operator + repo infra. Split into $count PRs, one per domain."
-          exit 1
+        if [ "$count" -le 1 ]; then exit 0; fi
+
+        # Lockfile-inherits exception: operator's only matched path is pnpm-lock.yaml,
+        # |S|=2, and operator is one of the two. Treat as the other domain and pass.
+        if [ "$count" -eq 2 ] \
+           && jq -e 'index("operator") != null' <<<"$MATCHED" >/dev/null \
+           && [ "$(jq -r '. | sort | join(",")' <<<"$OPERATOR_FILES")" = "pnpm-lock.yaml" ]; then
+          echo "single-domain scope OK (lockfile-inherits applied)"
+          exit 0
         fi
+
+        echo "::error::PR spans $count node domains: $(jq -r 'join(", ")' <<<"$MATCHED"). Each node owns its directory; operator owns nodes/operator + repo infra. Split into $count PRs, one per domain."
+        exit 1
 ```
 
 The `operator` filter is expressed as the negation of the other-node filters — `dorny/paths-filter` uses picomatch, which supports `!` negation. This keeps "operator owns everything else" derived from the small list of non-operator nodes; it does not enumerate any infra paths.
@@ -155,18 +177,35 @@ A parity test under `tests/ci-invariants/single-node-scope-parity.test.ts` runs 
 - [ ] **CLEAR_FAILURE_MESSAGE**: The failure annotation names the conflicting domains and instructs the contributor to split the PR. Uses `::error::` so it surfaces in the PR Files Changed view.
 - [ ] **REQUIRED_CHECK**: The job is a required status check on `main`, not informational.
 - [ ] **POLICY_PARITY_WITH_0382**: A parity test runs the CI gate and the runtime resolver from task.0382 against shared diff fixtures and asserts identical domain-set classification.
-- [ ] **ACTION_PINNED_BY_SHA**: `dorny/paths-filter` is pinned by full commit SHA, not by `@vN` tag. Meta-test enforces.
+- [ ] **ACTION_PINNED_BY_SHA**: `dorny/paths-filter` is pinned by full commit SHA, not by `@vN` tag. Meta-test enforces. `actions/checkout` reuses the existing repo-wide pin (`08eba0b27e820071cde6df949e0beb9ba4906955`).
+- [ ] **LOCKFILE_INHERITS**: When `|S|=2`, `operator ∈ S`, and the only operator-matched path is `pnpm-lock.yaml`, the lockfile inherits the other domain and the gate passes. Bounded — only `pnpm-lock.yaml`, no other operator paths inherit.
+- [ ] **SCRIPTS_ARE_THE_API_SHARPENED**: The same PR adds one sentence to `docs/spec/node-ci-cd-contract.md` clarifying SCRIPTS_ARE_THE_API targets cross-workflow logic duplication; gate-specific inline policy unique to one workflow is allowed when meta-tested. The single-domain gate is the canonical example.
 
 ### Files
 
-- Modify: `.github/workflows/ci.yaml` — add `single-node-scope` job (~20 lines YAML, no script).
-- Create: `tests/ci-invariants/single-node-scope-meta.test.ts` — asserts workflow filter list == `nodes/*` minus `operator`.
-- Create (deferred to task.0382 if more natural there): `tests/ci-invariants/single-node-scope-parity.test.ts` — shared-fixture parity between CI gate logic and runtime resolver.
-- Modify: `docs/spec/node-ci-cd-contract.md` — add SINGLE_NODE_HARD_FAIL row to the merge-gate matrix.
-- Modify: branch protection — add `single-node-scope` as a required check. Captured as the exact `gh api` invocation in the work item's `## Manual Steps` section (not just "do it in the UI").
+- Modify: `.github/workflows/ci.yaml` — add `single-node-scope` job (~30 lines YAML including lockfile-inherits clause, no script).
+- Create: `tests/ci-invariants/single-node-scope-meta.test.ts` — asserts workflow filter list == `nodes/*` minus `operator`, operator-filter negation list matches, and `dorny/paths-filter` is SHA-pinned.
+- Create: `tests/ci-invariants/single-node-scope-parity.test.ts` — shared-fixture parity test. CI-gate side asserted now; runtime-resolver-side assertions are `it.todo` stubs filled in by task.0382.
+- Create: `tests/ci-invariants/fixtures/single-node-scope/*.json` — diff fixtures (cross-node, node+operator, node+lockfile-only, operator-only, single-node, empty).
+- Modify: `docs/spec/node-ci-cd-contract.md` — add `SINGLE_DOMAIN_HARD_FAIL` row to merge-gate matrix; add one sentence sharpening SCRIPTS_ARE_THE_API.
+- Modify: branch protection — captured as the exact `gh api` invocation in `## Manual Steps`.
 
-### Out of scope
+### Rollout — non-required first, promote after a real cross-node test PR
 
+Land the job as **non-required** (informational) on this PR. Then:
+
+1. Open an intentionally-cross-node test PR (e.g., touch `nodes/poly/` and `nodes/resy/`).
+2. Confirm the job goes red with the expected `::error::` annotation.
+3. Run the `gh api` invocation in `## Manual Steps` to promote `single-node-scope` to a required check on `main`.
+4. Close the test PR.
+5. Set `deploy_verified: true` on this work item.
+
+Promoting before a real-world red run is what bites — a typo in the negation glob would silently pass the gate forever. The dry-run cross-node PR is the proof.
+
+### Out of scope (filed as follow-ups)
+
+- **Per-node `pnpm-lock.yaml` via `shared-workspace-lockfile=false`** — the long-term answer to lockfile coupling. The lockfile-inherits exception in this task is a near-term mitigation; the real fix is per-node lockfiles. Filed as a separate task.
+- **Move `packages/<node>-wallet/` → `nodes/<X>/packages/<node>-wallet/`** — node-specific workspace packages currently live under `packages/` (operator domain), forcing per-node-package edits to ride operator PRs. Architectural alignment with the sovereign-node model. Filed as a separate task.
 - Auto-splitting cross-node PRs (manual contributor action).
 - Detecting _semantic_ cross-node coupling (e.g., a `packages/` change that breaks node A but not node B) — that's task.0382's runtime resolver + the per-node reviewer's job.
 - Retroactive enforcement on already-merged PRs.
@@ -205,6 +244,10 @@ exercise: |
   # 3. Node + infra PR — touches nodes/poly/ and packages/foo/.
   #    Expectation: job FAILS with annotation naming poly + operator
   #    (packages/ is operator's domain).
+  # 3b. Node + lockfile PR — touches nodes/poly/app/package.json and pnpm-lock.yaml.
+  #    Expectation: job PASSES — lockfile-inherits exception applies.
+  # 3c. Node + lockfile + other operator path — touches nodes/poly/ + pnpm-lock.yaml + .github/foo.
+  #    Expectation: job FAILS — exception is bounded to lockfile-only operator paths.
   # 4. Operator-domain PR — touches nodes/operator/, packages/, .github/, docs/.
   #    Expectation: job PASSES — single domain (operator), span is fine.
   # 5. Single-node PR — touches only nodes/poly/.
