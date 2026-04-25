@@ -131,201 +131,223 @@ ERC1155 balance for the position token).
 
 ### Approach
 
-**Solution — three layers, smallest first:**
+**Invert the predicate: ERC1155 balance is the trigger, not a guard. Drop the
+Data-API `redeemable` flag from the predicate entirely.** The chain is the
+truth source; the Data-API positions list is just the _enumeration source_
+(which token ids to check). This deletes the entire class of "Data-API said yes
+when chain said no" bug, not just this instance.
 
-1. **Kill switch (deploy first, today).** Add `POLY_CTF_REDEEM_SWEEP_ENABLED`
-   env flag, default `false`. Read at sweep wiring in
-   `nodes/poly/app/src/bootstrap/container.ts:831`. If `false`, do not register
-   the `redeemSweep` callback at all (mirror pipeline already treats it as
-   optional — see `mirror-pipeline.ts:163`). Flip to `false` in the production
-   overlay to stop the bleed without requiring a code-review-paced rollout of
-   the correctness fix. Default-off is safe: missing a redemption is always
-   recoverable; burning gas forever is not.
+Concretely, in `redeemAllRedeemableResolvedPositions`
+(`nodes/poly/app/src/bootstrap/capabilities/poly-trade-executor.ts:657`):
 
-2. **Pre-flight balance check (the actual correctness fix).** Before calling
-   `walletClient.writeContract({ functionName: "redeemPositions", … })`, do a
-   read-only `eth_call` on the CTF contract to confirm the funder still holds
-   non-zero ERC1155 balance for at least one of the binary position tokens.
-   If both balances are 0, log `poly.ctf.redeem.skip_zero_balance` and return
-   early (no tx submitted, no gas spent). This is **stateless** (no in-process
-   cooldown map to lose on restart, no DB row to migrate) and **authoritative**
-   (the chain is the truth, not the Data-API's `redeemable` flag).
+1. Drop the `if (!p.redeemable …) continue` filter.
+2. Build the list of candidate `(conditionId, asset)` pairs from
+   `dataApiClient.listUserPositions(funderAddress)`. `Position.asset` is the
+   ERC1155 token id (decimal string per
+   `packages/market-provider/src/adapters/polymarket/polymarket.data-api.types.ts:68`)
+   — that _is_ the positionId; no `getCollectionId` / `getPositionId` derivation needed.
+3. Issue a single `publicClient.multicall` of `balanceOf(funder, BigInt(p.asset))`
+   against `POLYGON_CONDITIONAL_TOKENS` for every candidate.
+4. For positions where balance > 0, call `redeemResolvedPosition`. For balance
+   = 0, log `poly.ctf.redeem.skip_zero_balance` (info-level, structured:
+   `condition_id`, `asset`, `funder`) and skip.
+5. Inside `redeemResolvedPosition`
+   (`poly-trade-executor.ts:580`), keep the call shape unchanged — the precheck
+   lives in the sweep, not in the per-condition write path, so direct
+   `redeemResolvedPosition({ condition_id })` callers still work as today.
 
-   Implementation:
-   - Extend `polymarketCtfRedeemAbi` in
-     `packages/market-provider/src/adapters/polymarket/polymarket.ctf.redeem.ts`
-     with the three CTF view methods we need:
-     - `getCollectionId(bytes32 parentCollectionId, bytes32 conditionId, uint256 indexSet) view returns (bytes32)`
-     - `getPositionId(address collateralToken, bytes32 collectionId) view returns (uint256)`
-     - `balanceOf(address account, uint256 id) view returns (uint256)` (ERC1155
-       on the same CTF contract)
-   - In `poly-trade-executor.ts:redeemResolvedPosition` (line 580), after the
-     `match` lookup but before `walletClient.writeContract`, run a single
-     `multicall` (or two parallel `readContract` calls) against the CTF
-     contract for the two binary position tokens. If both balances are 0,
-     short-circuit with a structured `not_redeemable` outcome (without
-     throwing — a zero-balance redeem should be a no-op skip, not an error).
-   - In the sweep loop (`redeemAllRedeemableResolvedPositions`, line 657), the
-     existing `try/catch` already swallows per-condition errors, so the
-     short-circuit is naturally absorbed. Bump the log to `info` for
-     skip_zero_balance.
-
-3. **Cadence throttle (defense in depth).** Replace per-tick sweep invocation
-   with a per-process minimum interval. Track `lastSweepAt: number | null` on
-   the closure that wraps `redeemSweep` in `container.ts:831`. If `now -
-lastSweepAt < POLY_CTF_REDEEM_SWEEP_INTERVAL_MS` (default `60_000`), skip.
-   This caps worst-case bleed even if the balance check has a bug we missed.
+ABI surface: add ONE fragment to the existing CTF ABI module — `balanceOf(address, uint256) view returns (uint256)`.
+Rename `polymarket.ctf.redeem.ts` → `polymarket.ctf.ts` and broaden the
+module `Purpose` from "redeemPositions calldata" to "Polygon CTF read+write
+surface used by the poly node". Sibling-module split is unnecessary: the CTF
+contract is one address, this is one tiny adapter file.
 
 **Reuses:**
 
-- viem `publicClient.readContract` and `multicall` — already constructed and
-  used elsewhere in the same file (`createPublicClient` line 320). No new
-  RPC client, no new cache.
-- The mirror-pipeline tick driver and existing `redeemSweep?: () => Promise<void>`
-  optional hook (`mirror-pipeline.ts:118-175`) — no changes to the pipeline
-  contract; we only adjust how the sweep is wired and what it does internally.
-- The existing `viem.parseAbi` in `polymarket.ctf.redeem.ts` — extend the same
-  ABI artifact rather than create a new one.
+- viem `publicClient.multicall` — already constructed once in
+  `poly-trade-executor.ts:320` and shared via `SHARED_PUBLIC_CLIENT`.
+- The `PolymarketUserPosition.asset` field already returned by the Data-API
+  positions endpoint. No new fields, no schema migration.
+- The existing `polymarketCtfRedeemAbi` (after rename) — one ABI artifact,
+  same contract address.
+
+**Known acceptable limitation: in-flight double-fire window.** Tick at t=0
+fires `redeemPositions`; tx confirms in ~2s on Polygon. If a tick happens to
+fall in that 2s window, `balanceOf` still returns >0, and a second tx fires.
+Worst case: one extra successful redeem (cost ~0.0085 POL), and the second
+call is a no-op-success because the first already burned the ERC1155 balance.
+**Bounded by 1 extra tx per redemption, not unbounded** — this is the bug we
+are fixing, just expressed as the residual O(1) tail. Not blocking. If/when
+the sweep is moved to be reactive (see follow-up below), the window closes
+entirely. A single-flight in-process lock keyed by `conditionId` would also
+close it cheaply, but is deferred until we observe the residual matter.
 
 ### Rejected alternatives
 
-- **In-memory cooldown map (`Map<conditionId, last_attempt_ms>`).** Fragile:
-  state lost on pod restart, inconsistent across pods if we ever scale
-  horizontally, and still issues _one_ wasted tx per restart per condition.
-  An on-chain balance read is stateless, authoritative, and free.
-- **Post-hoc `Transfer` event scan on the receipt to detect zero-payout
-  redemptions.** The bleed has already happened by the time we read the
-  receipt. Pre-flight is strictly cheaper.
-- **Move `redeemAllRedeemableResolvedPositions` into a Temporal activity /
-  separate sweep job.** Real architectural improvement but out of scope for
-  an emergency stop-the-bleed fix; defer to a follow-up if anyone wants it.
-- **Trust the Data-API `redeemable` flag and just rate-limit retries.** The
-  Data-API is the bug source — we should not encode "wait long enough and
-  hope it self-heals" into our control loop.
+- **Env kill switch (`POLY_CTF_REDEEM_SWEEP_ENABLED`).** Rejected: v0
+  single-tenant prod with no users; bleed is bounded by the empty wallet, no
+  refill until the fix lands. Adding a flag for v0 creates a "default-off
+  forever" tar-pit.
+- **Cadence throttle (`POLY_CTF_REDEEM_SWEEP_INTERVAL_MS`).** Rejected:
+  defense-in-depth on a correct precheck is dead code. If the precheck is
+  right, 30s tick is fine. If it's wrong, throttling slows the bleed instead
+  of stopping it — that's _worse_, because the bug becomes invisible.
+- **Compute `positionId` via `getCollectionId` + `getPositionId` view
+  methods.** Rejected: `Position.asset` already _is_ the ERC1155 id. Saves
+  two ABI fragments and 2 RPC reads per position.
+- **In-memory cooldown map (`Map<conditionId, last_attempt_ms>`).**
+  Rejected: stateful, lost on pod restart, still issues one wasted tx per
+  restart per condition. On-chain balance is stateless, authoritative, free.
+- **Post-hoc `Transfer` event scan on the receipt.** Rejected: gas already
+  spent by the time we read the receipt. Pre-flight is strictly cheaper.
+- **Trust `Data-API.redeemable` and rate-limit retries.** Rejected: the
+  Data-API flag is the bug source. Hoping it self-heals isn't a control loop.
+
+### Follow-up (separate ticket — not this PR)
+
+Filed as `task.0374` (sweep architecture refactor). The current sweep runs
+every mirror-pipeline tick over every position; even with the precheck this
+is O(positions) RPC fan-out per tick on a hot loop the rest of the pipeline
+doesn't care about. Cleaner long-term: trigger redemption reactively when
+`wallet-watch` first observes the resolution event for a condition_id we
+hold, OR move the sweep to a slow dedicated cron. Out of scope for the
+emergency fix; in scope as the next refactor.
 
 ### Invariants
 
 <!-- CODE REVIEW CRITERIA -->
 
-- [ ] **CTF_REDEEM_REQUIRES_NONZERO_BALANCE** — `redeemResolvedPosition` MUST NOT
-      submit `redeemPositions` when both binary position-token balances are 0
-      for the funder. Verified by unit test that mocks the read calls.
-- [ ] **KILL_SWITCH_HONORED** — when `POLY_CTF_REDEEM_SWEEP_ENABLED !== "true"`,
-      `redeemSweep` MUST NOT be registered with the mirror pipeline. Verified
-      by container wiring test.
+- [ ] **SWEEP_TRIGGERED_BY_ON_CHAIN_BALANCE** — the sweep MUST select positions
+      to redeem by `balanceOf(funder, asset) > 0`, NOT by `Position.redeemable`.
+      The Data-API `redeemable` flag is no longer in the predicate.
+- [ ] **NO_REDEEM_ON_ZERO_BALANCE** — sweep MUST NOT call `redeemPositions`
+      when `balanceOf` returns 0. Verified by unit test (mocks) AND by
+      anvil-fork test (real contract, real tx semantics).
 - [ ] **POLYGON_MAINNET_ONLY** — extended ABI stays pinned to the same CTF
       contract address (spec: `polymarket.ctf.redeem.ts` invariants).
-- [ ] **BINARY_INDEX_SETS** — read both `[1, 2]` index-set balances; sum-zero
-      means skip. Multi-outcome markets remain out of scope (existing invariant).
-- [ ] **AUTHORIZED_PLACE_ONLY** — redeem path is unaffected; `authorizeWalletExit`
-      still runs before the eventual write (spec: `poly-trade-executor.ts`).
+- [ ] **BINARY_INDEX_SETS_WRITE_ONLY** — `[1, 2]` constraint applies only to
+      the `redeemPositions` write path (indexSets argument). The new read
+      path uses `Position.asset` directly and is outcome-cardinality agnostic.
+- [ ] **AUTHORIZED_PLACE_ONLY** — redeem write path is unchanged; existing
+      `authorizeWalletExit` runs before any submitted tx (spec:
+      `poly-trade-executor.ts`).
 - [ ] **NO_NEW_PORTS** — fix is contained to the existing `poly-trade-executor`
-      capability + the `polymarket.ctf.redeem` ABI module. No new ports,
-      adapters, or config layers.
-- [ ] **SIMPLE_SOLUTION** — three small changes (env flag, ABI extension,
-      pre-flight read). No state machines, no DB migrations, no new packages.
+      capability + the renamed `polymarket.ctf` ABI module. No new ports,
+      adapters, env vars, or config layers.
+- [ ] **SIMPLE_SOLUTION** — two small changes (one ABI fragment, one predicate
+      inversion in the sweep). No env flags, no throttles, no state machines,
+      no DB migrations, no new packages.
 - [ ] **ARCHITECTURE_ALIGNMENT** — extends an existing capability and a market-
       provider adapter ABI; no boundary violations (spec: architecture).
 
 ### Files
 
-- Modify: `packages/market-provider/src/adapters/polymarket/polymarket.ctf.redeem.ts`
-  — extend `polymarketCtfRedeemAbi` with `getCollectionId`, `getPositionId`,
-  `balanceOf`. Export a tiny helper `binaryPositionIds(funder, conditionId)`
-  that returns the two `uint256` ids for a binary market (pure ABI math, no
-  RPC).
+- Rename + modify: `packages/market-provider/src/adapters/polymarket/polymarket.ctf.redeem.ts`
+  → `polymarket.ctf.ts`. Update module header `Purpose` to "Polygon CTF
+  read+write surface used by the poly node". Add ONE ABI fragment to the
+  existing `polymarketCtfRedeemAbi`:
+  `balanceOf(address account, uint256 id) view returns (uint256)`.
+  Update the importer in `packages/market-provider/src/adapters/polymarket/index.ts`.
 - Modify: `nodes/poly/app/src/bootstrap/capabilities/poly-trade-executor.ts`
-  — in `redeemResolvedPosition` (line 580–655), insert a balance precheck
-  using the shared `publicClient.multicall` against `POLYGON_CONDITIONAL_TOKENS`.
-  Short-circuit with a structured "not redeemable, zero balance" return when
-  both balances are 0. Bubble the skip up to the sweep loop without throwing.
-- Modify: `nodes/poly/app/src/bootstrap/container.ts` (line 831) — read
-  `POLY_CTF_REDEEM_SWEEP_ENABLED` from `serverEnv`. If `!== "true"`, do NOT
-  pass `redeemSweep` to `startMirrorPipeline`. Add the
-  `POLY_CTF_REDEEM_SWEEP_INTERVAL_MS` throttle wrapper around the registered
-  callback.
-- Modify: env spec / serverEnv schema (wherever `POLY_*` env vars are declared)
-  — add `POLY_CTF_REDEEM_SWEEP_ENABLED` (default `false`) and
-  `POLY_CTF_REDEEM_SWEEP_INTERVAL_MS` (default `60000`).
-- Modify: `infra/k8s/overlays/production/poly/` (or equivalent ConfigMap) —
-  set `POLY_CTF_REDEEM_SWEEP_ENABLED=false` for prod immediately as a separate
-  config-only commit landed BEFORE the code fix, so the bleed stops without
-  waiting on tests.
-- Test: new unit test under `nodes/poly/app/tests/unit/` that asserts:
-  (a) zero-balance funder skips the redeem write; (b) non-zero balance
-  proceeds with the existing write path; (c) kill switch off → no
-  `redeemSweep` registered.
+  — rewrite `redeemAllRedeemableResolvedPositions` (line 657-691) to:
+  (a) drop the `p.redeemable` filter, (b) multicall `balanceOf(funder, BigInt(p.asset))`
+  for each candidate, (c) call `redeemResolvedPosition` only for positions
+  where balance > 0, (d) emit `poly.ctf.redeem.skip_zero_balance` info-log
+  (structured: `condition_id`, `asset`, `funder`) for the skipped ones.
+  Downgrade `poly.ctf.redeem.sweep_skip` to debug or remove (it is now
+  largely redundant — most "skips" become balance=0 skips at info level).
+  `redeemResolvedPosition` itself is unchanged.
+- Tests:
+  - `nodes/poly/app/tests/unit/.../redeem-sweep.test.ts` — mocked-RPC unit
+    tests asserting (a) zero-balance positions are skipped, (b) non-zero
+    balance positions are passed through to `redeemResolvedPosition`,
+    (c) the `Position.redeemable` flag has no effect on the predicate
+    (test passes `redeemable: false` with balance > 0 → still redeems).
+  - `nodes/poly/app/tests/integration/.../redeem-sweep.fork.test.ts` (NEW
+    layer) — anvil-fork integration test that:
+    (1) forks Polygon mainnet at a known resolved-market block,
+    (2) impersonates a funder holding a redeemable position,
+    (3) calls the sweep and asserts the ERC1155 balance decrements + USDC.e
+    transfer in the receipt,
+    (4) calls the sweep AGAIN with the now-zero balance and asserts NO new
+    tx is broadcast (anvil tx count unchanged).
+    This is the only test that catches the actual bug — `redeemPositions`
+    succeeding-as-no-op is a chain semantic that mocks cannot reproduce.
 
 ## Allowed Changes
 
+- `packages/market-provider/src/adapters/polymarket/polymarket.ctf.redeem.ts`
+  (rename to `polymarket.ctf.ts` + add `balanceOf` ABI fragment).
+- `packages/market-provider/src/adapters/polymarket/index.ts` (re-export path
+  update).
 - `nodes/poly/app/src/bootstrap/capabilities/poly-trade-executor.ts`
-  (`redeemAllRedeemableResolvedPositions` + `redeemResolvedPosition` — add
-  cross-tick dedup / cooldown / no-op detection).
-- `nodes/poly/app/src/bootstrap/container.ts` (wiring of `redeemSweep` if a
-  cooldown store needs to be injected).
-- `nodes/poly/app/src/features/copy-trade/mirror-pipeline.ts` (only if the
-  rate-limit lives at the tick boundary).
-- Tests under `nodes/poly/app/tests/unit/features/copy-trade/` and
-  `packages/market-provider/tests/` that cover the sweep path.
+  (`redeemAllRedeemableResolvedPositions` only — predicate inversion).
+- New tests under `nodes/poly/app/tests/unit/` and
+  `nodes/poly/app/tests/integration/` for the sweep path (mocked + anvil-fork).
+
+Out of scope: env vars, container wiring (`container.ts:831`),
+`mirror-pipeline.ts`, prod overlays, ConfigMaps. Sweep stays wired exactly
+as today.
 
 ## Plan
 
-- [ ] **Stop the bleed first.** Land a kill-switch env flag
-      (`POLY_CTF_REDEEM_SWEEP_ENABLED=false` default-off in prod) so we can
-      disable the sweep via config without redeploy churn while the real fix
-      is in flight.
-- [ ] Add an in-process cooldown map keyed by normalized condition_id
-      (`Map<string, { last_attempt_ms, last_outcome }>`) inside
-      `redeemAllRedeemableResolvedPositions` (or a small store on the
-      executor instance). On each sweep, skip any condition_id attempted
-      within the last N minutes regardless of outcome. N starts at 10 min.
-- [ ] After a successful tx, parse the receipt for the USDC.e `Transfer`
-      event amount. If 0, log `poly.ctf.redeem.no_payout` and extend the
-      cooldown to a much longer window (24h+) — this is the "already
-      redeemed, Data-API lying" case.
-- [ ] On `eth_estimateGas` failure path (already lands as `sweep_skip`),
-      apply the same cooldown so the noisy condition_id stops retrying every
-      tick.
-- [ ] Unit tests: - sweep called twice in a row only submits once per condition_id; - no-payout receipt extends cooldown beyond a normal failed attempt; - kill-switch flag short-circuits the sweep entirely.
-- [ ] Add a one-time bounded retry escape hatch (operator API or admin
-      endpoint) to force-redeem a specific condition_id, since cooldown will
-      otherwise block legitimate redemption retries for the cooldown window.
-- [ ] Top up the operator wallet only AFTER fix is flighted to candidate-a
-      and the sample tx rate has dropped to zero on the live wallet.
+- [ ] Rename `polymarket.ctf.redeem.ts` → `polymarket.ctf.ts`, add `balanceOf`
+      ABI fragment, update header.
+- [ ] Update importer in `packages/market-provider/src/adapters/polymarket/index.ts`.
+- [ ] Rewrite `redeemAllRedeemableResolvedPositions`: drop `p.redeemable`
+      filter, multicall `balanceOf` per candidate, redeem only when balance > 0,
+      emit structured `poly.ctf.redeem.skip_zero_balance` info-log otherwise.
+- [ ] Mocked-RPC unit tests (zero-balance skip / non-zero redeems / `redeemable`
+      flag has no effect).
+- [ ] Anvil-fork integration test: real Polygon fork, real funder with a
+      redeemable position; sweep redeems once, balance goes to 0, second
+      sweep submits zero new txs.
+- [ ] File `task.0374` (sweep architecture refactor — reactive on
+      wallet-watch resolution event, OR slow dedicated cron). Out of scope
+      here; in scope for the next refactor PR.
 
 ## Validation
 
-**Command:**
+**Commands:**
 
 ```bash
+# Unit (mocked) — predicate semantics
 pnpm --filter @cogni/poly-node-app test:unit -- redeem-sweep
+
+# Integration (anvil fork of Polygon mainnet) — real CTF semantics
+pnpm --filter @cogni/poly-node-app test:integration -- redeem-sweep.fork
 ```
 
-**Expected:** New tests pass; existing mirror-pipeline tests still green.
+**Expected:** All tests pass. Critically, the fork test's "second sweep" step
+asserts zero new transactions are broadcast — that is the regression gate
+this bug exists to install.
 
 **Post-flight on candidate-a (the gate that actually matters):**
 
 ```bash
-# 1. Confirm sweep enabled in candidate-a config (or kill-switch flipped).
-# 2. Watch the operator wallet for 1 hour:
+# 1. After candidate-a flight + wallet refill, watch native POL balance:
 curl -s -X POST https://1rpc.io/matic \
   -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"eth_getBalance","params":["0x95e407fE03996602Ed1BF4289ecb3B5AF88b5134","latest"]}'
-# 3. Read tx history; expect 0 new redeemPositions txs in the hour, OR at
-#    most 1 per genuinely-redeemable condition_id.
-# 4. Loki: zero `poly.ctf.redeem.sweep_skip` repeats for the same
-#    condition_id within the cooldown window.
+# 2. Pull Polygonscan tx history; expect zero `redeemPositions` txs over a
+#    1-hour idle window (no resolved positions held).
+# 3. Loki: structured `poly.ctf.redeem.skip_zero_balance` lines appear at
+#    sweep cadence; no `redeemPositions confirmed` (`poly.ctf.redeem.ok`)
+#    unless we genuinely had a non-zero balance.
 ```
 
-**Expected:** Wallet balance does not decrease over a 1-hour idle window;
-`redeemPositions` cadence drops from 150/hr to ≤1/hr per condition_id.
+**Expected:** Wallet balance flat over 1h idle; `redeemPositions` cadence
+drops from ~150/hr to 0/hr in steady state, with one tx per genuinely-
+redeemable position observed at resolution time.
 
 ## Review Checklist
 
 - [ ] **Work Item:** `bug.0373` linked in PR body
 - [ ] **Spec:** mirror-pipeline + poly-trade-executor invariants upheld; no
       regression to existing redeem flow on truly-unredeemed positions
-- [ ] **Tests:** new unit tests for cooldown + no-payout + kill-switch
+- [ ] **Tests:** mocked unit tests + anvil-fork integration test (real
+      chain semantics) both green; fork test's "second sweep submits 0 txs"
+      assertion is present
 - [ ] **Reviewer:** assigned and approved
 
 ## PR / Links
