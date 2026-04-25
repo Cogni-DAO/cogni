@@ -79,18 +79,12 @@ GH_REPO_FOR_COMPARE="${GH_REPO:-${GITHUB_REPOSITORY:-}}"
 
 EXPECTED_SHA=$(printf '%s' "$EXPECTED_SHA" | tr '[:upper:]' '[:lower:]')
 
-# If caller specified which apps were promoted, wait only for those.
-# Apps not promoted in this run keep their existing overlay digest and are
-# not expected to change health — waiting for them adds false negatives
-# (e.g. sandbox-openclaw with a placeholder image that can never pull).
-# Falls back to full catalog for backwards compatibility.
-if [ -n "$PROMOTED_APPS" ]; then
-  IFS=',' read -r -a APPS <<< "$PROMOTED_APPS"
-  echo "⏳ Waiting for promoted apps (${PROMOTED_APPS}) to reconcile to ${EXPECTED_SHA:0:8} (${DEPLOY_ENVIRONMENT}, timeout ${ARGOCD_TIMEOUT}s)..."
-else
-  APPS=(operator poly resy scheduler-worker sandbox-openclaw)
-  echo "⏳ Waiting for all catalog apps to reconcile to ${EXPECTED_SHA:0:8} (${DEPLOY_ENVIRONMENT}, timeout ${ARGOCD_TIMEOUT}s)..."
+if [ -z "$PROMOTED_APPS" ]; then
+  echo "[ERROR] wait-for-argocd: PROMOTED_APPS is required (CATALOG_IS_SSOT). Source it from a decide job (yq ea -o=tsv '.name' infra/catalog/*.yaml | paste -sd,) or from an upstream promote step's output. See docs/spec/ci-cd.md axiom 16." >&2
+  exit 1
 fi
+IFS=',' read -r -a APPS <<< "$PROMOTED_APPS"
+echo "⏳ Waiting for promoted apps (${PROMOTED_APPS}) to reconcile to ${EXPECTED_SHA:0:8} (${DEPLOY_ENVIRONMENT}, timeout ${ARGOCD_TIMEOUT}s)..."
 
 # SCP a remote script to the VM and execute it. Avoids heredoc quoting issues
 # and ensures all shell variables resolve on the remote.
