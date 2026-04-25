@@ -15,7 +15,7 @@ project: proj.vcs-integration
 branch: test/task-reviewer-adapter-contract
 pr:
 reviewer:
-revision: 1
+revision: 2
 blocked_by:
 deploy_verified: false
 created: 2026-04-25
@@ -50,7 +50,7 @@ The `ReviewHandlerDeps` interface and the `ReviewResult` / `EvaluationOutputSche
 
 ### Approach
 
-**Solution**: One vitest unit test file alongside `review-handler.ts`. Constructs a fake `ReviewHandlerDeps` (in-memory implementations covering all 8 callable members: `executor`, `log`, `createCheckRun`, `updateCheckRun`, `gatherEvidence`, `postPrComment`, `readRepoSpec`, `readRuleFile` — plus the data fields `virtualKeyId` and optional `reviewModel`). `handlePrReview` returns `Promise<void>`; the verdict is observable only via the arguments passed to `updateCheckRun(owner, repo, checkRunId, conclusion, summary)` and `postPrComment(...)`. All assertions spy on those call arguments.
+**Solution**: One vitest unit test file at `nodes/operator/app/tests/unit/features/review/review-handler.test.ts` (centralized layout, sibling to `gate-orchestrator.test.ts`). Constructs a fake `ReviewHandlerDeps` (in-memory implementations covering all 8 callable members: `executor`, `log`, `createCheckRun`, `updateCheckRun`, `gatherEvidence`, `postPrComment`, `readRepoSpec`, `readRuleFile` — plus the data fields `virtualKeyId` and optional `reviewModel`). `handlePrReview` returns `Promise<void>`; the verdict is observable only via the arguments passed to `updateCheckRun(owner, repo, checkRunId, conclusion, summary)` and `postPrComment(...)`. All assertions spy on those call arguments.
 
 Four scenarios against the real handler:
 
@@ -74,7 +74,8 @@ No GitHub. No LLM. No Octokit. No filesystem. Pure dependency injection against 
 - Existing `ReviewHandlerDeps` interface (review-handler.ts:38-73) — already a port shape, just needs to be exercised
 - Existing `EvaluationOutputSchema` Zod schema (ai-rule.ts:29-38) — fakes use it to build fixture LLM outputs
 - Existing `ReviewResult` / `GateResult` types (types.ts:17-31) — assertions reference these directly via `formatCheckRunSummary` output
-- vitest patterns from `gate-orchestrator.test.ts` (already next to the handler, same fake-deps style)
+- vitest fake-deps patterns from sibling tests in `tests/unit/features/review/` (`gate-orchestrator.test.ts`, `ai-rule-evaluate.test.ts`, `criteria-evaluator.test.ts`)
+- `pnpm test` / `pnpm test:ci` already include this directory; runs in PR CI without config change
 
 **Rejected**:
 
@@ -92,14 +93,14 @@ No GitHub. No LLM. No Octokit. No filesystem. Pure dependency injection against 
 - [ ] **VERDICT_CONTRACT_LOCKED**: Test assertions reference `ReviewResult` and `EvaluationOutputSchema` by import — schema drift breaks the test (spec: vcs-integration).
 - [ ] **NO_REAL_IO**: Test must not import Octokit, hit network, read filesystem outside of vitest fixtures, or invoke a real LLM. Pure DI fakes.
 - [ ] **SIMPLE_SOLUTION**: One test file. No new abstractions, no new ports, no helper packages. Reuses existing types verbatim.
-- [ ] **ARCHITECTURE_ALIGNMENT**: Test lives next to the handler (`nodes/operator/app/src/features/review/services/review-handler.test.ts`), matching the co-located test convention used by `gate-orchestrator.test.ts` (spec: architecture).
+- [ ] **ARCHITECTURE_ALIGNMENT**: Test lives at `nodes/operator/app/tests/unit/features/review/review-handler.test.ts`, matching the centralized test layout used by sibling review tests (`gate-orchestrator.test.ts`, `ai-rule-evaluate.test.ts`, `criteria-evaluator.test.ts`, etc.). `nodes/operator/app/vitest.config.mts` only picks up `tests/unit/**` — co-located tests under `src/` would silently not run (spec: architecture, ref: test-expert skill).
 - [ ] **GATE_BEFORE_REFACTOR**: This task ships alone, on `test/task-reviewer-adapter-contract`, before any per-node scoping change. Subsequent PRs run against the locked gate.
 
 ### Files
 
 <!-- High-level scope -->
 
-- Create: `nodes/operator/app/src/features/review/services/review-handler.test.ts` — fake-deps contract test, four scenarios + dep-invocation assertion, ~200 lines (fixtures push the count above the original 150 estimate). The whole task.
+- Create: `nodes/operator/app/tests/unit/features/review/review-handler.test.ts` — fake-deps contract test, four scenarios + dep-invocation assertion, ~200 lines (fixtures push the count above the original 150 estimate). Sits next to existing review unit tests (`gate-orchestrator.test.ts` et al.). The whole task.
 - Modify: none. (No production code changes. No spec changes — tonight's cut locks the contract; it does not change it.)
 
 ### Follow-on work
@@ -110,9 +111,9 @@ The per-node rule scoping refactor and any spec updates land as **separate `task
 
 ```yaml
 exercise: |
-  cd nodes/operator/app && pnpm vitest run src/features/review/services/review-handler.test.ts
+  cd nodes/operator/app && pnpm vitest run tests/unit/features/review/review-handler.test.ts
 observability: |
-  Test output shows three passing scenarios. Coverage report confirms every method on
-  ReviewHandlerDeps is invoked at least once. CI unit job (`pnpm test:ci`) includes the
-  new test on PR.
+  Test output shows four passing scenarios + the dep-invocation assertion. CI unit job
+  (`pnpm test:ci`, wired in `.github/workflows/ci.yaml`) picks the file up automatically
+  via the operator vitest `tests/unit/**` include glob — no config change needed.
 ```
