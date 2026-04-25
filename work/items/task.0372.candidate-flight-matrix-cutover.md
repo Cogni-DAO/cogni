@@ -457,6 +457,24 @@ Best-effort warning, not a hard gate — explicitly per GR-5 deferred to follow-
 - **`detect-affected.sh` BASE selection for preview/prod**. candidate-flight uses `origin/main` as base. flight-preview's base should be the previous preview SHA (read from `deploy/preview/.promote-state/current-sha`). promote-and-deploy's base for preview-forward is the previous preview SHA; for production it's the previous production SHA. The decide job sets `TURBO_SCM_BASE` per workflow; existing `detect-affected.sh` honors it without modification.
 - **Old whole-slot `deploy/candidate-a` etc. continue to receive writes from any in-flight runs that started pre-merge.** Acceptable: those runs complete on the old paths; the next dispatch picks up the new matrix workflow.
 
+## Review Feedback (2026-04-25, /review-implementation on PR #1060)
+
+**Verdict: REQUEST CHANGES → fixed in same iteration.** One blocking issue + one cross-PR race noted for follow-up. `pnpm check` PASS. Revision NOT bumped (mechanical fix, not design loop).
+
+### Blocking — fixed in commit `3bfe9338b`
+
+- **Preview + production AppSets refactored without matching workflow writers.** `preview-applicationset.yaml` + `production-applicationset.yaml` flipped to per-node generators (`deploy/<env>-<node>`), but `flight-preview.yml` + `promote-and-deploy.yml` still target whole-slot `deploy/<env>` (verified at `promote-and-deploy.yml:148-149`, `flight-preview.yml:225`). Post-merge: writers advance whole-slot tip; AppSet reads per-node which never advances; `wait-for-argocd.sh EXPECTED_SHA=<whole-slot tip>` times out. Reverted both AppSets to whole-slot shape; refactor moves to task.0376 atomic with workflow cutover.
+
+### Cross-PR race (noted for reviewer's bug.0378 commit)
+
+- `flight` cell concurrency `flight-<env>-<node>` and `verify-candidate` cell concurrency `verify-candidate-<env>-<node>` are **distinct groups** (`candidate-flight.yml:168` vs L325). Two consecutive same-node flights across PRs can interleave: flight-1 push → flight-2 push → verify-1 starts with stale `EXPECTED_SHA` from flight-1's artifact while Argo reports flight-2's tip → wait-for-argocd timeout. Reviewer's bug.0378 commit (planned, on top of this PR) is expected to address.
+
+### Non-blocking observations
+
+- Snapshot/restore loop in `flight` cell (`candidate-flight.yml:246-273`) is structurally a no-op on per-node trees — sibling-node overlay subdirs are never touched by rsync, so "restore" has nothing to restore. Cleanup candidate for task.0376.
+- `reconcile-appset` runs `kubectl apply` of the AppSet on every dispatch even when unchanged. Could short-circuit with a content compare. Defer to 0376.
+- `git fetch origin <head_sha> --depth=100 || true` (L83) silently masks fetch failures; if PR head is unreachable, matrix degrades to empty silently. Pre-existing pattern.
+
 ## Review Feedback (2026-04-25, foundation review)
 
 5 blocking issues + 4 suggestions on the 6-commit foundation (revision 4 design + bootstrap script + detect-affected + 3 AppSets + GR-5 pre-check). `pnpm check` PASS. Design stands; these are mechanical implementation fixes, not design issues — revision NOT bumped.
