@@ -14,7 +14,7 @@ spec_refs:
 assignees: []
 project: proj.vcs-integration
 branch: feat/task-0382-extract-owning-node-resolver
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/1057
 reviewer:
 revision: 0
 blocked_by:
