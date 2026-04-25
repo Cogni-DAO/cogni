@@ -1,12 +1,12 @@
 ---
 id: task.0372
 type: task
-title: Per-node cutover — refactor candidate-a + preview AppSets + matrix fan-out
+title: Per-node cutover — refactor 3 AppSets + matrix fan-out across all flight workflows
 status: needs_implement
 priority: 0
 rank: 99
 estimate: 4
-summary: "Unblocked 2026-04-25 by task.0374 (catalog SSoT). Scope: candidate-a + preview only; production stays whole-slot until release.yml current-sha semantics are designed (filed as task.0375 follow-up). Cutover refactors 2 AppSets from 1 git generator → 4 per-node git generators each, and cuts candidate-flight.yml + flight-preview.yml + (preview half of) promote-and-deploy.yml to strategy.matrix fan-out with fail-fast:false."
+summary: "Symmetric per-node lanes across candidate-a + preview + production in one atomic PR. Each (env, node) gets its own deploy/<env>-<node> branch, its own Argo Application generator, its own GHA matrix cell with fail-fast:false. Refactors 3 ApplicationSets (1 git generator → 4 each). Adds aggregator job that updates deploy/<env>/.promote-state/current-sha after all-cells-green so release.yml's read stays unchanged. Catalog SSoT (task.0374) makes the bootstrap a one-liner."
 outcome: |
   - All 3 ApplicationSets refactored: `infra/k8s/argocd/{candidate-a,preview,production}-applicationset.yaml` each goes from 1 git generator → 4 per-node git generators reading `deploy/<env>-<node>` and `files: [infra/catalog/<node>.yaml]`. `source.targetRevision` templates from `{{<env>_branch}}` (fields declared in task.0320).
   - `candidate-flight.yml` / `flight-preview.yml` / `promote-and-deploy.yml` all fan out via `strategy.matrix` with `fail-fast: false` — one job per affected node, each scoped to its own per-env branch + per-node Argo Application.
@@ -26,7 +26,7 @@ project: proj.cicd-services-gitops
 branch: feat/task.0372-matrix-cutover
 pr:
 reviewer:
-revision: 2
+revision: 3
 deploy_verified: false
 created: 2026-04-24
 updated: 2026-04-25
@@ -36,43 +36,64 @@ external_refs:
 
 # task.0372 — Per-node matrix cutover
 
-## Freeze + scope reduction (2026-04-25)
+## Revision 3 (2026-04-25) — symmetric per-env, in one atomic PR
 
-This task is **frozen** pending two upstream changes flagged in the design-prep review:
+> **Supersedes revision 2's "scope-reduce-to-candidate-a-plus-preview" framing.**
+> A pre-implement design pass found that per-node preview cells were going to be "fake isolation" (cells push to `deploy/preview-<node>` but AppSet still reads `deploy/preview`, so Argo never sees the per-node pushes). The fix is a small aggregator job, not a scope cut. Symmetric architecture across all 3 envs is the discipline; per-env divergence is a tax forever.
 
-1. **task.0374 lands first.** `infra/catalog/*.yaml` becomes the single source of truth for the node list. After that, this task's Layer 1 bootstrap script is a one-liner over `infra/catalog/*.yaml`, and the matrix `include` derives from the same glob. Without it, every per-node list (image-tags.sh, detect-affected.sh, wait-for-argocd.sh, future bootstrap script) re-pays the migration cost.
-2. **Scope reduced to candidate-a + preview only.** Production cutover deferred until `release.yml` current-sha semantics are designed. dev2's Gap 3 is correct: `release.yml` reads `deploy/preview` to decide what to promote forward; per-node preview branches break that read. Picking a roll-up branch design without the SSoT in hand is premature. **Production cutover filed as task.0375.**
+### Scope
 
-The design body below still describes the eventual 3-env shape; the **PR that ships from this task** is the 2-env subset (candidate-a + preview). All "for each env" language below should be read as `env ∈ {candidate-a, preview}` until task.0375 lifts the constraint.
+All 3 ApplicationSets refactor (1 git generator → 4 per-node generators). All 3 fan-out workflows go matrix. **No env stays on the whole-slot model.** Production cuts over symmetrically with candidate-a and preview in this PR.
 
-### dev2 gap-2 (preview lease aggregation) — inline policy
+### Architecture
 
-Today's `flight-preview.yml` + `promote-and-deploy.yml` chain treats the preview lease (`deploy/preview/.promote-state/lease.json` / lock-preview-on-success / unlock-preview-on-failure) as a single workflow-level decision. With the matrix, N cells can land different verdicts.
+```
+deploy/<env>-<node>     ← 12 branches; AppSet generators read these per-node.
+                          THIS is the reconciliation source of truth.
 
-**Policy (decided): any matrix cell red → preview stays unlocked. All cells green → lock.** Implementation: a final `aggregate-lease` job with `needs: [matrix-cells]` and `if: always()` that:
+deploy/<env>            ← 3 branches; metadata-only post-cutover.
+                          Aggregator job updates .promote-state/current-sha
+                          and .promote-state/source-sha-by-app.json after
+                          all matrix cells go green. release.yml reads
+                          .promote-state/current-sha unchanged.
+```
 
-- runs `unlock-preview` if `failure() || cancelled() || any(needs.*.result == 'failure')`,
-- runs `lock-preview` if `success() && all(needs.*.result == 'success')`,
-- writes the same `preview-flight-outcome` artifact (`dispatched | queued | failed`) consumed today by `promote-preview-digest-seed.yml` (task.0349 contract — must not break).
+`release.yml` → `scripts/ci/create-release.sh:22` reads `git show origin/${DEPLOY_BRANCH}:.promote-state/current-sha`. **Single SHA file, ~5 lines of consumer code.** Trivial to keep updated by an aggregator step. No release.yml changes needed.
 
-Documented here so the PR cannot ship a per-cell lock/unlock pattern by accident.
+### Aggregator pattern (the gap-2/gap-3 fix)
 
-### dev2 gap-3 (release.yml current-sha post-cutover) — scope decision
+Each fan-out workflow gains one final job at the end of its matrix:
 
-`release.yml` today reads `deploy/preview/.promote-state/current-sha` to know "what's promotable to production". After per-node preview branches, no single SHA represents "all preview is green". Two valid responses:
+```yaml
+aggregate-<env>:
+  needs: [matrix-cells, ...]
+  if: always()
+  runs-on: ubuntu-latest
+  steps:
+    - if: <all matrix cells green>
+      # (1) Update deploy/<env>/.promote-state/current-sha + source-sha-by-app.json
+      # (2) lock-<env>-on-success (preview only — preserves task.0349 lease semantics)
+      # (3) Write preview-flight-outcome=dispatched artifact (preview only — task.0349 contract)
+    - if: <any matrix cell red>
+      # (1) unlock-<env>-on-failure (preview only)
+      # (2) Write preview-flight-outcome=failed
+```
 
-- **(a) Keep `deploy/preview` alive as a roll-up branch.** Final `aggregate` job in `flight-preview.yml` (or its successor) commits `current-sha` + base/catalog rollup to `deploy/preview` only when **all** matrix cells passed. Argo no longer reconciles from this branch (the per-node branches do). It exists purely as the release-cut anchor.
-- **(b) Defer prod cutover.** Keep `deploy/preview` driving production via `release.yml` for now (whole-slot model), per-node only for candidate-a + preview reads.
+This replaces the current per-job `lock-preview-on-success` / `unlock-preview-on-failure`. **Lock/unlock MUST NOT fan out into matrix cells** — racing on the same `.promote-state/lease.json` ref is the same class of bug we're trying to delete.
 
-**Decided: (b).** Production stays on the whole-slot model. `release.yml` continues to read `deploy/preview/.promote-state/current-sha`. The matrix cells in `flight-preview.yml` push **both** their per-node branch (`deploy/preview-<node>`) **and** the preview AppSet still reads from `deploy/preview` whole-slot until task.0375. After all cells succeed, an `aggregate-preview` job fast-forwards `deploy/preview` to a roll-up commit so `release.yml`'s read stays honest. **The 2 ApplicationSets in scope for this task are `candidate-a-applicationset.yaml` only.** `preview-applicationset.yaml` keeps tracking `deploy/preview` until task.0375. Re-read the cutover layers below with this in mind: layer 2 refactors **one** AppSet (candidate-a), not two.
+### Pinned invariants — read these before writing YAML
 
-(This trims the cutover by ~50%. Cleaner, less amplified risk.)
+- **CONCURRENCY_GROUP_FORMAT**: `flight-${{ matrix.env }}-${{ matrix.node }}` everywhere. Same-(env, node) cross-workflow serialization only works if all 3 workflows compute byte-identical group strings. Use `matrix.env` as a literal even when there's only one env per workflow (e.g., candidate-flight sets `matrix.env: candidate-a`).
+- **PROMOTED_APPS_PER_CELL**: each matrix cell calls `wait-for-argocd.sh` with `PROMOTED_APPS=${{ matrix.node }}` (single app), `EXPECTED_SHA=<deploy/<env>-<node> tip>`, against Argo Application `<env>-<node>`.
+- **SOURCE_SHA_MAP_PER_CELL**: each cell writes `deploy/<env>-<node>:.promote-state/source-sha-by-app.json` with **exactly one entry** (its own node's source_sha). `verify-buildsha.sh` already supports the single-app map mode (task.0349 v3 `NODES ∩ map`); use it. The aggregator job MERGES per-node maps into the rollup `deploy/<env>:.promote-state/source-sha-by-app.json`.
+- **AGGREGATOR_OWNS_LEASE**: lock/unlock-preview semantics live in the aggregate job, never in per-cell jobs. Per-cell push of `.promote-state/lease.json` is forbidden.
+- **AFFECTED_FROM_TURBO** (task.0320 invariant, preserved): the destination is `turbo ls --affected --filter=...[$BASE]`. `scripts/ci/detect-affected.sh` is the v0 implementation that reads catalog `path_prefix:` (post-task.0374). task.0260 delivers the turbo migration; task.0372 keeps the existing detect-affected.sh callers. **Don't retroactively redefine the invariant; document the workaround.**
 
-### Open gaps (from dev2 review — not blockers, listed for next reviewer)
+### Open gaps (carried forward — concrete resolution required during implementation)
 
-- **Gap 1 — `detect-affected` BASE selection per env.** candidate-flight uses `origin/main`. flight-preview's BASE for "what changed since last preview" is the previous preview SHA; promote-and-deploy similarly. Existing `detect-affected.sh` honors `TURBO_SCM_BASE`; callers set it. Risk: misset BASE = empty matrix = silent skip. Mitigation in the PR: log effective BASE/HEAD per workflow, fail loud on empty matrix unless explicitly opted-in.
-- **Gap 4 — `preview-flight-outcome` artifact aggregation.** task.0349's `promote-preview-digest-seed.yml` consumes a single artifact per Flight Preview run. Matrix cells produce N. Resolution: the `aggregate-preview` job above writes the single outcome artifact based on the all-green policy from gap-2. Listed here so the implementer sees the contract from both ends.
-- **Gap 5 — candidate-flight slot-release / commit status reporting.** Today's release-slot job emits one commit-status check per PR head SHA. Matrix cells could each emit, racing on the same head SHA. Resolution: keep one final `report-status` job at the end of the matrix, similar to the gap-2 aggregator. Don't fan out status reporting.
+- **`detect-affected` BASE selection per env.** candidate-flight uses `origin/main`. flight-preview's BASE = previous preview rollup SHA (read from `deploy/preview/.promote-state/current-sha`). promote-and-deploy's BASE for production = previous prod SHA (`deploy/production/.promote-state/current-sha`). Existing `detect-affected.sh` honors `TURBO_SCM_BASE`; callers set it. **Mitigation: log effective BASE/HEAD per workflow; fail loud on empty matrix unless explicitly opted-in.**
+- **Production rollout scale.** Today's whole-slot prod has implicit-serial rollouts; matrix runs them parallel. Verify cluster capacity (4 simultaneous Argo syncs + 4 rolling pod replacements) before merge. If a problem, document trade-off; don't silently regress.
+- **GR-5 infra-lever pre-check.** `gh run list --workflow="Candidate Flight"` filter must match the workflow's `name:` exactly. Easy to drift when adding the matrix decide-job. Pin via test.
 
 ## Context
 
@@ -107,11 +128,11 @@ Each matrix cell pushes to the matching `deploy/<env>-<node>` branch and waits o
 
 This PR **must** ship under the pre-cutover whole-slot model:
 
-1. task.0320 merges (whole-slot flight model unchanged — substrate only).
-2. 12 per-env per-node branches pushed post-merge (automation script or manual).
+1. task.0320 + task.0374 merged (substrates in place — both done as of 2026-04-25).
+2. **All 12 per-env per-node deploy branches pushed pre-PR** (one-shot bootstrap script, dormant until AppSets read them at merge).
 3. THIS PR flights via the **existing whole-slot workflow** to validate its own diff.
 4. Merge THIS PR.
-5. The first PR merged _after_ this one is the first flight of the new lane model.
+5. The first PR merged _after_ this one is the first flight of the new lane model — across **all 3 envs**.
 
 Do not create a bootstrap workflow to flight this PR on its own new model.
 
@@ -201,38 +222,79 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        env: [candidate-a]
         node: ${{ fromJson(needs.decide.outputs.targets_json) }}
     concurrency:
-      group: flight-candidate-a-${{ matrix.node }}
+      group: flight-${{ matrix.env }}-${{ matrix.node }} # CONCURRENCY_GROUP_FORMAT
       cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: candidate-a
     steps:
-      # … existing flight steps, but scoped to matrix.node:
+      # … existing flight steps, scoped to matrix.node:
       # - clone deploy/candidate-a-${{ matrix.node }} as deploy-branch
       # - rsync only infra/k8s/overlays/candidate-a/${{ matrix.node }}/ + base/ + catalog/
-      # - resolve PR digest for ONLY this target via image_tag_for_target
+      # - resolve PR digest for ONLY this target
       # - promote-k8s-image.sh --no-commit --env candidate-a --app ${{ matrix.node }}
-      # - snapshot/restore (task.0373) reduces to no-op for single-target — drop, OR keep
-      #   for cold-start safety. KEEP — it costs nothing on single-target trees.
+      # - snapshot/restore (task.0373) — KEEP, cheap on single-target trees
       # - push to deploy/candidate-a-${{ matrix.node }}
-      # - wait-for-argocd.sh APPS=candidate-a-${{ matrix.node }}
-      # - smoke + verify-buildsha for ${{ matrix.node }} only
+      # - wait-for-argocd.sh PROMOTED_APPS=${{ matrix.node }} EXPECTED_SHA=<branch-tip>
+      # - smoke + verify-buildsha for ${{ matrix.node }} only (single-app SOURCE_SHA_MAP)
 ```
 
-`acquire-candidate-slot` / `release-candidate-slot` / `report-no-acquire-failure` jobs **deleted**. The branch ref is the lease (GR-3 concurrency group is the belt).
+`acquire-candidate-slot` / `release-candidate-slot` / `report-no-acquire-failure` jobs **deleted**. Branch ref is the lease; `concurrency` group is the belt.
+
+candidate-flight has no `aggregate` job (no `deploy/candidate-a/.promote-state/current-sha` consumer; release.yml only reads preview's). But it MAY want a final `report-status` job that emits the single PR commit-status check (don't fan out per-cell to avoid same-head-SHA races).
 
 **B. `flight-preview.yml`** (277 lines → ~320)
 
-The retag loop (lines 190-203) **already iterates `ALL_TARGETS` and skips non-`RESOLVED_TARGETS`** — no shape change there. The fan-out is downstream: instead of one `flight-preview.sh` call dispatching `promote-and-deploy.yml` whole-env, the workflow loops the affected target list and dispatches `promote-and-deploy.yml` once per affected node with a `nodes` input naming that node only. The `preview-flight-outcome` artifact still records `dispatched | queued` (consumed by `promote-preview-digest-seed.yml` — unchanged contract).
+The retag loop (lines 190-203) already iterates `ALL_TARGETS` and skips non-`RESOLVED_TARGETS`. Below it, replace the single `Flight to preview` dispatch with:
 
-Concurrency: `group: flight-preview-${{ matrix.node }}` per cell.
+1. `decide` job at the head (catalog-driven, per task.0374 worked example).
+2. Matrix-fanned `flight-preview-cell` job — each dispatches `promote-and-deploy.yml` (workflow_call) with `inputs.nodes=${{ matrix.node }}` and `inputs.env=preview`. Concurrency `flight-${{ matrix.env }}-${{ matrix.node }}`.
+3. **`aggregate-preview` job** — `needs: [flight-preview-cell]`, `if: always()`. Implements gap-2 lease + gap-3 rollup + gap-4 outcome artifact (single source for `promote-preview-digest-seed.yml`):
+
+```yaml
+aggregate-preview:
+  needs: [flight-preview-cell]
+  if: always()
+  runs-on: ubuntu-latest
+  steps:
+    - id: outcome
+      run: |
+        # success only when ALL cells succeeded; any failure → unlock+failed
+        if [ "${{ needs.flight-preview-cell.result }}" = "success" ]; then
+          echo "outcome=dispatched" >> "$GITHUB_OUTPUT"
+        else
+          echo "outcome=failed" >> "$GITHUB_OUTPUT"
+        fi
+    - if: steps.outcome.outputs.outcome == 'dispatched'
+      name: Update deploy/preview rollup + lock
+      run: |
+        # Update deploy/preview/.promote-state/current-sha to ${{ github.sha }}
+        # MERGE per-node deploy/preview-<node>/.promote-state/source-sha-by-app.json
+        #   into deploy/preview/.promote-state/source-sha-by-app.json
+        # Run lock-preview-on-success (existing logic, single call)
+    - if: steps.outcome.outputs.outcome == 'failed'
+      name: Unlock preview on failure
+      run: |
+        # Run unlock-preview-on-failure (existing logic, single call)
+    - name: Upload preview-flight-outcome artifact
+      run: printf '%s' "${{ steps.outcome.outputs.outcome }}" > preview-flight-outcome.txt
+    - uses: actions/upload-artifact@…
+      with:
+        name: preview-flight-outcome
+        path: preview-flight-outcome.txt
+```
+
+**Per-cell jobs MUST NOT push to `deploy/preview` and MUST NOT call `lock-preview-*` / `unlock-preview-*`.** That's the AGGREGATOR_OWNS_LEASE invariant.
 
 **C. `promote-and-deploy.yml`** (930 lines → ~1000) — the big one
 
-Adds `workflow_call.inputs.nodes` (CSV) alongside existing `workflow_dispatch.inputs`. Adds a top `decide` job. Existing `promote-k8s` / `verify-deploy` / `verify` / `e2e` / `lock-preview-on-success` / `unlock-preview-on-failure` jobs become matrix-fanned-out over `nodes`. Each cell scopes to one `deploy/<env>-<node>` branch and one `<env>-<node>` Argo Application.
+Adds `workflow_call.inputs.nodes` (CSV) alongside existing `workflow_dispatch.inputs`. Adds a top `decide` job. **All** existing `promote-k8s` / `verify-deploy` / `verify` / `e2e` jobs become matrix-fanned-out over `nodes`. Concurrency `flight-${{ matrix.env }}-${{ matrix.node }}` per cell where `matrix.env: [${{ inputs.env }}]`.
 
-Concurrency: `group: flight-${{ inputs.env }}-${{ matrix.node }}` per cell.
+`lock-preview-on-success` / `unlock-preview-on-failure` jobs are **deleted from this workflow**. Their semantics move into `flight-preview.yml`'s `aggregate-preview` job (per gap-2 / `AGGREGATOR_OWNS_LEASE`). The matrix path applies for `inputs.env in {preview, production}` — both are now per-node-laned. There is no whole-slot path post-cutover.
+
+For production: `aggregate-production` job in `promote-and-deploy.yml` itself updates `deploy/production/.promote-state/current-sha` after all cells succeed. No `release.yml` change needed (production isn't read by release.yml today; only preview is).
 
 **D. `candidate-flight-infra.yml`** (156 lines → ~170; GR-5 best-effort)
 
@@ -356,4 +418,3 @@ Best-effort warning, not a hard gate — explicitly per GR-5 deferred to follow-
 - Handoff: [handoff](../handoffs/task.0372.handoff.md)
 - Substrate: [task.0320](task.0320.per-node-candidate-flighting.md), [task.0374 PR #1053](https://github.com/Cogni-DAO/node-template/pull/1053)
 - Reuses: [task.0373 PR #1047](https://github.com/Cogni-DAO/node-template/pull/1047) snapshot/restore
-- Production follow-up: [task.0375](task.0375.production-matrix-cutover.md)
