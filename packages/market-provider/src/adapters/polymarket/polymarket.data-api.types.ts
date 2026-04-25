@@ -112,9 +112,7 @@ export const PolymarketUserPositionSchema = z
     eventId: z.string().optional().nullable().default(""),
     eventSlug: z.string().optional().nullable().default(""),
     outcome: z.string().optional().default(""),
-    // No silent default — the redeem precheck (bug.0383) needs to detect
-    // missing outcomeIndex and fail loud rather than guess outcome 0.
-    outcomeIndex: z.coerce.number().optional(),
+    outcomeIndex: z.coerce.number().optional().default(0),
     oppositeOutcome: z.string().optional().nullable().default(""),
     oppositeAsset: z.string().optional().nullable().default(""),
     endDate: z.string().optional().nullable().default(""),

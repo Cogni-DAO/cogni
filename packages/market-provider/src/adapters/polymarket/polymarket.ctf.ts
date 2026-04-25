@@ -8,7 +8,6 @@
  * Invariants:
  *   - POLYGON_MAINNET_ONLY — addresses match `approve-polymarket-allowances.ts` / Polymarket docs for chain id 137.
  *   - BINARY_INDEX_SETS_WRITE_ONLY — `[1, 2]` applies only to the `redeemPositions` write path (indexSets argument). The `balanceOf` read path takes an arbitrary ERC1155 token id (e.g. `Position.asset` from the Data-API) and is outcome-cardinality agnostic.
- *   - WINNING_OUTCOME_PRECHECK — callers MUST gate `redeemPositions` on `payoutNumerators(conditionId, outcomeIndex) > 0` for the funder's held outcome (see bug.0383). On a losing outcome the call succeeds with payout=0 and burns no ERC1155; the wallet's balance stays > 0 and naive sweeps loop forever.
  * Side-effects: none (pure constants + parseAbi)
  * Links: Polymarket agent-skills ctf-operations.md; scripts/experiments/approve-polymarket-allowances.ts
  * @public
@@ -36,7 +35,6 @@ export const BINARY_REDEEM_INDEX_SETS: readonly [bigint, bigint] = [1n, 2n];
 export const polymarketCtfRedeemAbi = parseAbi([
   "function redeemPositions(address collateralToken, bytes32 parentCollectionId, bytes32 conditionId, uint256[] indexSets) external",
   "function balanceOf(address account, uint256 id) view returns (uint256)",
-  "function payoutNumerators(bytes32 conditionId, uint256 outcomeIndex) view returns (uint256)",
 ]);
 
 /** Normalize API / DB condition ids to a 32-byte hex string. */

@@ -346,8 +346,17 @@ async function buildExecutor(
     PolymarketDataApiClient,
     polymarketCtfRedeemAbi,
   } = await import("@cogni/market-provider/adapters/polymarket");
-  const { createPublicClient, createWalletClient, http } = await import("viem");
+  const { createPublicClient, createWalletClient, http, parseAbi } =
+    await import("viem");
   const { polygon } = await import("viem/chains");
+
+  // bug.0383 precheck reads. Local fragment to keep this fix scoped to the
+  // poly node (single-domain CI gate). Promote to packages/market-provider
+  // when the next non-hotfix touches that package.
+  const ctfPrecheckAbi = parseAbi([
+    "function balanceOf(address account, uint256 id) view returns (uint256)",
+    "function payoutNumerators(bytes32 conditionId, uint256 outcomeIndex) view returns (uint256)",
+  ]);
 
   // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
   const accountAny: any = resolved.account;
@@ -660,13 +669,13 @@ async function buildExecutor(
       contracts: [
         {
           address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
-          abi: polymarketCtfRedeemAbi,
+          abi: ctfPrecheckAbi,
           functionName: "balanceOf" as const,
           args: [funderAddress as `0x${string}`, positionId] as const,
         },
         {
           address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
-          abi: polymarketCtfRedeemAbi,
+          abi: ctfPrecheckAbi,
           functionName: "payoutNumerators" as const,
           args: [normalized, BigInt(match.outcomeIndex ?? 0)] as const,
         },
@@ -785,13 +794,13 @@ async function buildExecutor(
       contracts: candidates.flatMap((c) => [
         {
           address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
-          abi: polymarketCtfRedeemAbi,
+          abi: ctfPrecheckAbi,
           functionName: "balanceOf" as const,
           args: [funderAddress as `0x${string}`, c.asset] as const,
         },
         {
           address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
-          abi: polymarketCtfRedeemAbi,
+          abi: ctfPrecheckAbi,
           functionName: "payoutNumerators" as const,
           // outcomeIndex `null` becomes 0 here; decideRedeem still routes to
           // missing_outcome_index, so the multicall layout stays a clean 2N.

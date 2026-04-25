@@ -13,10 +13,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import {
-  normalizePolygonConditionId,
-  polymarketCtfRedeemAbi,
-} from "../src/adapters/polymarket/polymarket.ctf.js";
+import { normalizePolygonConditionId } from "../src/adapters/polymarket/polymarket.ctf.js";
 
 describe("normalizePolygonConditionId", () => {
   const valid =
@@ -34,27 +31,5 @@ describe("normalizePolygonConditionId", () => {
     expect(() => normalizePolygonConditionId("0xabc")).toThrow(
       /expected 32-byte hex/
     );
-  });
-});
-
-describe("polymarketCtfRedeemAbi", () => {
-  it("exposes payoutNumerators(bytes32, uint256) view returning uint256", () => {
-    const fragment = polymarketCtfRedeemAbi.find(
-      (x) => x.type === "function" && x.name === "payoutNumerators"
-    );
-    expect(fragment).toBeDefined();
-    if (!fragment || fragment.type !== "function") throw new Error("bad");
-    expect(fragment.stateMutability).toBe("view");
-    expect(fragment.inputs.map((i) => i.type)).toEqual(["bytes32", "uint256"]);
-    expect(fragment.outputs.map((o) => o.type)).toEqual(["uint256"]);
-  });
-
-  it("retains balanceOf and redeemPositions fragments", () => {
-    const names = polymarketCtfRedeemAbi
-      .filter((x) => x.type === "function")
-      .map((x) => (x as { name: string }).name);
-    expect(names).toContain("balanceOf");
-    expect(names).toContain("redeemPositions");
-    expect(names).toContain("payoutNumerators");
   });
 });

@@ -47,6 +47,7 @@ vi.mock("viem", () => ({
   createWalletClient: vi.fn(() => ({ writeContract })),
   createPublicClient: vi.fn(() => ({ waitForTransactionReceipt, multicall })),
   http: vi.fn(() => "transport"),
+  parseAbi: vi.fn(() => []),
 }));
 
 vi.mock("viem/chains", () => ({
