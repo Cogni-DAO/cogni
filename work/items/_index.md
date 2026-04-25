@@ -84,6 +84,7 @@
 | 1 | 1 | 1 | needs_merge | bug.0361 | promote-and-deploy: EXPECTED_BUILDSHA uses merge commit SHA; deploy-infra always runs | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 1 | needs_review | bug.0364 | promote-and-deploy: production can't promote heterogeneous preview (single source_sha assumption) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 2 | needs_triage | bug.0369 | Reown/WalletConnect origin allowlist missing for poly-test (and no sync workflow across node × env matrix) | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 1 | 1 | needs_review | bug.0370 | LiteLLM billing callback DNS-fails since k3s migration — every prod LLM call drops on the floor | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 1 | needs_review | task.0370 | Rebase every node's migrator stage on its runtime image | Database Operations | proj.database-ops |
 | 1 | 1 | 2 | needs_review | task.0371 | Kill PreSync migration hook + migrator image — step 1 hotfix | Database Operations | proj.database-ops |
 | 1 | 1 | 2 | needs_implement | task.0373 | candidate-flight self-heals deploy/candidate-a digests around PR rsync |  |  |
@@ -188,7 +189,6 @@
 | 1 | 99 | 2 | needs_review | bug.0343 | Candidate-a poly flights inherit ancient poly-migrator digest — doltgres PreSync hook fails intermittently |  |  |
 | 2 | 0 | 2 | needs_triage | task.0109 | Expand GitHub adapter — PR comments, review comments, issue creation | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 2 | 2 | 3 | needs_design | task.0238 | Agent avatars — Rive/Lottie animated characters on run cards and chat | Premium Frontend UX | proj.premium-frontend-ux |
-| 1 | 1 | 1 | needs_review | bug.0370 | LiteLLM billing callback DNS-fails since k3s migration — every prod LLM call drops on the floor | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 2 | 1 | needs_review | bug.0367 | verify-buildsha.sh hostname convention breaks production verify | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 2 | 2 | needs_review | bug.0368 | candidate-flight verify wait is ~4min of migrator image pull, not migration work | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 3 | 1 | needs_triage | bug.0012 | pre-commit check:docs validates all files, not just staged — blocks unrelated commits |  |  |
