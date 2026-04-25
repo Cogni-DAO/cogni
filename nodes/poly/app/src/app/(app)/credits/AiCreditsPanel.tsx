@@ -79,7 +79,7 @@ export function AiCreditsPanel(): ReactElement {
         </span>
       </Card>
 
-      <SectionCard title="Buy Credits">
+      <SectionCard title="Buy AI Credits">
         <SplitInput
           label="Amount"
           value={amountInput}

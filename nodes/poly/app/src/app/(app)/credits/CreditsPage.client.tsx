@@ -5,20 +5,14 @@
  * Module: `@app/(app)/credits/CreditsPage.client`
  * Purpose: Money page composed of two panels — AI Credits (USDC top-up)
  *   and the Polymarket Trading Wallet (per-tenant Privy wallet balances +
- *   the first-user onboarding surface). Two columns only at `lg+` so the
- *   wallet card gets room for its deposit hero; narrower viewports use a
- *   Credits / Wallet pill toggle. Route stays `/credits` so existing links
- *   and footer nav stay stable.
+ *   stubbed fund/withdraw). Two columns on desktop; mobile uses Credits /
+ *   Wallet pill toggle. Route stays `/credits` so existing links and footer
+ *   nav stay stable.
  * Scope: Client layout shell only. Panels own their own data fetching.
- * Invariants:
- *   - No URL rename — relabel-only per the project charter.
- *   - WALLET_BREAKPOINT_LG (task.0365): the two-column grid only kicks in
- *     at `lg` (≥1024px). Below that the wallet card renders at full width
- *     so the deposit address + enable-trading button never cramp.
+ * Invariants: No URL rename — relabel-only per the project charter.
  * Side-effects: none (panels perform their own IO).
  * Links: packages/node-contracts/src/poly.wallet.connection.v1.contract.ts,
- *        packages/node-contracts/src/poly.wallet.balances.v1.contract.ts,
- *        work/items/task.0365.poly-onboarding-ux-polish-v0-1.md
+ *        packages/node-contracts/src/poly.wallet.balances.v1.contract.ts
  * @public
  */
 
@@ -28,61 +22,54 @@ import { type ReactElement, useState } from "react";
 import { PageContainer } from "@/components";
 import { cn } from "@/shared/util/cn";
 import { AiCreditsPanel } from "./AiCreditsPanel";
-import { OnboardingProgress } from "./OnboardingProgress";
 import { TradingWalletPanel } from "./TradingWalletPanel";
 
-type NarrowTab = "credits" | "wallet";
+type MobileTab = "credits" | "wallet";
 
 export function CreditsPageClient(): ReactElement {
-  // First-user hot path is the trading wallet — default the narrow-viewport
-  // tab to Wallet so aspiring users land on deposit + enable flow, not on
-  // AI credits. AI credits is a returning-user action.
-  const [narrowTab, setNarrowTab] = useState<NarrowTab>("wallet");
+  const [mobileTab, setMobileTab] = useState<MobileTab>("credits");
 
   return (
     <PageContainer maxWidth="2xl">
-      <OnboardingProgress />
-
-      {/* Narrow-viewport toggle — hidden ≥lg. Keeps the visual hierarchy
-          minimal: two pill-buttons, one active at a time, switching which
-          panel renders. */}
-      <div className="mb-4 flex gap-2 lg:hidden">
+      {/* Mobile toggle — hidden ≥md. Keeps the visual hierarchy minimal: two
+          pill-buttons, one active at a time, switching which panel renders. */}
+      <div className="mb-4 flex gap-2 md:hidden">
         <button
           type="button"
-          onClick={() => setNarrowTab("wallet")}
+          onClick={() => setMobileTab("credits")}
           className={cn(
-            "flex-1 rounded-md px-3 py-2 font-medium text-sm transition-colors",
-            narrowTab === "wallet"
+            "flex-1 rounded-md px-3 py-2 font-medium text-sm",
+            mobileTab === "credits"
               ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:text-foreground"
+              : "bg-muted text-muted-foreground"
           )}
-          aria-pressed={narrowTab === "wallet"}
+          aria-pressed={mobileTab === "credits"}
+        >
+          AI Credits
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("wallet")}
+          className={cn(
+            "flex-1 rounded-md px-3 py-2 font-medium text-sm",
+            mobileTab === "wallet"
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground"
+          )}
+          aria-pressed={mobileTab === "wallet"}
         >
           Trading wallet
         </button>
-        <button
-          type="button"
-          onClick={() => setNarrowTab("credits")}
-          className={cn(
-            "flex-1 rounded-md px-3 py-2 font-medium text-sm transition-colors",
-            narrowTab === "credits"
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:text-foreground"
-          )}
-          aria-pressed={narrowTab === "credits"}
-        >
-          AI credits
-        </button>
       </div>
 
-      {/* Two columns only at lg+ — wallet first so the deposit hero is the
-          page's anchor point on desktop too. */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className={cn(narrowTab === "wallet" ? "" : "hidden lg:block")}>
-          <TradingWalletPanel />
-        </div>
-        <div className={cn(narrowTab === "credits" ? "" : "hidden lg:block")}>
+      {/* Desktop grid — two columns ≥md; panels stack on mobile with only the
+          selected tab visible. */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className={cn(mobileTab === "credits" ? "" : "hidden md:block")}>
           <AiCreditsPanel />
+        </div>
+        <div className={cn(mobileTab === "wallet" ? "" : "hidden md:block")}>
+          <TradingWalletPanel />
         </div>
       </div>
     </PageContainer>
