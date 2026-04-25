@@ -2,7 +2,7 @@
 id: bug.0373
 type: bug
 title: poly CTF redeem sweep burns POL on a runaway loop, re-redeeming already-redeemed positions
-status: needs_implement
+status: needs_closeout
 priority: 0
 rank: 1
 estimate: 2
@@ -291,20 +291,54 @@ as today.
 
 ## Plan
 
-- [ ] Rename `polymarket.ctf.redeem.ts` → `polymarket.ctf.ts`, add `balanceOf`
-      ABI fragment, update header.
-- [ ] Update importer in `packages/market-provider/src/adapters/polymarket/index.ts`.
-- [ ] Rewrite `redeemAllRedeemableResolvedPositions`: drop `p.redeemable`
-      filter, multicall `balanceOf` per candidate, redeem only when balance > 0,
-      emit structured `poly.ctf.redeem.skip_zero_balance` info-log otherwise.
-- [ ] Mocked-RPC unit tests (zero-balance skip / non-zero redeems / `redeemable`
-      flag has no effect).
-- [ ] Anvil-fork integration test: real Polygon fork, real funder with a
-      redeemable position; sweep redeems once, balance goes to 0, second
-      sweep submits zero new txs.
-- [ ] File `task.0374` (sweep architecture refactor — reactive on
-      wallet-watch resolution event, OR slow dedicated cron). Out of scope
-      here; in scope for the next refactor PR.
+- [x] **Checkpoint 1 — ABI surface**
+  - Milestone: CTF read+write surface exposes `balanceOf`; importers updated.
+  - Invariants: POLYGON_MAINNET_ONLY, NO_NEW_PORTS.
+  - Todos:
+    - [ ] Rename `packages/market-provider/src/adapters/polymarket/polymarket.ctf.redeem.ts` → `polymarket.ctf.ts`. Update module header `Purpose`.
+    - [ ] Add `balanceOf(address account, uint256 id) view returns (uint256)` to `polymarketCtfRedeemAbi`.
+    - [ ] Update import path in `packages/market-provider/src/adapters/polymarket/index.ts`.
+    - [ ] Update `Links:` comment in `nodes/poly/app/src/app/api/v1/poly/wallet/positions/redeem/route.ts`.
+    - [ ] Rename + update `packages/market-provider/tests/polymarket-ctf-redeem.test.ts` → `polymarket-ctf.test.ts` if needed.
+  - Validation: `pnpm --filter @cogni/market-provider check` green.
+
+- [x] **Checkpoint 2 — Predicate inversion**
+  - Milestone: `redeemAllRedeemableResolvedPositions` redeems only when on-chain ERC1155 balance > 0.
+  - Invariants: SWEEP_TRIGGERED_BY_ON_CHAIN_BALANCE, NO_REDEEM_ON_ZERO_BALANCE.
+  - Todos:
+    - [ ] Rewrite `redeemAllRedeemableResolvedPositions` (`nodes/poly/app/src/bootstrap/capabilities/poly-trade-executor.ts:657`) to drop `p.redeemable` filter, multicall `balanceOf(funder, BigInt(p.asset))` for each candidate, redeem only when balance > 0.
+    - [ ] Emit `poly.ctf.redeem.skip_zero_balance` (info, structured) for zero-balance positions; downgrade old `sweep_skip` warn-event.
+  - Validation: typecheck + existing unit tests pass.
+
+- [x] **Checkpoint 3 — Mocked unit tests**
+  - Milestone: Test layer asserts predicate semantics (independent of real chain).
+  - Todos:
+    - [ ] New tests in `nodes/poly/app/tests/unit/bootstrap/poly-trade-executor.test.ts`:
+      - [ ] Sweep skips positions with `balanceOf === 0n` (no `writeContract` call).
+      - [ ] Sweep redeems positions with `balanceOf > 0n` (one `writeContract` per non-zero).
+      - [ ] Sweep ignores `Position.redeemable` flag (false + non-zero balance still redeems).
+  - Validation: `pnpm --filter @cogni/poly-app test:unit` green.
+
+- [ ] **Checkpoint 4 — Anvil-fork integration test (DEFERRED to task.0375)**
+  - Decision: poly node has no anvil/fork test infrastructure
+    (`viem.adapter.int.test.ts` files are stubs across all nodes; no
+    `@viem/anvil` dep, no foundry, no testcontainers anvil image). Building
+    that harness, plus refactoring the executor factory to accept an injected
+    raw account (currently hard-couples to Privy `PolyTraderWalletPort`), is
+    a multi-hour scope expansion materially larger than the bug fix itself.
+  - Trade-off accepted: the mocked unit tests prove the predicate is
+    inverted; the regression-prone `redeemable` filter is dropped at the
+    source level. The remaining "redeemPositions succeeds-as-no-op on
+    zero balance" semantic is documented CTF behavior — we no longer call
+    that code path on a zero-balance position regardless of chain semantics.
+  - Filed `task.0375` (anvil-fork harness) so the gate gets installed in
+    a follow-up PR with proper infra scope.
+
+- [x] **Checkpoint 5 — Bookkeeping**
+  - Todos:
+    - [x] File `task.0374` (sweep architecture refactor follow-up).
+    - [x] File `task.0375` (anvil-fork test harness follow-up).
+    - [x] Update `_index.md` and bug status to `needs_closeout`.
 
 ## Validation
 

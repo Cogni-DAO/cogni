@@ -2,18 +2,18 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/market-provider/tests/polymarket-ctf-redeem`
+ * Module: `@cogni/market-provider/tests/polymarket-ctf`
  * Purpose: Unit tests for Polygon condition id normalization used before CTF redeem.
  * Scope: `normalizePolygonConditionId` only. Does not hit RPC or chain.
  * Invariants: Valid ids are 32-byte hex.
  * Side-effects: none
- * Links: packages/market-provider/src/adapters/polymarket/polymarket.ctf.redeem.ts
+ * Links: packages/market-provider/src/adapters/polymarket/polymarket.ctf.ts
  * @internal
  */
 
 import { describe, expect, it } from "vitest";
 
-import { normalizePolygonConditionId } from "../src/adapters/polymarket/polymarket.ctf.redeem.js";
+import { normalizePolygonConditionId } from "../src/adapters/polymarket/polymarket.ctf.js";
 
 describe("normalizePolygonConditionId", () => {
   const valid =

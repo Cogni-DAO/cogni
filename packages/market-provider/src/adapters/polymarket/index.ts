@@ -44,7 +44,7 @@ export {
   POLYGON_CONDITIONAL_TOKENS,
   POLYGON_USDC_E,
   polymarketCtfRedeemAbi,
-} from "./polymarket.ctf.redeem.js";
+} from "./polymarket.ctf.js";
 export {
   type ListTopTradersParams,
   type ListUserActivityParams,
