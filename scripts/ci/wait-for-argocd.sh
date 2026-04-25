@@ -37,12 +37,14 @@
 #   VM_HOST             (required) SSH target
 #   DEPLOY_ENVIRONMENT  (required) preview | candidate-a | production — used
 #                       for the `{env}-{app}` Application name convention
-#   EXPECTED_SHA        (required) git SHA the caller expects Argo to report
-#                       as status.sync.revision — MUST be the deploy-branch
-#                       tip SHA (NOT the source-app commit). Argo tracks the
-#                       deploy branch, not main. Passing COGNI_REPO_REF here
-#                       is wrong — it will never match sync.revision and the
-#                       script will silently time out.
+#   EXPECTED_SHA        (required) deploy-branch commit the caller expects
+#                       Argo to apply. Acceptance is "identical or ancestor
+#                       of sync.revision" — strict equality false-failed
+#                       when the deploy branch advanced mid-wait
+#                       (run #24923018566). Ancestry uses the GitHub compare
+#                       API; falls back to strict equality if GH_TOKEN/GH_REPO
+#                       are unset.
+#   GH_TOKEN, GH_REPO   (optional) enable the ancestry check.
 #   PROMOTED_APPS       (optional) CSV of app names to scope the wait to.
 #                       Empty → fall back to full catalog. Apps not promoted
 #                       in this run may legitimately be pinned at prior digest
@@ -72,6 +74,8 @@ ARGOCD_TIMEOUT="${ARGOCD_TIMEOUT:-600}"
 ACTIVE_SYNC_AFTER="${ACTIVE_SYNC_AFTER:-30}"
 SYNC_KICK_INTERVAL="${SYNC_KICK_INTERVAL:-45}"
 PROMOTED_APPS="${PROMOTED_APPS:-}"
+GH_TOKEN_FOR_COMPARE="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+GH_REPO_FOR_COMPARE="${GH_REPO:-${GITHUB_REPOSITORY:-}}"
 
 EXPECTED_SHA=$(printf '%s' "$EXPECTED_SHA" | tr '[:upper:]' '[:lower:]')
 
@@ -96,6 +100,8 @@ cat > "$REMOTE_SCRIPT" <<'REMOTESCRIPT'
 set -euo pipefail
 
 # Args: DEPLOY_ENVIRONMENT EXPECTED_SHA ARGOCD_TIMEOUT ACTIVE_SYNC_AFTER SYNC_KICK_INTERVAL app1 ...
+# Env (optional, set via SSH SetEnv from caller):
+#   GH_TOKEN, GH_REPO — enable ancestry check via GitHub compare API.
 DEPLOY_ENVIRONMENT="$1"
 EXPECTED_SHA="$2"
 ARGOCD_TIMEOUT="$3"
@@ -105,6 +111,43 @@ shift 5
 APPS=("$@")
 
 EXPECTED_SHA=$(printf '%s' "$EXPECTED_SHA" | tr '[:upper:]' '[:lower:]')
+GH_TOKEN="${GH_TOKEN:-}"
+GH_REPO="${GH_REPO:-}"
+
+ANCESTRY_CACHE_REV=""
+ANCESTRY_CACHE_RESULT=1
+
+# rc 0 iff EXPECTED is identical-to or an ancestor-of REV. Strict-equality
+# fallback when GH_TOKEN/GH_REPO are unset.
+rev_includes_expected() {
+  local rev="$1" expected="$2"
+  [ -z "$rev" ] && return 1
+  [ "$rev" = "$expected" ] && return 0
+  if [ -z "$GH_TOKEN" ] || [ -z "$GH_REPO" ]; then
+    return 1
+  fi
+  if [ "$rev" = "$ANCESTRY_CACHE_REV" ]; then
+    return "$ANCESTRY_CACHE_RESULT"
+  fi
+  ANCESTRY_CACHE_REV="$rev"
+  local status
+  status=$(curl -fsSL --max-time 10 \
+    -H "Authorization: Bearer ${GH_TOKEN}" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/${GH_REPO}/compare/${expected}...${rev}" 2>/dev/null \
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status",""))' 2>/dev/null \
+    || echo "")
+  case "$status" in
+    identical|behind)
+      ANCESTRY_CACHE_RESULT=0
+      return 0
+      ;;
+    *)
+      ANCESTRY_CACHE_RESULT=1
+      return 1
+      ;;
+  esac
+}
 
 # Early exit: if Application CRD doesn't exist, skip entirely (first deploy / no Argo)
 if ! kubectl get crd applications.argoproj.io &>/dev/null; then
@@ -251,9 +294,7 @@ wait_for_app() {
       return 1
     }
 
-    # First verify revision matches, then ensure Argo reports the promoted
-    # Deployment resource itself as Synced before trusting rollout status.
-    if [ "$REV" = "$EXPECTED_SHA" ] &&
+    if rev_includes_expected "$REV" "$EXPECTED_SHA" &&
        can_proceed_to_rollout_check "$HEALTH" "$SYNC_PHASE" &&
        deployment_sync_ready "$deployment" "$deployment_status"; then
       # bug.0326: sync.revision + health.status are Argo-Application-level
@@ -278,7 +319,7 @@ wait_for_app() {
     fi
 
     if [ $SECONDS -ge "$next_kick" ] &&
-       { [ "$REV" != "$EXPECTED_SHA" ] ||
+       { ! rev_includes_expected "$REV" "$EXPECTED_SHA" ||
          ! can_proceed_to_rollout_check "$HEALTH" "$SYNC_PHASE" ||
          ! deployment_sync_ready "$deployment" "$deployment_status"; }; then
       kick_count=$((kick_count + 1))
@@ -323,9 +364,17 @@ REMOTESCRIPT
 scp $SSH_OPTS "$REMOTE_SCRIPT" root@"$VM_HOST":/tmp/wait-for-argocd-remote.sh
 rm -f "$REMOTE_SCRIPT"
 
+# GH_TOKEN goes via a SCP'd tmp file so it never lands on the ssh cmdline.
+TOKEN_FILE=$(mktemp)
+chmod 600 "$TOKEN_FILE"
+printf '%s' "${GH_TOKEN_FOR_COMPARE}" > "$TOKEN_FILE"
+# shellcheck disable=SC2086
+scp $SSH_OPTS "$TOKEN_FILE" root@"$VM_HOST":/tmp/wait-for-argocd-token
+rm -f "$TOKEN_FILE"
+
 # shellcheck disable=SC2086
 ssh $SSH_OPTS root@"$VM_HOST" \
-  "bash /tmp/wait-for-argocd-remote.sh '$DEPLOY_ENVIRONMENT' '$EXPECTED_SHA' '$ARGOCD_TIMEOUT' '$ACTIVE_SYNC_AFTER' '$SYNC_KICK_INTERVAL' ${APPS[*]}; RC=\$?; rm -f /tmp/wait-for-argocd-remote.sh; exit \$RC"
+  "GH_TOKEN=\$(cat /tmp/wait-for-argocd-token) GH_REPO='$GH_REPO_FOR_COMPARE' bash /tmp/wait-for-argocd-remote.sh '$DEPLOY_ENVIRONMENT' '$EXPECTED_SHA' '$ARGOCD_TIMEOUT' '$ACTIVE_SYNC_AFTER' '$SYNC_KICK_INTERVAL' ${APPS[*]}; RC=\$?; rm -f /tmp/wait-for-argocd-remote.sh /tmp/wait-for-argocd-token; exit \$RC"
 
 # Gate-ordering invariant (bug.0321 Fix 4): signal downstream steps in the
 # same job that Argo sync was verified at EXPECTED_SHA. wait-for-candidate-ready.sh

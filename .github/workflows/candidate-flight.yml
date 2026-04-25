@@ -384,6 +384,8 @@ jobs:
           DEPLOY_ENVIRONMENT: candidate-a
           EXPECTED_SHA: ${{ needs.flight.outputs.deploy_branch_sha }}
           PROMOTED_APPS: ${{ needs.flight.outputs.promoted_apps }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: bash ci-src/scripts/ci/wait-for-argocd.sh
 
       - name: Wait for candidate readiness

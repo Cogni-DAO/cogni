@@ -686,6 +686,8 @@ jobs:
           # Scope the wait to apps actually promoted this run. Untouched apps
           # (e.g. sandbox-openclaw placeholder) would false-fail.
           PROMOTED_APPS: ${{ needs.promote-k8s.outputs.promoted_apps }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: bash app-src/scripts/ci/wait-for-argocd.sh
 
       - name: Wait for in-cluster services
