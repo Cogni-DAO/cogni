@@ -168,12 +168,12 @@ const CTF_SET_APPROVAL_ABI = parseAbi([
 
 /**
  * Minimum POL balance required before we start submitting approval txs.
- * Empirically each tx is ~35k gas @ ~30 gwei ≈ 0.001 POL; 6 txs + headroom
- * for gas-price spikes ≈ 0.02 POL. We gate on 0.02 to keep the UX error
- * ("insufficient gas") fast and loud instead of letting a mid-sequence tx
- * fail and leave the wallet half-approved.
+ * Empirically each tx is ~35k gas @ ~30 gwei ≈ 0.001 POL; 6 enable txs
+ * cost ≈ 0.006 POL. We gate at 0.1 so the user lands post-enable with
+ * ~90 txs of trading headroom instead of ~14 — a half-funded wallet that
+ * runs out of gas mid-trade is the worst silent-failure mode.
  */
-const ENABLE_TRADING_MIN_POL = 0.02;
+const ENABLE_TRADING_MIN_POL = 0.1;
 
 /**
  * Default scopes auto-issued alongside every new wallet. BUY + SELL so the
