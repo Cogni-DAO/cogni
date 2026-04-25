@@ -137,13 +137,26 @@ Already tracked in DATABASE_RLS_SPEC.md P1:
 
 **Goal:** Each node owns its DB schema — no cross-node table leak, no shared migration numbering.
 
-| Deliverable                                                        | Status       | Est | Work Item                                                                  |
-| ------------------------------------------------------------------ | ------------ | --- | -------------------------------------------------------------------------- |
-| Per-node drizzle configs + per-node migrator images + legacy purge | done         | 2   | task.0324 ([PR #916](https://github.com/Cogni-DAO/node-template/pull/916)) |
-| Un-no-op prod poly/resy migration Jobs (gated on DB inspection)    | needs_design | 1   | task.0324 Phase 3 (follow-up)                                              |
-| **Future:** Atlas + GitOps migrations (declarative schema, CRD)    | needs_design | 5   | task.0325                                                                  |
+| Deliverable                                                                                       | Status       | Est | Work Item                                                                    |
+| ------------------------------------------------------------------------------------------------- | ------------ | --- | ---------------------------------------------------------------------------- |
+| Per-node drizzle configs + per-node migrator images + legacy purge                                | done         | 2   | task.0324 ([PR #916](https://github.com/Cogni-DAO/node-template/pull/916))   |
+| Migrator rebased on runtime image (`FROM runner AS migrator` + drizzle-orm programmatic migrator) | done         | 2   | task.0370 ([PR #1041](https://github.com/Cogni-DAO/node-template/pull/1041)) |
+| Migrations as Deployment initContainer + retire `cogni-template-migrate` GHCR build               | in-review    | 2   | task.0371 ([PR #1043](https://github.com/Cogni-DAO/node-template/pull/1043)) |
+| Un-no-op prod poly/resy migration Jobs (gated on DB inspection)                                   | obviated     | —   | superseded by task.0371 — Jobs deleted entirely                              |
+| **Future:** Atlas + GitOps migrations (declarative schema, CRD)                                   | needs_design | 5   | task.0325                                                                    |
 
-task.0324 delivered per-node schema sovereignty. task.0325 preserves the Atlas adoption plan for when destructive-change linting warrants it.
+**As-shipped state after task.0371:**
+
+- Each node app ships a single runtime image; `cogni-template-migrate` GHCR package retired.
+- Migrations run as a Deployment initContainer (`base/node-app/deployment.yaml`) using the same image as the main container; CMD reads `NODE_NAME` from configmap and invokes `node /app/nodes/$(NODE_NAME)/app/migrate.mjs ...`.
+- Postgres migrators (operator/poly/resy) wrap `migrate()` in a blocking `pg_advisory_lock(0x436f676e6901)` — single-writer guard for concurrent initContainers (replicas > 1, HPA scale-out, rolling-update overlap). Drizzle's journal makes the post-acquire migration a no-op when schema is already current.
+- Poly Doltgres runs as a second initContainer in the poly Deployment (added via overlay patch on candidate-a + preview only — production-poly doesn't run Doltgres). The Doltgres script does **not** wrap in advisory lock today: support is unverified and postgres.js extended-protocol has known compat gaps. Single-writer is fine at `replicas: 1`.
+- Argo PreSync hook Jobs are gone everywhere; `wait-for-argocd.sh` lost ~80 lines of hook-Job babysitting.
+
+**Remaining open items:**
+
+- Doltgres advisory-lock validation when poly scales beyond `replicas: 1` (multi-writer Doltgres safety).
+- task.0325 — Atlas / declarative schema / destructive-change linting — when contributor scale warrants it.
 
 ### Migrator Image Layer Sharing (task.0370 — bug.0368)
 

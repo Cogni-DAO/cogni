@@ -24,28 +24,21 @@ if (!migrationsFolder) {
 
 // Postgres advisory lock — single-writer guard so concurrent initContainers
 // (replicas > 1, HPA scale-out, rolling-update overlap) don't race the same
-// migration. Lock auto-releases on session end; non-acquirer skip-and-logs
-// at exit 0 because someone else is already migrating to the same SHA.
-const LOCK_KEY = 0x436f676e6900 + 0x01; // "Cogni\0\x01" — namespace + slot
+// migration. Blocking acquire: peer waits, then drizzle's journal makes the
+// inner migrate() a no-op when the schema is already current. Lock auto-
+// releases on session end; explicit unlock in finally for clarity.
+const LOCK_KEY = 0x436f676e6901n;
 
 let sql;
 try {
   sql = postgres(url, { max: 1, onnotice: (n) => console.log(n.message) });
-  const [{ acquired }] =
-    await sql`SELECT pg_try_advisory_lock(${LOCK_KEY}) AS acquired`;
-  if (!acquired) {
-    console.log(
-      `⏭ ${NODE} migrate skipped — peer holds advisory lock ${LOCK_KEY} (concurrent migrator)`
-    );
-    process.exitCode = 0;
-  } else {
-    const t0 = Date.now();
-    try {
-      await migrate(drizzle(sql), { migrationsFolder });
-      console.log(`✅ ${NODE} migrations applied in ${Date.now() - t0}ms`);
-    } finally {
-      await sql`SELECT pg_advisory_unlock(${LOCK_KEY})`;
-    }
+  const t0 = Date.now();
+  await sql`SELECT pg_advisory_lock(${LOCK_KEY})`;
+  try {
+    await migrate(drizzle(sql), { migrationsFolder });
+    console.log(`✅ ${NODE} migrations applied in ${Date.now() - t0}ms`);
+  } finally {
+    await sql`SELECT pg_advisory_unlock(${LOCK_KEY})`;
   }
 } catch (err) {
   console.error(`FATAL(${NODE}): migrate failed:`, err);

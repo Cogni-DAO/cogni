@@ -150,18 +150,19 @@ See [Database RLS Spec](database-rls.md) for the dual-client architecture and st
 
 ## 2. Migration Strategy
 
-**Core Principle:** Each node owns its migrations. task.0324 split the previously-shared drizzle config into per-node configs (`nodes/<node>/drizzle.config.ts`). task.0370 rebased each node's migrator image on its runner image so the per-flight migrator pull is a tiny layer delta over the runner's already-cached layers (was ~400 MB unique blob, now ~2 MB).
+**Core Principle:** Each node owns its migrations and runs them as a Deployment **initContainer** off the runtime image. task.0324 split the previously-shared drizzle config into per-node configs (`nodes/<node>/drizzle.config.ts`). task.0370 rebased the migrator stage on `runner` and swapped drizzle-kit for `drizzle-orm/postgres-js/migrator`. task.0371 retired the separate `cogni-template-migrate` image and the Argo PreSync hook Jobs entirely — migrations now run inline on pod start, gated by `kubectl rollout status`.
 
 **Architecture:**
 
-- **Per-node migrator images:** `cogni-template-migrate:{tag}-{operator,poly,resy}-migrate` — one image per node, built from `nodes/<node>/app/Dockerfile` stage `migrator`. Stage is `FROM runner AS migrator` (task.0370): the runner's standalone Next.js bundle already carries `drizzle-orm` + `postgres` (production deps via `serverExternalPackages`), so the migrator stage adds only the SQL migration files + a ~15-line `migrate.mjs` runner script.
-- **Migration runner script:** `nodes/<node>/app/src/adapters/server/db/migrate.mjs` invokes `drizzle-orm/postgres-js/migrator` programmatically — same function drizzle-kit calls internally. CMD: `node /app/nodes/<node>/app/migrate.mjs /app/nodes/<node>/app/migrations`. Forces `outputFileTracingIncludes` of the full `drizzle-orm` + `postgres` packages in `next.config.ts` so the standalone bundle ships their `package.json` + `exports` map (the app itself only imports the driver, not the migrator subpath).
+- **One image per node:** `ghcr.io/cogni-dao/cogni-template:{tag}-{operator,poly,resy}` — single runtime image. Built from `nodes/<node>/app/Dockerfile` `runner` stage. The runner ships migration SQL + per-node `migrate.mjs` alongside the standalone Next.js bundle (which already carries `drizzle-orm` + `postgres` as production deps via `serverExternalPackages`). `next.config.ts` forces `outputFileTracingIncludes` of the full `drizzle-orm/**/*` + `postgres/**/*` packages so the standalone bundle has their `package.json` + `exports` map.
+- **Deployment initContainer:** `infra/k8s/base/node-app/deployment.yaml` declares `initContainers: [migrate]` using the same image as the main container. CMD: `["/bin/sh", "-c", "exec node /app/nodes/$(NODE_NAME)/app/migrate.mjs /app/nodes/$(NODE_NAME)/app/migrations"]`. `NODE_NAME` comes from `node-app-config` (per-overlay configmap patch).
+- **Migration runner script:** `nodes/<node>/app/src/adapters/server/db/migrate.mjs` invokes `drizzle-orm/postgres-js/migrator` programmatically — the same function drizzle-kit calls internally. Wraps `migrate()` in a blocking `pg_advisory_lock(0x436f676e6901)`: concurrent initContainers (replicas > 1, HPA scale-out, rolling-update overlap) acquire serially, and drizzle's journal makes post-acquire migrations a no-op when schema is current. Lock auto-releases on session end + explicit `pg_advisory_unlock` in finally.
 - **Per-node drizzle-kit configs (dev only):** `nodes/<node>/drizzle.config.ts` — used by `pnpm db:migrate:*` for local dev + testcontainers. Not invoked at production runtime.
 - **Core schema package:** `packages/db-schema` (`@cogni/db-schema`) — cross-node platform tables.
 - **Per-node schema packages:** `nodes/<node>/packages/db-schema` (`@cogni/<node>-db-schema`) — node-local tables. Today only `@cogni/poly-db-schema` exists.
-- **Poly Doltgres migration:** poly's migrator image carries a second script `migrate-doltgres.mjs` which calls the same programmatic migrator, then issues `SELECT dolt_commit('-Am', 'migration: drizzle-orm batch')` to stamp DDL into `dolt_log` (Dolt DDL doesn't auto-commit). Reached via the `migrate-poly-doltgres` Job's `command:` override in `infra/k8s/base/poly-doltgres/doltgres-migration-job.yaml`.
+- **Poly Doltgres migration:** poly's runtime image also carries `migrate-doltgres.mjs` + a separate `doltgres-migrations/` dir. poly's overlay (candidate-a + preview only — production-poly doesn't run Doltgres) appends a second initContainer `migrate-doltgres` to the Deployment via JSON patch (`op: add path: /spec/template/spec/initContainers/-`). The Doltgres script calls the same programmatic migrator and issues a trailing `SELECT dolt_commit('-Am', 'migration: drizzle-orm batch')` to stamp DDL into `dolt_log` (Dolt DDL doesn't auto-commit). It does **not** wrap in advisory lock today — Doltgres advisory-lock support is unverified and postgres.js extended-protocol has known compat gaps; single-writer is fine at `replicas: 1`.
 - **Migration history per DB:** one `drizzle.__drizzle_migrations` table per database (standard drizzle default). Idempotent — script no-ops in <100 ms when journal is caught up. `0027_silent_nextwave.sql` is byte-duplicated across `nodes/{operator,poly,resy}/app/src/adapters/server/db/migrations/` (pre-task.0324 legacy) — READMEs warn against deletion.
-- **Runner image:** Production image (~920 MB at the time of task.0370; ~285 MB is `@openai/codex` SDK weight tracked separately as bug.0369). Carries the standalone Next.js bundle + production deps including `drizzle-orm` + `postgres` (which the app uses for runtime DB I/O and the migrator reuses via the FROM-runner stage).
+- **Runner image:** Production image (~920 MB; ~285 MB is `@openai/codex` SDK weight tracked separately as bug.0369). Carries the standalone Next.js bundle + production deps including `drizzle-orm` + `postgres`.
 
 **Invariants:**
 
@@ -188,7 +189,7 @@ See [Database RLS Spec](database-rls.md) for the dual-client architecture and st
 - **Local Dev** (`db:migrate:dev` / `:poly` / `:resy`): runs `drizzle-kit migrate` with `.env.local` + per-node config. For daily development.
 - **Local Test** (`db:migrate:test*`): runs with `.env.test`. For test database setup.
 - **Direct** (`db:migrate:direct`): runs with operator config using `DATABASE_URL` from environment. For testcontainers (`testcontainers-postgres.global.ts` sets `process.env.DATABASE_URL` before `execSync`).
-- **Container** (`db:migrate:{operator,poly,resy}:container`): default CMD of each per-node migrator image. K8s `AtlasMigration`/`migrate-node-app` Jobs invoke these via overlays.
+- **Production runtime** (Deployment initContainer): bundles the per-node `migrate.mjs` script + migration SQL into the runtime image. Pod start blocks on the initContainer until migrations apply (or no-op via journal). No separate Job, no PreSync hook.
 
 **Future: Atlas + GitOps migrations** — declarative schema, CRD-based Argo integration, destructive-change linting. Deferred to task.0325 with full spike intel preserved.
 
@@ -362,29 +363,24 @@ env:
 
 ### 4.1 Docker Image Architecture
 
-**Per-node image strategy (task.0324 + task.0370):** each deployed node ships two images from its own `nodes/<node>/app/Dockerfile`. After task.0370, the migrator stage rebases on the runner image so the two images share base layers and the per-flight migrator pull is a tiny delta over the runner.
+**One image per node (task.0324 + task.0370 + task.0371):** each deployed node ships exactly one runtime image from its own `nodes/<node>/app/Dockerfile`. After task.0371 the migration scripts + SQL bundle into the runner stage; there is no separate `cogni-template-migrate` package.
 
-- **Runner image** (`IMAGE_NAME:IMAGE_TAG` for operator; `IMAGE_NAME:IMAGE_TAG-{poly,resy}` for node variants): production image carrying the standalone Next.js bundle + production deps (`drizzle-orm`, `postgres`, etc.).
-- **Migrator image** (`cogni-template-migrate:IMAGE_TAG-{operator,poly,resy}-migrate`): `FROM runner` plus migration SQL + a ~15-line `migrate.mjs`. ~2 MB unique on top of runner. k3s pulls only the delta when runner is already cached.
+- **Runner image** (`IMAGE_NAME:IMAGE_TAG` for operator; `IMAGE_NAME:IMAGE_TAG-{poly,resy}` for node variants): production image carrying the standalone Next.js bundle + production deps (`drizzle-orm`, `postgres`, etc.) + per-node `migrate.mjs` + migration SQL (and for poly, also `migrate-doltgres.mjs` + Doltgres migration SQL).
 
-**Migrator stage (task.0370):** each node's Dockerfile defines `migrator` AFTER `runner` so it can inherit:
+**Runner stage (post-task.0371):** each node's Dockerfile bundles migration runners alongside the standalone bundle:
 
 ```dockerfile
 # Runner – production image
 FROM node:22-alpine AS runner
 ... (standalone bundle, codex SDK, etc.)
-CMD ["node", "nodes/<node>/app/server.js"]
-
-# Migrator — rebased on runner so it shares layers with the runtime image
-FROM runner AS migrator
 COPY --from=builder --chown=nextjs:nodejs /app/nodes/<node>/app/src/adapters/server/db/migrations  /app/nodes/<node>/app/migrations
 COPY --from=builder --chown=nextjs:nodejs /app/nodes/<node>/app/src/adapters/server/db/migrate.mjs /app/nodes/<node>/app/migrate.mjs
-CMD ["node", "/app/nodes/<node>/app/migrate.mjs", "/app/nodes/<node>/app/migrations"]
+CMD ["node", "nodes/<node>/app/server.js"]
 ```
 
-Poly additionally ships `migrate-doltgres.mjs` next to `migrate.mjs`; the `migrate-poly-doltgres` Job overrides `command:` to invoke it.
+Poly additionally COPYs `migrate-doltgres.mjs` + `doltgres-migrations/`. No second image; both initContainers (Postgres + Doltgres) run off the same runtime digest with `command:` overrides set in the Deployment spec / poly overlay.
 
-**`next.config.ts` requirement (task.0370):** the app itself imports `drizzle-orm/postgres-js` (the driver) but never the `migrator` subpath, so nft would prune it from standalone tracing. Each node's `next.config.ts` must include:
+**`next.config.ts` requirement:** the app itself imports `drizzle-orm/postgres-js` (the driver) but never the `migrator` subpath, so nft would prune it from standalone tracing. Each node's `next.config.ts` must include:
 
 ```ts
 outputFileTracingIncludes: {
@@ -392,20 +388,16 @@ outputFileTracingIncludes: {
 },
 ```
 
-This forces the full `drizzle-orm` + `postgres` packages (with their `package.json` exports map) into the standalone bundle so the migrator stage can resolve `drizzle-orm/postgres-js/migrator` at runtime.
+This forces the full `drizzle-orm` + `postgres` packages (with their `package.json` exports map) into the standalone bundle so `migrate.mjs` can resolve `drizzle-orm/postgres-js/migrator` at runtime.
 
-**Partial isolation, not full sovereignty:** each migrator image still inherits the runner's standalone, so core schema changes rebuild all three migrators. The win is per-node cache invalidation + pattern consistency with existing per-node app images + forks inheriting trivially.
+**CI wiring (see `scripts/ci/`):** simpler post-task.0371 — one target per node, no migrator companion.
 
-**CI wiring (see `scripts/ci/`):**
-
-Adding a new build-target name requires updating this full chain — missing any one step causes silent failure modes (target gets built but never promoted, or promoted but never resolved on re-flight).
-
-- `detect-affected.sh` — emits the target name when its paths change.
-- `build-and-push-images.sh` — builds the image tag from a Dockerfile stage with a distinct GHA cache scope.
-- `merge-build-fragments.sh` — `canonical_order` array must include the target for stable JSON ordering across matrix leg merges.
-- `compute_migrator_fingerprint.sh` — (migrators only) takes a node arg and hashes only that node's inputs for content-addressed image caching.
-- `resolve-pr-build-images.sh` — `ALL_TARGETS` + `resolve_tag()` must know about the tag shape, or the flight's PR-image resolver silently drops the target from the promoted payload (bug.0321 documents the vacuous-green failure mode this produces).
-- `promote-build-payload.sh` — pairs each app with its companion migrator digest (`operator-migrator` digest → operator overlay, etc.).
+- `detect-affected.sh` — emits the per-node target when its paths change.
+- `build-and-push-images.sh` — one build per target.
+- `merge-build-fragments.sh` — `canonical_order` is `["operator", "poly", "resy", "scheduler-worker"]`.
+- `resolve-pr-build-images.sh` — `ALL_TARGETS` + `resolve_tag()`. No `*-migrator` companions.
+- `promote-build-payload.sh` — one digest per app, no migrator pairing.
+- `wait-for-argocd.sh` — polls `sync.revision == EXPECTED_SHA && Healthy` then `kubectl rollout status`. Hook-Job babysitting (`delete_stale_hook_jobs`, `clear_stale_missing_hook_operation`, `patch_sync_operation`) is gone.
 
 ### 4.2 Drizzle Configuration
 
@@ -446,39 +438,36 @@ Poly's config uses an array schema that unions core + poly's per-node package so
 
 ### 5.1 Benefits
 
-**Separation of Concerns:**
+**Single image per node (task.0371):**
 
-- Migrator pod has only DB env vars (least-secret exposure)
-- Migrator runs in a one-shot Job, not as part of the long-running app pod (no replica race, no app-restart-induced re-migration)
+- One build per node — no `cogni-template-migrate` companion package
+- Runtime image bundles migration SQL + `migrate.mjs` + (for poly) `migrate-doltgres.mjs`
+- Removes `wait-for-argocd.sh`'s ~80 lines of hook-Job babysitting (the resy-stuck-hook failure class is gone)
 
-**Cache-friendly per-flight pulls (task.0370):**
+**Multi-replica safety:**
 
-- Migrator image is `FROM runner` → shares base layers with the runtime image k3s already pulled for the app pod
-- Per-flight migrator delta: ~2 MB (was ~400 MB unique blob pre-task.0370)
-- Drizzle-orm programmatic migrator means no drizzle-kit/pnpm/tsx in the migrator image — same library code drizzle-kit calls internally
+- Postgres migrators wrap `migrate()` in `pg_advisory_lock(0x436f676e6901)` — concurrent initContainers acquire serially; drizzle's journal makes peers' migrations no-ops
+- Single-writer guarantee survives HPA scale-out and rolling-update overlap
 
 **Consistent Migration Tooling:**
 
-- `drizzle-orm/postgres-js/migrator` is the pinned version (resolved via the runner's standalone deps)
-- Idempotent migrations (safe to re-run via journal table)
-- Same migrator entry-point shape across all nodes (operator, resy, poly Postgres + poly Doltgres)
+- `drizzle-orm/postgres-js/migrator` is the pinned migrator (resolved via the runner's standalone deps) — same library code drizzle-kit calls internally
+- Idempotent migrations (safe on every pod start via journal table)
+- Same script shape across all nodes; adding a new node is a one-line node-app overlay change + a `migrate.mjs` copy
 
 ### 5.2 Trade-offs
 
-**Two Images to Build:**
-
-- CI builds both runner and migrator targets per node
-- Tag coupling: `cogni-template:{tag}-{node}` for runtime, `cogni-template-migrate:{tag}-{node}-migrate` for migrator
-- Layer-cache shared on k3s after task.0370 — second-flight migrator pull is ~2 MB
-
-**Migrator inherits runner weight:**
-
-- Virtual size of migrator image ≈ runner size (~920 MB at the time of task.0370). Most of that is shared layers; per-flight unique pull is ~2 MB.
-- The runner's own first-pull weight (~285 MB of `@openai/codex` SDK) is tracked separately as bug.0369. Reducing runner weight cuts both app and migrator first-pull cost.
-
 **Forward-compat migrations required:**
 
-- Argo PreSync Job model means migrations run before the new app pods roll out, but rolling-update overlap window still has the old app pod talking to the new schema briefly. `DROP COLUMN` / non-default `NOT NULL` without a two-deploy plan = partial outage. CI lint for destructive SQL is follow-up work.
+- Deployment initContainer runs before the new pod becomes Ready, but rolling-update overlap means the old pod still serves traffic against the newly-migrated schema briefly. `DROP COLUMN` / non-default `NOT NULL` without a two-deploy plan = partial outage. CI lint for destructive SQL is follow-up work.
+
+**Doltgres advisory-lock skip:**
+
+- Poly's `migrate-doltgres.mjs` runs without an advisory-lock guard. Doltgres advisory-lock support is unverified and postgres.js extended-protocol has known compat gaps. Single-writer is fine at `replicas: 1` (current state); multi-writer Doltgres safety is a separate follow-up when poly scales out.
+
+**Runner image weight (~920 MB):**
+
+- Pre-existing, ~285 MB is `@openai/codex` SDK weight (bug.0369). Initial flight pull cost is per-pod once; cached on k3s thereafter.
 
 ## 6. Future Improvements (If/When Needed)
 
@@ -494,13 +483,9 @@ Non-localhost `DATABASE_URL` values do not currently require `sslmode=require`. 
 
 `provision.sh` creates the `app_user` role but does not restrict it from DDL operations. Production deployments should revoke `CREATE`, `DROP`, `TRUNCATE`, `ALTER` from the app role. Covered in [Database RLS Spec](database-rls.md).
 
-### 6.4 Migrator Image Optimization
+### 6.4 Runner Image Weight
 
-The migrator image (~480MB) includes full node_modules. Potential optimizations:
-
-- Use pnpm's `--filter` to install only drizzle-kit and dependencies
-- Multi-stage build to copy only required binaries
-- Consider distroless base image for smaller footprint
+After task.0371, runner is the only deploy-time image. Weight is ~920 MB, ~285 MB of which is the `@openai/codex` SDK (`bug.0369`). Reducing runner weight cuts both app and migration first-pull cost. Candidates: lazy-fetch codex on first AI call, smaller base image, or moving codex into the sandbox-openclaw container instead of runner.
 
 ### 6.2 Enhanced Environment Separation
 

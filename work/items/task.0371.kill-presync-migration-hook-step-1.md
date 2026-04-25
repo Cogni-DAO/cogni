@@ -3,7 +3,7 @@ id: task.0371
 type: task
 title: "Kill PreSync migration hook + migrator image — step 1 hotfix"
 status: needs_review
-revision: 1
+revision: 2
 priority: 1
 rank: 1
 estimate: 2
@@ -55,8 +55,21 @@ observability:
 - `/version.buildSha` on candidate-a-{operator,poly,resy} matches the flown SHA within 2 min of dispatch.
 - Failure-path: a syntactically-broken migration leaves the pod in `Init:Error`; old ReplicaSet keeps serving; `kubectl rollout status` non-zero; `verify-buildsha` fails on the flown SHA.
 
+## Review Feedback (rev 2)
+
+Self + dev review on PR #1043 caught:
+
+1. **(blocker)** `pg_try_advisory_lock` non-blocking + `process.exitCode = 0` on contention → race: pod B's main container would start before pod A's migration finished. Fixed by switching to **blocking** `pg_advisory_lock` — pod B waits, drizzle's journal makes the post-acquire migration a no-op. Operator/poly/resy migrate.mjs all updated.
+2. **(bug)** `clear_stale_missing_hook_operation` function body in `wait-for-argocd.sh` survived the kick-callsite delete — dead code with misleading comments. Body removed.
+3. **(bug)** Poly overlay `kustomization.yaml` (candidate-a + preview) had duplicate JSON patches: `op: replace` on `/spec/template/spec/initContainers/0/envFrom/1/secretRef/name` ran twice + the doltgres `op: add /spec/template/spec/initContainers/-` block was duplicated, rendering THREE initContainers (1 Postgres + 2 Doltgres). Idempotent at runtime via drizzle journal but wrong. Deduped — both overlays now render exactly two initContainers.
+4. **(comment drift)** `ARGOCD_TIMEOUT` default-600s comment in `wait-for-argocd.sh` referenced "two serial init containers" sized for the old migrator-image-pull + hook Job cold-starts. Reworded to reflect post-task.0371 posture.
+5. **(style)** `LOCK_KEY` literal cleaned up: `0x436f676e6900 + 0x01` → `0x436f676e6901n` (single hex BigInt, no arithmetic).
+
+Spec/project docs updated as part of this revision: `docs/spec/databases.md` §2 + §4.1 + §5 + §6.4 reflect the post-task.0371 single-image-per-node runtime + advisory-lock pattern. `work/projects/proj.database-ops.md` "Per-Node Schema Independence" deliverable table marks task.0371 in-review and adds the as-shipped state summary.
+
 ## Out of scope
 
 - Per-env per-node deploy branches (task.0320 redesign — a different dev's track).
-- `infra/catalog/*.yaml` becoming the single source of truth for `NODE_TARGETS` / `wait-for-argocd APPS` / detect-affected paths (task.0371 follow-up — orthogonal multiplier).
+- `infra/catalog/*.yaml` becoming the single source of truth for `NODE_TARGETS` / `wait-for-argocd APPS` / detect-affected paths.
 - Runtime image bloat (~285 MB `@openai/codex` SDK) — `bug.0369` follow-up, not blocking.
+- Doltgres advisory-lock validation when poly scales beyond `replicas: 1` (multi-writer Doltgres safety).

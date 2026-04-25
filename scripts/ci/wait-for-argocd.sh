@@ -48,15 +48,14 @@
 #                       in this run may legitimately be pinned at prior digest
 #                       (e.g. sandbox-openclaw placeholder) and would false-fail.
 #   ARGOCD_TIMEOUT      (optional, default 600) per-app timeout in seconds.
-#                       600s covers poly's two serial init containers (Postgres
-#                       + Doltgres migrate.mjs) + rolling-update drain —
-#                       observed 300s ceiling breach on
-#                       PR #1012 flight (run 24873868016). kubectl rollout
-#                       status exits on completion, so the extra budget is pure
-#                       headroom — fast rollouts still exit in <60s.
+#                       600s is conservative headroom — post-task.0370-step1
+#                       the runtime image is already warm for the app pod, so
+#                       initContainer migrations + rolling-update drain
+#                       typically finish well under 60s. Tighten in a follow-up
+#                       once we have post-merge flights to measure.
 #   ACTIVE_SYNC_AFTER   (optional, default 30) seconds before the first Argo kick
 #   SYNC_KICK_INTERVAL  (optional, default 45) seconds between subsequent kicks
-#                       while revision still mismatches (hard refresh + sync op)
+#                       (single hard-refresh annotation, no hook babysitting)
 #   SSH_OPTS            (optional) ssh flags
 #
 # Side-effect on success: writes ARGOCD_SYNC_VERIFIED=true to $GITHUB_ENV
@@ -218,37 +217,6 @@ request_hard_refresh() {
     '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}' 2>&1); then
     echo "    ⚠️  hard-refresh annotation patch failed for ${app_name}: $out" >&2
   fi
-}
-
-# Clear a stale Running operation waiting on a hook Job that no longer exists.
-# Uses direct Application spec.operation = null — no argocd CLI exec, no RBAC
-# expansion (patch on applications.argoproj.io is already held by the SA).
-clear_stale_missing_hook_operation() {
-  local app_name="$1"
-  local namespace op_phase op_message hook_job out
-  local op_revision=""
-
-  op_phase=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.phase}' 2>/dev/null || true)
-  [ "$op_phase" = "Running" ] || return 0
-
-  op_message=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.message}' 2>/dev/null || true)
-  hook_job=$(printf '%s' "$op_message" | sed -n 's/.*hook batch\/Job\/\([^ ]*\).*/\1/p')
-  [ -n "$hook_job" ] || return 0
-
-  namespace="cogni-${DEPLOY_ENVIRONMENT}"
-  if kubectl -n "$namespace" get job "$hook_job" >/dev/null 2>&1; then
-    return 0
-  fi
-
-  op_revision=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.syncResult.revision}' 2>/dev/null || true)
-  op_revision=$(printf '%s' "$op_revision" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
-  echo "    🛑 ${app_name}: clearing stale Running operation at ${op_revision:0:8} (missing hook job ${namespace}/${hook_job})"
-
-  if ! out=$(kubectl -n argocd patch application "$app_name" --type=merge -p '{"operation":null}' 2>&1); then
-    echo "    ⚠️  failed to clear stale operation for ${app_name}: $out" >&2
-    return 1
-  fi
-  return 0
 }
 
 # Poll a single app until it reports EXPECTED_SHA on sync.revision AND is Healthy,

@@ -66,9 +66,6 @@ patches:
         path: /spec/template/spec/initContainers/0/envFrom/1/secretRef/name
         value: "poly-node-app-secrets"
       - op: replace
-        path: /spec/template/spec/initContainers/0/envFrom/1/secretRef/name
-        value: "poly-node-app-secrets"
-      - op: replace
         path: /spec/template/spec/containers/0/ports/0/containerPort
         value: 3100
       - op: add
@@ -78,38 +75,6 @@ patches:
         path: /spec/template/metadata/labels/app.kubernetes.io~1instance
         value: "poly"
 
-  # task.0370 step 1: Doltgres knowledge-plane migrator runs as a second initContainer
-  # on the poly Deployment. DATABASE_URL maps to DOLTGRES_URL_POLY (separate from
-  # the Postgres DATABASE_URL the main container + first initContainer use).
-  - target:
-      kind: Deployment
-      name: node-app
-    patch: |
-      - op: add
-        path: /spec/template/spec/initContainers/-
-        value:
-          name: migrate-doltgres
-          image: ghcr.io/cogni-dao/cogni-template:placeholder
-          command:
-            - /bin/sh
-            - -c
-            - exec node /app/nodes/$(NODE_NAME)/app/migrate-doltgres.mjs /app/nodes/$(NODE_NAME)/app/doltgres-migrations
-          envFrom:
-            - configMapRef:
-                name: poly-node-app-config
-          env:
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: poly-node-app-secrets
-                  key: DOLTGRES_URL_POLY
-          resources:
-            requests:
-              memory: "384Mi"
-              cpu: "200m"
-            limits:
-              memory: "1Gi"
-              cpu: "1000m"
   # task.0370 step 1: Doltgres knowledge-plane migrator runs as a second initContainer
   # on the poly Deployment. DATABASE_URL maps to DOLTGRES_URL_POLY (separate from
   # the Postgres DATABASE_URL the main container + first initContainer use).
