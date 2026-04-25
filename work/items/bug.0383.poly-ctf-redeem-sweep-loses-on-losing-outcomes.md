@@ -126,83 +126,199 @@ success. The predicate must additionally consult
 
 ### Outcome
 
-The poly node's redeem sweep stops paying gas on no-op `redeemPositions`
-calls. After this ships, on-chain POL spend on the operator funder traces 1:1
-to USDC.e inbound payouts within the same tx. Losing-outcome positions
-accumulate harmlessly (zero gas, zero on-chain calls) until they are sold or
-swept by a separate cleanup task (out of scope here).
+The poly node's redeem sweep AND the manual `/api/v1/poly/wallet/positions/redeem`
+route stop paying gas on no-op `redeemPositions` calls. After this ships,
+on-chain POL spend on the operator funder traces 1:1 to USDC.e inbound
+payouts within the same tx, for both vanilla CTF and neg-risk positions.
+Predicate is verified end-to-end against the full position matrix held by
+the production funder via captured fixtures (see Test Fixtures).
 
 ### Approach
 
-**Extend the existing `balanceOf` multicall with a paired `payoutNumerators`
-read; skip when the held outcome is a loser.** Same multicall pattern,
-same ABI module, no new infrastructure.
+**One shared on-chain precheck, called by both the autonomous sweep and the
+manual redeem route.** Predicate: `balanceOf(funder, positionId) > 0` AND
+`payoutNumerators(conditionId, outcomeIndex) > 0`. Extends the existing
+multicall with one ABI fragment; no new ports, no new infra.
 
-Concretely, in `redeemAllRedeemableResolvedPositions`
-(`nodes/poly/app/src/bootstrap/capabilities/poly-trade-executor.ts:667+`):
+Verified against real Data-API + on-chain reads on
+`0x95e407fE03996602Ed1BF4289ecb3B5AF88b5134` (16 held positions; see
+"On-chain validation of the predicate" below).
+
+#### Shared precheck (closes the bug class on both paths)
+
+Add a private helper inside `poly-trade-executor.ts`:
+
+```ts
+async function assertOnChainRedeemable(
+  conditionId: `0x${string}`,
+  outcomeIndex: number,
+  positionId: bigint
+): Promise<{
+  ok: boolean;
+  reason?:
+    | "zero_balance"
+    | "losing_outcome"
+    | "missing_outcome_index"
+    | "read_failed";
+}>;
+```
+
+- Invoked by `redeemResolvedPosition` (manual route) BEFORE
+  `walletClient.writeContract`. If `!ok`, throw
+  `PolyTradeExecutorError("not_redeemable", reason)` — no chain write, no gas.
+- Invoked by `redeemAllRedeemableResolvedPositions` (autonomous sweep) per
+  candidate. If `!ok`, log structured skip and continue.
+
+#### Sweep changes (`redeemAllRedeemableResolvedPositions`, file `:667+`)
 
 1. Carry `outcomeIndex` from each `Position` into the candidate tuple
-   alongside `conditionId` + `asset`. (`outcomeIndex` is already on the
-   Data-API `Position` type — `polymarket.data-api.types.ts:78`.)
-2. The existing multicall builds N `balanceOf(funder, asset)` calls. Extend
-   it to 2N: also call `payoutNumerators(conditionId, outcomeIndex)` per
-   candidate. Same `publicClient.multicall({ allowFailure: true })` shape.
-3. For each candidate, skip with a structured log if **either**:
+   alongside `conditionId` + `asset`. The field exists on the Data-API
+   `Position` zod type (`polymarket.data-api.types.ts:78,115`).
+2. Existing multicall: N × `balanceOf` + N × `payoutNumerators(conditionId, outcomeIndex)`.
+   Same `publicClient.multicall({ allowFailure: true })` shape, doubles the
+   call count but stays in one RPC round-trip. Predicate works for both
+   vanilla CTF and neg-risk markets — verified against the captured
+   fixture; see Test Fixtures.
+3. Per candidate, skip with structured log if:
    - `balanceOf == 0` → existing `poly.ctf.redeem.skip_zero_balance` (kept).
    - `payoutNumerators == 0` → new `poly.ctf.redeem.skip_losing_outcome`
      (info-level, fields: `condition_id`, `asset`, `outcome_index`, `funder`).
-4. Only when both checks pass, invoke `redeemResolvedPosition({ condition_id })`
-   — write path is unchanged.
+   - either read failed → existing `poly.ctf.redeem.balance_read_failed`-shape
+     warn (rename to `read_failed`; reason field covers both reads).
+4. Only when both checks pass, invoke `redeemResolvedPosition`.
+
+#### Manual route changes
+
+`redeemResolvedPosition` (`:585+`) gets the same precheck applied to its
+single (`condition_id` → looked-up Position). If precheck fails, throw
+`not_redeemable` with the specific reason; the route at
+`app/api/v1/poly/wallet/positions/redeem/route.ts:91` already maps that to
+a 400-ish response — no route changes needed.
+
+#### Outcome-index hardening
+
+`Position.outcomeIndex` zod schema currently defaults to 0 silently
+(`z.coerce.number().optional().default(0)`). Tighten to fail loud: drop
+`.default(0)`, keep `.optional()` so we can detect missing values, and reject
+in the helper if `outcomeIndex == null`. Logged as
+`poly.ctf.redeem.skip_missing_outcome_index` (warn). Touch in
+`packages/market-provider/src/adapters/polymarket/polymarket.data-api.types.ts:78,115`.
+
+#### Kill switch
+
+Add `POLY_REDEEM_SWEEP_ENABLED` env var (default `true`); when `false`,
+`redeemSweep` in `mirror-pipeline.ts` is a no-op. Wired through
+`serverEnv()`. Lets us kill the loop via configmap without revert+redeploy
+if the new predicate misfires. Manual route is unaffected (kill switch only
+affects the autonomous sweep — manual close still works).
+
+#### Test Fixtures (real Polymarket + Polygon mainnet data)
+
+Captured 2026-04-25 at Polygon block `86010953` against funder
+`0x95e407fE03996602Ed1BF4289ecb3B5AF88b5134` (the production trader). Three
+files in `nodes/poly/app/tests/fixtures/poly-ctf-redeem/`:
+
+- `positions.data-api.snapshot-2026-04-25.json` — raw Data-API response
+  (16 positions; 11 neg-risk, 5 vanilla; 11 redeemable, 5 not).
+- `ctf-reads.snapshot-2026-04-25.json` — per-position on-chain reads at the
+  pinned block: `payoutNumerators(cid, heldIdx)`, `payoutNumerators(cid, otherIdx)`,
+  `payoutDenominator(cid)`, `getOutcomeSlotCount(cid)`,
+  `balanceOf(funder, heldAsset)`, `balanceOf(funder, oppositeAsset)`.
+- `expected-decisions.snapshot-2026-04-25.json` — golden decision table:
+  for each position, the `assertOnChainRedeemable` output the predicate
+  MUST produce (`{action: redeem|skip, skipReason}`).
+- `snapshot.sh` — re-runner. Re-snapshot when adding scenarios; pin a new
+  block, write a new dated file, don't mutate old ones.
+- `README.md` — what each file is, predicate covered, scenarios covered
+  vs. synthesized, refresh procedure.
+
+**Predicate verdict on the captured matrix (16 positions):**
+
+| Bucket                         | Count | Predicate decision                       | Correct? |
+| ------------------------------ | ----: | ---------------------------------------- | -------- |
+| Vanilla, resolved-loser        |     3 | `skip:losing_outcome`                    | ✅       |
+| Vanilla, unresolved (denom=0)  |     2 | `skip:losing_outcome` (numerator==0 too) | ✅       |
+| Neg-risk, resolved-loser       |     6 | `skip:losing_outcome`                    | ✅       |
+| Neg-risk, unresolved (denom=0) |     3 | `skip:losing_outcome`                    | ✅       |
+| **Neg-risk, resolved-WINNER**  | **2** | **`redeem`**                             | **✅**   |
+
+The two winners (Shanghai Haigang `+$4.83`, Querétaro `+$3.39`) are both
+neg-risk, both correctly identified by the predicate. The naive predicate
+covers vanilla AND neg-risk on this funder — earlier hypothesis that
+neg-risk needed special handling was based on testing the wrong conditionId
+(see git history of this file).
+
+These fixtures are the canonical e2e ground truth. Unit tests load
+`expected-decisions.snapshot-*.json` and assert that
+`assertOnChainRedeemable` reproduces every row exactly. No test mocks the
+Polymarket schema, the CTF ABI, or the predicate decisions — they all come
+from real data.
 
 **Reuses:**
 
-- `publicClient.multicall` with `allowFailure: true` (already used in
-  `redeemAllRedeemableResolvedPositions`).
+- `publicClient.multicall` with `allowFailure: true` (already used).
 - `polymarketCtfRedeemAbi` ABI module — append one fragment:
   `function payoutNumerators(bytes32 conditionId, uint256 outcomeIndex) view returns (uint256)`.
 - `Position.outcomeIndex` (already in the validated zod type).
 - Existing `poly.ctf.redeem.skip_*` logger event family.
-- bug.0376's chain-truth principle (`CHAIN_TRUTH_SOURCE`) — this fix
-  strengthens it, doesn't replace it.
+- bug.0376's `CHAIN_TRUTH_SOURCE` principle — this fix strengthens it.
 
 **Rejected alternatives:**
 
 - **Receipt-parse cooldown** (inspect prior tx for ERC1155 burn / USDC
-  Transfer; cache `condition_id → no-op` for N ticks): requires either
-  in-process Set (lost on restart, leaks one wasted redeem per stuck
-  condition per pod-start) or persistent Redis cache (new infra, new
-  invalidation rules, new failure modes). Doesn't fix the underlying "we
-  asked the wrong question" problem — only debounces the symptom.
-- **Disable redeem sweep entirely / move to manual close**: stops the
-  bleed but loses real winning redemptions and breaks the autonomous
-  exit-path UX. Operationally too large a regression for a P0 hotfix.
-- **Per-tick blacklist of conditions seen in prior tick**: no chain
-  cost, but doesn't survive restart and still wastes one redeem per
-  condition per pod uptime; doesn't address why the predicate is wrong.
-- **Filter at the Data-API layer (`Position.redeemable`)**: precisely the
-  source bug.0376 was filed to escape — Data-API state lags chain and is
-  not authoritative.
+  Transfer; cache `condition_id → no-op`): requires either in-process Set
+  (lost on restart, leaks one wasted redeem per stuck condition per
+  pod-start) or persistent Redis cache (new infra, new invalidation rules,
+  new failure modes). Doesn't fix the underlying "we asked the wrong
+  question" problem.
+- **Vanilla-only carve-out (skip all neg-risk)**: initial design hypothesis
+  rejected after fixture validation showed predicate works for both. Would
+  forgo ~$8 of legitimate neg-risk winnings on this funder for no benefit.
+- **Disable redeem sweep entirely**: stops bleed but loses real winning
+  redemptions and breaks the autonomous exit-path UX. Use the kill switch
+  in this PR as the operational backstop, not the default.
+- **Per-tick in-memory blacklist**: doesn't survive restart, still wastes
+  one redeem per condition per pod uptime, doesn't address root cause.
+- **Filter at Data-API layer (`Position.redeemable`)**: precisely the trap
+  bug.0376 was filed to escape.
+- **Sweep-only fix without manual-route precheck**: doesn't fix the manual
+  route bug class (design-review issue #1).
+
+### Out of Scope (explicit follow-up)
+
+- **task.0384 — losing-outcome ERC1155 dust cleanup**: positions that
+  trip `skip_losing_outcome` accumulate forever on the funder. Decide
+  whether to `safeTransferFrom` them to `0xdead`, leave them, or sell
+  via CLOB. Not gas-burning anymore after this fix, just clutter.
 
 ### Invariants
 
 <!-- CODE REVIEW CRITERIA -->
 
-- [ ] WINNING_OUTCOME_PRECHECK: Sweep submits `redeemPositions` only when
-      `payoutNumerators(conditionId, outcomeIndex) > 0` for the funder's
-      held position. (spec: proj.poly-web3-security-hardening)
+- [ ] WINNING_OUTCOME_PRECHECK: Both manual `redeemResolvedPosition` and
+      autonomous sweep submit `redeemPositions` only when
+      `payoutNumerators(conditionId, outcomeIndex) > 0` AND
+      `balanceOf(funder, positionId) > 0`. (spec: proj.poly-web3-security-hardening)
+- [ ] SHARED_PRECHECK_BOTH_PATHS: The on-chain precheck is implemented as
+      one helper called by both code paths; no path can skip it. (closes
+      design-review issue #1)
+- [ ] FIXTURE_PARITY: The unit test loads `expected-decisions.snapshot-*.json`
+      and asserts predicate output matches every row. No mocked decisions.
 - [ ] CHAIN_TRUTH_SOURCE: Predicate inputs come from CTF view calls
       (`balanceOf` + `payoutNumerators`), not from Data-API state flags.
-      (spec: bug.0376 invariant, retained)
+      (retained from bug.0376)
 - [ ] BINARY_INDEX_SETS_WRITE_ONLY: `[1, 2]` index-set assumption stays
-      scoped to the `redeemPositions` write call; the new
-      `payoutNumerators` read is outcome-cardinality agnostic. (spec:
-      `polymarket.ctf.ts` module invariants)
-- [ ] SIMPLE_SOLUTION: Extends one existing multicall with one extra ABI
-      fragment; no new ports, no new packages, no new infra.
-- [ ] ARCHITECTURE_ALIGNMENT: All chain reads continue to flow through the
+      scoped to the `redeemPositions` write call. (existing
+      `polymarket.ctf.ts` invariant)
+- [ ] OUTCOME_INDEX_FAIL_LOUD: Missing `Position.outcomeIndex` rejects
+      with `skip_missing_outcome_index` instead of silently defaulting to 0.
+- [ ] KILL_SWITCH_PRESENT: `POLY_REDEEM_SWEEP_ENABLED=false` makes
+      `redeemSweep` a no-op without code redeploy.
+- [ ] SIMPLE_SOLUTION: One ABI fragment, one helper, one env var. No new
+      ports, packages, or infrastructure.
+- [ ] ARCHITECTURE_ALIGNMENT: All chain reads flow through the
       `polymarket.ctf.ts` ABI module; sweep wiring stays in
-      `bootstrap/capabilities/poly-trade-executor.ts`. (spec:
-      docs/spec/architecture.md)
+      `bootstrap/capabilities/poly-trade-executor.ts`.
 
 ### Files
 
@@ -212,37 +328,74 @@ Concretely, in `redeemAllRedeemableResolvedPositions`
   — append one ABI fragment for
   `payoutNumerators(bytes32, uint256) view returns (uint256)` to
   `polymarketCtfRedeemAbi`. Update module-doc invariants list.
+- Modify: `packages/market-provider/src/adapters/polymarket/polymarket.data-api.types.ts`
+  — drop silent `.default(0)` on `outcomeIndex`; allow `null`/missing,
+  detected by caller.
 - Modify: `nodes/poly/app/src/bootstrap/capabilities/poly-trade-executor.ts`
-  — in `redeemAllRedeemableResolvedPositions`: carry `outcomeIndex` into
-  candidate tuple, extend multicall to include `payoutNumerators` per
-  candidate, gate redeem on both checks passing, emit
-  `poly.ctf.redeem.skip_losing_outcome` for losers.
+  — add `assertOnChainRedeemable` helper; call from both
+  `redeemResolvedPosition` (manual route) and
+  `redeemAllRedeemableResolvedPositions` (autonomous sweep); new skip
+  events; predicate covers vanilla + neg-risk uniformly.
+- Modify: `nodes/poly/app/src/features/copy-trade/mirror-pipeline.ts`
+  (`:163-175`) — wrap `redeemSweep` invocation in
+  `if (env.POLY_REDEEM_SWEEP_ENABLED)`.
+- Modify: `nodes/poly/app/src/lib/server-env.ts` (or wherever `serverEnv()`
+  lives) — add `POLY_REDEEM_SWEEP_ENABLED` boolean, default `true`.
+- Create: `nodes/poly/app/tests/fixtures/poly-ctf-redeem/positions.data-api.snapshot-2026-04-25.json`
+  — already captured.
+- Create: `nodes/poly/app/tests/fixtures/poly-ctf-redeem/ctf-reads.snapshot-2026-04-25.json`
+  — already captured.
+- Create: `nodes/poly/app/tests/fixtures/poly-ctf-redeem/expected-decisions.snapshot-2026-04-25.json`
+  — already captured.
+- Create: `nodes/poly/app/tests/fixtures/poly-ctf-redeem/snapshot.sh` +
+  `README.md` — already captured.
 - Test: `nodes/poly/app/tests/unit/bootstrap/poly-trade-executor.test.ts`
-  — add cases:
-  (a) balance>0 + numerator==0 (loser) → no redeem call, skip event emitted;
-  (b) balance>0 + numerator>0 (winner) → redeem fires;
-  (c) multicall returns mixed ok/failure for `payoutNumerators` → graceful
-  skip with existing `balance_read_failed`-shape warning;
-  (d) multiple positions, only winners redeemed.
+  — drive `assertOnChainRedeemable` from
+  `expected-decisions.snapshot-2026-04-25.json`. For each `case`: feed
+  `case.inputs` to a mocked multicall and assert the helper returns
+  `{ok, reason}` exactly matching `case.expected`. Plus synthetic cases
+  the snapshot doesn't cover:
+  (a) `read_failed` (mock multicall returns `status: failure`);
+  (b) `missing_outcome_index` (set `outcomeIndex: null` on a fixture row);
+  (c) full `redeemAllRedeemableResolvedPositions` walk over all 16 cases
+  → exactly 2 `writeContract` calls (the 2 winners), 14 skips.
+  (d) manual `redeemResolvedPosition` on a losing fixture row → throws
+  `not_redeemable / losing_outcome`, no `writeContract`.
 - Test: `packages/market-provider/tests/polymarket-ctf.test.ts` — assert
-  the new ABI fragment parses and exposes `payoutNumerators` with the
-  correct signature.
+  the new ABI fragment parses with the correct signature.
+- Create: `work/items/task.0384.poly-losing-outcome-erc1155-cleanup.md` —
+  follow-up for accumulated dust (out of scope).
 
 ## Validation
 
 ```yaml
 exercise: |
-  # Anvil-fork validation (out of scope for this PR — covered by task.0378).
-  # For this PR: stack-test fixture in tests/unit/bootstrap simulates the
-  # multicall result shape and asserts the gating logic.
-  pnpm -C nodes/poly/app test -- poly-trade-executor.test.ts
+  # Real interaction on candidate-a after flight, against funder 0x95e4…5134.
+  # 1. Establish baseline:
+  RPC=$POLYGON_RPC_URL
+  ADDR=0x95e407fE03996602Ed1BF4289ecb3B5AF88b5134
+  NONCE_BEFORE=$(curl -s -X POST $RPC -H 'Content-Type: application/json' \
+    -d "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getTransactionCount\",\"id\":1,\"params\":[\"$ADDR\",\"latest\"]}" \
+    | jq -r .result)
+  # 2. Trigger one mirror tick (or wait ~30s for the natural one).
+  # 3. Wait 60s.
+  # 4. Assert: on-chain nonce delta == 0 OR == count of poly.ctf.redeem.ok in the same window.
+  # 5. POL balance delta on the funder over the next 5 minutes <= 0.001 POL.
+  # Manual route exercise:
+  #   POST https://test.cognidao.org/api/v1/poly/wallet/positions/redeem
+  #   body: {"condition_id":"0x6e9cf6f11f6fcd7843d714fb25dce8d8f7554d22589701f405ee26fe981b6a3d"}
+  #   assert: response.status == 400, body.error == "not_redeemable"
 
 observability: |
-  # Post-flight on candidate-a, against funder 0x95e4…5134:
-  # 1. Loki: `{env="candidate-a", service="app"} | json | event="poly.ctf.redeem.skip_losing_outcome"` ≥ 1 within first sweep tick.
-  # 2. Loki: `{env="candidate-a", service="app"} | json | event="poly.ctf.redeem.ok"` count over 1h ≤ on-chain USDC.e inbounds in same window.
-  # 3. On-chain: `eth_getTransactionCount` delta over 1h on the funder ≤ count of `poly.ctf.redeem.ok` in the same window (no surprise txs).
+  # Loki, env=candidate-a, service=app:
+  # 1. event="poly.ctf.redeem.skip_losing_outcome" : ≥ 1 entry within first sweep tick.
+  # 2. event="poly.ctf.redeem.ok" count over 1h ≤ count of USDC.e inbound transfers
+  #    (alchemy_getAssetTransfers, contract 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174,
+  #    from 0x4D97DCd97eC945f40cF65F87097ACe5EA0476045) in the same 1h window.
+  # 3. On-chain: eth_getTransactionCount delta over 1h on funder ≤ count of
+  #    poly.ctf.redeem.ok events (no surprise on-chain redemptions).
 
 smoke_cmd: |
   pnpm -C nodes/poly/app test -- poly-trade-executor.test.ts
+  pnpm -C packages/market-provider test -- polymarket-ctf.test.ts
 ```

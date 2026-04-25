@@ -197,6 +197,8 @@
 | 1 | 99 | 3 | needs_research | spike.0263 | Spike: agent contributor protocol — communication mechanism + workflow design | Development Workflows | proj.development-workflows |
 | 1 | 99 | 2 | needs_review | bug.0343 | Candidate-a poly flights inherit ancient poly-migrator digest — doltgres PreSync hook fails intermittently |  |  |
 | 2 | 0 | 2 | needs_triage | task.0109 | Expand GitHub adapter — PR comments, review comments, issue creation | Transparent Credit Payouts | proj.transparent-credit-payouts |
+| 2 | 1 | 3 | needs_design | task.0375 | Production matrix cutover — extend per-node lanes to prod | CI/CD Pipeline | proj.cicd-services-gitops |
+| 2 | 1 | 2 | needs_triage | task.0384 | poly losing-outcome ERC1155 cleanup — decide what to do with stuck loser tokens | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
 | 2 | 2 | 3 | needs_design | task.0238 | Agent avatars — Rive/Lottie animated characters on run cards and chat | Premium Frontend UX | proj.premium-frontend-ux |
 | 2 | 2 | 1 | needs_review | bug.0367 | verify-buildsha.sh hostname convention breaks production verify | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 2 | 2 | needs_review | bug.0368 | candidate-flight verify wait is ~4min of migrator image pull, not migration work | CI/CD Pipeline | proj.cicd-services-gitops |
