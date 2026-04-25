@@ -117,9 +117,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ needs.decide.outputs.environment }}
     steps:
+      # Checkout the workflow dispatch ref (not source_sha) — the AppSet
+      # YAML is part of the CI control plane, not the artifact under
+      # promotion. Mirrors candidate-flight.yml's reconcile-appset.
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.decide.outputs.head_sha }}
 
       - name: Setup SSH
         id: ssh-setup
