@@ -13,7 +13,7 @@ spec_refs:
 assignees: []
 project: proj.vcs-integration
 branch: feat/task-0374-node-base-path-resolver
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/1055
 reviewer:
 revision: 1
 blocked_by:
