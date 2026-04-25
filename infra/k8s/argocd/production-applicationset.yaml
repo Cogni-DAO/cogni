@@ -2,7 +2,18 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 #
 # ApplicationSet for production environment.
-# Same pattern as preview — reads infra/catalog/*.yaml from main branch.
+#
+# task.0320 — per-node production flighting. Each node has its own deploy
+# branch (deploy/production-<node>, declared in infra/catalog/<node>.yaml
+# as production_branch) so one node's failed verify cannot block another
+# node's lane — even at the production gate. Same four-generator shape as
+# the candidate-a and preview ApplicationSets.
+#
+# Applications produced (names unchanged vs. pre-task.0320 shape):
+#   production-operator          tracking deploy/production-operator
+#   production-poly              tracking deploy/production-poly
+#   production-resy              tracking deploy/production-resy
+#   production-scheduler-worker  tracking deploy/production-scheduler-worker
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -12,9 +23,24 @@ spec:
   generators:
     - git:
         repoURL: https://github.com/cogni-dao/cogni-template.git
-        revision: deploy/production
+        revision: deploy/production-operator
         files:
-          - path: "infra/catalog/*.yaml"
+          - path: "infra/catalog/operator.yaml"
+    - git:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        revision: deploy/production-poly
+        files:
+          - path: "infra/catalog/poly.yaml"
+    - git:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        revision: deploy/production-resy
+        files:
+          - path: "infra/catalog/resy.yaml"
+    - git:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        revision: deploy/production-scheduler-worker
+        files:
+          - path: "infra/catalog/scheduler-worker.yaml"
   template:
     metadata:
       name: "production-{{name}}"
@@ -25,7 +51,7 @@ spec:
       project: default
       source:
         repoURL: https://github.com/cogni-dao/cogni-template.git
-        targetRevision: deploy/production
+        targetRevision: "{{production_branch}}"
         path: "infra/k8s/overlays/production/{{name}}"
       destination:
         server: https://kubernetes.default.svc

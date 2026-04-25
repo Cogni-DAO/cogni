@@ -2,8 +2,20 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 #
 # ApplicationSet for preview environment.
-# Human e2e testing. Promoted from canary after AI e2e passes.
-# Generates one Argo Application per catalog entry.
+# Human e2e testing. Promoted from main after candidate-a flight passes.
+#
+# task.0320 — per-node preview flighting. Each node has its own deploy
+# branch (deploy/preview-<node>, declared in infra/catalog/<node>.yaml
+# as preview_branch) so one node's failed verify cannot block another
+# node's lane. Argo's git generator applies one revision to all matched
+# files, so per-node revisions require one git generator per node —
+# four git generators under one ApplicationSet.
+#
+# Applications produced (names unchanged vs. pre-task.0320 shape):
+#   preview-operator          tracking deploy/preview-operator
+#   preview-poly              tracking deploy/preview-poly
+#   preview-resy              tracking deploy/preview-resy
+#   preview-scheduler-worker  tracking deploy/preview-scheduler-worker
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -13,9 +25,24 @@ spec:
   generators:
     - git:
         repoURL: https://github.com/cogni-dao/cogni-template.git
-        revision: deploy/preview
+        revision: deploy/preview-operator
         files:
-          - path: "infra/catalog/*.yaml"
+          - path: "infra/catalog/operator.yaml"
+    - git:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        revision: deploy/preview-poly
+        files:
+          - path: "infra/catalog/poly.yaml"
+    - git:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        revision: deploy/preview-resy
+        files:
+          - path: "infra/catalog/resy.yaml"
+    - git:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        revision: deploy/preview-scheduler-worker
+        files:
+          - path: "infra/catalog/scheduler-worker.yaml"
   template:
     metadata:
       name: "preview-{{name}}"
@@ -26,7 +53,7 @@ spec:
       project: default
       source:
         repoURL: https://github.com/cogni-dao/cogni-template.git
-        targetRevision: deploy/preview
+        targetRevision: "{{preview_branch}}"
         path: "infra/k8s/overlays/preview/{{name}}"
       destination:
         server: https://kubernetes.default.svc
