@@ -666,13 +666,15 @@ async function buildExecutor(
     const seen = new Set<string>();
     for (const p of positions) {
       if (!p.conditionId) continue;
+      let norm: string;
       try {
-        normalizePolygonConditionId(p.conditionId);
+        norm = normalizePolygonConditionId(p.conditionId);
       } catch {
         continue;
       }
-      if (seen.has(p.conditionId)) continue;
-      seen.add(p.conditionId);
+      if (seen.has(norm)) continue;
+      seen.add(norm);
+      if (!p.asset) continue;
       let asset: bigint;
       try {
         asset = BigInt(p.asset);
@@ -736,14 +738,17 @@ async function buildExecutor(
         });
         out.push({ condition_id: c.condition_id, tx_hash: r.tx_hash });
       } catch (err) {
+        // Post-balance-check error path: balanceOf said >0 but
+        // redeemResolvedPosition's own Data-API match failed (e.g. Data-API
+        // marked the position not redeemable, RPC failure). Rare; warn-level.
         deps.logger.warn(
           {
-            event: "poly.ctf.redeem.sweep_skip",
+            event: "poly.ctf.redeem.error",
             billing_account_id: billingAccountId,
             condition_id: c.condition_id,
             err: err instanceof Error ? err.message : String(err),
           },
-          "poly-trade-executor: redeem sweep skipped one condition"
+          "poly-trade-executor: redeem failed after balance precheck"
         );
       }
     }

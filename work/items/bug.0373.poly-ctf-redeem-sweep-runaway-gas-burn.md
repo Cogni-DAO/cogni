@@ -2,7 +2,7 @@
 id: bug.0373
 type: bug
 title: poly CTF redeem sweep burns POL on a runaway loop, re-redeeming already-redeemed positions
-status: needs_implement
+status: needs_closeout
 priority: 0
 rank: 1
 estimate: 2

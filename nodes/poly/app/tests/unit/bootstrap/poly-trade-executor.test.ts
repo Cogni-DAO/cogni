@@ -503,5 +503,133 @@ describe("createPolyTradeExecutorFactory", () => {
         | undefined;
       expect(call?.contracts).toHaveLength(2);
     });
+
+    it("redeems every position when all balances are non-zero (in order)", async () => {
+      const positionList = [
+        {
+          asset: "1",
+          size: 5,
+          curPrice: 1,
+          conditionId: CONDITION_A,
+          outcome: "YES",
+          redeemable: true,
+        },
+        {
+          asset: "2",
+          size: 3,
+          curPrice: 1,
+          conditionId: CONDITION_B,
+          outcome: "NO",
+          redeemable: true,
+        },
+      ];
+      // First call (sweep enumeration) + two re-fetches inside
+      // redeemResolvedPosition's per-condition match.
+      listUserPositions.mockResolvedValue(positionList);
+      multicall.mockResolvedValue([
+        { status: "success", result: 100n },
+        { status: "success", result: 200n },
+      ]);
+      writeContract
+        .mockResolvedValueOnce("0xredeemA")
+        .mockResolvedValueOnce("0xredeemB");
+
+      const { factory } = makeFactory();
+      const executor =
+        await factory.getPolyTradeExecutorFor(BILLING_ACCOUNT_ID);
+      const result = await executor.redeemAllRedeemableResolvedPositions();
+
+      expect(result).toEqual([
+        { condition_id: CONDITION_A, tx_hash: "0xredeemA" },
+        { condition_id: CONDITION_B, tx_hash: "0xredeemB" },
+      ]);
+      expect(writeContract).toHaveBeenCalledTimes(2);
+    });
+
+    it("skips positions where balanceOf multicall element failed; later successes still redeem", async () => {
+      const positionList = [
+        {
+          asset: "1",
+          size: 1,
+          curPrice: 1,
+          conditionId: CONDITION_A,
+          outcome: "YES",
+          redeemable: true,
+        },
+        {
+          asset: "2",
+          size: 1,
+          curPrice: 1,
+          conditionId: CONDITION_B,
+          outcome: "NO",
+          redeemable: true,
+        },
+      ];
+      listUserPositions.mockResolvedValue(positionList);
+      multicall.mockResolvedValue([
+        { status: "failure", error: new Error("rpc down") },
+        { status: "success", result: 100n },
+      ]);
+      writeContract.mockResolvedValue("0xredeemB");
+
+      const { factory } = makeFactory();
+      const executor =
+        await factory.getPolyTradeExecutorFor(BILLING_ACCOUNT_ID);
+      const result = await executor.redeemAllRedeemableResolvedPositions();
+
+      expect(result).toEqual([
+        { condition_id: CONDITION_B, tx_hash: "0xredeemB" },
+      ]);
+      expect(writeContract).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns immediately without multicall when there are no candidate positions", async () => {
+      listUserPositions.mockResolvedValue([]);
+
+      const { factory } = makeFactory();
+      const executor =
+        await factory.getPolyTradeExecutorFor(BILLING_ACCOUNT_ID);
+      const result = await executor.redeemAllRedeemableResolvedPositions();
+
+      expect(result).toEqual([]);
+      expect(multicall).not.toHaveBeenCalled();
+      expect(writeContract).not.toHaveBeenCalled();
+    });
+
+    it("dedupes by normalized conditionId — same id with/without 0x prefix collapses to one entry", async () => {
+      const hex = "a".repeat(64);
+      const withPrefix = `0x${hex}` as `0x${string}`;
+      const withoutPrefix = hex;
+      listUserPositions.mockResolvedValue([
+        {
+          asset: "1",
+          size: 1,
+          curPrice: 1,
+          conditionId: withPrefix,
+          outcome: "YES",
+          redeemable: true,
+        },
+        {
+          asset: "1",
+          size: 1,
+          curPrice: 1,
+          conditionId: withoutPrefix,
+          outcome: "YES",
+          redeemable: true,
+        },
+      ]);
+      multicall.mockResolvedValue([{ status: "success", result: 0n }]);
+
+      const { factory } = makeFactory();
+      const executor =
+        await factory.getPolyTradeExecutorFor(BILLING_ACCOUNT_ID);
+      await executor.redeemAllRedeemableResolvedPositions();
+
+      expect(multicall).toHaveBeenCalledTimes(1);
+      const call = multicall.mock.calls[0]?.[0] as
+        | { contracts: Array<unknown> }
+        | undefined;
+      expect(call?.contracts).toHaveLength(1);
+    });
   });
 });
