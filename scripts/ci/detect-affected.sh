@@ -97,8 +97,10 @@ is_global_build_input() {
     tsconfig.app.json | \
     tsconfig.scripts.json | \
     config/* | \
+    infra/catalog/* | \
     scripts/ci/build-and-push-images.sh | \
     scripts/ci/detect-affected.sh | \
+    scripts/ci/lib/image-tags.sh | \
     scripts/ci/write-build-manifest.sh)
       return 0
       ;;

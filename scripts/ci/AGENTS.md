@@ -73,13 +73,14 @@ scripts/fetch_github_job_logs.sh  # Fetch job logs from GitHub Actions API (requ
 - Keep actual YAML pipelines in repository root .github/ directory
 - `build.sh` builds both APP_IMAGE (runner target) and MIGRATOR_IMAGE (migrator target)
 - Tag coupling: MIGRATOR_IMAGE = IMAGE_NAME:IMAGE_TAG-migrate
-- `detect-affected.sh` mirrors the repo's turbo-aware SCM base/head selection and maps changed paths onto deployable image targets via each catalog entry's `path_prefix:` field (`CATALOG_IS_SSOT`, ci-cd.md axiom 16)
+- `detect-affected.sh` mirrors the repo's turbo-aware SCM base/head selection and maps changed paths onto deployable image targets via each catalog entry's `path_prefix:` field (`CATALOG_IS_SSOT`, ci-cd.md axiom 16). Treats `infra/catalog/**` and `scripts/ci/lib/image-tags.sh` as global build inputs (`CATALOG_EDITS_ARE_GLOBAL_BUILD_INPUT`, task.0372): any catalog edit triggers `add_all_targets` so all per-node deploy branches update in lockstep.
 - `lib/image-tags.sh` is a thin shim that populates `ALL_TARGETS` / `NODE_TARGETS` and resolves `tag_suffix_for_target` by reading `infra/catalog/*.yaml` at source time via the pre-installed `yq`. Repo-root-relative resolution; override via `COGNI_CATALOG_ROOT` for fixtures.
 - `build-and-push-images.sh` is the PR-build entrypoint for affected image pushes; workflows should pass resolved targets, not inline Docker command graphs
 - `write-build-manifest.sh` writes the canonical build artifact consumed by later candidate-flight automation
 - `resolve-pr-build-images.sh` resolves digest refs from the deterministic PR tag convention when candidate-flight needs the current pushed image set
 - `promote-build-payload.sh` translates a resolved image payload into overlay mutations via `promote-k8s-image.sh`, writes `promoted_apps=<csv>` to `$GITHUB_OUTPUT` incrementally after each successful promotion (trap EXIT guarantees the exit-time write even on abort — bug.0328), and merges per-app `source_sha` into `.promote-state/source-sha-by-app.json`. Map-write failures are `::warning::` annotations; total map-write failure exits non-zero so provenance decay cannot silently persist.
-- `acquire-candidate-slot.sh`, `release-candidate-slot.sh`, and `report-candidate-status.sh` are the minimal control-plane scripts for one-slot candidate flight
+- `report-candidate-status.sh` posts the terminal commit-status check on a PR head from `candidate-flight.yml`. `acquire-candidate-slot.sh` and `release-candidate-slot.sh` are dormant post-task.0372 (per-node `concurrency: flight-<env>-<node>` is the lease primitive — `BRANCH_HEAD_IS_LEASE`); files retained for rollback, deletion ships with task.0376.
+- `wait-for-argocd.sh` uses per-invocation `$$.$RANDOM.$RANDOM` suffix on its remote `/tmp/` paths so concurrent matrix cells don't race each other's cleanup (task.0372).
 - PLATFORM env: native locally (fast), linux/amd64 in CI
 - `deploy.sh` uses checksum-gated restart for LiteLLM: compares SHA256 of config file against stored hash at `/var/lib/cogni/litellm-config.sha256`, restarts only if changed
 - `deploy.sh` runs `git-sync` as a bootstrap step before db-provision to populate `/repo` volume for brain tools

@@ -367,22 +367,26 @@ fi
 echo "✅ All ArgoCD apps reconciled and healthy"
 REMOTESCRIPT
 
-# SCP script to VM, execute with args, clean up
+# Per-invocation unique remote paths so concurrent matrix cells (task.0372)
+# don't race each other's /tmp files.
+REMOTE_SUFFIX="$$.${RANDOM}.${RANDOM}"
+REMOTE_SCRIPT_PATH="/tmp/wait-for-argocd-remote.${REMOTE_SUFFIX}.sh"
+REMOTE_TOKEN_PATH="/tmp/wait-for-argocd-token.${REMOTE_SUFFIX}"
+
 # shellcheck disable=SC2086
-scp $SSH_OPTS "$REMOTE_SCRIPT" root@"$VM_HOST":/tmp/wait-for-argocd-remote.sh
+scp $SSH_OPTS "$REMOTE_SCRIPT" root@"$VM_HOST":"$REMOTE_SCRIPT_PATH"
 rm -f "$REMOTE_SCRIPT"
 
-# GH_TOKEN goes via a SCP'd tmp file so it never lands on the ssh cmdline.
 TOKEN_FILE=$(mktemp)
 chmod 600 "$TOKEN_FILE"
 printf '%s' "${GH_TOKEN_FOR_COMPARE}" > "$TOKEN_FILE"
 # shellcheck disable=SC2086
-scp $SSH_OPTS "$TOKEN_FILE" root@"$VM_HOST":/tmp/wait-for-argocd-token
+scp $SSH_OPTS "$TOKEN_FILE" root@"$VM_HOST":"$REMOTE_TOKEN_PATH"
 rm -f "$TOKEN_FILE"
 
 # shellcheck disable=SC2086
 ssh $SSH_OPTS root@"$VM_HOST" \
-  "GH_TOKEN=\$(cat /tmp/wait-for-argocd-token) GH_REPO='$GH_REPO_FOR_COMPARE' bash /tmp/wait-for-argocd-remote.sh '$DEPLOY_ENVIRONMENT' '$EXPECTED_SHA' '$ARGOCD_TIMEOUT' '$ACTIVE_SYNC_AFTER' '$SYNC_KICK_INTERVAL' ${APPS[*]}; RC=\$?; rm -f /tmp/wait-for-argocd-remote.sh /tmp/wait-for-argocd-token; exit \$RC"
+  "GH_TOKEN=\$(cat $REMOTE_TOKEN_PATH) GH_REPO='$GH_REPO_FOR_COMPARE' bash $REMOTE_SCRIPT_PATH '$DEPLOY_ENVIRONMENT' '$EXPECTED_SHA' '$ARGOCD_TIMEOUT' '$ACTIVE_SYNC_AFTER' '$SYNC_KICK_INTERVAL' ${APPS[*]}; RC=\$?; rm -f $REMOTE_SCRIPT_PATH $REMOTE_TOKEN_PATH; exit \$RC"
 
 # Gate-ordering invariant (bug.0321 Fix 4): signal downstream steps in the
 # same job that Argo sync was verified at EXPECTED_SHA. wait-for-candidate-ready.sh

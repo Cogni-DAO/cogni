@@ -64,7 +64,8 @@
 | 0 | 24 | 4 | needs_design | task.0001 | Docs Migration Tracker | Docs + Work System Infrastructure | proj.docs-system-infrastructure |
 | 0 | 25 | 2 | needs_implement | task.0090 | Keep Cogni Alive - direct system account funding on credits page | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
 | 0 | 99 | 2 | needs_closeout | task.0320 | Per-node flighting substrate — per-env deploy branches + per-node AppSets (candidate-a + preview + production) | CI/CD Pipeline | proj.cicd-services-gitops |
-| 0 | 99 | 4 | blocked | task.0372 | Per-node cutover — refactor candidate-a + preview AppSets + matrix fan-out | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | 99 | 4 | needs_merge | task.0372 | Per-node candidate-flight matrix + AppSet substrate | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | 99 | 3 | needs_implement | task.0376 | Preview + production matrix cutover — flight-preview.yml + promote-and-deploy.yml + cleanup | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 0 | 2 | needs_triage | task.0108 | Collection completeness verification for epoch ingestion | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 1 | 2 | needs_design | bug.0060 | Cost authority bug: OpenRouter billed cost not flowing through LiteLLM callback (response_cost=0) | Reliability & Uptime | proj.reliability |
 | 1 | 1 | 4 | needs_implement | task.0119 | Epoch approver UI — EIP-712 signing, review/edit/finalize admin panel | Transparent Credit Payouts | proj.transparent-credit-payouts |
@@ -196,7 +197,6 @@
 | 1 | 99 | 3 | needs_research | spike.0263 | Spike: agent contributor protocol — communication mechanism + workflow design | Development Workflows | proj.development-workflows |
 | 1 | 99 | 2 | needs_review | bug.0343 | Candidate-a poly flights inherit ancient poly-migrator digest — doltgres PreSync hook fails intermittently |  |  |
 | 2 | 0 | 2 | needs_triage | task.0109 | Expand GitHub adapter — PR comments, review comments, issue creation | Transparent Credit Payouts | proj.transparent-credit-payouts |
-| 2 | 1 | 3 | needs_design | task.0375 | Production matrix cutover — extend per-node lanes to prod | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 2 | 3 | needs_design | task.0238 | Agent avatars — Rive/Lottie animated characters on run cards and chat | Premium Frontend UX | proj.premium-frontend-ux |
 | 2 | 2 | 1 | needs_review | bug.0367 | verify-buildsha.sh hostname convention breaks production verify | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 2 | 2 | needs_review | bug.0368 | candidate-flight verify wait is ~4min of migrator image pull, not migration work | CI/CD Pipeline | proj.cicd-services-gitops |
