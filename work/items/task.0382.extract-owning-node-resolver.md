@@ -138,6 +138,10 @@ These two tasks implement the **same policy at two layers**:
 
 Both must agree. If they disagree, that's a real bug — captured by a contract test that exercises a fixed PR diff against both implementations. **Defer the contract test to a follow-on**; ship 0381 + 0382 first, then the parity test once both exist.
 
+## Links
+
+- Handoff: [handoff](../handoffs/task.0382.handoff.md)
+
 ## Validation
 
 ```yaml
