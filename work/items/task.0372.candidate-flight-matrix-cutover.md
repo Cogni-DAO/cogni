@@ -26,7 +26,7 @@ project: proj.cicd-services-gitops
 branch: feat/task.0372-matrix-cutover
 pr:
 reviewer:
-revision: 3
+revision: 4
 deploy_verified: false
 created: 2026-04-24
 updated: 2026-04-25
@@ -35,6 +35,19 @@ external_refs:
 ---
 
 # task.0372 — Per-node matrix cutover
+
+## Revision 4 (2026-04-25) — release.yml semantic regression + aggregator races + catalog drift
+
+> **Supersedes revision 3's "aggregator updates current-sha after all-cells-green" framing for `release.yml` consumption.**
+> Pre-implement design pass found four real correctness gaps in revision 3:
+>
+> - **R4-#3 (release.yml semantic regression).** Aggregator setting `current-sha = github.sha` after an affected-only flight stomps a SHA into the file at which only some nodes' overlays were validated. `release.yml` cuts releases that include unvalidated code. Fix: `current-sha` is computed as `git merge-base $(deploy/<env>-{operator,poly,resy,scheduler-worker} tips)` — the latest commit ancestor of all per-node tips. Every node has been preview-validated through the merge-base by definition. Lagging node holds back current-sha; that's correct, don't ship unvalidated code. `release.yml` byte-unchanged. Pinned as `CURRENT_SHA_IS_MERGE_BASE` invariant.
+> - **R4-#2 (rollup map merge must preserve unaffected entries).** Aggregator MUST `read existing rollup → overwrite ONLY affected-node keys → push`. Naive "union of cells this run" stomps stale-but-valid prior entries. Pinned as `ROLLUP_MAP_PRESERVES_UNAFFECTED`.
+> - **R4-#4 (aggregator races on `deploy/<env>` push).** Per-cell concurrency does not cover the aggregator. Two disjoint-node concurrent flights both push aggregate-preview → second non-fast-forward → unlock-preview-on-failure fires despite both succeeding. Fix: `concurrency: { group: aggregate-${{ matrix.env }}, cancel-in-progress: false }` on every aggregate job + rebase-retry on push. Pinned as `AGGREGATOR_CONCURRENCY_GROUP`.
+> - **R4-#5 (bootstrap-to-merge race).** If a whole-slot flight runs between bootstrap and PR merge, whole-slot branches advance, per-node branches stay behind, AppSets flip on merge, Argo rolls back. Fix: bootstrap script is idempotent + fast-forwards per-node branches to whole-slot HEADs on every run; implementer re-runs it as the last action immediately pre-merge. Pinned as `BOOTSTRAP_FAST_FORWARDS_BEFORE_MERGE`.
+> - **R4-#8 (catalog drift across per-node branches).** Per-cell rsync of `infra/catalog/` would land catalog edits only on the per-node branch that flighted. Two-part fix: (1) `detect-affected.sh` treats `infra/catalog/**` as a global-build-input (any catalog edit triggers `add_all_targets` → full matrix → all per-node branches get the update simultaneously). (2) Per-cell rsync is scoped to `infra/catalog/<this-node>.yaml` only, so non-catalog flights cannot stomp other nodes' catalog state. Pinned as `CATALOG_EDITS_ARE_GLOBAL_BUILD_INPUT`.
+>
+> Plus revision-3 invariant rename: bottom checklist reused old names (`AFFECTED_FROM_DETECT_AFFECTED_SH`, `CONCURRENCY_GROUP_KEYED_BY_ENV_AND_NODE`) that diverged from the pinned-invariants section. Bottom checklist rewritten in v4 to match pinned names verbatim and to add the missing `AGGREGATOR_OWNS_LEASE`, `SOURCE_SHA_MAP_PER_CELL`, `PROMOTED_APPS_PER_CELL`, plus the four new R4 invariants.
 
 ## Revision 3 (2026-04-25) — symmetric per-env, in one atomic PR
 
@@ -88,6 +101,11 @@ This replaces the current per-job `lock-preview-on-success` / `unlock-preview-on
 - **SOURCE_SHA_MAP_PER_CELL**: each cell writes `deploy/<env>-<node>:.promote-state/source-sha-by-app.json` with **exactly one entry** (its own node's source_sha). `verify-buildsha.sh` already supports the single-app map mode (task.0349 v3 `NODES ∩ map`); use it. The aggregator job MERGES per-node maps into the rollup `deploy/<env>:.promote-state/source-sha-by-app.json`.
 - **AGGREGATOR_OWNS_LEASE**: lock/unlock-preview semantics live in the aggregate job, never in per-cell jobs. Per-cell push of `.promote-state/lease.json` is forbidden.
 - **AFFECTED_FROM_TURBO** (task.0320 invariant, preserved): the destination is `turbo ls --affected --filter=...[$BASE]`. `scripts/ci/detect-affected.sh` is the v0 implementation that reads catalog `path_prefix:` (post-task.0374). task.0260 delivers the turbo migration; task.0372 keeps the existing detect-affected.sh callers. **Don't retroactively redefine the invariant; document the workaround.**
+- **CURRENT_SHA_IS_MERGE_BASE** (R4-#3): `deploy/<env>/.promote-state/current-sha` is computed by the aggregator as `git merge-base <tip-of-each-deploy/<env>-<node>>`. The merge-base is the latest commit ancestor of all 4 per-node tips — every node has been preview-validated through it by definition. `release.yml` reads this file unchanged. A node that hasn't flighted in a long time drags current-sha backward; that is correct ("don't ship unvalidated code") and the safety valve is a periodic full-matrix re-validation flight, not a heuristic-bump.
+- **ROLLUP_MAP_PRESERVES_UNAFFECTED** (R4-#2): the aggregator merges per-node `source-sha-by-app.json` into `deploy/<env>:.promote-state/source-sha-by-app.json` by `read existing rollup → overwrite ONLY affected-node keys → push`. Naive "union of cells this run" stomps stale-but-valid prior entries on affected-only flights. Verify-buildsha relies on the rollup being complete across all nodes.
+- **AGGREGATOR_CONCURRENCY_GROUP** (R4-#4): every aggregator job carries `concurrency: { group: aggregate-${{ matrix.env }}, cancel-in-progress: false }`. Aggregator step also performs rebase-retry on push (loop with `git fetch && git rebase && git push` up to N attempts) so legitimate disjoint-node flights never lose a lease to a non-fast-forward race.
+- **BOOTSTRAP_FAST_FORWARDS_BEFORE_MERGE** (R4-#5): `scripts/ops/bootstrap-per-node-deploy-branches.sh` is idempotent. On every run it computes each whole-slot tip and **fast-forwards** every per-node branch to that tip (creates if missing; fast-forwards if behind; no-ops if already at or ahead). Implementer re-runs it as the last action immediately before merging this PR, so per-node branches cannot be behind whole-slot at the moment AppSets flip.
+- **CATALOG_EDITS_ARE_GLOBAL_BUILD_INPUT** (R4-#8): `scripts/ci/detect-affected.sh` treats `infra/catalog/**` as a global-build-input → any catalog edit triggers `add_all_targets` → full matrix → all per-node branches receive the catalog change in lockstep. Per-cell rsync is scoped to `infra/catalog/<this-node>.yaml` only (not the whole `infra/catalog/`), so a non-catalog-edit flight cannot stomp other nodes' catalog state on its per-node deploy branch.
 
 ### Open gaps (carried forward — concrete resolution required during implementation)
 
@@ -170,7 +188,7 @@ deploy/preview-{operator,poly,resy,scheduler-worker}         ← deploy/preview 
 deploy/production-{operator,poly,resy,scheduler-worker}      ← deploy/production tip
 ```
 
-One-shot script `scripts/ops/bootstrap-per-node-deploy-branches.sh` (idempotent: skip-if-exists). Run **before** opening this PR; verified via `git ls-remote origin 'refs/heads/deploy/*-*'`.
+One-shot script `scripts/ops/bootstrap-per-node-deploy-branches.sh` (idempotent + fast-forwarding per BOOTSTRAP_FAST_FORWARDS_BEFORE_MERGE). On every run: create per-node branches if missing, fast-forward to whole-slot tip if behind, no-op if already at-or-ahead. Run pre-PR to seed; **re-run as the last action immediately before merge** so per-node branches cannot lag whole-slot at the moment AppSets flip. Verified via `git ls-remote origin 'refs/heads/deploy/*-*'` (12 rows).
 
 #### Layer 2 — Refactor the 3 ApplicationSets (1 generator → 4 generators each)
 
@@ -232,7 +250,9 @@ jobs:
     steps:
       # … existing flight steps, scoped to matrix.node:
       # - clone deploy/candidate-a-${{ matrix.node }} as deploy-branch
-      # - rsync only infra/k8s/overlays/candidate-a/${{ matrix.node }}/ + base/ + catalog/
+      # - rsync only infra/k8s/overlays/candidate-a/${{ matrix.node }}/ + base/ + infra/catalog/${{ matrix.node }}.yaml
+      #   (CATALOG_EDITS_ARE_GLOBAL_BUILD_INPUT: per-cell rsync touches ONLY this node's catalog file;
+      #    catalog edits trigger full matrix via detect-affected.sh so all per-node branches update in lockstep)
       # - resolve PR digest for ONLY this target
       # - promote-k8s-image.sh --no-commit --env candidate-a --app ${{ matrix.node }}
       # - snapshot/restore (task.0373) — KEEP, cheap on single-target trees
@@ -258,6 +278,9 @@ aggregate-preview:
   needs: [flight-preview-cell]
   if: always()
   runs-on: ubuntu-latest
+  concurrency:
+    group: aggregate-preview # AGGREGATOR_CONCURRENCY_GROUP
+    cancel-in-progress: false
   steps:
     - id: outcome
       run: |
@@ -268,12 +291,21 @@ aggregate-preview:
           echo "outcome=failed" >> "$GITHUB_OUTPUT"
         fi
     - if: steps.outcome.outputs.outcome == 'dispatched'
-      name: Update deploy/preview rollup + lock
+      name: Update deploy/preview rollup + lock (rebase-retry)
       run: |
-        # Update deploy/preview/.promote-state/current-sha to ${{ github.sha }}
-        # MERGE per-node deploy/preview-<node>/.promote-state/source-sha-by-app.json
-        #   into deploy/preview/.promote-state/source-sha-by-app.json
-        # Run lock-preview-on-success (existing logic, single call)
+        # Loop git fetch / rebase / push up to N=5 times (AGGREGATOR_CONCURRENCY_GROUP rebase-retry):
+        # 1. CURRENT_SHA_IS_MERGE_BASE: compute current-sha
+        #      op=$(git rev-parse origin/deploy/preview-operator)
+        #      poly=$(git rev-parse origin/deploy/preview-poly)
+        #      resy=$(git rev-parse origin/deploy/preview-resy)
+        #      sw=$(git rev-parse origin/deploy/preview-scheduler-worker)
+        #      merge_base=$(git merge-base "$op" "$poly" "$resy" "$sw")
+        #      echo "$merge_base" > .promote-state/current-sha
+        # 2. ROLLUP_MAP_PRESERVES_UNAFFECTED:
+        #      jq -s '.[0] * .[1]' deploy/preview/.promote-state/source-sha-by-app.json \
+        #         <(merge of affected-node entries from deploy/preview-<node>/.promote-state/...)
+        #      Result: prior entries preserved; only affected nodes' keys overwritten.
+        # 3. lock-preview-on-success (existing logic; single call from this aggregator only)
     - if: steps.outcome.outputs.outcome == 'failed'
       name: Unlock preview on failure
       run: |
@@ -294,7 +326,7 @@ Adds `workflow_call.inputs.nodes` (CSV) alongside existing `workflow_dispatch.in
 
 `lock-preview-on-success` / `unlock-preview-on-failure` jobs are **deleted from this workflow**. Their semantics move into `flight-preview.yml`'s `aggregate-preview` job (per gap-2 / `AGGREGATOR_OWNS_LEASE`). The matrix path applies for `inputs.env in {preview, production}` — both are now per-node-laned. There is no whole-slot path post-cutover.
 
-For production: `aggregate-production` job in `promote-and-deploy.yml` itself updates `deploy/production/.promote-state/current-sha` after all cells succeed. No `release.yml` change needed (production isn't read by release.yml today; only preview is).
+For production: `aggregate-production` job in `promote-and-deploy.yml` itself updates `deploy/production/.promote-state/current-sha` (CURRENT_SHA_IS_MERGE_BASE over `deploy/production-<node>` tips) and merges the rollup map (ROLLUP_MAP_PRESERVES_UNAFFECTED). Carries `concurrency: { group: aggregate-production, cancel-in-progress: false }` + rebase-retry. No `release.yml` change needed (production isn't read by release.yml today; only preview is). The production current-sha is consumed as the BASE for the next production matrix flight (see "Open gaps" — detect-affected BASE selection).
 
 **D. `candidate-flight-infra.yml`** (156 lines → ~170; GR-5 best-effort)
 
@@ -346,19 +378,27 @@ Best-effort warning, not a hard gate — explicitly per GR-5 deferred to follow-
 
 <!-- CODE REVIEW CRITERIA -->
 
-- [ ] LANE_ISOLATION: Each affected node runs in its own GHA matrix job with `fail-fast: false`. A red sibling cell does not short-circuit other cells. Verified via Validation case (b): intentionally broken resy on a multi-node PR. (spec: ci-cd)
-- [ ] BRANCH_HEAD_IS_LEASE: No `infra/control/candidate-lease.json`, no acquire/release scripts. Same-node concurrency is resolved by GHA `concurrency` group + `git push` non-fast-forward. (spec: ci-cd)
-- [ ] CONCURRENCY_GROUP_KEYED_BY_ENV_AND_NODE: Every matrix-fanned cell carries `concurrency: { group: flight-<env>-${{ matrix.node }}, cancel-in-progress: false }`. candidate-a-poly, preview-poly, production-poly each have independent groups. (spec: ci-cd)
-- [ ] AFFECTED_FROM_DETECT_AFFECTED_SH: Matrix include list is computed by `scripts/ci/detect-affected.sh`. No hand-rolled path-diff in any of the 3 workflows. (spec: ci-cd)
-- [ ] ONE_APPSET_PER_ENV: `infra/k8s/argocd/{candidate-a,preview,production}-applicationset.yaml` each remain **one** ApplicationSet resource. Per-node routing happens via 4 git-generators inside it. (spec: architecture)
-- [ ] APPSET_PRESERVE_ON_TRANSITION: All 3 AppSets carry `spec.preserveResourcesOnDeletion: true` post-cutover. Belt-and-suspenders for the 1→4 generator transition. (spec: ci-cd)
-- [ ] APPLICATION_NAMES_UNCHANGED: Pre- and post-cutover Argo Application names are byte-identical (`<env>-<node>` for all 4 nodes per env). The AppSet refactor is generator-shape-only — Argo reconciles in place, no Application teardown. (spec: ci-cd)
-- [ ] DOGFOOD_ORDERING: This PR flights via the **existing** whole-slot `candidate-flight.yml` (the file in main pre-merge), not on its own diff. The first PR merged after this one is the first matrix flight. (spec: ci-cd)
-- [ ] PER_NODE_BRANCH_PUSH_BEFORE_MERGE: All 12 `deploy/<env>-<node>` branches exist on origin before this PR merges. Verified via `git ls-remote`. (spec: ci-cd)
+- [ ] LANE_ISOLATION: Each affected node runs in its own GHA matrix job with `fail-fast: false`. A red sibling cell does not short-circuit other cells. Verified via Validation case (b). (spec: ci-cd)
+- [ ] BRANCH_HEAD_IS_LEASE: No `infra/control/candidate-lease.json`, no acquire/release scripts. Same-node concurrency resolved by GHA `concurrency` group + `git push` non-fast-forward. (spec: ci-cd)
+- [ ] CONCURRENCY_GROUP_FORMAT: Every matrix-fanned cell carries `concurrency: { group: flight-${{ matrix.env }}-${{ matrix.node }}, cancel-in-progress: false }`. `matrix.env` is a literal singleton list even when there's one env per workflow, so all 3 workflows render byte-identical group strings for the same `(env, node)` pair. (spec: ci-cd)
+- [ ] AGGREGATOR_OWNS_LEASE: lock/unlock-preview semantics live in `flight-preview.yml`'s `aggregate-preview` job ONLY. Per-cell jobs MUST NOT push `.promote-state/lease.json` and MUST NOT call lock/unlock scripts. (spec: ci-cd)
+- [ ] AGGREGATOR_CONCURRENCY_GROUP (R4-#4): every aggregator job carries `concurrency: { group: aggregate-${{ matrix.env }}, cancel-in-progress: false }` and performs rebase-retry on push. Disjoint-node concurrent flights cannot lose a lease to a non-fast-forward race. (spec: ci-cd)
+- [ ] CURRENT_SHA_IS_MERGE_BASE (R4-#3): `deploy/<env>/.promote-state/current-sha` is computed by aggregator as `git merge-base` over the 4 per-node tips. `release.yml` reads it unchanged and only ships code that all nodes have validated. (spec: ci-cd)
+- [ ] ROLLUP_MAP_PRESERVES_UNAFFECTED (R4-#2): aggregator merges `source-sha-by-app.json` by `read existing rollup → overwrite ONLY affected-node keys → push`. Stale-but-valid prior entries for unaffected nodes are preserved. (spec: ci-cd)
+- [ ] SOURCE_SHA_MAP_PER_CELL: each cell writes `deploy/<env>-<node>:.promote-state/source-sha-by-app.json` with EXACTLY one entry (its own node). `verify-buildsha.sh` runs in single-app `NODES ∩ map` mode per cell. (spec: ci-cd)
+- [ ] PROMOTED_APPS_PER_CELL: each cell calls `wait-for-argocd.sh` with `PROMOTED_APPS=${{ matrix.node }}` (single app) + `EXPECTED_SHA=<deploy/<env>-<node> tip>`. (spec: ci-cd)
+- [ ] AFFECTED_FROM_TURBO: matrix include list is computed by `scripts/ci/detect-affected.sh` (v0 implementation reading catalog `path_prefix:`); destination is `turbo ls --affected --filter=...[$BASE]` per task.0260. No hand-rolled path-diff in any of the workflows. (spec: ci-cd)
+- [ ] CATALOG_EDITS_ARE_GLOBAL_BUILD_INPUT (R4-#8): `detect-affected.sh` treats `infra/catalog/**` as a global-build-input → catalog edits trigger full matrix. Per-cell rsync scope is `infra/catalog/<this-node>.yaml` only, never the whole `infra/catalog/`. (spec: ci-cd)
+- [ ] BOOTSTRAP_FAST_FORWARDS_BEFORE_MERGE (R4-#5): `bootstrap-per-node-deploy-branches.sh` is idempotent + fast-forwards per-node branches to whole-slot tips on every run. Implementer re-runs it as the last pre-merge action so per-node branches cannot lag whole-slot at AppSet flip. (spec: ci-cd)
+- [ ] ONE_APPSET_PER_ENV: each AppSet remains **one** ApplicationSet resource; per-node routing via 4 git-generators inside it. (spec: architecture)
+- [ ] APPSET_PRESERVE_ON_TRANSITION: All 3 AppSets carry `spec.preserveResourcesOnDeletion: true` post-cutover. (spec: ci-cd)
+- [ ] APPLICATION_NAMES_UNCHANGED: Pre- and post-cutover Argo Application names are byte-identical (`<env>-<node>`). Argo reconciles in place; no Application teardown. (spec: ci-cd)
+- [ ] DOGFOOD_ORDERING: This PR flights via the **existing** whole-slot `candidate-flight.yml`. First post-merge PR is the first matrix flight. (spec: ci-cd)
+- [ ] PER_NODE_BRANCH_PUSH_BEFORE_MERGE: All 12 `deploy/<env>-<node>` branches exist on origin before merge. Verified via `git ls-remote`. (spec: ci-cd)
 - [ ] NO_NEW_CONTROLLERS: No new CRDs, no new in-cluster controllers, no new long-running services. (spec: architecture)
 - [ ] BUILD_ONCE_PROMOTE: pr-build still builds `pr-{N}-{sha}-*` once. Per-node matrix cells only rewrite their one node's overlay digest. (spec: ci-cd)
-- [ ] SIMPLE_SOLUTION: Reuses existing detect-affected.sh, AppSet generators, `strategy.matrix`, `concurrency`, `wait-for-argocd.sh`, `smoke-candidate.sh`, `promote-k8s-image.sh`. Net new code is workflow plumbing + ~12 catalog-field-consumers + one bootstrap-branches script. No new packages, no new long-running services.
-- [ ] ARCHITECTURE_ALIGNMENT: Branch-head-as-lease + matrix-with-fail-fast = Kargo primitives implemented on existing GHA + Argo substrate. Future Kargo install is rename + install, not rewrite. (spec: ci-cd)
+- [ ] SIMPLE_SOLUTION: Reuses existing detect-affected.sh, AppSet generators, `strategy.matrix`, `concurrency`, `wait-for-argocd.sh`, `smoke-candidate.sh`, `promote-k8s-image.sh`. Net new code is workflow plumbing + bootstrap script + aggregator jobs. No new packages, no new long-running services.
+- [ ] ARCHITECTURE_ALIGNMENT: Branch-head-as-lease + matrix-with-fail-fast = Kargo primitives on existing GHA + Argo substrate. Future Kargo install is rename + install, not rewrite. (spec: ci-cd)
 
 ### Files
 
@@ -380,6 +420,10 @@ Best-effort warning, not a hard gate — explicitly per GR-5 deferred to follow-
 - `.github/workflows/flight-preview.yml` — add `decide` job that re-uses the existing `RESOLVED_TARGETS` output (already affected-only at retag); fan out `Flight to preview` step into matrix cells; per-cell artifact upload keyed by node.
 - `.github/workflows/promote-and-deploy.yml` — add `decide` job; matrix-fan all post-decide jobs over `nodes`; per-cell `targetRevision: deploy/${OVERLAY_ENV}-${{ matrix.node }}`; per-cell `wait-for-argocd APPS=${OVERLAY_ENV}-${{ matrix.node }}`. ~70 lines added per fan-out point; multiple sub-jobs touched.
 - `.github/workflows/candidate-flight-infra.yml` — add GR-5 best-effort pre-check step.
+
+**Modify (scripts — 1 file)**
+
+- `scripts/ci/detect-affected.sh` — `is_global_build_input()` matches `infra/catalog/**` (CATALOG_EDITS_ARE_GLOBAL_BUILD_INPUT). Plus log effective `TURBO_SCM_BASE` / `TURBO_SCM_HEAD` per call; fail loud on empty matrix unless `ALLOW_EMPTY_MATRIX=1` is explicitly set by a caller (open-gap "BASE selection per env" mitigation).
 
 **Delete**
 

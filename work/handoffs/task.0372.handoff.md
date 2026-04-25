@@ -43,8 +43,10 @@ Before writing any matrix YAML, validate four assumptions. Land these notes inli
 - [ ] **AppSet 1→4 dry-run for all 3 envs.** Render each AppSet variant locally; confirm Application names are byte-identical pre/post (`<env>-<node>` for each `node ∈ ALL_TARGETS`). If `argocd app diff` is available against a candidate cluster, capture diffs.
 - [ ] **`verify-buildsha.sh` per-cell semantics.** Confirm task.0349 v3's `NODES ∩ map` behavior accepts a single-app `SOURCE_SHA_MAP` (one entry, one node). Test by passing `NODES=poly` with a one-line map → must verify only poly. (Probably already works; confirm.)
 - [ ] **Production rollout scale.** Count concurrent Argo syncs + rolling pod replacements that 4 parallel matrix cells produce. Today's whole-slot has implicit serialization; matrix runs them parallel. Verify cluster headroom (worst case: 4 nodes × 2 replicas mid-rollout). If tight, document trade-off; don't silently regress.
+- [ ] **Per-cell push permission (R4 spike #6).** Per-cell push permission ≠ bootstrap permission. Dispatch a no-op test workflow (or use an ad-hoc workflow_dispatch) that pushes from a matrix-cell context to one of the per-node deploy branches using `${{ secrets.GITHUB_TOKEN }}`. If branch-protection on `deploy/*` blocks the per-cell write, address before opening the PR (org-rule update or `pull_request_target` permission).
+- [ ] **AppSet 4-generator render distinctness (R4 spike #7).** Render each refactored AppSet (`argocd appset render` or equivalent) and confirm the 4-git-generators-with-1-file-each pattern produces 4 distinct Applications named `<env>-<node>`, not 4 duplicates or 1 with merged-revisions. If `argocd app diff` is available against a candidate cluster, capture diffs proving `source.targetRevision` is the only spec change per Application.
 
-If all four pass, proceed to /implement. If any fails, update the design before writing code.
+If all six pass, proceed to /implement. If any fails, update the design before writing code.
 
 ## Next Actions (post-verification)
 
