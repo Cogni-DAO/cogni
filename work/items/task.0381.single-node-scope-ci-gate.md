@@ -2,7 +2,7 @@
 id: task.0381
 type: task
 title: "Single-node-scope CI gate — reject PRs that touch >1 node domain (operator owns repo infra)"
-status: needs_merge
+status: done
 branch: feat/task-0381-single-node-scope-ci-gate
 priority: 0
 rank: 1
