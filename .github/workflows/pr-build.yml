@@ -31,8 +31,21 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - id: changed
+        name: Detect catalog changes
+        run: |
+          if git diff --name-only "origin/${{ github.event.pull_request.base.ref }}...HEAD" \
+             | grep -qE '^infra/catalog/'; then
+            echo "catalog_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "catalog_changed=false" >> "$GITHUB_OUTPUT"
+            echo "ℹ️  No infra/catalog/** changes — skipping schema validation."
+          fi
 
       - name: Validate infra/catalog/*.yaml against schema
+        if: steps.changed.outputs.catalog_changed == 'true'
         run: |
           pipx install 'check-jsonschema==0.37.1'
           check-jsonschema --schemafile infra/catalog/_schema.json infra/catalog/*.yaml
