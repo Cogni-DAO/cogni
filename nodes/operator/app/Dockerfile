@@ -57,22 +57,6 @@ ENV AUTH_SECRET=${AUTH_SECRET_BUILD}
 RUN --mount=type=cache,id=next-cache,target=/app/nodes/operator/app/.next/cache,sharing=locked \
     pnpm --filter operator build
 
-# Migrator — operator-only migration image (task.0322).
-# Each node's Dockerfile has its own migrator stage carrying only that node's
-# schema + migrations + drizzle config, plus the shared packages/db-schema/src
-# for core tables. Fork pattern consistency with existing per-node app images.
-FROM base AS migrator
-WORKDIR /app
-
-COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/nodes/operator/drizzle.config.ts ./nodes/operator/drizzle.config.ts
-COPY --from=builder /app/packages/db-schema/src ./packages/db-schema/src
-COPY --from=builder /app/nodes/operator/app/src/shared/db ./nodes/operator/app/src/shared/db
-COPY --from=builder /app/nodes/operator/app/src/adapters/server/db/migrations ./nodes/operator/app/src/adapters/server/db/migrations
-
-CMD ["pnpm", "db:migrate:operator:container"]
-
 # Runner – lean production image
 FROM node:22-alpine AS runner
 WORKDIR /app
@@ -129,3 +113,11 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -fsS http://localhost:3000/livez || exit 1
 
 CMD ["node", "nodes/operator/app/server.js"]
+
+# Migrator — rebased on runner so it shares layers with the runtime image. task.0370.
+# migrate.mjs + migrations live inside the standalone app dir so Node resolves
+# drizzle-orm from standalone's own node_modules.
+FROM runner AS migrator
+COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/src/adapters/server/db/migrations /app/nodes/operator/app/migrations
+COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/src/adapters/server/db/migrate.mjs /app/nodes/operator/app/migrate.mjs
+CMD ["node", "/app/nodes/operator/app/migrate.mjs", "/app/nodes/operator/app/migrations"]
