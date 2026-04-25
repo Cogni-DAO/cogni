@@ -2,7 +2,7 @@
 id: task.0382
 type: task
 title: "`extractOwningNode(spec, paths)` — TS resolver for files-changed → owning nodeId in operator runtime"
-status: needs_closeout
+status: needs_merge
 priority: 0
 rank: 1
 estimate: 1
