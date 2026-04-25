@@ -117,19 +117,8 @@ GH_REPO="${GH_REPO:-}"
 ANCESTRY_CACHE_REV=""
 ANCESTRY_CACHE_RESULT=1
 
-# rc 0 iff EXPECTED is identical-to or an ancestor-of REV — i.e. argo's
-# rev contains the deploy commit we just pushed. Strict-equality fallback
-# when GH_TOKEN/GH_REPO are unset.
-#
-# GitHub `compare/{base}...{head}` returns:
-#   identical — base == head
-#   ahead     — head contains base + extra commits  (rev caught up, OK)
-#   behind    — base contains head + extra commits  (rev is BEHIND expected, NOT OK)
-#   diverged  — both have unique commits
-# We call with base=expected, head=rev, so accept identical|ahead only.
-# Bug history: previously accepted `identical|behind`, which green-lit
-# flights where argo had not yet reconciled the just-pushed commit
-# (run #24925395779: expected=331bd3b, argo at b4e95b59 ancestor).
+# rc 0 iff EXPECTED is identical-to or an ancestor-of REV. Strict-equality
+# fallback when GH_TOKEN/GH_REPO are unset.
 rev_includes_expected() {
   local rev="$1" expected="$2"
   [ -z "$rev" ] && return 1
