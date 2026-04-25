@@ -83,6 +83,7 @@
 | 1 | 1 | 2 | needs_implement | task.0360 | POST /api/v1/vcs/pr — VCS create-PR endpoint for external agents | Agentic Interoperability | proj.agentic-interop |
 | 1 | 1 | 1 | needs_merge | bug.0361 | promote-and-deploy: EXPECTED_BUILDSHA uses merge commit SHA; deploy-infra always runs | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 1 | needs_review | bug.0364 | promote-and-deploy: production can't promote heterogeneous preview (single source_sha assumption) | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 1 | 1 | needs_merge | task.0368 | Reviewer adapter-boundary contract test — lock ReviewHandlerDeps before per-node scoping refactor | VCS Integration | proj.vcs-integration |
 | 1 | 1 | 2 | needs_triage | bug.0369 | Reown/WalletConnect origin allowlist missing for poly-test (and no sync workflow across node × env matrix) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 1 | needs_review | bug.0370 | LiteLLM billing callback DNS-fails since k3s migration — every prod LLM call drops on the floor | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 1 | needs_review | task.0370 | Rebase every node's migrator stage on its runtime image | Database Operations | proj.database-ops |
