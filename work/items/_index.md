@@ -82,7 +82,6 @@
 | 1 | 1 | 1 | needs_merge | bug.0358 | candidate-flight false-red: wait-for-argocd shares one timeout budget across all promoted apps | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 2 | needs_implement | task.0360 | POST /api/v1/vcs/pr — VCS create-PR endpoint for external agents | Agentic Interoperability | proj.agentic-interop |
 | 1 | 1 | 1 | needs_merge | bug.0361 | promote-and-deploy: EXPECTED_BUILDSHA uses merge commit SHA; deploy-infra always runs | CI/CD Pipeline | proj.cicd-services-gitops |
-| 1 | 1 | 2 | needs_closeout | task.0363 | Operator dashboard: Active Pull Requests + CI/flight/deploy_verified loop |  |  |
 | 1 | 1 | 1 | needs_review | bug.0364 | promote-and-deploy: production can't promote heterogeneous preview (single source_sha assumption) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 2 | needs_triage | bug.0369 | Reown/WalletConnect origin allowlist missing for poly-test (and no sync workflow across node × env matrix) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 1 | needs_review | task.0370 | Rebase every node's migrator stage on its runtime image | Database Operations | proj.database-ops |
