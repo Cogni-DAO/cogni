@@ -655,11 +655,21 @@ append_env_if_set "$RUNTIME_ENV" CONNECTIONS_ENCRYPTION_KEY "${CONNECTIONS_ENCRY
 # Grafana observability (for OpenClaw grafana-health skill)
 append_env_if_set "$RUNTIME_ENV" GRAFANA_URL "${GRAFANA_URL-}"
 append_env_if_set "$RUNTIME_ENV" GRAFANA_SERVICE_ACCOUNT_TOKEN "${GRAFANA_SERVICE_ACCOUNT_TOKEN-}"
-# Per-node endpoints (LiteLLM billing callback routing: Compose → k8s NodePorts)
+# Per-node endpoints (LiteLLM billing callback routing: Compose → k8s NodePorts).
 # LiteLLM runs in Docker Compose and must reach k8s node-app Services via NodePort.
-# k8s service names don't resolve from Compose — use host.docker.internal:NodePort.
-# Note: the k8s scheduler-worker gets its own COGNI_NODE_ENDPOINTS from the k8s overlay ConfigMap.
-LITELLM_NODE_ENDPOINTS="4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://host.docker.internal:30000,5ed2d64f-2745-4676-983b-2fb7e05b2eba=http://host.docker.internal:30100,f6d2a17d-b7f6-4ad1-a86b-f0ad2380999e=http://host.docker.internal:30300"
+# Use the same per-env VM DNS introduced by bug.0295 for k8s pods → Compose
+# infra (LITELLM_IS_DNS_DISCOVERED): <env>.vm.cognidao.org resolves to the VM's
+# public IP, traffic routes back in via docker-proxy, and k3s NodePorts are
+# pinned in infra/k8s/base/node-app/service.yaml + per-env overlays
+# (operator=30000, poly=30100, resy=30300). UUIDs match each node's
+# .cogni/repo-spec.yaml node_id (REPO_SPEC_AUTHORITY).
+# host.docker.internal is intentionally NOT used here — it requires extra_hosts
+# wiring on the LiteLLM service, and silently DNS-fails inside the callback
+# without it (bug.0370). The bug.0295 DNS path is already proven bidirectional.
+# Note: the k8s scheduler-worker gets its own COGNI_NODE_ENDPOINTS from the k8s
+# overlay ConfigMap (k3s-internal Service DNS, not relevant here).
+LITELLM_NODE_HOST="${DEPLOY_ENVIRONMENT}.vm.cognidao.org"
+LITELLM_NODE_ENDPOINTS="4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://${LITELLM_NODE_HOST}:30000,5ed2d64f-2745-4676-983b-2fb7e05b2eba=http://${LITELLM_NODE_HOST}:30100,f6d2a17d-b7f6-4ad1-a86b-f0ad2380999e=http://${LITELLM_NODE_HOST}:30300"
 printf '%s=%s\n' COGNI_NODE_ENDPOINTS "$LITELLM_NODE_ENDPOINTS" >> "$RUNTIME_ENV"
 # Multi-node DB provisioning
 append_env_if_set "$RUNTIME_ENV" COGNI_NODE_DBS "${COGNI_NODE_DBS-}"
