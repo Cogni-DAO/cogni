@@ -139,11 +139,25 @@ Already tracked in DATABASE_RLS_SPEC.md P1:
 
 | Deliverable                                                        | Status       | Est | Work Item                                                                  |
 | ------------------------------------------------------------------ | ------------ | --- | -------------------------------------------------------------------------- |
-| Per-node drizzle configs + per-node migrator images + legacy purge | in-review    | 2   | task.0324 ([PR #916](https://github.com/Cogni-DAO/node-template/pull/916)) |
+| Per-node drizzle configs + per-node migrator images + legacy purge | done         | 2   | task.0324 ([PR #916](https://github.com/Cogni-DAO/node-template/pull/916)) |
 | Un-no-op prod poly/resy migration Jobs (gated on DB inspection)    | needs_design | 1   | task.0324 Phase 3 (follow-up)                                              |
 | **Future:** Atlas + GitOps migrations (declarative schema, CRD)    | needs_design | 5   | task.0325                                                                  |
 
-task.0324 is the current-priority minimal fix (no new tooling). task.0325 preserves the Atlas adoption plan for when contributor scale or destructive-change linting warrants the investment.
+task.0324 delivered per-node schema sovereignty. task.0325 preserves the Atlas adoption plan for when destructive-change linting warrants it.
+
+### Migrator Image Layer Sharing (task.0370 — bug.0368)
+
+**Goal:** kill the per-flight migrator image-pull tax. Pre-task.0370 migrator was `FROM base` with full dev `node_modules` (~480 MB unique blob). k3s pulled it cold every flight (~3m45s per affected node), turning candidate-flight verify-candidate into a 4–9 min wait while the migration itself ran in ~8 s.
+
+| Deliverable                                                                                                                                | Status   | Est | Work Item                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | -------- | --- | ------------------------------------------------------ |
+| bug.0368 — diagnose & evidence                                                                                                             | done     | 1   | bug.0368                                               |
+| Rebase each migrator stage `FROM runner`; replace `pnpm db:migrate` with programmatic `migrate.mjs` using `drizzle-orm/postgres-js/migrator` | **done** | 2   | task.0370 (PR #1041, validated on candidate-a 2026-04-24) |
+| Validate operator + resy + poly Postgres + poly Doltgres all run programmatic migrator successfully                                        | done     | 1   | task.0370 (4/4 image digests match, 4/4 logs ✅)        |
+| Follow-up: runner image bloat (~285 MB codex SDK)                                                                                          | needs_triage | 1   | bug.0369 (file)                                       |
+| Follow-up: `wait-for-argocd.sh` `clear_stale_missing_hook_operation` only fires once → wedged apps after first kick are unrecoverable     | needs_triage | 1   | bug.0370-followup (file)                              |
+
+**Hard invariant inherited:** `FORWARD_COMPAT_MIGRATIONS` — migrations must be backward-compatible with the prior app version. Rolling-update overlap means old pods serve traffic against the new schema briefly. Same obligation as before task.0370; made explicit in [databases.md](../../docs/spec/databases.md) §5.2.
 
 ### P3 — DSN-Only Provisioning
 
