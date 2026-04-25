@@ -150,6 +150,44 @@ Record per row: the refs clicked, the post-click snapshot excerpt proving the ou
 
 **For any axis you truly can't figure out how to exercise** — mark `skipped` with the reason rather than halting, and ding the final verdict toward 🟡.
 
+### Thoroughness — when one row hides a family
+
+The headline matrix has one row per impacted surface, but a single "surface" often hides a **family of members** — a set of related endpoints, tools, or capabilities — and a 🟢 row that only exercised one member silently passes the rest. PR #1033 is the canonical lesson: the `poly-research graph` row was 🟢 after 2 probes, but a per-tool sweep revealed 2/8 tools were broken (wrong endpoint, schema mismatch). The top-level scorecard said PASS while the actual feature was 75% functional.
+
+**Trigger conditions for a sub-matrix sweep** — apply when any of these are true:
+
+- The PR introduces ≥3 new tools, endpoints, schemas, or graphs of the same shape (`core__*_<x>` cluster, `/api/v1/<resource>/*` cluster, `*Capability.method()` cluster).
+- The PR wraps a third-party API where each method maps to a distinct upstream endpoint and schema.
+- The PR purges, replaces, or rewrites a member of an existing family — adjacent untouched members may share the same root cause.
+- One row's agent-axis evidence covers the easy case and you're tempted to extrapolate to the rest.
+
+**How the sub-matrix works:**
+
+- One sub-matrix row per family member. Columns mirror a tool-test pattern: `MEMBER · PROBE · LOKI ai.tool_call.error · OVERALL`.
+- Each member gets its own one-shot exercise — for tools, that means one `chat/completions` turn per tool with a direct `Call <tool-name> with <args>. Return raw JSON, no commentary.` prompt; for endpoints, one `curl` per route. 4o-mini follows direct-named tool prompts cleanly; do not chain.
+- Probe payload should hit the real upstream (real wallet, real conditionId, real handle) — discovered live, not invented. Hallucinated identifiers reproduce the original bug.
+- Source identifiers from working endpoints first (e.g. grab a `proxyWallet` from `/v1/leaderboard`, a `conditionId` from `/trades`), then re-use across probes.
+- Loki sweep at the end: one query for `ai.tool_call.error` across the whole batch's runIds — surfaces silent-fail tools that returned 200 to the agent but logged a typed validation error underneath.
+
+**Posting:** the sub-matrix lives in a **second PR comment**, not embedded in the headline scorecard (which stays exactly as locked in §"Exact scorecard format"). Title it `## /validate-candidate — PR #<N> · <sha-short> · per-<family> probe matrix · <verdict>`. Cross-link from the headline scorecard's NOTES line if findings warrant it.
+
+**Example shape** (verbatim from PR #1033 follow-up):
+
+```
+| TOOL                              | PROBE | LOKI ai.tool_call.error | OVERALL              |
+| --------------------------------- | ----- | ----------------------- | -------------------- |
+| core__poly_data_help              | 🟢    | —                       | 🟢 PASS              |
+| core__poly_data_value             | 🟢    | —                       | 🟢 PASS              |
+| core__poly_data_holders           | 🔴    | 1 hit                   | 🔴 SCHEMA-MISMATCH   |
+| core__poly_data_resolve_username  | 🟡    | —                       | 🔴 WRONG-ENDPOINT    |
+```
+
+Then the EVIDENCE block lists every runId with its outcome and the ROOT CAUSE block explains each 🔴 with the actual upstream shape. Required follow-ups go inline as `bug.<NNNN>` items so the PR author can decide fix-in-PR vs split.
+
+**Cost discipline still applies.** Sub-matrices add LLM cost — one chat/completions turn per family member at the smallest model the graph supports (gpt-4o-mini is fine for direct probes). Skip the sweep when the family has <3 members or when an axis-1 exercise already covered every member implicitly (e.g. a contract-shape PR where each consumer of the contract is exercised by the headline row).
+
+**When to escalate:** if the sub-matrix surfaces a 🔴 that wasn't visible in the headline run, the headline verdict drops to 🔴 and the NOTES line MUST cross-link the sub-matrix comment. Do not leave a 🟢 headline standing while a 🔴 sub-matrix sits below it — that recreates exactly the false-confidence the sweep is designed to catch.
+
 ### Step 6 — Observability: find the **feature-specific** log of your own call
 
 For each exercised row, query Loki for evidence your exercise _did the thing_, not just that traffic reached the pod.
