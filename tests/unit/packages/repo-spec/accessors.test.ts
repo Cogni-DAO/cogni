@@ -23,6 +23,11 @@ import {
   parseRepoSpec,
   type RepoSpec,
 } from "@cogni/repo-spec";
+import {
+  buildTestRepoSpec,
+  TEST_NODE_ENTRIES,
+  TEST_NODE_IDS,
+} from "@cogni/repo-spec/testing";
 import { describe, expect, it } from "vitest";
 
 const TEST_NODE_ID = "00000000-0000-4000-8000-000000000001";
@@ -291,68 +296,43 @@ describe("extractLedgerApprovers", () => {
 });
 
 describe("extractNodePath", () => {
-  const NODE_OPERATOR = "00000000-0000-4000-8000-000000000010";
-  const NODE_POLY = "00000000-0000-4000-8000-000000000011";
-  const NODE_RESY = "00000000-0000-4000-8000-000000000012";
-  const NODE_UNREGISTERED = "00000000-0000-4000-8000-0000000000ff";
-
-  function specWithNodes(
-    nodes: Array<{ node_id: string; node_name: string; path: string }>
-  ): RepoSpec {
-    return parseRepoSpec({
-      node_id: TEST_NODE_ID,
-      cogni_dao: { chain_id: String(TEST_CHAIN_ID) },
-      nodes,
-    });
-  }
-
   it("scenario 1: returns the registered path on match", () => {
-    const spec = specWithNodes([
-      { node_id: NODE_POLY, node_name: "Poly", path: "nodes/poly" },
-      { node_id: NODE_RESY, node_name: "Resy", path: "nodes/resy" },
-    ]);
-    expect(extractNodePath(spec, NODE_POLY)).toBe("nodes/poly");
-    expect(extractNodePath(spec, NODE_RESY)).toBe("nodes/resy");
+    const spec = buildTestRepoSpec({
+      nodes: [TEST_NODE_ENTRIES.poly, TEST_NODE_ENTRIES.resy],
+    });
+    expect(extractNodePath(spec, TEST_NODE_IDS.poly)).toBe("nodes/poly");
+    expect(extractNodePath(spec, TEST_NODE_IDS.resy)).toBe("nodes/resy");
   });
 
   it("scenario 2: returns null when nodeId is not in the registry", () => {
-    const spec = specWithNodes([
-      { node_id: NODE_POLY, node_name: "Poly", path: "nodes/poly" },
-    ]);
-    expect(extractNodePath(spec, NODE_UNREGISTERED)).toBeNull();
+    const spec = buildTestRepoSpec({ nodes: [TEST_NODE_ENTRIES.poly] });
+    expect(extractNodePath(spec, TEST_NODE_IDS.unregistered)).toBeNull();
   });
 
   it("scenario 3: returns null when nodes[] is empty", () => {
-    const spec = specWithNodes([]);
-    expect(extractNodePath(spec, NODE_POLY)).toBeNull();
+    const spec = buildTestRepoSpec({ nodes: [] });
+    expect(extractNodePath(spec, TEST_NODE_IDS.poly)).toBeNull();
   });
 
   it("scenario 4: returns null when nodes[] is missing entirely", () => {
-    const spec = parseRepoSpec({
-      node_id: TEST_NODE_ID,
-      cogni_dao: { chain_id: String(TEST_CHAIN_ID) },
-    });
-    expect(extractNodePath(spec, NODE_POLY)).toBeNull();
+    // No `nodes` override → builder omits the field, exercising the optional-registry path.
+    const spec = buildTestRepoSpec();
+    expect(extractNodePath(spec, TEST_NODE_IDS.poly)).toBeNull();
   });
 
   it("scenario 5: does NOT special-case the operator's own node_id", () => {
-    const spec = specWithNodes([
-      {
-        node_id: NODE_OPERATOR,
-        node_name: "Cogni Operator",
-        path: "nodes/operator",
-      },
-      { node_id: NODE_POLY, node_name: "Poly", path: "nodes/poly" },
-    ]);
+    const spec = buildTestRepoSpec({
+      nodes: [TEST_NODE_ENTRIES.operator, TEST_NODE_ENTRIES.poly],
+    });
     // Locks: registry path is returned verbatim even when nodeId is the operator's.
     // Caller decides whether to map "nodes/operator" to repoRoot/.cogni or nodes/operator/.cogni.
-    expect(extractNodePath(spec, NODE_OPERATOR)).toBe("nodes/operator");
+    expect(extractNodePath(spec, TEST_NODE_IDS.operator)).toBe(
+      "nodes/operator"
+    );
   });
 
   it("scenario 6: returns null for an empty-string nodeId (no spurious match)", () => {
-    const spec = specWithNodes([
-      { node_id: NODE_POLY, node_name: "Poly", path: "nodes/poly" },
-    ]);
+    const spec = buildTestRepoSpec({ nodes: [TEST_NODE_ENTRIES.poly] });
     expect(extractNodePath(spec, "")).toBeNull();
   });
 
@@ -366,18 +346,28 @@ describe("extractNodePath", () => {
       "  spaced-path  ",
     ];
     for (const path of cases) {
-      const spec = specWithNodes([
-        { node_id: NODE_POLY, node_name: "Poly", path },
-      ]);
-      expect(extractNodePath(spec, NODE_POLY)).toBe(path);
+      const spec = buildTestRepoSpec({
+        nodes: [{ ...TEST_NODE_ENTRIES.poly, path }],
+      });
+      expect(extractNodePath(spec, TEST_NODE_IDS.poly)).toBe(path);
     }
   });
 
   it("scenario 8: on duplicate node_id, returns the first match (Array.find semantics)", () => {
-    const spec = specWithNodes([
-      { node_id: NODE_POLY, node_name: "Poly A", path: "nodes/poly-a" },
-      { node_id: NODE_POLY, node_name: "Poly B", path: "nodes/poly-b" },
-    ]);
-    expect(extractNodePath(spec, NODE_POLY)).toBe("nodes/poly-a");
+    const spec = buildTestRepoSpec({
+      nodes: [
+        {
+          ...TEST_NODE_ENTRIES.poly,
+          node_name: "Poly A",
+          path: "nodes/poly-a",
+        },
+        {
+          ...TEST_NODE_ENTRIES.poly,
+          node_name: "Poly B",
+          path: "nodes/poly-b",
+        },
+      ],
+    });
+    expect(extractNodePath(spec, TEST_NODE_IDS.poly)).toBe("nodes/poly-a");
   });
 });
