@@ -49,10 +49,13 @@ One-command setup (recommended for new developers):
 Individual installers:
 
 ```bash
-install/install-pnpm.sh    # Volta + Node.js + pnpm
-install/install-docker.sh  # Docker Desktop
-install/install-tofu.sh    # Infrastructure tooling (optional)
-install/install-reuse.sh   # License compliance (optional)
+install/install-pnpm.sh                 # Volta + Node.js + pnpm
+install/install-docker.sh               # Docker Desktop
+install/install-ripgrep.sh              # rg (brain repo search)
+install/install-yq.sh                   # mikefarah/yq v4 (CATALOG_IS_SSOT)
+install/install-tofu.sh                 # Infrastructure tooling (optional, --all)
+install/install-reuse.sh                # License compliance (optional, --all)
+install/install-check-jsonschema.sh     # Catalog schema validation (opt-in; CI is authoritative)
 ```
 
 ## Standards
