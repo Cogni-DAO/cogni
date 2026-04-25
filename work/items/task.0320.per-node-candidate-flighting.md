@@ -2,7 +2,7 @@
 id: task.0320
 type: task
 title: "Per-node flighting substrate — per-env deploy branches + per-node AppSets (candidate-a + preview + production)"
-status: needs_closeout
+status: needs_merge
 priority: 0
 rank: 99
 estimate: 2
@@ -19,7 +19,7 @@ spec_refs:
 assignees: []
 project: proj.cicd-services-gitops
 created: 2026-04-17
-updated: 2026-04-24
+updated: 2026-04-25
 labels: [cicd, deployment]
 ---
 

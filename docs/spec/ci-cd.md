@@ -160,6 +160,18 @@ Promotion environments run accepted code only.
 
 This spec does not require a `canary` environment. If one is retained during migration, it must be described explicitly as a post-merge soak lane and not as a branch or as a pre-merge safety lane.
 
+### Per-Node Deploy Branches (task.0320)
+
+Each environment additionally carries one `deploy/<env>-<node>` branch per catalog entry — e.g. `deploy/candidate-a-poly`, `deploy/preview-operator`, `deploy/production-scheduler-worker`. Twelve refs in total across four nodes × three envs.
+
+Each env's ApplicationSet (`infra/k8s/argocd/<env>-applicationset.yaml`) contains **one git generator per node**, with `revision: deploy/<env>-<node>` and `files: [infra/catalog/<node>.yaml]`. Each catalog file declares the matching branch name in its `{candidate_a,preview,production}_branch` field, consumed by the template's `targetRevision`. The generated Application names are unchanged (`<env>-<node>`) — only each Application's tracked ref differs from the pre-task.0320 shape.
+
+**Today** (post-task.0320, pre-task.0372): the per-(env, node) branches exist as additional GitOps tracking points and are held at the same SHA as the parent `deploy/<env>` branch by an initial one-shot push. Flight workflows still write the whole-slot `deploy/<env>` branch. ApplicationSet regeneration produces the same twelve Application names reconciling to the same state — this substrate is a behavioral no-op at merge.
+
+**Task.0372** flips the flight workflows (`candidate-flight.yml`, `flight-preview.yml`, `promote-and-deploy.yml`) to a `strategy.matrix` fan-out with `fail-fast: false`, where each matrix cell pushes only to `deploy/<env>-<node>` and waits on only the matching Argo Application. Lane isolation becomes structural — a failed verify on one node cannot fail another node's lane. The whole-slot `deploy/<env>` branches are retired after the cutover validates.
+
+The branch-per-(env, node) primitive mirrors [Kargo](https://kargo.akuity.io) Stage semantics (`Stage = per-env-per-node Application` tracking its own immutable-per-promotion ref), implemented on existing ApplicationSet + deploy-branch infrastructure without introducing new CRDs, controllers, or long-running services.
+
 ### Preview Review Lock
 
 `deploy/preview` holds a small state directory, `.promote-state/`, that drives merge-to-main flighting. Three files:

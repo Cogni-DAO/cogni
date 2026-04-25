@@ -54,7 +54,7 @@ Everything about how the system runs. Split by responsibility, not by tool.
 
 ## Standards
 
-- `catalog/` stays thin — name, type, port, env keys. No platform-specific fields.
+- `catalog/` stays thin — name, type, port, env keys, and per-env deploy-branch names (`{candidate_a,preview,production}_branch`, consumed by the Argo CD ApplicationSets as each node's Stage ref). Do not add runtime container config, image digests, or non-GitOps wiring here.
 - `k8s/` and `akash/` are peer renderers. Both read from `catalog/`.
 - `compose/` is for infra services intentionally kept off-cluster.
 - `images/` contains only Dockerfiles and build contexts, not runtime config.
