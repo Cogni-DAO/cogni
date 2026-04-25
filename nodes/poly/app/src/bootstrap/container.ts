@@ -828,10 +828,18 @@ function createContainer(): Container {
                   size: p.size,
                 }));
               },
-              redeemSweep: async () => {
-                const executor = await getExecutor();
-                await executor.redeemAllRedeemableResolvedPositions();
-              },
+              // bug.0383 kill switch: configmap-driven, no redeploy needed.
+              // When disabled, the property is omitted so mirror-pipeline's
+              // optional-chained call short-circuits. Manual
+              // /api/v1/poly/wallet/positions/redeem is unaffected.
+              ...(serverEnv().POLY_REDEEM_SWEEP_ENABLED
+                ? {
+                    redeemSweep: async () => {
+                      const executor = await getExecutor();
+                      await executor.redeemAllRedeemableResolvedPositions();
+                    },
+                  }
+                : {}),
               logger: mirrorLogger,
               metrics: noopMetrics,
             });

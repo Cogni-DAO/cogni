@@ -46,6 +46,15 @@
  *     (info), `poly.ctf.redeem.balance_read_failed` (warn, multicall element
  *     failure), `poly.ctf.redeem.error` (warn, post-balance-check redeem failure).
  *     See bug.0376.
+ *   - WINNING_OUTCOME_PRECHECK — both `redeemResolvedPosition` (manual route)
+ *     and `redeemAllRedeemableResolvedPositions` (autonomous sweep) call the
+ *     same `decideRedeem` helper, which gates `redeemPositions` on
+ *     `payoutNumerators(conditionId, outcomeIndex) > 0` AND
+ *     `balanceOf(funder, positionId) > 0`. Holding ERC1155 of a losing
+ *     outcome would otherwise produce no-op `redeemPositions` calls (CTF
+ *     succeeds with payout=0 and burns nothing) and the sweep would loop
+ *     forever. Skip events: `poly.ctf.redeem.skip_losing_outcome` (info),
+ *     `poly.ctf.redeem.skip_missing_outcome_index` (warn). See bug.0383.
  * Side-effects: on first `placeIntent` for a new tenant: HTTPS to
  *   Polymarket CLOB + Privy API. Subsequent calls reuse cached clients. Sweep
  *   path additionally issues one `eth_call` (multicall) per tick.
@@ -166,6 +175,45 @@ export class PolyTradeExecutorError extends Error {
 export interface RedeemResolvedParams {
   /** Polymarket condition id (`0x` + 64 hex). */
   condition_id: string;
+}
+
+/**
+ * Reasons the redeem precheck (bug.0383) refuses to submit `redeemPositions`.
+ * `read_failed` means at least one of the two CTF view calls
+ * (`balanceOf` / `payoutNumerators`) returned no usable result.
+ */
+export type RedeemSkipReason =
+  | "zero_balance"
+  | "losing_outcome"
+  | "missing_outcome_index"
+  | "read_failed";
+
+/**
+ * Pure decision function for the redeem precheck. Tests drive this directly
+ * from `tests/fixtures/poly-ctf-redeem/expected-decisions.snapshot-*.json`
+ * so the predicate stays anchored to real Polygon mainnet behavior.
+ */
+export function decideRedeem(input: {
+  /** ERC1155 balance of the funder for the held positionId. `null` ⇒ read failed. */
+  balance: bigint | null;
+  /** `payoutNumerators(conditionId, heldIdx)`. `null` ⇒ read failed. */
+  payoutNumerator: bigint | null;
+  /** Held outcome index from the Data-API. Missing ⇒ skip. */
+  outcomeIndex: number | null | undefined;
+}): { ok: true } | { ok: false; reason: RedeemSkipReason } {
+  if (input.outcomeIndex == null || !Number.isFinite(input.outcomeIndex)) {
+    return { ok: false, reason: "missing_outcome_index" };
+  }
+  if (input.balance === null || input.payoutNumerator === null) {
+    return { ok: false, reason: "read_failed" };
+  }
+  if (input.balance === 0n) {
+    return { ok: false, reason: "zero_balance" };
+  }
+  if (input.payoutNumerator === 0n) {
+    return { ok: false, reason: "losing_outcome" };
+  }
+  return { ok: true };
 }
 
 /**
@@ -615,6 +663,35 @@ async function buildExecutor(
       );
     }
 
+    // bug.0383 precheck: confirm on-chain balance > 0 AND payoutNumerators > 0
+    // before signing. CTF's `redeemPositions` succeeds-with-payout=0 on losing
+    // outcomes; without this gate the manual route burns gas for nothing and
+    // (for autonomous sweep callers) loops forever.
+    let assetBigint: bigint | null = null;
+    try {
+      assetBigint = match.asset ? BigInt(match.asset) : null;
+    } catch {
+      assetBigint = null;
+    }
+    if (assetBigint === null) {
+      throw new PolyTradeExecutorError(
+        "not_redeemable",
+        `poly-trade-executor: invalid asset positionId for conditionId=${params.condition_id}`
+      );
+    }
+    const verdict = await assertOnChainRedeemable({
+      conditionId: normalized,
+      outcomeIndex: match.outcomeIndex,
+      positionId: assetBigint,
+    });
+    if (!verdict.ok) {
+      throw new PolyTradeExecutorError(
+        "not_redeemable",
+        `poly-trade-executor: precheck refused redeem conditionId=${params.condition_id}`,
+        verdict.reason
+      );
+    }
+
     await authorizeWalletExit({
       action: "redeem",
       requireTradingReady: false,
@@ -664,26 +741,77 @@ async function buildExecutor(
     }
   }
 
+  /**
+   * Read the two CTF view calls (`balanceOf`, `payoutNumerators`) needed to
+   * decide whether `redeemPositions` will pay out, and reduce the result via
+   * `decideRedeem`. Used by both the manual-route precheck and (in batched
+   * form) by the autonomous sweep.
+   */
+  async function assertOnChainRedeemable(input: {
+    conditionId: `0x${string}`;
+    outcomeIndex: number | null | undefined;
+    positionId: bigint;
+  }): Promise<{ ok: true } | { ok: false; reason: RedeemSkipReason }> {
+    if (input.outcomeIndex == null || !Number.isFinite(input.outcomeIndex)) {
+      return { ok: false, reason: "missing_outcome_index" };
+    }
+    const reads = await publicClient.multicall({
+      contracts: [
+        {
+          address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
+          abi: polymarketCtfRedeemAbi,
+          functionName: "balanceOf" as const,
+          args: [funderAddress as `0x${string}`, input.positionId] as const,
+        },
+        {
+          address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
+          abi: polymarketCtfRedeemAbi,
+          functionName: "payoutNumerators" as const,
+          args: [input.conditionId, BigInt(input.outcomeIndex)] as const,
+        },
+      ],
+      allowFailure: true,
+    });
+    const [balRes, numRes] = reads;
+    return decideRedeem({
+      balance:
+        balRes && balRes.status === "success"
+          ? (balRes.result as bigint)
+          : null,
+      payoutNumerator:
+        numRes && numRes.status === "success"
+          ? (numRes.result as bigint)
+          : null,
+      outcomeIndex: input.outcomeIndex,
+    });
+  }
+
   async function redeemAllRedeemableResolvedPositions(): Promise<
     Array<{ condition_id: string; tx_hash: `0x${string}` }>
   > {
-    // Predicate is on-chain ERC1155 balance, NOT Data-API `redeemable`. The
-    // Data-API flag is the bug source (it stays true for already-redeemed
-    // positions); the chain is the truth source. The positions list is just
-    // the *enumeration source* — which token ids to check. See bug.0376.
+    // Predicate is on-chain (`balanceOf` + `payoutNumerators`), NOT Data-API
+    // `redeemable`. The Data-API flag is the bug.0376 source (stays true for
+    // already-redeemed positions); the chain is the truth source. bug.0383
+    // adds the `payoutNumerators` gate so we don't fire on losing outcomes.
+    // Positions list is the *enumeration source* only.
     const positions = await dataApiClient.listUserPositions(funderAddress);
-    const candidates: Array<{ condition_id: string; asset: bigint }> = [];
+    const candidates: Array<{
+      condition_id: string;
+      conditionIdHex: `0x${string}`;
+      asset: bigint;
+      outcomeIndex: number | null;
+    }> = [];
     const seen = new Set<string>();
     for (const p of positions) {
       if (!p.conditionId) continue;
-      let norm: string;
+      let conditionIdHex: `0x${string}`;
       try {
-        norm = normalizePolygonConditionId(p.conditionId);
+        conditionIdHex = normalizePolygonConditionId(p.conditionId);
       } catch {
         continue;
       }
-      if (seen.has(norm)) continue;
-      seen.add(norm);
+      if (seen.has(conditionIdHex)) continue;
+      seen.add(conditionIdHex);
       if (!p.asset) continue;
       let asset: bigint;
       try {
@@ -691,66 +819,125 @@ async function buildExecutor(
       } catch {
         continue;
       }
-      candidates.push({ condition_id: p.conditionId, asset });
+      const outcomeIndex =
+        typeof p.outcomeIndex === "number" && Number.isFinite(p.outcomeIndex)
+          ? p.outcomeIndex
+          : null;
+      candidates.push({
+        condition_id: p.conditionId,
+        conditionIdHex,
+        asset,
+        outcomeIndex,
+      });
     }
     if (candidates.length === 0) return [];
 
-    const balances = await publicClient.multicall({
-      contracts: candidates.map((c) => ({
-        address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
-        abi: polymarketCtfRedeemAbi,
-        functionName: "balanceOf" as const,
-        args: [funderAddress as `0x${string}`, c.asset] as const,
-      })),
+    // 2N batched read: balanceOf + payoutNumerators per candidate. One RPC
+    // round-trip via multicall.
+    const reads = await publicClient.multicall({
+      contracts: candidates.flatMap((c) => [
+        {
+          address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
+          abi: polymarketCtfRedeemAbi,
+          functionName: "balanceOf" as const,
+          args: [funderAddress as `0x${string}`, c.asset] as const,
+        },
+        {
+          address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
+          abi: polymarketCtfRedeemAbi,
+          functionName: "payoutNumerators" as const,
+          // Use 0 as a placeholder when outcomeIndex missing — the read
+          // happens but the decision still routes to skip_missing_outcome_index
+          // via decideRedeem. Keeps the multicall layout 2N for simplicity.
+          args: [c.conditionIdHex, BigInt(c.outcomeIndex ?? 0)] as const,
+        },
+      ]),
       allowFailure: true,
     });
 
     const out: Array<{ condition_id: string; tx_hash: `0x${string}` }> = [];
     for (let i = 0; i < candidates.length; i++) {
       const c = candidates[i];
-      const result = balances[i];
       if (!c) continue;
-      if (!result || result.status !== "success") {
-        deps.logger.warn(
-          {
-            event: "poly.ctf.redeem.balance_read_failed",
-            billing_account_id: billingAccountId,
-            condition_id: c.condition_id,
-            asset: c.asset.toString(),
-            err:
-              result?.status === "failure"
-                ? result.error instanceof Error
-                  ? result.error.message
-                  : String(result.error)
-                : "missing result",
-          },
-          "poly-trade-executor: balanceOf read failed; skipping condition"
-        );
+      const balRes = reads[i * 2];
+      const numRes = reads[i * 2 + 1];
+
+      const verdict = decideRedeem({
+        balance:
+          balRes && balRes.status === "success"
+            ? (balRes.result as bigint)
+            : null,
+        payoutNumerator:
+          numRes && numRes.status === "success"
+            ? (numRes.result as bigint)
+            : null,
+        outcomeIndex: c.outcomeIndex,
+      });
+
+      if (!verdict.ok) {
+        const base = {
+          billing_account_id: billingAccountId,
+          condition_id: c.condition_id,
+          asset: c.asset.toString(),
+          funder: funderAddress,
+          outcome_index: c.outcomeIndex,
+        };
+        switch (verdict.reason) {
+          case "zero_balance":
+            deps.logger.info(
+              { event: "poly.ctf.redeem.skip_zero_balance", ...base },
+              "poly-trade-executor: redeem sweep skipped — funder holds zero ERC1155 balance"
+            );
+            break;
+          case "losing_outcome":
+            deps.logger.info(
+              { event: "poly.ctf.redeem.skip_losing_outcome", ...base },
+              "poly-trade-executor: redeem sweep skipped — losing outcome (payoutNumerator=0)"
+            );
+            break;
+          case "missing_outcome_index":
+            deps.logger.warn(
+              { event: "poly.ctf.redeem.skip_missing_outcome_index", ...base },
+              "poly-trade-executor: redeem sweep skipped — Data-API position missing outcomeIndex"
+            );
+            break;
+          case "read_failed":
+            deps.logger.warn(
+              {
+                event: "poly.ctf.redeem.balance_read_failed",
+                ...base,
+                bal_err:
+                  balRes?.status === "failure"
+                    ? balRes.error instanceof Error
+                      ? balRes.error.message
+                      : String(balRes.error)
+                    : balRes
+                      ? null
+                      : "missing balance result",
+                num_err:
+                  numRes?.status === "failure"
+                    ? numRes.error instanceof Error
+                      ? numRes.error.message
+                      : String(numRes.error)
+                    : numRes
+                      ? null
+                      : "missing payoutNumerators result",
+              },
+              "poly-trade-executor: precheck read failed; skipping condition"
+            );
+            break;
+        }
         continue;
       }
-      const balance = result.result as bigint;
-      if (balance === 0n) {
-        deps.logger.info(
-          {
-            event: "poly.ctf.redeem.skip_zero_balance",
-            billing_account_id: billingAccountId,
-            condition_id: c.condition_id,
-            asset: c.asset.toString(),
-            funder: funderAddress,
-          },
-          "poly-trade-executor: redeem sweep skipped — funder holds zero ERC1155 balance"
-        );
-        continue;
-      }
+
       try {
         const r = await redeemResolvedPosition({
           condition_id: c.condition_id,
         });
         out.push({ condition_id: c.condition_id, tx_hash: r.tx_hash });
       } catch (err) {
-        // Post-balance-check error path: balanceOf said >0 but
-        // redeemResolvedPosition's own Data-API match failed (e.g. Data-API
-        // marked the position not redeemable, RPC failure). Rare; warn-level.
+        // Post-precheck error path: precheck passed but `redeemResolvedPosition`
+        // failed (Data-API match drift, RPC error, write failure). Rare.
         deps.logger.warn(
           {
             event: "poly.ctf.redeem.error",
@@ -758,7 +945,7 @@ async function buildExecutor(
             condition_id: c.condition_id,
             err: err instanceof Error ? err.message : String(err),
           },
-          "poly-trade-executor: redeem failed after balance precheck"
+          "poly-trade-executor: redeem failed after on-chain precheck"
         );
       }
     }

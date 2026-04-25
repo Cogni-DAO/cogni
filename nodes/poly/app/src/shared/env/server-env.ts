@@ -280,6 +280,18 @@ export const serverSchema = z.object({
     .nonnegative()
     .default(900_000),
 
+  // bug.0383 kill switch — when "false", the autonomous CTF redeem sweep
+  // (`redeemAllRedeemableResolvedPositions` invoked by mirror-pipeline) is
+  // a no-op. Manual /api/v1/poly/wallet/positions/redeem is unaffected.
+  // Lets us stop the sweep via configmap without a code redeploy if the
+  // precheck misfires.
+  POLY_REDEEM_SWEEP_ENABLED: z
+    .preprocess(
+      (v) => (typeof v === "string" ? v.toLowerCase() : v),
+      z.enum(["true", "false"]).default("true")
+    )
+    .transform((v) => v === "true"),
+
   // Operator wallet top-up cap (USD)
   // Per operator-wallet.md: MAX_TOPUP_CAP — per-tx ceiling for OpenRouter top-ups.
   OPERATOR_MAX_TOPUP_USD: z.coerce.number().positive().default(500),
