@@ -109,6 +109,10 @@ Operator-infra-only PRs are allowed to be arbitrarily large and span many concer
 - Detecting _semantic_ cross-node coupling (e.g., a `packages/` change that breaks node A but not node B). That's task.0382 + the per-node reviewer's job, not this gate's.
 - Retroactive enforcement on already-merged PRs.
 
+## Links
+
+- Handoff: [handoff](../handoffs/task.0381.handoff.md)
+
 ## Validation
 
 ```yaml
