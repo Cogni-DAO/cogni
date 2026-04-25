@@ -17,6 +17,8 @@ project: proj.database-ops
 branch: fix/candidate-flight-migrator-image-pull
 bugs:
   - bug.0368
+created: 2026-04-24
+updated: 2026-04-24
 ---
 
 # Task: rebase migrator stage on runtime image
