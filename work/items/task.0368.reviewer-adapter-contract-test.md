@@ -6,7 +6,7 @@ status: needs_implement
 priority: 1
 rank: 1
 estimate: 1
-summary: "Add a fake-deps unit test against review-handler.ts that exercises every ReviewHandlerDeps method (executor, createCheckRun, gatherEvidence, postPrComment, readRepoSpec, readRuleFile) and asserts the verdict pipeline produces a contract-conforming ReviewResult. Locks the adapter boundary before the per-node rule scoping refactor so AI PRs cannot silently break it."
+summary: "Add a fake-deps unit test against review-handler.ts that exercises all 8 callable members of ReviewHandlerDeps (executor, log, createCheckRun, updateCheckRun, gatherEvidence, postPrComment, readRepoSpec, readRuleFile) across happy-path, threshold-fail, empty-gates, and evidence-error scenarios, asserting the verdict pipeline calls updateCheckRun + postPrComment with the contract-conforming arguments. Locks the adapter boundary before the per-node rule scoping refactor so AI PRs cannot silently break it."
 outcome: "When the per-node rule scoping refactor lands (factory takes nodeBasePath, model moves to repo-spec, nodeId threads through), any drift in the ReviewHandlerDeps interface or the ReviewResult/EvaluationOutputSchema contracts fails this test before review. AI-authored PRs touching the reviewer pipeline are mechanically gated on the existing structural contract, not on Derek catching it at self-review."
 spec_refs:
   - vcs-integration
@@ -15,7 +15,7 @@ project: proj.vcs-integration
 branch: test/task-reviewer-adapter-contract
 pr:
 reviewer:
-revision: 0
+revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-04-25
@@ -38,7 +38,7 @@ But the entire boundary is **untested at unit level**:
 
 The only end-to-end coverage is `pr-review-e2e.external.test.ts` — a full-stack test that needs real GitHub credentials, a running app, LiteLLM, and the smee webhook relay. It runs in CI only.
 
-The next planned change to the reviewer is the per-node rule scoping refactor: parameterize `review-adapter.factory.ts:62-65` with `nodeBasePath`, thread `PrReviewWorkflowInput.nodeId` (currently decorative — present at pr-review.workflow.ts:35 but unused) through the activity payload, and move the hardcoded `DEFAULT_REVIEW_MODEL = "gpt-4o-mini"` (review-handler.ts:32) into the per-node repo-spec. Without a unit-level lock on the adapter boundary, that refactor lands without a regression net — and the AI contributors expected to flow through this pipeline have no machine-readable gate against drifting the interface.
+The next planned change to the reviewer is the per-node rule scoping refactor: parameterize `review-adapter.factory.ts:62-65` with `nodeBasePath`, thread `PrReviewWorkflowInput.nodeId` (currently decorative — present at pr-review.workflow.ts:35 but unused) through the activity payload, and _populate_ `ReviewHandlerDeps.reviewModel` (already an optional dep field at review-handler.ts:43, currently unwired) from a per-node repo-spec field. Without a unit-level lock on the adapter boundary, that refactor lands without a regression net — and the AI contributors expected to flow through this pipeline have no machine-readable gate against drifting the interface.
 
 This task is the **prerequisite gate**. Land it first, alone, on its own branch. Subsequent refactor PRs run against this test suite.
 
@@ -50,19 +50,30 @@ The `ReviewHandlerDeps` interface and the `ReviewResult` / `EvaluationOutputSche
 
 ### Approach
 
-**Solution**: One vitest unit test file alongside `review-handler.ts`. Constructs a fake `ReviewHandlerDeps` (in-memory implementations of all six dependencies). Exercises three scenarios against the real handler:
+**Solution**: One vitest unit test file alongside `review-handler.ts`. Constructs a fake `ReviewHandlerDeps` (in-memory implementations covering all 8 callable members: `executor`, `log`, `createCheckRun`, `updateCheckRun`, `gatherEvidence`, `postPrComment`, `readRepoSpec`, `readRuleFile` — plus the data fields `virtualKeyId` and optional `reviewModel`). `handlePrReview` returns `Promise<void>`; the verdict is observable only via the arguments passed to `updateCheckRun(owner, repo, checkRunId, conclusion, summary)` and `postPrComment(...)`. All assertions spy on those call arguments.
 
-1. **Happy path** — fake `gatherEvidence` returns a known PR; fake `executor.runGraph` returns a fixed structured output conforming to `EvaluationOutputSchema`; fake `readRepoSpec` / `readRuleFile` return canned yaml with one ai-rule gate. Assert: handler calls `createCheckRun` once with status `pass`, calls `postPrComment` once, returns a `ReviewResult` whose `gateResults[].metrics` round-trip the LLM scores.
-2. **Gate failure aggregation** — same setup but executor returns scores below `success_criteria` thresholds. Assert: `conclusion: "fail"`, check run summary contains the failing metric, PR comment posts.
-3. **Adapter contract surface** — assert that every method on `ReviewHandlerDeps` is invoked at least once across the two scenarios. This is the antifragile bit: removing or renaming a dep method breaks the test before it breaks production.
+Four scenarios against the real handler:
+
+1. **Happy path** — fake `gatherEvidence` returns a known PR; fake `executor.runGraph` returns a `GraphExecutorPort` envelope whose structured output conforms to `EvaluationOutputSchema` with metric scores above `success_criteria` thresholds; fake `readRepoSpec` returns yaml with one ai-rule gate; fake `readRuleFile` returns a rule yaml with `success_criteria`. Assert: `createCheckRun` called once; `updateCheckRun` called once with `conclusion === "pass"` and a summary string built by `formatCheckRunSummary`; `postPrComment` called once with `expectedHeadSha === ctx.headSha`.
+2. **Threshold fail** — same setup, scores below `success_criteria`. Assert: `updateCheckRun` called with `conclusion === "fail"`; summary string contains the failing metric name; `postPrComment` called once.
+3. **Empty gates short-circuit** (review-handler.ts:118-137) — `readRepoSpec` returns yaml with `gates: []`. Assert: `updateCheckRun` called with `"pass"` + the literal "No review gates configured." string; `executor.runGraph` **never** called; `postPrComment` **never** called; `gatherEvidence` called once (the early return is post-evidence). Locks the empty-config contract.
+4. **Evidence-gatherer error path** (review-handler.ts:224-247) — `gatherEvidence` throws. Assert: `updateCheckRun` called with `conclusion === "neutral"` and a summary containing the error message; `postPrComment` **never** called; `executor.runGraph` **never** called. This is the only path that exercises `updateCheckRun(..., "neutral", ...)`, and locks the failure-mode contract.
+
+A fifth assertion at the end of the file: every callable member of `ReviewHandlerDeps` was invoked at least once across the four scenarios. Removing or renaming a dep method breaks this before production. This is the antifragile bit.
 
 No GitHub. No LLM. No Octokit. No filesystem. Pure dependency injection against the existing handler signature.
+
+**Fixture surface (don't underestimate)**:
+
+- `readRepoSpec` / `readRuleFile` return strings that must round-trip through the real `parseRepoSpec` / `extractGatesConfig` / `parseRule` Zod parsers from `@cogni/repo-spec` — fixtures are real yaml, not arbitrary text. Lift minimal valid examples from existing operator `.cogni/repo-spec.yaml` and `.cogni/rules/*.yaml`.
+- `executor.runGraph` must return the full `GraphExecutorPort.runGraph` envelope, not just the inner structured-output payload. Match the port's actual return type from `@/ports`.
+- `log` is a real `pino` Logger (or `pino().child(...)`-compatible stub) — the handler calls `deps.log.child({...})` at line 85.
 
 **Reuses**:
 
 - Existing `ReviewHandlerDeps` interface (review-handler.ts:38-73) — already a port shape, just needs to be exercised
 - Existing `EvaluationOutputSchema` Zod schema (ai-rule.ts:29-38) — fakes use it to build fixture LLM outputs
-- Existing `ReviewResult` / `GateResult` types (types.ts:17-31) — assertions reference these directly
+- Existing `ReviewResult` / `GateResult` types (types.ts:17-31) — assertions reference these directly via `formatCheckRunSummary` output
 - vitest patterns from `gate-orchestrator.test.ts` (already next to the handler, same fake-deps style)
 
 **Rejected**:
@@ -70,13 +81,14 @@ No GitHub. No LLM. No Octokit. No filesystem. Pure dependency injection against 
 - _Mocking Octokit at the SDK level_ — defeats the purpose. The point is to test the seam, not the implementation behind it.
 - _Spinning up a fake GitHub server (msw, nock)_ — adds a layer the handler doesn't see anyway. Wrong altitude.
 - _Adding contract tests for each adapter individually_ (check-run, pr-comment, evidence-gatherer) — those are GitHub-specific I/O; their failure modes are GitHub API drift, not interface drift. Out of scope for this task; covered by the e2e test which exercises real GitHub.
+- _Asserting against `handlePrReview`'s return value_ — it returns `Promise<void>`. The verdict only escapes through `updateCheckRun` + `postPrComment` arguments. Spy on those.
 - _Bundling this with the per-node scoping refactor in one PR_ — defeats the lock. The test must land first, on green main, so the refactor runs against a known-good gate.
 
 ### Invariants
 
 <!-- CODE REVIEW CRITERIA -->
 
-- [ ] **REVIEWER_PORT_LOCKED**: Every method on `ReviewHandlerDeps` (review-handler.ts:38-73) must be invoked by the test suite. Adding/removing/renaming a method requires updating this test.
+- [ ] **REVIEWER_PORT_LOCKED**: All 8 callable members of `ReviewHandlerDeps` (review-handler.ts:38-73) — `executor`, `log`, `createCheckRun`, `updateCheckRun`, `gatherEvidence`, `postPrComment`, `readRepoSpec`, `readRuleFile` — must be invoked at least once across the four scenarios. Adding/removing/renaming a method requires updating this test.
 - [ ] **VERDICT_CONTRACT_LOCKED**: Test assertions reference `ReviewResult` and `EvaluationOutputSchema` by import — schema drift breaks the test (spec: vcs-integration).
 - [ ] **NO_REAL_IO**: Test must not import Octokit, hit network, read filesystem outside of vitest fixtures, or invoke a real LLM. Pure DI fakes.
 - [ ] **SIMPLE_SOLUTION**: One test file. No new abstractions, no new ports, no helper packages. Reuses existing types verbatim.
@@ -87,20 +99,12 @@ No GitHub. No LLM. No Octokit. No filesystem. Pure dependency injection against 
 
 <!-- High-level scope -->
 
-- Create: `nodes/operator/app/src/features/review/services/review-handler.test.ts` — fake-deps contract test, three scenarios, ~150 lines. The whole task.
+- Create: `nodes/operator/app/src/features/review/services/review-handler.test.ts` — fake-deps contract test, four scenarios + dep-invocation assertion, ~200 lines (fixtures push the count above the original 150 estimate). The whole task.
 - Modify: none. (No production code changes. No spec changes — tonight's cut locks the contract; it does not change it.)
 
-### Out of scope (follow-on tasks)
+### Follow-on work
 
-These are the planned next moves, **not in this task**:
-
-1. `review-adapter.factory.ts` takes `nodeBasePath` parameter; resolution helper `nodeId → repo-spec.nodes[].path → join(repoRoot, path, ".cogni")` with fallback to `repoRoot/.cogni`.
-2. `PrReviewWorkflowInput.nodeId` threads through activity payload to handler dep construction.
-3. `DEFAULT_REVIEW_MODEL` becomes a fallback; per-node repo-spec gets optional `review.model:` field.
-4. L4 convention test: every node in root repo-spec registry has a resolvable `.cogni/` or explicit `review: inherit`.
-5. `docs/spec/vcs-integration.md` update to document the per-node rule scoping behavior (only after #1 lands).
-
-Each of those is a separate task. None blocks the others once this contract test is green. **`docs/spec/node-ci-cd-contract.md` is NOT updated by any of this work** — that spec covers CI workflows and merge gates, not the operator's review pipeline. The review pipeline architecture lives in `docs/spec/vcs-integration.md`.
+The per-node rule scoping refactor and any spec updates land as **separate `task.*` items**, created at `needs_design` after this gate is green. They are intentionally not designed here — embedding their design in this execution item violates content boundaries and prevents independent review. **`docs/spec/node-ci-cd-contract.md` is not the right home** for any of it; the review pipeline architecture lives in `docs/spec/vcs-integration.md`.
 
 ## Validation
 
