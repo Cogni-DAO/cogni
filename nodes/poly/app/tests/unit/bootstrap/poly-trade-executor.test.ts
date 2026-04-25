@@ -330,9 +330,9 @@ describe("createPolyTradeExecutorFactory", () => {
     expect(walletPort.authorizeIntent).not.toHaveBeenCalled();
   });
 
-  // bug.0373: redeem sweep predicate is on-chain ERC1155 balance, not the
+  // bug.0376: redeem sweep predicate is on-chain ERC1155 balance, not the
   // Data-API `redeemable` flag.
-  describe("redeemAllRedeemableResolvedPositions (bug.0373 predicate)", () => {
+  describe("redeemAllRedeemableResolvedPositions (bug.0376 predicate)", () => {
     const CONDITION_A =
       "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
     const CONDITION_B =

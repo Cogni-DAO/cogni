@@ -38,9 +38,19 @@
  *     call. Subsequent calls reuse the cached instance until the process exits.
  *   - SHARED_PUBLIC_CLIENT — the `viem.PublicClient` used for RPC reads is a
  *     process-level singleton; wallet clients fan out per tenant.
+ *   - SWEEP_TRIGGERED_BY_ON_CHAIN_BALANCE — `redeemAllRedeemableResolvedPositions`
+ *     selects redemption candidates by ERC1155 `balanceOf(funder, asset) > 0`
+ *     against `POLYGON_CONDITIONAL_TOKENS`, NOT by Data-API `Position.redeemable`.
+ *     Predicate is on-chain truth; Data-API positions are only the enumeration
+ *     source. Sweep emits structured events: `poly.ctf.redeem.skip_zero_balance`
+ *     (info), `poly.ctf.redeem.balance_read_failed` (warn, multicall element
+ *     failure), `poly.ctf.redeem.error` (warn, post-balance-check redeem failure).
+ *     See bug.0376.
  * Side-effects: on first `placeIntent` for a new tenant: HTTPS to
- *   Polymarket CLOB + Privy API. Subsequent calls reuse cached clients.
- * Links: work/items/task.0318 (Phase B3), docs/spec/poly-trader-wallet-port.md
+ *   Polymarket CLOB + Privy API. Subsequent calls reuse cached clients. Sweep
+ *   path additionally issues one `eth_call` (multicall) per tick.
+ * Links: work/items/task.0318 (Phase B3), work/items/bug.0376,
+ *   docs/spec/poly-trader-wallet-port.md
  * @public
  */
 
@@ -660,7 +670,7 @@ async function buildExecutor(
     // Predicate is on-chain ERC1155 balance, NOT Data-API `redeemable`. The
     // Data-API flag is the bug source (it stays true for already-redeemed
     // positions); the chain is the truth source. The positions list is just
-    // the *enumeration source* — which token ids to check. See bug.0373.
+    // the *enumeration source* — which token ids to check. See bug.0376.
     const positions = await dataApiClient.listUserPositions(funderAddress);
     const candidates: Array<{ condition_id: string; asset: bigint }> = [];
     const seen = new Set<string>();

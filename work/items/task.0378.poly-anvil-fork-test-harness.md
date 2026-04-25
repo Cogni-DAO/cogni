@@ -1,5 +1,5 @@
 ---
-id: task.0375
+id: task.0378
 type: task
 title: poly anvil-fork test harness — verify CTF semantics against real Polygon chain state
 blocked_by: bug.0373
@@ -91,15 +91,15 @@ exists to install.
 
 ## Review Checklist
 
-- [ ] **Work Item:** `task.0375` linked in PR body
-- [ ] **Spec:** `bug.0373` invariants still uphold (predicate is on-chain
+- [ ] **Work Item:** `task.0378` linked in PR body
+- [ ] **Spec:** `bug.0376` invariants still uphold (predicate is on-chain
       balance; no env flags introduced).
 - [ ] **Tests:** new fork test green; existing unit tests untouched.
 - [ ] **Reviewer:** assigned and approved.
 
 ## PR / Links
 
-- Parent fix: `bug.0373`
+- Parent fix: `bug.0376`
 - Sweep code: `nodes/poly/app/src/bootstrap/capabilities/poly-trade-executor.ts:657`
 
 ## Attribution

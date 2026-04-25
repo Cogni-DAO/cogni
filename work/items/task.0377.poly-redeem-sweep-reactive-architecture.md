@@ -1,5 +1,5 @@
 ---
-id: task.0374
+id: task.0377
 type: task
 title: poly CTF redeem sweep — reactive architecture (replace per-tick RPC fan-out)
 status: needs_triage
@@ -28,7 +28,7 @@ external_refs:
 
 ## Requirements
 
-After `bug.0373` lands the correctness fix (predicate inverted to use on-chain
+After `bug.0376` lands the correctness fix (predicate inverted to use on-chain
 ERC1155 balance instead of `Data-API.redeemable`), the sweep is _correct_ but
 still architecturally ugly:
 
@@ -79,8 +79,8 @@ should drop from ~120 events/hour (current sweep cadence) to either ~0 (option
 
 ## Review Checklist
 
-- [ ] **Work Item:** `task.0374` linked in PR body
-- [ ] **Spec:** `bug.0373` invariants still uphold (predicate is on-chain
+- [ ] **Work Item:** `task.0377` linked in PR body
+- [ ] **Spec:** `bug.0376` invariants still uphold (predicate is on-chain
       balance; no env flags introduced)
 - [ ] **Tests:** integration covers chosen trigger path
 - [ ] **Reviewer:** assigned and approved

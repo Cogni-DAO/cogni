@@ -1,8 +1,8 @@
 ---
-id: bug.0373
+id: bug.0376
 type: bug
 title: poly CTF redeem sweep burns POL on a runaway loop, re-redeeming already-redeemed positions
-status: done
+status: needs_merge
 priority: 0
 rank: 1
 estimate: 2
@@ -205,7 +205,7 @@ close it cheaply, but is deferred until we observe the residual matter.
 
 ### Follow-up (separate ticket — not this PR)
 
-Filed as `task.0374` (sweep architecture refactor). The current sweep runs
+Filed as `task.0377` (sweep architecture refactor). The current sweep runs
 every mirror-pipeline tick over every position; even with the precheck this
 is O(positions) RPC fan-out per tick on a hot loop the rest of the pipeline
 doesn't care about. Cleaner long-term: trigger redemption reactively when
@@ -319,7 +319,7 @@ as today.
       - [ ] Sweep ignores `Position.redeemable` flag (false + non-zero balance still redeems).
   - Validation: `pnpm --filter @cogni/poly-app test:unit` green.
 
-- [ ] **Checkpoint 4 — Anvil-fork integration test (DEFERRED to task.0375)**
+- [ ] **Checkpoint 4 — Anvil-fork integration test (DEFERRED to task.0378)**
   - Decision: poly node has no anvil/fork test infrastructure
     (`viem.adapter.int.test.ts` files are stubs across all nodes; no
     `@viem/anvil` dep, no foundry, no testcontainers anvil image). Building
@@ -331,13 +331,13 @@ as today.
     source level. The remaining "redeemPositions succeeds-as-no-op on
     zero balance" semantic is documented CTF behavior — we no longer call
     that code path on a zero-balance position regardless of chain semantics.
-  - Filed `task.0375` (anvil-fork harness) so the gate gets installed in
+  - Filed `task.0378` (anvil-fork harness) so the gate gets installed in
     a follow-up PR with proper infra scope.
 
 - [x] **Checkpoint 5 — Bookkeeping**
   - Todos:
-    - [x] File `task.0374` (sweep architecture refactor follow-up).
-    - [x] File `task.0375` (anvil-fork test harness follow-up).
+    - [x] File `task.0377` (sweep architecture refactor follow-up).
+    - [x] File `task.0378` (anvil-fork test harness follow-up).
     - [x] Update `_index.md` and bug status to `needs_closeout`.
 
 ## Validation
@@ -376,7 +376,7 @@ redeemable position observed at resolution time.
 
 ## Review Checklist
 
-- [ ] **Work Item:** `bug.0373` linked in PR body
+- [ ] **Work Item:** `bug.0376` linked in PR body
 - [ ] **Spec:** mirror-pipeline + poly-trade-executor invariants upheld; no
       regression to existing redeem flow on truly-unredeemed positions
 - [ ] **Tests:** mocked unit tests + anvil-fork integration test (real
