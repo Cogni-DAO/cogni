@@ -83,11 +83,9 @@
 | 1 | 1 | 2 | needs_implement | task.0360 | POST /api/v1/vcs/pr — VCS create-PR endpoint for external agents | Agentic Interoperability | proj.agentic-interop |
 | 1 | 1 | 1 | needs_merge | bug.0361 | promote-and-deploy: EXPECTED_BUILDSHA uses merge commit SHA; deploy-infra always runs | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 1 | needs_review | bug.0364 | promote-and-deploy: production can't promote heterogeneous preview (single source_sha assumption) | CI/CD Pipeline | proj.cicd-services-gitops |
-| 1 | 1 | 2 | needs_triage | bug.0369 | Reown/WalletConnect origin allowlist missing for poly-test (and no sync workflow across node × env matrix) | CI/CD Pipeline | proj.cicd-services-gitops |
-| 1 | 1 | 1 | needs_review | bug.0370 | LiteLLM billing callback DNS-fails since k3s migration — every prod LLM call drops on the floor | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 1 | 1 | needs_implement | task.0368 | Reviewer adapter-boundary contract test — lock ReviewHandlerDeps before per-node scoping refactor | VCS Integration | proj.vcs-integration |
 | 1 | 1 | 1 | needs_review | task.0370 | Rebase every node's migrator stage on its runtime image | Database Operations | proj.database-ops |
 | 1 | 1 | 2 | needs_review | task.0371 | Kill PreSync migration hook + migrator image — step 1 hotfix | Database Operations | proj.database-ops |
-| 1 | 1 | 2 | needs_implement | task.0373 | candidate-flight self-heals deploy/candidate-a digests around PR rsync |  |  |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD Pipeline | proj.cicd-services-gitops |
