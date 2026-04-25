@@ -73,11 +73,13 @@ compose_endpoint_url: "http://app:3000" # for COGNI_NODE_ENDPOINTS generation
 
 The compose fields are Run-tier ("regenerate compose from catalog"). This task ships the Walk tier (read-only consumers), not full compose generation.
 
-## Design (revision 2 — structural prevention, OSS tools)
+## Design (revision 3 — locked in 2026-04-25)
 
 > **Revision history**
-> v1 — bash readers + bespoke repo-grep lint (`check-catalog-ssot.sh`). Rejected by /review-design 2026-04-25: _"Why are we writing linters + parsers? Custom linters exist because the architecture leaks. The OSS answer is to fix the architecture so the leak can't happen."_
-> v2 (this) — yq (standard reader), JSON Schema validation (standard contract), decide-job pattern (structural prevention via a single matrix-emitting job). No bespoke lint, no bespoke parser.
+>
+> - v1 — bash readers + bespoke `check-catalog-ssot.sh` repo-grep lint. Rejected /review-design v1: _"Custom linters exist because the architecture leaks. Fix the architecture so the leak can't happen."_
+> - v2 — yq + check-jsonschema + decide-job pattern. Cited `mikefarah/yq@v4` as install action; cited `python-jsonschema/check-jsonschema` as first-party GHA action. /review-design v2 flagged both action names as unverified.
+> - v3 (this) — researched and verified. **`yq 4.52.5` is pre-installed on `ubuntu-24.04`** (every workflow in this repo runs on `ubuntu-latest` which aliases to 24.04). No install action needed — just call `yq` in `run:` blocks. **`check-jsonschema` has no first-party action** — install via `pipx install check-jsonschema` (latest 0.37.1) and invoke as a CLI. Verified yq query expressions with a local 4.53.2 yq against the live `infra/catalog/`.
 
 ### Outcome
 
@@ -85,7 +87,7 @@ The compose fields are Run-tier ("regenerate compose from catalog"). This task s
 
 ### Architectural primitive — the `decide` job pattern
 
-Every workflow that needs a per-node fan-out gains one job at the head:
+Every workflow that needs a per-node fan-out gains one job at the head. yq is pre-installed on `ubuntu-latest` (verified: `ubuntu-24.04` ships yq 4.52.5), so the job has no install step:
 
 ```yaml
 jobs:
@@ -96,24 +98,32 @@ jobs:
       apps_csv: ${{ steps.read.outputs.apps_csv }}
     steps:
       - uses: actions/checkout@v4
-      - uses: mikefarah/yq@v4 # the standard yq install action
       - id: read
         run: |
-          targets_json=$(yq -o=json -I=0 '[.. | select(.name) | .name]' infra/catalog/*.yaml)
-          apps_csv=$(yq -o=tsv '.name' infra/catalog/*.yaml | tr '\n' ',' | sed 's/,$//')
+          # Verified expressions (yq v4.52+, see Validation block).
+          targets_json=$(yq ea -o=json -I=0 '[.name]' infra/catalog/*.yaml)
+          apps_csv=$(yq ea '.name' infra/catalog/*.yaml | paste -sd,)
           echo "targets_json=$targets_json" >> "$GITHUB_OUTPUT"
-          echo "apps_csv=$apps_csv" >> "$GITHUB_OUTPUT"
+          echo "apps_csv=$apps_csv"          >> "$GITHUB_OUTPUT"
 ```
 
-Downstream consumers reference `${{ needs.decide.outputs.targets_json }}` (matrix) or pass `apps_csv` to `wait-for-argocd.sh` as `PROMOTED_APPS`. **There is no bash array of node names anywhere in CI.** The only place a node literal can live is `infra/catalog/*.yaml`.
+Downstream consumers reference `${{ needs.decide.outputs.targets_json }}` for the matrix and `apps_csv` for `wait-for-argocd.sh`'s `PROMOTED_APPS`. **No bash array of node names lives anywhere in CI** other than `infra/catalog/*.yaml`. Structural prevention, not policy enforcement.
 
-This is structural prevention, not policy enforcement: no lint required.
+> **Scope honesty:** This PR adds the decide job to `candidate-flight.yml` only — the worked example task.0372 will reuse for the other two fan-out workflows. `flight-preview.yml` and `promote-and-deploy.yml` continue to derive `promoted_apps` from `promote-build-payload.sh`, which itself is catalog-driven via `image-tags.sh` after Commit 3 below. Both provenance chains terminate at catalog; the decide-job pattern is the cleaner long-term shape that task.0372 fully adopts.
 
 ### Approach
 
 **Five small commits, in order.** Each independently revertable.
 
-#### Commit 1 — Add `path_prefix:` field + JSON Schema
+#### Commit 1 — Spec rewrite: `docs/spec/ci-cd.md` axiom 16
+
+Replace the existing axiom (`scripts/ci/lib/image-tags.sh` is the registry) with:
+
+> **CATALOG_IS_SSOT.** `infra/catalog/*.yaml` is the single declaration site for nodes and node-shaped services for **CI fan-out and digest promotion**. Workflows that fan out per node SHOULD adopt a `decide` job at the head that reads catalog via the pre-installed `yq` (no install step needed on `ubuntu-latest`); downstream jobs consume that decide-job output. Bash scripts that need a per-node enumeration source `scripts/ci/lib/image-tags.sh`, which itself reads catalog. Schema is validated on every PR that touches `infra/catalog/**` via the `check-jsonschema` CLI. Adding a node = drop a catalog yaml + Dockerfile + overlay; nothing else needs editing. Compose generation from catalog (`infra/compose/runtime/docker-compose.yml`) and k8s overlay generation are tracked as separate follow-ups; this axiom does **not** cover them yet.
+
+Spec rewrite **first** so each subsequent commit is reviewable against the new contract.
+
+#### Commit 2 — Add `path_prefix:` field + JSON Schema
 
 Add `path_prefix:` to all 4 catalog files (the field `detect-affected.sh` will consume in Commit 4):
 
@@ -124,31 +134,43 @@ path_prefix: nodes/operator/
 path_prefix: services/scheduler-worker/
 ```
 
-Create `infra/catalog/_schema.json` (JSON Schema) declaring required fields (`name`, `type`, `port`, `node_id`, `dockerfile`, `image_tag_suffix`, `path_prefix`, `candidate_a_branch`, `preview_branch`, `production_branch`) with type and pattern constraints. Wire `python-jsonschema/check-jsonschema` action into `pr-build.yml` (single step, runs on PRs that touch `infra/catalog/**`). Standard tool, no bespoke code.
+Create `infra/catalog/_schema.json` (JSON Schema draft-2020-12) declaring required fields (`name`, `type`, `port`, `node_id`, `dockerfile`, `image_tag_suffix`, `path_prefix`, `candidate_a_branch`, `preview_branch`, `production_branch`) with type and pattern constraints (e.g., `path_prefix` is a string ending with `/`; `node_id` matches a UUID regex; `*_branch` starts with `deploy/`). The leading `_` keeps the file outside the AppSet glob (`infra/catalog/*.yaml`) so Argo never tries to template it.
 
-#### Commit 2 — Spec rewrite: `docs/spec/ci-cd.md` axiom 16
+Wire validation into `pr-build.yml`:
 
-Replace the existing axiom (`scripts/ci/lib/image-tags.sh` is the registry) with:
+```yaml
+- name: Validate infra/catalog schema
+  if: ${{ github.event_name == 'pull_request' }}
+  run: |
+    pipx install 'check-jsonschema==0.37.1'
+    check-jsonschema --schemafile infra/catalog/_schema.json infra/catalog/*.yaml
+```
 
-> **CATALOG_IS_SSOT.** `infra/catalog/*.yaml` is the single declaration site for nodes and node-shaped services. CI workflows that fan out per node MUST consume the matrix via a `decide` job that reads catalog via `yq`; downstream jobs MUST consume that decide-job output, not their own enumeration. Schema is validated on every PR via `check-jsonschema`. Adding a node = drop a catalog yaml + Dockerfile + overlay; nothing else needs editing.
-
-Spec rewrite **first** so each subsequent commit is reviewable against the new contract.
+`pipx` is pre-installed on `ubuntu-latest`. `check-jsonschema` has no first-party GHA action; the pip CLI is the canonical pattern.
 
 #### Commit 3 — Migrate `scripts/ci/lib/image-tags.sh` to catalog-backed readers
 
-Replace hardcoded arrays + case-arm function with `yq` readers, populating compatibility shims (`ALL_TARGETS`, `NODE_TARGETS`) at source time so existing callers keep working unchanged:
+Replace hardcoded arrays + case-arm function with verified `yq` expressions. Populate compatibility shims (`ALL_TARGETS`, `NODE_TARGETS`) at source time so existing callers keep working unchanged:
 
 ```bash
-catalog_targets()       { yq -r '.name' infra/catalog/*.yaml ; }
-catalog_node_targets()  { yq -r 'select(.type == "node") | .name' infra/catalog/*.yaml ; }
-catalog_field()         { yq -r ".${2}" "infra/catalog/${1}.yaml" ; }
+catalog_targets()       { yq ea '.name' infra/catalog/*.yaml ; }
+catalog_node_targets()  { yq ea '.name' infra/catalog/*.yaml -- \
+                          --from-file <(printf '%s\n' 'select(.type == "node")') ; }
+# Or equivalently and more readable:
+# catalog_node_targets() { yq ea '. | select(.type == "node") | .name' infra/catalog/*.yaml ; }
+catalog_field()         { yq ".${2}" "infra/catalog/${1}.yaml" ; }
 tag_suffix_for_target() { catalog_field "$1" image_tag_suffix ; }
 
 mapfile -t ALL_TARGETS  < <(catalog_targets)
 mapfile -t NODE_TARGETS < <(catalog_node_targets)
 ```
 
-Verified semantics-preserving: catalog `type: node` entries are operator/poly/resy; `scheduler-worker` is `type: service`. Resulting `NODE_TARGETS=(operator poly resy)` matches the current literal.
+Verified locally with yq 4.53.2 (matches `ubuntu-latest`'s 4.52.5 series):
+
+- `yq ea '.name' infra/catalog/*.yaml` → `operator\npoly\nresy\nscheduler-worker`
+- `yq ea '. | select(.type == "node") | .name' infra/catalog/*.yaml` → `operator\npoly\nresy`
+
+Semantics-preserving: catalog has 3 `type: node` entries (operator/poly/resy) + 1 `type: service` (scheduler-worker). Resulting shim arrays match the current literals exactly.
 
 #### Commit 4 — Migrate `scripts/ci/detect-affected.sh`
 
@@ -156,52 +178,62 @@ Replace the per-target case arms with iteration over catalog `path_prefix`:
 
 ```bash
 while IFS= read -r catalog_file; do
-  target=$(yq -r '.name' "$catalog_file")
-  prefix=$(yq -r '.path_prefix' "$catalog_file")
+  target=$(yq '.name' "$catalog_file")
+  prefix=$(yq '.path_prefix' "$catalog_file")
   case "$path" in "${prefix}"*) add_target "$target" ;; esac
 done < <(printf '%s\n' infra/catalog/*.yaml)
 ```
 
-#### Commit 5 — Decide-job adoption: `wait-for-argocd.sh` callers + matrix readiness
+#### Commit 5 — `wait-for-argocd.sh` default-APPS removal + decide-job worked example
 
-Two surface edits — neither one a parser, both structural:
+**Caller audit confirmed both existing callers already pass `PROMOTED_APPS`:**
 
-1. **`wait-for-argocd.sh` default APPS list deleted entirely.** Callers must pass `PROMOTED_APPS` explicitly. The only existing default-using caller would have a behavior change (silently waited on a hardcoded list); make it loud: if `PROMOTED_APPS` is empty, the script exits 1 with a clear message pointing to the decide-job pattern. Saves us from "default APPS drifted" forever.
-2. **One worked example wired in `candidate-flight.yml`** — add the `decide` job upstream of the existing `flight` job, pass `decide.outputs.apps_csv` (when matching the affected promoted set) explicitly. Other workflows already pass `PROMOTED_APPS` from `flight.outputs.promoted_apps`, so the contract is preserved without changes there. This commit also proves the decide-job-as-only-source pattern works end-to-end for task.0372 to reuse.
+- `candidate-flight.yml:387` → `PROMOTED_APPS: ${{ needs.flight.outputs.promoted_apps }}`
+- `promote-and-deploy.yml:688` → `PROMOTED_APPS: ${{ needs.promote-k8s.outputs.promoted_apps }}`
+
+The hardcoded default `APPS=(operator poly resy scheduler-worker sandbox-openclaw)` is dead code. Two edits:
+
+1. **Delete the default.** Empty `PROMOTED_APPS` → exit 1 with a message pointing to the decide-job pattern. Prevents silent drift forever.
+2. **Wire the decide job in `candidate-flight.yml` as the worked example.** Add `decide` upstream of `flight`. The `flight` job's `wait-for-argocd` step continues to read `flight.outputs.promoted_apps` (unchanged). The new decide job's value in this PR is to prove the pattern compiles end-to-end and to give task.0372 a concrete shape to reuse for `flight-preview.yml` + `promote-and-deploy.yml`.
 
 #### Out of scope (filed as follow-ups)
 
-- **Compose generation from catalog** — `infra/compose/runtime/docker-compose.yml` per-service blocks + `COGNI_NODE_ENDPOINTS` env. Solved later via Kustomize `replacements` / `components` (the standard primitive for "render N copies of a template from a catalog"). Filed separately.
-- **K8s overlay generation from catalog** — same pattern, same follow-up.
-- **Removing the compatibility shims** in `image-tags.sh` (`ALL_TARGETS` / `NODE_TARGETS` arrays). After one release cycle when no caller relies on them as bash arrays. Tracked in the same follow-up.
+- **Compose generation from catalog** — `infra/compose/runtime/docker-compose.yml` per-service blocks + `COGNI_NODE_ENDPOINTS` env. Standard primitive for the follow-up: Kustomize `replacements` / `components`, or a small render script consuming catalog. Spec axiom 16 explicitly excludes this for now.
+- **K8s overlay generation from catalog** — same shape, same follow-up.
+- **Decide-job adoption in `flight-preview.yml` + `promote-and-deploy.yml`** — task.0372.
+- **Removing the compatibility shims** in `image-tags.sh` (`ALL_TARGETS` / `NODE_TARGETS`). After one release cycle. Tracked in the same follow-up.
 
-### Reuses (OSS-native)
+### Reuses (OSS-native, all verified)
 
-- **`mikefarah/yq@v4`** — the standard YAML reader for GitOps tooling. Installed via the maintained `mikefarah/yq@v4` GHA action (one line per workflow). Not preinstalled on `ubuntu-latest`, so the install step is explicit; this is the standard pattern.
-- **`python-jsonschema/check-jsonschema`** — the standard JSON-Schema validator GHA action. Wired into `pr-build.yml` to validate `infra/catalog/*.yaml` against `infra/catalog/_schema.json`. No custom validator code.
-- **GHA `decide` → `matrix` pattern** — already used in `pr-build.yml` (task.0321: detect → build matrix → manifest). This task generalizes the pattern: every per-node fan-out workflow gets one decide job feeding all matrix consumers.
+- **`yq` (mikefarah v4)** — pre-installed on `ubuntu-latest` (resolves to `ubuntu-24.04` as of April 2026; ships yq 4.52.5). No install step. Direct invocation in `run:` blocks. Verified locally with 4.53.2 against `infra/catalog/`. Source: [actions/runner-images Ubuntu2404 readme](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md).
+- **`check-jsonschema`** — pip-distributed CLI (latest stable 0.37.1, March 2026). No first-party GHA action. Invoked via `pipx install check-jsonschema && check-jsonschema --schemafile …` in one step on PRs that touch `infra/catalog/**`. Source: [python-jsonschema/check-jsonschema](https://github.com/python-jsonschema/check-jsonschema).
+- **GHA `decide` → `matrix` pattern** — already used in `pr-build.yml` (task.0321: detect → build matrix → manifest). This task generalizes the pattern; task.0372 adopts it across the other fan-out workflows.
 - **ApplicationSet `files:` generator** — already catalog-driven. No change.
 
 ### Rejected
 
-- **v1: bash readers + bespoke `check-catalog-ssot.sh` lint.** Rejected: a lint exists when the architecture can't structurally prevent the regression. The decide-job pattern + JSON Schema validation _do_ prevent it (no place to put a hardcoded literal that any production code path consumes; schema rejects malformed catalog entries at PR time). No bespoke lint needed. (Reviewer note 2026-04-25.)
-- **`python3` reader instead of `yq`.** Reviewer was explicit: yq is the GitOps-standard reader. Adding it via `mikefarah/yq@v4` is one line per workflow and gives us the same selector syntax everywhere (workflows, scripts, ad-hoc debugging). python3 inline parsers are an anti-pattern compared to the standard tool.
-- **Top-down rewrite — generate compose + overlays in this task.** Too big; multiplies blast radius. Standard pattern (Kustomize replacements / components) deferred to a separate follow-up.
-- **Land this AFTER task.0372.** Would force task.0372 to either ship with hardcoded lists (re-paying the migration cost on the next node) or land a partial SSoT inside the matrix PR. Reviewer's pivot is correct.
+- **v1: bash readers + bespoke `check-catalog-ssot.sh` lint.** A lint exists when the architecture can't structurally prevent the regression. The decide-job pattern + JSON Schema validation _do_ prevent it. No bespoke lint needed.
+- **`python3` reader instead of `yq`.** yq is the GitOps-standard reader and is pre-installed. python3 inline parsers are an anti-pattern when the standard tool is one shell call away.
+- **`mikefarah/yq@v4` as an install action (v2 plan).** That action runs yq inside its container, not on the host's PATH for downstream `run:` steps. Wrong shape. yq pre-install on the runner makes the question moot.
+- **First-party `python-jsonschema/check-jsonschema-action` (v2 plan).** No such first-party action exists. Pip CLI is the canonical pattern.
+- **Top-down rewrite — generate compose + overlays in this task.** Too big; multiplies blast radius. Standard pattern (Kustomize replacements / components) deferred to a follow-up. Spec axiom 16 explicitly excludes compose for now.
+- **Land this AFTER task.0372.** Would force task.0372 to either ship with hardcoded lists or land a partial SSoT inside the matrix PR.
 
 ### Invariants
 
 <!-- CODE REVIEW CRITERIA -->
 
 - [ ] CATALOG_IS_SSOT: `infra/catalog/*.yaml` is the only file that declares nodes. (spec: ci-cd, axiom 16 rewrite)
-- [ ] DECIDE_JOB_IS_ONLY_SOURCE: Every workflow that fans out per node has exactly one `decide` job (head of the workflow) reading catalog via `yq`. Downstream jobs consume `needs.decide.outputs.*` — never their own enumeration. (spec: ci-cd)
+- [ ] DECIDE_JOB_PATTERN_AVAILABLE: `candidate-flight.yml` has a `decide` job at the head reading catalog via pre-installed `yq` and emitting `targets_json` + `apps_csv`. The pattern compiles end-to-end and is ready for `flight-preview.yml` and `promote-and-deploy.yml` to adopt in task.0372. (spec: ci-cd)
+- [ ] CATALOG_BACKED_PROMOTED_APPS: The `promoted_apps` flowing from `promote-build-payload.sh` into `wait-for-argocd.sh` derives from catalog (via `image-tags.sh` after Commit 3). Both decide-job and promoted-apps provenance chains terminate at `infra/catalog/*.yaml` — no other source of node names exists. (spec: ci-cd)
 - [ ] SCHEMA_VALIDATED_ON_PR: `python-jsonschema/check-jsonschema` validates `infra/catalog/*.yaml` against `infra/catalog/_schema.json` on every PR that touches catalog. Schema declares required fields including `path_prefix`. (spec: ci-cd)
 - [ ] NO_DEFAULT_APPS_LIST: `scripts/ci/wait-for-argocd.sh` has no hardcoded default APPS. Callers pass `PROMOTED_APPS` explicitly (sourced from a decide job). Empty `PROMOTED_APPS` → loud failure with a pointer to the decide-job pattern. (spec: ci-cd)
 - [ ] BACKWARDS_COMPATIBLE_SHIM: `image-tags.sh` continues to export `ALL_TARGETS` and `NODE_TARGETS` arrays (populated from catalog) so existing bash callers keep working unchanged. Shims tracked for removal in a follow-up after one release cycle. (spec: ci-cd)
-- [ ] OSS_TOOLS_NOT_BESPOKE: yq for reading; check-jsonschema for validation; GHA decide→matrix for fan-out. No bespoke linter, no bespoke parser, no in-repo `check-catalog-ssot.sh`. (spec: architecture)
+- [ ] OSS_TOOLS_NOT_BESPOKE: yq (pre-installed on `ubuntu-latest`) for reading; `check-jsonschema` (pip CLI) for validation; GHA `decide` → `matrix` for fan-out. No bespoke linter, no bespoke parser, no in-repo `check-catalog-ssot.sh`, no install action for yq. (spec: architecture)
+- [ ] AXIOM_CARVES_OUT_COMPOSE: ci-cd.md axiom 16 rewrite explicitly says CATALOG_IS_SSOT covers CI fan-out + digest promotion, NOT compose / k8s overlay generation. Compose remains hand-edited until a separate follow-up. (spec: ci-cd)
 - [ ] TASK_0372_MULTIPLIER: After this task, task.0372's bootstrap script and matrix `include` derive from catalog without further code. Verified by drafting `for c in infra/catalog/*.yaml; do for env in candidate-a preview; do …; done` as a checkpoint snippet in the task.0372 design.
-- [ ] NO_NEW_RUNTIME_DEPS: No new packages, no new long-running services. New CI tooling is two well-maintained GHA actions (yq, check-jsonschema). (spec: architecture)
-- [ ] SIMPLE_SOLUTION: Net new code is `_schema.json` + `path_prefix:` × 4 + ~30 lines of bash refactor + 1 decide job + 2 GHA-action install lines. **Zero bespoke linter, zero bespoke parser.**
+- [ ] NO_NEW_RUNTIME_DEPS: No new packages, no new long-running services, no new GHA actions. yq is pre-installed; check-jsonschema is `pipx install` (one line). (spec: architecture)
+- [ ] SIMPLE_SOLUTION: Net new code is `_schema.json` + `path_prefix:` × 4 + ~30 lines of bash refactor + 1 decide job + 1 `pipx install` step. **Zero bespoke linter, zero bespoke parser, zero new GHA actions.**
 - [ ] ARCHITECTURE_ALIGNMENT: `infra/catalog/*.yaml` was always meant to be the catalog (per `infra/AGENTS.md`); this task delivers on the promise via OSS-native tooling.
 
 ### Files
@@ -239,15 +271,17 @@ Two surface edits — neither one a parser, both structural:
 
 ### exercise
 
-1. Local: source `image-tags.sh`; `printf '%s\n' "${ALL_TARGETS[@]}"` → `operator poly resy scheduler-worker` (byte-identical to pre-migration). Drop a fixture catalog `infra/catalog/_test-canary.yaml` with `name: canary`; re-source; output now includes `canary`. Delete fixture.
-2. Local: drop a malformed catalog entry (e.g., remove the required `path_prefix` field). Run `check-jsonschema --schemafile infra/catalog/_schema.json infra/catalog/*.yaml` → fails with a clear schema-violation message. Revert.
-3. CI: open this PR. New `validate-catalog` step (check-jsonschema) green. New `decide` job in `candidate-flight.yml` emits the expected `targets_json` and `apps_csv`. All existing CI green (no regression).
+1. **yq query smoke (pre-implementation, already done — see Approach):** `yq ea -o=json -I=0 '[.name]' infra/catalog/*.yaml` → `["operator","poly","resy","scheduler-worker"]`. `yq ea '. | select(.type == "node") | .name' infra/catalog/*.yaml` → `operator\npoly\nresy`. Verified locally with yq 4.53.2.
+2. **Source-time shim parity:** `source scripts/ci/lib/image-tags.sh && printf '%s\n' "${ALL_TARGETS[@]}"` → byte-identical to pre-migration. `printf '%s\n' "${NODE_TARGETS[@]}"` → `operator poly resy`.
+3. **Catalog-driven extension:** Drop a fixture `infra/catalog/test-canary.yaml` (with all schema-required fields); re-source `image-tags.sh`; `ALL_TARGETS` now includes `test-canary`. Delete fixture, re-source; back to 4 names. Done.
+4. **Schema rejection:** Remove the `path_prefix:` field from a catalog file; run `check-jsonschema --schemafile infra/catalog/_schema.json infra/catalog/*.yaml` → exits non-zero with a clear missing-field message. Revert.
+5. **CI dry-run:** Open this PR. The new schema-validation step is green. The new `decide` job in `candidate-flight.yml` emits the expected `targets_json` and `apps_csv` to its outputs (visible in workflow run summary). All existing CI green.
 
 ### observability
 
-- `validate-catalog` step log on every PR confirms catalog files conform to schema.
-- `decide` job outputs (`targets_json`, `apps_csv`) visible in workflow run summary; downstream consumers reference them via `${{ needs.decide.outputs.* }}`.
-- Image-tag and affected-targets workflow output for a known PR (e.g., `feat/poly-…`) is byte-identical pre- and post-migration.
+- `validate-catalog` step log: schema validation result on every PR touching `infra/catalog/**`.
+- `decide` job outputs (`targets_json`, `apps_csv`) visible in workflow run summary.
+- Image-tag and affected-targets workflow output for a known PR (e.g., `feat/poly-…`) is byte-identical pre- and post-migration. (Captured by re-running the relevant scripts locally on a checkout of an existing open PR.)
 
 ## Success criteria
 
