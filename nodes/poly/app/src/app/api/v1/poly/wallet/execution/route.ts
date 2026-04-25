@@ -53,7 +53,8 @@ function emptyPayload(warning: { code: string; message: string }) {
     address: ZERO_ADDRESS,
     capturedAt: new Date().toISOString(),
     dailyTradeCounts: [],
-    positions: [],
+    live_positions: [],
+    closed_positions: [],
     warnings: [warning],
   });
 }

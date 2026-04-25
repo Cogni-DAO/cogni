@@ -106,24 +106,19 @@ PY
 
 promote_target() {
   local target="$1"
-  local digest migrator_digest=""
+  local digest
 
   digest=$(extract_digest "$target")
   [ -z "$digest" ] && return 0
 
-  if [ "$target" = "operator" ] || [ "$target" = "poly" ] || [ "$target" = "resy" ]; then
-    # task.0322: each node pairs with its own per-node migrator digest.
-    migrator_digest=$(extract_digest "${target}-migrator")
-    if [ -n "$migrator_digest" ]; then
-      bash "$PROMOTE_SCRIPT" --no-commit --env "$OVERLAY_ENV" --app "$target" --digest "$digest" --migrator-digest "$migrator_digest"
-    else
+  case "$target" in
+    operator | poly | resy | scheduler-worker)
       bash "$PROMOTE_SCRIPT" --no-commit --env "$OVERLAY_ENV" --app "$target" --digest "$digest"
-    fi
-  elif [ "$target" = "scheduler-worker" ]; then
-    bash "$PROMOTE_SCRIPT" --no-commit --env "$OVERLAY_ENV" --app "$target" --digest "$digest"
-  else
-    return 0
-  fi
+      ;;
+    *)
+      return 0
+      ;;
+  esac
 
   PROMOTED+=("$target")
   # Re-emit after every success so a later abort still leaves an accurate

@@ -135,6 +135,24 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      # task.0373 — snapshot deploy/candidate-a overlay digests *before*
+      # the rsync below clobbers them with whatever the PR branch carries.
+      # Combined with the post-promote restore step, this self-heals
+      # non-promoted overlays so a stale PR base cannot roll an unrelated
+      # node to a regressing image. Cold-start (newly-created
+      # deploy/candidate-a) reads the PR-branch state — restore is a no-op,
+      # which is acceptable because there is no prior good state.
+      - name: Snapshot deploy-branch overlay digests (pre-rsync)
+        id: snapshot
+        working-directory: deploy-branch
+        env:
+          OVERLAY_ENV: candidate-a
+          SNAPSHOT_FILE: ${{ runner.temp }}/candidate-a-overlay-snapshot.tsv
+        run: |
+          bash ../ci-src/scripts/ci/snapshot-overlay-digests.sh > "$SNAPSHOT_FILE"
+          echo "ℹ️  Pre-rsync overlay snapshot ($(wc -l < "$SNAPSHOT_FILE" | tr -d ' ') rows):"
+          sed 's/^/  /' "$SNAPSHOT_FILE"
+
       - name: Sync base and catalog to deploy branch
         run: |
           rsync -a --delete app-src/infra/k8s/base/ deploy-branch/infra/k8s/base/
@@ -177,6 +195,55 @@ jobs:
           PAYLOAD_FILE: ${{ runner.temp }}/resolved-pr-images.json
           OVERLAY_ENV: candidate-a
         run: bash ../ci-src/scripts/ci/promote-build-payload.sh
+
+      # task.0373 — for every ALL_TARGETS app NOT in promoted_apps, restore
+      # the digest the snapshot captured pre-rsync. Promoted apps' digests
+      # were just written by promote-build-payload above and must stay.
+      # Snapshot rows without a digest pin (`:tag` form, only possible on
+      # cold-start) are skipped — promote-k8s-image.sh requires `@sha256:`.
+      # PROMOTED_APPS comes from promote-build-payload.sh as a comma-
+      # separated list (e.g. `operator,poly,resy,scheduler-worker`); we
+      # normalize to space-delimited for the membership check.
+      - name: Restore non-promoted overlay digests (post-rsync self-heal)
+        if: steps.acquire-summary.outputs.acquired == 'true'
+        working-directory: deploy-branch
+        env:
+          PROMOTED_APPS: ${{ steps.promote.outputs.promoted_apps }}
+          SNAPSHOT_FILE: ${{ runner.temp }}/candidate-a-overlay-snapshot.tsv
+        run: |
+          set -euo pipefail
+          if [ ! -s "$SNAPSHOT_FILE" ]; then
+            echo "ℹ️  No snapshot rows (cold-start) — nothing to restore"
+            exit 0
+          fi
+          # shellcheck source=../ci-src/scripts/ci/lib/image-tags.sh
+          . ../ci-src/scripts/ci/lib/image-tags.sh
+          declare -A snap=()
+          while IFS=$'\t' read -r app ref; do
+            [ -n "$app" ] && snap["$app"]="$ref"
+          done < "$SNAPSHOT_FILE"
+          # Normalize comma- or space-delimited PROMOTED_APPS to a single
+          # space-padded string so ` $target ` membership check is exact.
+          promoted_padded=" $(echo "$PROMOTED_APPS" | tr ',' ' ' | tr -s ' ') "
+          echo "ℹ️  PROMOTED_APPS (normalized): ${promoted_padded}"
+          for target in "${ALL_TARGETS[@]}"; do
+            if [[ "$promoted_padded" == *" $target "* ]]; then
+              echo "  promoted: $target — keep newly-built digest"
+              continue
+            fi
+            ref="${snap[$target]:-}"
+            if [ -z "$ref" ]; then
+              echo "  skip: $target — no snapshot row (cold-start or no overlay)"
+              continue
+            fi
+            if [[ "$ref" != *"@sha256:"* ]]; then
+              echo "  skip: $target — snapshot pin is tag-only ($ref); cold-start, leave PR-branch state in place"
+              continue
+            fi
+            echo "  restore: $target ← ${ref#*@}"
+            bash ../ci-src/scripts/ci/promote-k8s-image.sh --no-commit \
+              --env candidate-a --app "$target" --digest "$ref"
+          done
 
       - name: Commit and push deploy/candidate-a
         id: push-deploy
@@ -317,6 +384,8 @@ jobs:
           DEPLOY_ENVIRONMENT: candidate-a
           EXPECTED_SHA: ${{ needs.flight.outputs.deploy_branch_sha }}
           PROMOTED_APPS: ${{ needs.flight.outputs.promoted_apps }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: bash ci-src/scripts/ci/wait-for-argocd.sh
 
       - name: Wait for candidate readiness

@@ -16,7 +16,6 @@
 
 import {
   type ApiKeyCreds,
-  AssetType,
   Chain,
   ClobClient,
   type ClobSigner,
@@ -153,11 +152,6 @@ export interface PolymarketMarketSellParams {
   orderType?: OrderType.FOK | OrderType.FAK;
 }
 
-export interface PolymarketBalanceAllowanceParams {
-  assetType: "COLLATERAL" | "CONDITIONAL";
-  tokenId?: string;
-}
-
 /**
  * Polymarket CLOB Run-phase adapter.
  *
@@ -284,11 +278,17 @@ export class PolymarketClobAdapter implements MarketProviderPort {
       // not exposed per-market. Hardcoded here; kept in lock-step with
       // getMarketConstraints.minUsdcNotional. bug.0342.
       const POLY_MARKETABLE_BUY_MIN_USDC = 1;
-      const belowShareMin = Number.isFinite(minShares) && shareSize < minShares;
+      // `shareSize = size_usdc / price` and `effectiveUsdc = shareSize * price`
+      // is a lossy float round-trip (e.g. `1/0.09 * 0.09 = 0.9999999999999999`).
+      // Compare with a 1µ-unit tolerance so intents that clear the floor by
+      // design don't get bounced by precision noise. bug.0342.
+      const FLOOR_EPSILON = 1e-6;
+      const belowShareMin =
+        Number.isFinite(minShares) && shareSize < minShares - FLOOR_EPSILON;
       const belowUsdcMin =
         intent.side === "BUY" &&
         intent.attributes?.post_only !== true &&
-        effectiveUsdc < POLY_MARKETABLE_BUY_MIN_USDC;
+        effectiveUsdc < POLY_MARKETABLE_BUY_MIN_USDC - FLOOR_EPSILON;
       if (belowShareMin || belowUsdcMin) {
         throw makeBelowMarketMinError(
           `PolymarketClobAdapter.placeOrder: intent below market floor (gotShares=${shareSize}, minShares=${minShares}, gotUsdc=${effectiveUsdc}, minUsdc=${POLY_MARKETABLE_BUY_MIN_USDC}, tokenId=${tokenId}). Coordinator should have scaled or skipped. bug.0342.`
@@ -409,17 +409,6 @@ export class PolymarketClobAdapter implements MarketProviderPort {
         );
       }
 
-      // Polymarket's `/balance-allowance` view can lag behind on-chain
-      // approvals. Refresh both collateral and conditional caches before we
-      // post a market SELL so exits don't fail on stale provider state.
-      await Promise.all([
-        this.updateBalanceAllowance({ assetType: "COLLATERAL" }),
-        this.updateBalanceAllowance({
-          assetType: "CONDITIONAL",
-          tokenId: params.tokenId,
-        }),
-      ]);
-
       const response: unknown = await this.client.createAndPostMarketOrder(
         {
           tokenID: params.tokenId,
@@ -496,27 +485,6 @@ export class PolymarketClobAdapter implements MarketProviderPort {
       );
       throw err;
     }
-  }
-
-  async updateBalanceAllowance(
-    params: PolymarketBalanceAllowanceParams
-  ): Promise<void> {
-    const assetType =
-      params.assetType === "COLLATERAL"
-        ? AssetType.COLLATERAL
-        : AssetType.CONDITIONAL;
-    await this.client.updateBalanceAllowance({
-      asset_type: assetType,
-      ...(params.tokenId ? { token_id: params.tokenId } : {}),
-    });
-    this.log.info(
-      {
-        event: "poly.clob.balance_allowance.sync",
-        asset_type: params.assetType,
-        token_id: params.tokenId,
-      },
-      "updateBalanceAllowance: ok"
-    );
   }
 
   async cancelOrder(orderId: string): Promise<void> {

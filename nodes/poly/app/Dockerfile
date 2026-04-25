@@ -58,33 +58,6 @@ ENV AUTH_SECRET=${AUTH_SECRET_BUILD}
 RUN --mount=type=cache,id=next-cache-poly,target=/app/nodes/poly/app/.next/cache,sharing=locked \
     pnpm --filter @cogni/poly-app build
 
-# Migrator — poly-only migration image (task.0324 + task.0311 Doltgres).
-# Carries:
-#   - Postgres side: poly's migrations + drizzle config + core db-schema + poly-db-schema
-#   - Doltgres side: poly's doltgres-migrations + drizzle.doltgres.config + poly-doltgres-schema
-# drizzle-kit reads raw TS via the config's schema glob array, so dist/ is not
-# required. The app's src/shared/db barrel is not copied — it's only for runtime adapters.
-FROM base AS migrator
-WORKDIR /app
-
-COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
-COPY --from=builder /app/node_modules ./node_modules
-# Postgres migration inputs
-COPY --from=builder /app/nodes/poly/drizzle.config.ts ./nodes/poly/drizzle.config.ts
-COPY --from=builder /app/packages/db-schema/src ./packages/db-schema/src
-COPY --from=builder /app/nodes/poly/packages/db-schema/src ./nodes/poly/packages/db-schema/src
-COPY --from=builder /app/nodes/poly/app/src/adapters/server/db/migrations ./nodes/poly/app/src/adapters/server/db/migrations
-# Doltgres migration inputs (task.0311).
-# @cogni/poly-doltgres-schema re-exports from @cogni/node-template-knowledge,
-# so both packages need resolvable workspace targets (package.json + built dist)
-# for Node to walk the re-export at drizzle-kit load time.
-COPY --from=builder /app/nodes/poly/drizzle.doltgres.config.ts ./nodes/poly/drizzle.doltgres.config.ts
-COPY --from=builder /app/nodes/poly/packages/doltgres-schema ./nodes/poly/packages/doltgres-schema
-COPY --from=builder /app/nodes/node-template/packages/knowledge ./nodes/node-template/packages/knowledge
-COPY --from=builder /app/nodes/poly/app/src/adapters/server/db/doltgres-migrations ./nodes/poly/app/src/adapters/server/db/doltgres-migrations
-
-CMD ["pnpm", "db:migrate:poly:container"]
-
 # Runner – lean production image
 FROM node:22-alpine AS runner
 WORKDIR /app
@@ -134,6 +107,13 @@ ARG BUILD_SHA
 ENV APP_BUILD_SHA=$BUILD_SHA
 
 USER nextjs
+
+# Migrate runners — bundled into runtime image so Deployment initContainers can
+# invoke them directly. task.0370 step 1. Postgres + Doltgres variants ship side-by-side.
+COPY --from=builder --chown=nextjs:nodejs /app/nodes/poly/app/src/adapters/server/db/migrations /app/nodes/poly/app/migrations
+COPY --from=builder --chown=nextjs:nodejs /app/nodes/poly/app/src/adapters/server/db/doltgres-migrations /app/nodes/poly/app/doltgres-migrations
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/db/migrate.mjs /app/nodes/poly/app/migrate.mjs
+COPY --from=builder --chown=nextjs:nodejs /app/nodes/poly/app/src/adapters/server/db/migrate-doltgres.mjs /app/nodes/poly/app/migrate-doltgres.mjs
 
 EXPOSE 3100
 

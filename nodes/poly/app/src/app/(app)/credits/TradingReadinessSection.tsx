@@ -17,9 +17,14 @@
  *   - PARTIAL_FAILURE_VISIBLE: per-step `state` surfaces as colored pills
  *     even when the overall outcome is `ready: false` — user sees which
  *     approval failed and retries.
+ *   - FUNDED_RECOLOR (task.0365): the same compact "Trading enabled" badge
+ *     swaps green tokens for warning/yellow tokens when `isFunded=false`.
+ *     Same pill, same shape, same one line — just a different color says
+ *     "approvals on-chain, but you have $0 USDC.e so you can't trade yet".
  * Side-effects: IO (POST enable-trading; React Query cache invalidation).
  * Links: packages/node-contracts/src/poly.wallet.enable-trading.v1.contract.ts,
- *        work/items/task.0355.poly-trading-wallet-enable-trading.md
+ *        work/items/task.0355.poly-trading-wallet-enable-trading.md,
+ *        work/items/task.0365.poly-onboarding-ux-polish-v0-1.md
  * @public
  */
 
@@ -33,6 +38,12 @@ import type { ReactElement } from "react";
 export interface TradingReadinessSectionProps {
   /** From `poly.wallet.status.v1` — drives the initial view. */
   readonly tradingReady: boolean;
+  /**
+   * Whether the wallet has any USDC.e (`> 0`). When `tradingReady && !isFunded`
+   * the "Trading enabled" pill recolors to warning/yellow (FUNDED_RECOLOR,
+   * task.0365) — approvals alone are not enough to actually place an order.
+   */
+  readonly isFunded: boolean;
   /** Decimal POL on Polygon. `null` on unknown / RPC error. */
   readonly polBalance: number | null;
   /** Decimal USDC.e. `null` on unknown. Informational (not gated on). */
@@ -77,15 +88,26 @@ export function TradingReadinessSection(
     props.polBalance !== null &&
     props.polBalance < MIN_POL_FOR_ENABLE;
 
-  if (derivedReady && !result && !inFlight) {
-    // Happy steady state — compact confirmation chip, no call to action.
+  // Compact confirmation: either steady state (no mutation) OR the most recent
+  // mutation succeeded end-to-end (`result.ready === true`). Without the
+  // latter, a fresh successful "Enable trading" click would keep rendering the
+  // big authorize-box with step rows until the user hard-refreshed the page.
+  if (derivedReady && !inFlight && (!result || result.ready)) {
+    // FUNDED_RECOLOR: same shape, swap success → warning tokens when $0.
+    const tone = props.isFunded
+      ? "border-success/30 bg-success/10 text-success"
+      : "border-warning/40 bg-warning/10 text-warning";
+    const sub = props.isFunded
+      ? "Approvals signed in-app"
+      : "Approvals signed · add USDC.e to trade";
+    const subTone = props.isFunded ? "text-success/70" : "text-warning/80";
     return (
-      <div className="flex items-center gap-2 rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
+      <div
+        className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${tone}`}
+      >
         <CheckCircle2 size={16} />
         <span className="font-medium">Trading enabled</span>
-        <span className="text-success/70 text-xs">
-          · Approvals signed in-app
-        </span>
+        <span className={`text-xs ${subTone}`}>· {sub}</span>
       </div>
     );
   }

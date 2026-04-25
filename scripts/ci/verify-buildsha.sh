@@ -214,8 +214,10 @@ for node in "${NODE_ARR[@]}"; do
 
   if [ "$node" = "operator" ]; then
     host="${DOMAIN}"
-  else
+  elif [[ "$DOMAIN" == *.*.* ]]; then
     host="${node}-${DOMAIN}"
+  else
+    host="${node}.${DOMAIN}"
   fi
   url="https://${host}/version"
 

@@ -3,28 +3,29 @@
 
 /**
  * Module: `@app/(app)/profile/view`
- * Purpose: Client component for user profile settings — display name, avatar color, and linked accounts.
- * Scope: Reads/updates user profile via /api/v1/users/me; does not handle OAuth flow directly or manage session persistence.
- * Invariants: Requires authenticated session (enforced by parent layout); avatar color updates reflected in session via update().
- * Side-effects: IO (fetch API, session update, navigation for OAuth linking)
- * Links: src/contracts/users.profile.v1.contract.ts, src/app/api/v1/users/me/route.ts
+ * Purpose: Identity-only profile settings — display name, avatar color, linked
+ *   OAuth accounts (Ethereum / GitHub / Discord / Google), BYO-AI providers
+ *   (ChatGPT / Ollama), and ownership/attribution summary.
+ * Scope: Reads/updates user profile via `/api/v1/users/me`; does not handle
+ *   OAuth flow directly or manage session persistence. Polymarket trading-
+ *   wallet lifecycle lives on `/credits` — this view intentionally does not
+ *   read `/api/v1/poly/wallet/status` or render a wallet creation row.
+ * Invariants:
+ *   - Requires authenticated session (enforced by parent layout); avatar
+ *     color updates reflect in session via `update()`.
+ *   - PROFILE_IS_IDENTITY_ONLY (task.0361): no trading-wallet UI here.
+ * Side-effects: IO (fetch API, session update, navigation for OAuth linking).
+ * Links: src/contracts/users.profile.v1.contract.ts,
+ *        src/app/api/v1/users/me/route.ts,
+ *        src/app/(app)/credits/TradingWalletPanel.tsx,
+ *        work/items/task.0361.poly-first-user-onboarding-flow-v0.md
  * @public
  */
 
 "use client";
 
-import type {
-  PolyWalletConnectOutput,
-  PolyWalletStatusOutput,
-} from "@cogni/node-contracts";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
-import {
-  Check,
-  ExternalLink,
-  Loader2,
-  Server as ServerIcon,
-  Wallet,
-} from "lucide-react";
+import { Check, Server as ServerIcon } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn, useSession } from "next-auth/react";
 import type { ReactElement, ReactNode } from "react";
@@ -179,10 +180,6 @@ function formatUnits(units: string): string {
   const value = Number(units);
   if (!Number.isFinite(value)) return units;
   return value.toLocaleString();
-}
-
-function formatShortWalletAddress(address: string): string {
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
 /* ─── Feedback banner ──────────────────────────────────────────────── */
@@ -523,197 +520,6 @@ function ChatGptConnectFlow({
   );
 }
 
-/**
- * Default slider positions for the first-time consent modal. Chosen to match
- * MIRROR_USDC's current default (~$1) so a new tenant that immediately
- * enables copy-trade can mirror at least one fill per market without
- * tripping the per-order cap.
- */
-const DEFAULT_PER_ORDER_CAP_USDC = 2;
-const DEFAULT_DAILY_CAP_USDC = 10;
-
-function GrantCapSlider({
-  id,
-  label,
-  min,
-  max,
-  step,
-  value,
-  onChange,
-  helperText,
-}: {
-  id: string;
-  label: string;
-  min: number;
-  max: number;
-  step: number;
-  value: number;
-  onChange: (next: number) => void;
-  helperText?: string;
-}): ReactElement {
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-baseline justify-between gap-2">
-        <label htmlFor={id} className="font-medium text-foreground text-sm">
-          {label}
-        </label>
-        <span className="font-mono text-foreground text-sm tabular-nums">
-          ${value.toFixed(2)}
-        </span>
-      </div>
-      <input
-        id={id}
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-primary"
-      />
-      <div className="flex justify-between text-muted-foreground text-xs">
-        <span>${min.toFixed(2)}</span>
-        {helperText && <span>{helperText}</span>}
-        <span>${max.toFixed(2)}</span>
-      </div>
-    </div>
-  );
-}
-
-function TradingWalletConnectFlow({
-  userId,
-  onConnected,
-  onCancel,
-}: {
-  userId: string;
-  onConnected: (wallet: PolyWalletConnectOutput) => void;
-  onCancel: () => void;
-}): ReactElement {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [perOrderCapUsdc, setPerOrderCapUsdc] = useState(
-    DEFAULT_PER_ORDER_CAP_USDC
-  );
-  const [dailyCapUsdc, setDailyCapUsdc] = useState(DEFAULT_DAILY_CAP_USDC);
-
-  // Keep daily >= per-order (matches DB CHECK on poly_wallet_grants).
-  useEffect(() => {
-    if (dailyCapUsdc < perOrderCapUsdc) {
-      setDailyCapUsdc(perOrderCapUsdc);
-    }
-  }, [perOrderCapUsdc, dailyCapUsdc]);
-
-  const handleCreate = async (): Promise<void> => {
-    setIsSubmitting(true);
-    setError("");
-    try {
-      const res = await fetch("/api/v1/poly/wallet/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          custodialConsentAcknowledged: true,
-          custodialConsentActorKind: "user",
-          custodialConsentActorId: userId,
-          defaultGrant: {
-            perOrderUsdcCap: perOrderCapUsdc,
-            dailyUsdcCap: dailyCapUsdc,
-          },
-        }),
-      });
-      const body: unknown = await res.json().catch(() => null);
-      if (!res.ok) {
-        const message =
-          typeof body === "object" &&
-          body !== null &&
-          "error" in body &&
-          typeof body.error === "string"
-            ? body.error
-            : "Could not create your trading wallet.";
-        setError(message);
-        return;
-      }
-      onConnected(body as PolyWalletConnectOutput);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
-      <div className="space-y-2">
-        <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
-          Dedicated trading wallet
-        </div>
-        <p className="text-muted-foreground text-sm">
-          Cogni will create a separate Polymarket trading wallet for your
-          account via Privy. This is distinct from your Ethereum sign-in wallet
-          and is the wallet copy-trading will fund and use.
-        </p>
-        <p className="text-muted-foreground text-sm">
-          By continuing, you acknowledge that Cogni manages this trading wallet
-          on your behalf inside the app and that funding, withdrawals, and
-          disconnect controls will live here in Profile.
-        </p>
-      </div>
-
-      <div className="space-y-3 rounded-md border border-border bg-background p-3">
-        <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
-          Trading limits
-        </div>
-        <p className="text-muted-foreground text-xs">
-          Caps the copy-trade pipeline enforces before every order. You can
-          revoke the wallet (and the limits) at any time.
-        </p>
-        <GrantCapSlider
-          id="grant-per-order-cap"
-          label="Max per trade"
-          min={0.5}
-          max={20}
-          step={0.5}
-          value={perOrderCapUsdc}
-          onChange={setPerOrderCapUsdc}
-        />
-        <GrantCapSlider
-          id="grant-daily-cap"
-          label="Max per day"
-          min={Math.max(2, perOrderCapUsdc)}
-          max={200}
-          step={1}
-          value={dailyCapUsdc}
-          onChange={setDailyCapUsdc}
-        />
-      </div>
-
-      {error ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-destructive text-sm">
-          {error}
-        </div>
-      ) : null}
-
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void handleCreate()}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-            <>
-              <Loader2 className="mr-2 size-4 animate-spin" />
-              Creating...
-            </>
-          ) : (
-            "I understand — create trading wallet"
-          )}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 /* ─── View ─────────────────────────────────────────────────────────── */
 
 export function ProfileView(): ReactElement {
@@ -736,11 +542,6 @@ export function ProfileView(): ReactElement {
   const [ollamaUrl, setOllamaUrl] = useState("");
   const [ollamaApiKey, setOllamaApiKey] = useState("");
   const [ollamaError, setOllamaError] = useState("");
-  const [tradingWalletStatus, setTradingWalletStatus] =
-    useState<PolyWalletStatusOutput | null>(null);
-  const [tradingWalletExpanded, setTradingWalletExpanded] = useState(false);
-  const [tradingWalletStatusFailed, setTradingWalletStatusFailed] =
-    useState(false);
 
   // Read feedback query params and strip them to prevent re-display on refresh
   const linkedProvider = searchParams.get("linked");
@@ -807,15 +608,6 @@ export function ProfileView(): ReactElement {
         if (data) setOllamaConnected(data.connected);
       })
       .catch(() => {});
-
-    fetch("/api/v1/poly/wallet/status")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: PolyWalletStatusOutput | null) => {
-        if (data) setTradingWalletStatus(data);
-      })
-      .catch(() => {
-        setTradingWalletStatusFailed(true);
-      });
   }, []);
 
   const walletAddress = session?.user?.walletAddress ?? null;
@@ -901,76 +693,6 @@ export function ProfileView(): ReactElement {
           </Button>
         )}
       </SettingRow>
-
-      <SettingRow
-        icon={<Wallet className="size-5" />}
-        label="Polymarket Trading Wallet"
-        description={
-          tradingWalletStatus?.connected
-            ? "Your dedicated copy-trading wallet is ready to fund and use."
-            : tradingWalletStatus?.configured === false
-              ? "Trading wallets are not configured on this deployment yet."
-              : "Create a dedicated trading wallet for copy-trading. Separate from your Ethereum sign-in wallet."
-        }
-      >
-        {tradingWalletStatus?.connected &&
-        tradingWalletStatus.funder_address ? (
-          <div className="flex items-center gap-2">
-            <ConnectedBadge
-              login={formatShortWalletAddress(
-                tradingWalletStatus.funder_address
-              )}
-            />
-            <Button variant="ghost" size="sm" asChild>
-              <a
-                href={`https://polygonscan.com/address/${tradingWalletStatus.funder_address}`}
-                target="_blank"
-                rel="noreferrer noopener"
-              >
-                View
-                <ExternalLink className="ml-1 size-3.5" />
-              </a>
-            </Button>
-          </div>
-        ) : tradingWalletStatus?.configured === false ? (
-          <span className="text-muted-foreground text-sm">Unavailable</span>
-        ) : tradingWalletStatus === null && !tradingWalletStatusFailed ? (
-          <span className="inline-flex items-center gap-2 text-muted-foreground text-sm">
-            <Loader2 className="size-4 animate-spin" />
-            Loading...
-          </span>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setTradingWalletExpanded((prev) => !prev)}
-          >
-            Create trading wallet
-          </Button>
-        )}
-      </SettingRow>
-
-      {tradingWalletExpanded &&
-      !tradingWalletStatus?.connected &&
-      tradingWalletStatus?.configured !== false &&
-      session?.user?.id ? (
-        <TradingWalletConnectFlow
-          userId={session.user.id}
-          onConnected={(wallet) => {
-            setTradingWalletStatus({
-              configured: true,
-              connected: true,
-              connection_id: wallet.connection_id,
-              funder_address: wallet.funder_address,
-              // A freshly-provisioned wallet has not run the approvals
-              // ceremony yet — the Money page surfaces Enable Trading.
-              trading_ready: false,
-            });
-            setTradingWalletExpanded(false);
-          }}
-          onCancel={() => setTradingWalletExpanded(false)}
-        />
-      ) : null}
 
       {OAUTH_PROVIDERS.filter(
         ({ id }) => configuredProviders.has(id) || linkedProviderIds.has(id)

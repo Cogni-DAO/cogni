@@ -80,7 +80,7 @@ The UI and any future readonly tool must stop treating "position" as one overloa
 
 ### Current As-Built Behavior
 
-This PR ships the Phase 1 correctness path:
+The close/redeem correctness path (task.0357):
 
 1. close is a market `FAK` sell of the wallet's current share balance
 2. exits ignore grant caps
@@ -89,7 +89,14 @@ This PR ships the Phase 1 correctness path:
 5. provider-accepted exits no longer fail just because one immediate `/positions` reread is stale
 6. successful close/redeem evicts wallet-scoped execution/read-model cache keys so the next dashboard refetch sees fresh state
 
-The current HTTP route still returns the receipt-shaped contract already on the wire. It does not yet expose typed `exited/submitted/partial` states.
+The dashboard position-state split (task.0358):
+
+- `GET /api/v1/poly/wallet/execution` now returns `live_positions` (open/redeemable, capped at 18) and `closed_positions` (trade-derived history, capped at 30) as separate contract fields.
+- The dashboard execution card renders an "Open" tab from `live_positions` and a "Position History" tab from `closed_positions`.
+- CLOB `prices-history` is fetched only for open/redeemable assets; closed positions rely on trade-derived timelines.
+- Client-side `recentlyClosedIds` suppresses a just-closed row from "Open" until the next `live_positions` refetch confirms its absence.
+
+The close/redeem HTTP routes still return the receipt-shaped contract on the wire. They do not yet expose typed `exited/submitted/partial` states.
 
 ### Close Flow
 

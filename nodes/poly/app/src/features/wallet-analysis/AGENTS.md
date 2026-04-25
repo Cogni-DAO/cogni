@@ -56,3 +56,4 @@ Shared shape `WalletAnalysisData` mirrors the v1 wallet-analysis HTTP contract t
 
 - `useWalletAnalysis` now fans out to `snapshot`, `trades`, `balance`, and `pnl` slices; `WalletAnalysisSurface` threads the selected interval through the page and drawer.
 - Position lifecycle visuals are reusable UI primitives first. Dashboard-specific execution fetching belongs in app routes/services, not on the wallet-analysis public barrel.
+- `PositionsTable` accepts `variant?: "default" | "history"`. Default shows Current value + Action columns. History variant shows a Closed timestamp column and omits action buttons — used by the dashboard Position History tab.

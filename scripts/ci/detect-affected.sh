@@ -130,52 +130,14 @@ else
         selection_reason="shared-package-change:${path}"
         break
         ;;
-      nodes/operator/packages/*)
+      nodes/operator/packages/* | nodes/operator/*)
         add_target operator
-        add_target operator-migrator
         ;;
-      nodes/poly/packages/*)
+      nodes/poly/packages/* | nodes/poly/*)
         add_target poly
-        add_target poly-migrator
         ;;
-      nodes/resy/packages/*)
+      nodes/resy/packages/* | nodes/resy/*)
         add_target resy
-        add_target resy-migrator
-        ;;
-      nodes/node-template/packages/*)
-        selection_reason="non-deployable-node-template-change:${path}"
-        ;;
-      nodes/operator/app/src/shared/db/* | \
-      nodes/operator/app/src/adapters/server/db/migrations/*)
-        add_target operator
-        add_target operator-migrator
-        ;;
-      nodes/operator/*)
-        add_target operator
-        add_target operator-migrator
-        ;;
-      nodes/poly/app/src/shared/db/* | \
-      nodes/poly/app/src/adapters/server/db/migrations/*)
-        add_target poly
-        add_target poly-migrator
-        ;;
-      nodes/poly/*)
-        add_target poly
-        # bug.0343: app and migrator share one Dockerfile + package.json, so
-        # rebuild them together. Skipping the migrator lets stale digests
-        # (e.g. the pre-#894 image missing `db:migrate:poly:doltgres:container`)
-        # ride through on main's overlay and break the Doltgres PreSync hook.
-        add_target poly-migrator
-        ;;
-      nodes/resy/app/src/shared/db/* | \
-      nodes/resy/app/src/adapters/server/db/migrations/*)
-        add_target resy
-        add_target resy-migrator
-        ;;
-      nodes/resy/*)
-        add_target resy
-        # bug.0343: pair app+migrator — see poly case above.
-        add_target resy-migrator
         ;;
       services/scheduler-worker/*)
         add_target scheduler-worker
@@ -183,9 +145,6 @@ else
       nodes/node-template/*)
         selection_reason="non-deployable-node-template-change:${path}"
         ;;
-      # Per-node drizzle configs live at nodes/<node>/drizzle.config.ts and are
-      # handled by the nodes/<node>/* catchall above (adds node + node-migrator).
-      # No drizzle-specific case needed.
     esac
   done <<< "$changed_paths"
 fi

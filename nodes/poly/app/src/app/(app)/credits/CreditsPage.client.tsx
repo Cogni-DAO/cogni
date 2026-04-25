@@ -45,7 +45,7 @@ export function CreditsPageClient(): ReactElement {
           )}
           aria-pressed={mobileTab === "credits"}
         >
-          Credits
+          AI Credits
         </button>
         <button
           type="button"
@@ -58,7 +58,7 @@ export function CreditsPageClient(): ReactElement {
           )}
           aria-pressed={mobileTab === "wallet"}
         >
-          Wallet
+          Trading wallet
         </button>
       </div>
 

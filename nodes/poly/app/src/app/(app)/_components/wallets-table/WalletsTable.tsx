@@ -70,7 +70,7 @@ export type WalletsTableProps = {
   renderActions?: (row: WalletRow) => ReactNode;
   /** Required for `variant="full"` — drives URL-synced sorting/filters/search. */
   fullState?: WalletsTableFullState;
-  emptyMessage?: string;
+  emptyMessage?: ReactNode;
 };
 
 const FULL_COLUMN_VISIBILITY: VisibilityState = {

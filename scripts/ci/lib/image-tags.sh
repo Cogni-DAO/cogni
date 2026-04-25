@@ -11,35 +11,30 @@
 #   - resolve-pr-build-images.sh (discoverer)     — looks up pushed digests
 #   - flight-preview.yml retag step (re-tagger)   — alias pr-<N>-<sha>-* → preview-<sha>-*
 #   - promote-and-deploy.yml resolve/promote      — resolves preview-<sha>-* digests
-#                                                   and pairs apps with per-node migrators
 #   - detect-affected.sh (dispatcher)             — target list only
 #
-# Adding a new node (e.g. `mynode`) is a single edit here:
-#   1. Add `mynode`, `mynode-migrator` to ALL_TARGETS
-#   2. Add the case arms to tag_suffix_for_target
+# Adding a new node (e.g. `mynode`):
+#   1. Add `mynode` to ALL_TARGETS and NODE_TARGETS
+#   2. Add the case arm to tag_suffix_for_target
 # All workflows automatically pick up the new target on their next run.
 #
 # Convention: `tag_suffix_for_target TARGET` prints the string that
 # appends to a base image tag to form the full GHCR tag.
 #   - operator          → ""                (unsuffixed, historical)
 #   - <node>            → "-<node>"
-#   - <node>-migrator   → "-<node>-migrate" (migrator → migrate; task.0324)
 #   - scheduler-worker  → "-scheduler-worker"
 #
 # Convention: `image_name_for_target TARGET` prints the GHCR package the
-# target pushes to. bug.0344 split the migrator images into a distinct
-# GHCR package so argocd-image-updater's ContainsImage matcher
-# (pkg/image/image.go:148, matches by RegistryURL+ImageName only) gives
-# app and migrator aliases independent Status.Summary.Images entries —
-# otherwise only one of {app, migrator} updates per poll in steady state.
-#   - app targets (operator, poly, resy, scheduler-worker) → cogni-template
-#   - migrator targets (*-migrator)                        → cogni-template-migrate
+# target pushes to. After task.0370 step 1, every target maps to the same
+# `cogni-template` package — migrations now run as Deployment initContainers
+# off the runtime image, so the legacy `cogni-template-migrate` package is
+# retired.
 #
 # Example:
-#   base="pr-918-a377bad"; target=poly-migrator
-#   image_name_for_target "$target"                        → ghcr.io/cogni-dao/cogni-template-migrate
+#   base="pr-918-a377bad"; target=poly
+#   image_name_for_target "$target"                        → ghcr.io/cogni-dao/cogni-template
 #   image_tag_for_target  "$(image_name_for_target $t)" "$base" "$t"
-#                                                          → ghcr.io/cogni-dao/cogni-template-migrate:pr-918-a377bad-poly-migrate
+#                                                          → ghcr.io/cogni-dao/cogni-template:pr-918-a377bad-poly
 
 # Intentionally no `set -euo pipefail` — this file is meant to be sourced,
 # and forcing strict-mode on the caller can break subtle behaviour in shells
@@ -49,47 +44,32 @@
 # Default GHCR packages. Callers may override via env before sourcing.
 # shellcheck disable=SC2034
 IMAGE_NAME_APP=${IMAGE_NAME_APP:-ghcr.io/cogni-dao/cogni-template}
-# shellcheck disable=SC2034
-IMAGE_NAME_MIGRATOR=${IMAGE_NAME_MIGRATOR:-ghcr.io/cogni-dao/cogni-template-migrate}
-
 # shellcheck disable=SC2034  # ALL_TARGETS is consumed by callers after sourcing
 ALL_TARGETS=(
   operator
-  operator-migrator
   poly
-  poly-migrator
   resy
-  resy-migrator
   scheduler-worker
 )
 
-# Target names that pair with a per-node migrator (task.0324). Used by
-# promote-and-deploy's promote loop to pass each node its own migrator
-# digest rather than a single shared one.
+# Target names that map to a node app (operator/poly/resy) — distinguishes them
+# from infra-shaped targets (scheduler-worker) for CI loops that promote per-node
+# overlays. task.0370 step 1 collapsed migrator images into the runtime image,
+# so there's no longer a separate `*-migrator` companion target per node.
 # shellcheck disable=SC2034
 NODE_TARGETS=(operator poly resy)
 
-# Map a target to its GHCR package. bug.0344: split migrator images into
-# a distinct package so the Argo CD Image Updater's needsUpdate can track
-# app + migrator independently in the same Application's Status.Summary.Images.
 image_name_for_target() {
-  local target="$1"
-  case "$target" in
-    *-migrator) printf '%s' "$IMAGE_NAME_MIGRATOR" ;;
-    *)          printf '%s' "$IMAGE_NAME_APP" ;;
-  esac
+  printf '%s' "$IMAGE_NAME_APP"
 }
 
 tag_suffix_for_target() {
   local target="$1"
   case "$target" in
-    operator)          printf '%s' '' ;;
-    poly)              printf -- '-poly' ;;
-    resy)              printf -- '-resy' ;;
-    operator-migrator) printf -- '-operator-migrate' ;;
-    poly-migrator)     printf -- '-poly-migrate' ;;
-    resy-migrator)     printf -- '-resy-migrate' ;;
-    scheduler-worker)  printf -- '-scheduler-worker' ;;
+    operator)         printf '%s' '' ;;
+    poly)             printf -- '-poly' ;;
+    resy)             printf -- '-resy' ;;
+    scheduler-worker) printf -- '-scheduler-worker' ;;
     *)
       echo "[ERROR] image-tags: unknown target: $target" >&2
       return 1

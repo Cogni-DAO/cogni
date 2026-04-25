@@ -131,6 +131,23 @@ describe("planMirrorFromFill() — sizing policy: kind=fixed (bug.0342)", () => 
     expect(d).toEqual({ kind: "skip", reason: "below_market_min" });
   });
 
+  it("clamps size_usdc ≥ min_usdc_notional across float-lossy prices (bug.0342 regression)", () => {
+    // price=0.09, mirror_usdc=1: `1/0.09 * 0.09 = 0.9999999999999999`.
+    // Before bug.0342 this slipped through the planner and was rejected by
+    // the adapter's USDC-floor check, breaking mirror placement in prod.
+    const fill = makeFill(0.09);
+    const d = planMirrorFromFill({
+      fill,
+      config: makeConfig({ mirror_usdc: 1, max_usdc_per_trade: 5 }),
+      state: CLEAN_STATE,
+      client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
+      min_shares: 5,
+      min_usdc_notional: 1,
+    });
+    if (d.kind !== "place") throw new Error("expected place");
+    expect(d.intent.size_usdc).toBeGreaterThanOrEqual(1);
+  });
+
   it("legacy behavior: no min_shares input → no share-min guard, passes mirror_usdc as-is", () => {
     const fill = makeFill(0.64);
     const d = planMirrorFromFill({

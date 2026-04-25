@@ -28,31 +28,36 @@
 #
 # Belt-and-suspenders active sync: if an app's reported revision has not
 # caught up to EXPECTED_SHA, we (1) request a hard git refresh on the
-# Application, (2) kubectl-patch a hook sync operation. The first kick (after
-# ACTIVE_SYNC_AFTER) also deletes stale PreSync hook Jobs so Argo cannot wedge
-# on sticky Jobs; subsequent kicks repeat refresh + patch every SYNC_KICK_INTERVAL
-# until the deadline. A single silent patch was not enough on candidate-a when
-# the controller ignored the first operation (2026-04 flight stalls).
+# Application. After task.0370 step 1 retired Argo PreSync Job hooks, the
+# refresh nudge is the only kick we need — no Job to babysit, no stale hook
+# operation to clear. `kubectl rollout status` (run downstream) is the real gate.
 #
 # Usage: wait-for-argocd.sh
 # Env:
 #   VM_HOST             (required) SSH target
 #   DEPLOY_ENVIRONMENT  (required) preview | candidate-a | production — used
 #                       for the `{env}-{app}` Application name convention
-#   EXPECTED_SHA        (required) git SHA the caller expects Argo to report
-#                       as status.sync.revision — MUST be the deploy-branch
-#                       tip SHA (NOT the source-app commit). Argo tracks the
-#                       deploy branch, not main. Passing COGNI_REPO_REF here
-#                       is wrong — it will never match sync.revision and the
-#                       script will silently time out.
+#   EXPECTED_SHA        (required) deploy-branch commit the caller expects
+#                       Argo to apply. Acceptance is "identical or ancestor
+#                       of sync.revision" — strict equality false-failed
+#                       when the deploy branch advanced mid-wait
+#                       (run #24923018566). Ancestry uses the GitHub compare
+#                       API; falls back to strict equality if GH_TOKEN/GH_REPO
+#                       are unset.
+#   GH_TOKEN, GH_REPO   (optional) enable the ancestry check.
 #   PROMOTED_APPS       (optional) CSV of app names to scope the wait to.
 #                       Empty → fall back to full catalog. Apps not promoted
 #                       in this run may legitimately be pinned at prior digest
 #                       (e.g. sandbox-openclaw placeholder) and would false-fail.
-#   ARGOCD_TIMEOUT      (optional, default 300) per-app timeout in seconds
+#   ARGOCD_TIMEOUT      (optional, default 600) per-app timeout in seconds.
+#                       600s is conservative headroom — post-task.0370-step1
+#                       the runtime image is already warm for the app pod, so
+#                       initContainer migrations + rolling-update drain
+#                       typically finish well under 60s. Tighten in a follow-up
+#                       once we have post-merge flights to measure.
 #   ACTIVE_SYNC_AFTER   (optional, default 30) seconds before the first Argo kick
 #   SYNC_KICK_INTERVAL  (optional, default 45) seconds between subsequent kicks
-#                       while revision still mismatches (hard refresh + sync op)
+#                       (single hard-refresh annotation, no hook babysitting)
 #   SSH_OPTS            (optional) ssh flags
 #
 # Side-effect on success: writes ARGOCD_SYNC_VERIFIED=true to $GITHUB_ENV
@@ -65,10 +70,12 @@ VM_HOST="${VM_HOST:?VM_HOST is required}"
 DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT:?DEPLOY_ENVIRONMENT is required}"
 EXPECTED_SHA="${EXPECTED_SHA:?EXPECTED_SHA is required (deploy-branch tip SHA)}"
 SSH_OPTS="${SSH_OPTS:--i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6}"
-ARGOCD_TIMEOUT="${ARGOCD_TIMEOUT:-300}"
+ARGOCD_TIMEOUT="${ARGOCD_TIMEOUT:-600}"
 ACTIVE_SYNC_AFTER="${ACTIVE_SYNC_AFTER:-30}"
 SYNC_KICK_INTERVAL="${SYNC_KICK_INTERVAL:-45}"
 PROMOTED_APPS="${PROMOTED_APPS:-}"
+GH_TOKEN_FOR_COMPARE="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+GH_REPO_FOR_COMPARE="${GH_REPO:-${GITHUB_REPOSITORY:-}}"
 
 EXPECTED_SHA=$(printf '%s' "$EXPECTED_SHA" | tr '[:upper:]' '[:lower:]')
 
@@ -93,6 +100,8 @@ cat > "$REMOTE_SCRIPT" <<'REMOTESCRIPT'
 set -euo pipefail
 
 # Args: DEPLOY_ENVIRONMENT EXPECTED_SHA ARGOCD_TIMEOUT ACTIVE_SYNC_AFTER SYNC_KICK_INTERVAL app1 ...
+# Env (optional, set via SSH SetEnv from caller):
+#   GH_TOKEN, GH_REPO — enable ancestry check via GitHub compare API.
 DEPLOY_ENVIRONMENT="$1"
 EXPECTED_SHA="$2"
 ARGOCD_TIMEOUT="$3"
@@ -102,6 +111,43 @@ shift 5
 APPS=("$@")
 
 EXPECTED_SHA=$(printf '%s' "$EXPECTED_SHA" | tr '[:upper:]' '[:lower:]')
+GH_TOKEN="${GH_TOKEN:-}"
+GH_REPO="${GH_REPO:-}"
+
+ANCESTRY_CACHE_REV=""
+ANCESTRY_CACHE_RESULT=1
+
+# rc 0 iff EXPECTED is identical-to or an ancestor-of REV. Strict-equality
+# fallback when GH_TOKEN/GH_REPO are unset.
+rev_includes_expected() {
+  local rev="$1" expected="$2"
+  [ -z "$rev" ] && return 1
+  [ "$rev" = "$expected" ] && return 0
+  if [ -z "$GH_TOKEN" ] || [ -z "$GH_REPO" ]; then
+    return 1
+  fi
+  if [ "$rev" = "$ANCESTRY_CACHE_REV" ]; then
+    return "$ANCESTRY_CACHE_RESULT"
+  fi
+  ANCESTRY_CACHE_REV="$rev"
+  local status
+  status=$(curl -fsSL --max-time 10 \
+    -H "Authorization: Bearer ${GH_TOKEN}" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/${GH_REPO}/compare/${expected}...${rev}" 2>/dev/null \
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status",""))' 2>/dev/null \
+    || echo "")
+  case "$status" in
+    identical|ahead)
+      ANCESTRY_CACHE_RESULT=0
+      return 0
+      ;;
+    *)
+      ANCESTRY_CACHE_RESULT=1
+      return 1
+      ;;
+  esac
+}
 
 # Early exit: if Application CRD doesn't exist, skip entirely (first deploy / no Argo)
 if ! kubectl get crd applications.argoproj.io &>/dev/null; then
@@ -185,60 +231,12 @@ rollout_check() {
   return 1
 }
 
-# Kick a manual sync on an Application by replacing the operation in its spec.
-# Argo CD's application-controller picks this up within the reconciliation loop
-# and runs it even if automated sync is disabled or misconfigured. This MUST
-# use hook sync (not apply sync) so PreSync migration jobs still execute.
-#
-# bug.0360 follow-up: merge-patching only the nested sync strategy was enough
-# to advance status.sync.revision to the new deploy SHA, but not enough to
-# clear a stale Running operation that was still waiting on a missing hook Job.
-# Rebuild the full operation payload on each kick so the controller gets an
-# explicit sync request for EXPECTED_SHA, and clear obviously-stale operations
-# that reference a hook job that no longer exists.
-#
-# Named hook Jobs are sticky: if a prior no-hook sync left them in-cluster as
-# obj->obj, Argo can decide the first out-of-sync wave is Sync/0 and never
-# recreate the PreSync Jobs even with hook sync enabled. Remove those stale
-# named Jobs first so the active sync has to materialize them again.
-#
-# bug.0361: never delete a Job whose `.status.active > 0` — that's a live
-# migration doing real work. Killing it mid-flight leaves Argo waiting for a
-# hook that no longer exists, which triggers clear_stale_missing_hook_operation
-# → Argo auto-syncs → new jobs → script kills them again (infinite loop). Only
-# Completed / Failed / absent jobs are eligible for deletion.
-delete_stale_hook_jobs() {
-  local app_name="$1"
-  local app namespace jobs=()
-  app="${app_name#${DEPLOY_ENVIRONMENT}-}"
-  namespace="cogni-${DEPLOY_ENVIRONMENT}"
-
-  case "$app" in
-    operator | poly | resy)
-      jobs+=("${app}-migrate-node-app")
-      ;;
-  esac
-
-  case "$app" in
-    poly)
-      jobs+=("${app}-migrate-poly-doltgres")
-      ;;
-  esac
-
-  if [ "${#jobs[@]}" -eq 0 ]; then
-    return 0
-  fi
-
-  for job in "${jobs[@]}"; do
-    active=$(kubectl -n "$namespace" get job "$job" -o jsonpath='{.status.active}' 2>/dev/null || true)
-    if [ "${active:-0}" -gt 0 ]; then
-      echo "    ⏭ skipping active hook job ${namespace}/${job} (still running — protecting live migration)"
-      continue
-    fi
-    echo "    🧹 deleting stale hook job ${namespace}/${job}"
-    kubectl -n "$namespace" delete job "$job" --ignore-not-found >/dev/null 2>&1 || true
-  done
-}
+# task.0370 step 1 retired Argo PreSync hook Jobs — migrations are now
+# Deployment initContainers. The pre-sync hook-Job babysitting (delete_stale_hook_jobs,
+# clear_stale_missing_hook_operation) is gone with the hooks. The kick that
+# remains is just a hard-refresh annotation poke; if Argo is in Running/phase=Running
+# during a rolling update, kubectl rollout status (run after this script) is the
+# real gate.
 
 # Prefer status.sync.revision; fall back to last successful operation revision
 # (some Argo states leave sync.revision empty while a sync completed).
@@ -262,63 +260,6 @@ request_hard_refresh() {
     '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}' 2>&1); then
     echo "    ⚠️  hard-refresh annotation patch failed for ${app_name}: $out" >&2
   fi
-}
-
-# Clear a stale Running operation waiting on a hook Job that no longer exists.
-# Uses direct Application spec.operation = null — no argocd CLI exec, no RBAC
-# expansion (patch on applications.argoproj.io is already held by the SA).
-clear_stale_missing_hook_operation() {
-  local app_name="$1"
-  local namespace op_phase op_message hook_job out
-  local op_revision=""
-
-  op_phase=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.phase}' 2>/dev/null || true)
-  [ "$op_phase" = "Running" ] || return 0
-
-  op_message=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.message}' 2>/dev/null || true)
-  hook_job=$(printf '%s' "$op_message" | sed -n 's/.*hook batch\/Job\/\([^ ]*\).*/\1/p')
-  [ -n "$hook_job" ] || return 0
-
-  namespace="cogni-${DEPLOY_ENVIRONMENT}"
-  if kubectl -n "$namespace" get job "$hook_job" >/dev/null 2>&1; then
-    return 0
-  fi
-
-  op_revision=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.syncResult.revision}' 2>/dev/null || true)
-  op_revision=$(printf '%s' "$op_revision" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
-  echo "    🛑 ${app_name}: clearing stale Running operation at ${op_revision:0:8} (missing hook job ${namespace}/${hook_job})"
-
-  if ! out=$(kubectl -n argocd patch application "$app_name" --type=merge -p '{"operation":null}' 2>&1); then
-    echo "    ⚠️  failed to clear stale operation for ${app_name}: $out" >&2
-    return 1
-  fi
-  return 0
-}
-
-patch_sync_operation() {
-  local app_name="$1"
-  local out
-  local patch
-
-  patch=$(cat <<EOF
-{"operation":{
-  "initiatedBy":{"username":"candidate-flight"},
-  "sync":{
-    "prune":true,
-    "revision":"$EXPECTED_SHA",
-    "syncOptions":["CreateNamespace=true"],
-    "syncStrategy":{"hook":{"force":false}}
-  }
-}}
-EOF
-)
-
-  if ! out=$(kubectl -n argocd patch application "$app_name" --type=merge -p \
-    "$patch" 2>&1); then
-    echo "    ⚠️  sync operation patch failed for ${app_name}: $out" >&2
-    return 1
-  fi
-  return 0
 }
 
 # Poll a single app until it reports EXPECTED_SHA on sync.revision AND is Healthy,
@@ -353,9 +294,7 @@ wait_for_app() {
       return 1
     }
 
-    # First verify revision matches, then ensure Argo reports the promoted
-    # Deployment resource itself as Synced before trusting rollout status.
-    if [ "$REV" = "$EXPECTED_SHA" ] &&
+    if rev_includes_expected "$REV" "$EXPECTED_SHA" &&
        can_proceed_to_rollout_check "$HEALTH" "$SYNC_PHASE" &&
        deployment_sync_ready "$deployment" "$deployment_status"; then
       # bug.0326: sync.revision + health.status are Argo-Application-level
@@ -380,17 +319,12 @@ wait_for_app() {
     fi
 
     if [ $SECONDS -ge "$next_kick" ] &&
-       { [ "$REV" != "$EXPECTED_SHA" ] ||
+       { ! rev_includes_expected "$REV" "$EXPECTED_SHA" ||
          ! can_proceed_to_rollout_check "$HEALTH" "$SYNC_PHASE" ||
          ! deployment_sync_ready "$deployment" "$deployment_status"; }; then
       kick_count=$((kick_count + 1))
-      echo "    ⚡ ${app_name}: Argo reconcile kick #${kick_count} (hard refresh + hook sync)"
+      echo "    ⚡ ${app_name}: Argo hard-refresh kick #${kick_count}"
       request_hard_refresh "$app_name"
-      if [ "$kick_count" -eq 1 ]; then
-        delete_stale_hook_jobs "$app_name"
-      fi
-      clear_stale_missing_hook_operation "$app_name" || true
-      patch_sync_operation "$app_name" || true
       next_kick=$((SECONDS + SYNC_KICK_INTERVAL))
     fi
 
@@ -430,9 +364,17 @@ REMOTESCRIPT
 scp $SSH_OPTS "$REMOTE_SCRIPT" root@"$VM_HOST":/tmp/wait-for-argocd-remote.sh
 rm -f "$REMOTE_SCRIPT"
 
+# GH_TOKEN goes via a SCP'd tmp file so it never lands on the ssh cmdline.
+TOKEN_FILE=$(mktemp)
+chmod 600 "$TOKEN_FILE"
+printf '%s' "${GH_TOKEN_FOR_COMPARE}" > "$TOKEN_FILE"
+# shellcheck disable=SC2086
+scp $SSH_OPTS "$TOKEN_FILE" root@"$VM_HOST":/tmp/wait-for-argocd-token
+rm -f "$TOKEN_FILE"
+
 # shellcheck disable=SC2086
 ssh $SSH_OPTS root@"$VM_HOST" \
-  "bash /tmp/wait-for-argocd-remote.sh '$DEPLOY_ENVIRONMENT' '$EXPECTED_SHA' '$ARGOCD_TIMEOUT' '$ACTIVE_SYNC_AFTER' '$SYNC_KICK_INTERVAL' ${APPS[*]}; RC=\$?; rm -f /tmp/wait-for-argocd-remote.sh; exit \$RC"
+  "GH_TOKEN=\$(cat /tmp/wait-for-argocd-token) GH_REPO='$GH_REPO_FOR_COMPARE' bash /tmp/wait-for-argocd-remote.sh '$DEPLOY_ENVIRONMENT' '$EXPECTED_SHA' '$ARGOCD_TIMEOUT' '$ACTIVE_SYNC_AFTER' '$SYNC_KICK_INTERVAL' ${APPS[*]}; RC=\$?; rm -f /tmp/wait-for-argocd-remote.sh /tmp/wait-for-argocd-token; exit \$RC"
 
 # Gate-ordering invariant (bug.0321 Fix 4): signal downstream steps in the
 # same job that Argo sync was verified at EXPECTED_SHA. wait-for-candidate-ready.sh

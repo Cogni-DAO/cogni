@@ -306,7 +306,6 @@ describe("PolymarketClobAdapter", () => {
     stub: {
       createAndPostOrder?: ReturnType<typeof vi.fn>;
       createAndPostMarketOrder?: ReturnType<typeof vi.fn>;
-      updateBalanceAllowance?: ReturnType<typeof vi.fn>;
       cancelOrder?: ReturnType<typeof vi.fn>;
       getOrder?: ReturnType<typeof vi.fn>;
       getTickSize?: ReturnType<typeof vi.fn>;
@@ -319,9 +318,6 @@ describe("PolymarketClobAdapter", () => {
     stub.getTickSize ??= vi.fn().mockResolvedValue("0.01");
     stub.getNegRisk ??= vi.fn().mockResolvedValue(false);
     stub.getFeeRateBps ??= vi.fn().mockResolvedValue(0);
-    stub.updateBalanceAllowance ??= vi
-      .fn()
-      .mockResolvedValue({ balance: "0", allowance: "0" });
     // Default orderBook: minShares=1 so legacy tests (BASE_INTENT size_usdc=1
     // at price 0.5 = 2 shares ≥ 1) pass through without triggering the
     // bug.0342 defense-in-depth guard. Tests that exercise the guard override
@@ -469,15 +465,11 @@ describe("PolymarketClobAdapter", () => {
       status: "matched",
       takingAmount: "1.25",
     });
-    const updateBalanceAllowance = vi
-      .fn()
-      .mockResolvedValue({ balance: "5", allowance: "5" });
     const getTickSize = vi.fn().mockResolvedValue("0.001");
     const getNegRisk = vi.fn().mockResolvedValue(true);
     const getFeeRateBps = vi.fn().mockResolvedValue(1000);
     const adapter = makeAdapter({
       createAndPostMarketOrder,
-      updateBalanceAllowance,
       getTickSize,
       getNegRisk,
       getFeeRateBps,
@@ -505,13 +497,6 @@ describe("PolymarketClobAdapter", () => {
     });
     expect(opts).toEqual({ tickSize: "0.001", negRisk: true });
     expect(orderType).toBe("FAK");
-    expect(updateBalanceAllowance).toHaveBeenNthCalledWith(1, {
-      asset_type: "COLLATERAL",
-    });
-    expect(updateBalanceAllowance).toHaveBeenNthCalledWith(2, {
-      asset_type: "CONDITIONAL",
-      token_id: "0xtoken",
-    });
     expect(receipt.order_id).toBe("0xmarket");
     expect(receipt.client_order_id).toBe("0xclientid");
     expect(receipt.filled_size_usdc).toBe(1.25);
@@ -642,6 +627,33 @@ describe("PolymarketClobAdapter", () => {
     expect(errObj.name).toBe("BelowMarketMinError");
     expect(errObj.message).toMatch(/below market floor/);
     expect(createAndPostOrder).not.toHaveBeenCalled();
+  });
+
+  it("placeOrder tolerates float-lossy round-trip at the USDC-notional floor (bug.0342 regression)", async () => {
+    // size_usdc=1, price=0.09 → shareSize=11.11…, effectiveUsdc=0.9999999999999999.
+    // The round-trip loses precision but the intent clears the floor by
+    // design; without epsilon tolerance the adapter bounced prod mirror
+    // placements.
+    const createAndPostOrder = vi.fn().mockResolvedValue({
+      orderID: "0xresp",
+      status: "live",
+      makingAmount: "11.11",
+    });
+    const getOrderBook = vi.fn().mockResolvedValue({
+      min_order_size: "5",
+      tick_size: "0.01",
+    });
+    const adapter = makeAdapter({ createAndPostOrder, getOrderBook });
+
+    await expect(
+      adapter.placeOrder({
+        ...BASE_INTENT,
+        size_usdc: 1,
+        limit_price: 0.09,
+        side: "BUY",
+      })
+    ).resolves.toMatchObject({ order_id: "0xresp" });
+    expect(createAndPostOrder).toHaveBeenCalled();
   });
 
   it("placeOrder proceeds when shareSize >= min_order_size", async () => {

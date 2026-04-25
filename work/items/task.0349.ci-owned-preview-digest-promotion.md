@@ -132,3 +132,18 @@ Per [docs/spec/docs-work-system.md](../../docs/spec/docs-work-system.md) `LINK_D
 ## Success criteria
 
 - `deploy_verified: true` after observed merge cycle: zero new `argocd-image-updater` **write-back** commits from preview (AppSet demoted), seed commits ≤1 per human merge when digests change, candidate-a verify green on affected-only flights, preview digest pins consistent with `promote-and-deploy` rsync.
+
+## Follow-up (bundled CI cleanup) — harden `loki-ci-telemetry` to be checkout-layout-agnostic
+
+Surfaced by PR #1029 (bare-checkout workaround for the `verify-deploy` job in `promote-and-deploy.yml`). Every `promote-and-deploy` run since the action was introduced silently job-failed on the `CI Telemetry` step in `verify-deploy` (preview + production) because that job checks out only to `app-src/` + `deploy-branch/` sub-paths, leaving `$GITHUB_WORKSPACE` root empty. Two repo-root assumptions inside `.github/actions/loki-ci-telemetry/action.yml`:
+
+1. Line 307: `uses: ./.github/actions/loki-push` — nested `uses: ./...` in a composite action resolves against `$GITHUB_WORKSPACE`, **not** the parent action's directory.
+2. Line 136: `scripts/ci/fetch_github_job_logs.sh` — bash `run:` defaults to `cwd=$GITHUB_WORKSPACE`.
+
+PR #1029 worked around both by adding a bare root checkout in `verify-deploy`. The next workflow job that checks out only to sub-paths will hit this again. Make the action self-contained:
+
+- Resolve the script via `${{ github.action_path }}/../../scripts/ci/fetch_github_job_logs.sh`, or copy the script into the action and drop the out-of-tree dependency.
+- Inline `loki-push` into `loki-ci-telemetry` (it's one `curl`) so the nested `uses:` disappears.
+- Drop the bare root checkout from `verify-deploy` once the action no longer depends on workspace layout.
+
+Regression guard: a lint step that greps `.github/actions/**/action.yml` for workspace-relative paths (`scripts/`, `uses: ./...`) and fails the PR.

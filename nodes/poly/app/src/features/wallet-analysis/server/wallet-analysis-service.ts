@@ -3,15 +3,16 @@
 
 /**
  * Module: `@features/wallet-analysis/server/wallet-analysis-service`
- * Purpose: Service layer feeding the `/api/v1/poly/wallets/[addr]` route — fetches the wallet-analysis slices (snapshot, trades, balance, pnl) via the existing `PolymarketDataApiClient`, the public CLOB client, and Polymarket's public user-pnl service. All upstream calls are bounded by a process-wide `p-limit(4)` and per-(slice, addr) coalesced under a 30 s TTL.
- * Scope: Compute + I/O only. Does not authenticate, does not parse HTTP. Returns Zod-validated slice values per the wallet-analysis v1 contract.
+ * Purpose: Service layer feeding `/api/v1/poly/wallets/[addr]` (snapshot, trades, balance, pnl slices) and `/api/v1/poly/wallet/execution` (live/closed position split). Fetches via `PolymarketDataApiClient`, the public CLOB client, and Polymarket's public user-pnl service. All upstream calls are bounded by a process-wide `p-limit(4)` and per-(slice, addr) coalesced under a 30 s TTL.
+ * Scope: Compute + I/O only. Does not authenticate, does not parse HTTP. Returns Zod-validated slice values per the wallet-analysis v1 and execution v1 contracts.
  * Invariants:
  *   - REUSE_PACKAGE_CLIENTS: all upstream HTTP goes through `@cogni/market-provider` clients — no fetch in this file.
  *   - DETERMINISTIC_METRICS: snapshot math is identical to `computeWalletMetrics` (spike.0323 v3).
  *   - PARTIAL_FAILURE_NEVER_THROWS: each slice returns a `{ value | warning }` result; the route surfaces warnings without 5xx-ing.
+ *   - CLOB_HISTORY_OPEN_ONLY: `getPriceHistory` is fetched only for open/redeemable positions; closed positions use trade-derived timelines only.
  * Side-effects: IO (Polymarket Data API + Polymarket CLOB public + Polymarket user-pnl).
  * Notes: Cache is process-scoped — see `instrumentation.ts` single-replica boot assert.
- * Links: docs/design/wallet-analysis-components.md, packages/market-provider/src/analysis/wallet-metrics.ts, packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts
+ * Links: docs/design/wallet-analysis-components.md, packages/market-provider/src/analysis/wallet-metrics.ts, packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts, packages/node-contracts/src/poly.wallet.execution.v1.contract.ts
  * @public
  */
 
@@ -49,7 +50,10 @@ const upstreamLimit = pLimit(4);
 /** Trades fetched per analysis request (`computeWalletMetrics` accepts up to ~500 per the Data API cap). */
 const TRADE_FETCH_LIMIT = 500;
 const EXECUTION_TRADE_FETCH_LIMIT = 10_000;
-const EXECUTION_POSITION_LIMIT = 18;
+/** Max open/redeemable rows returned in live_positions. */
+const EXECUTION_OPEN_LIMIT = 18;
+/** Max closed rows returned in closed_positions. */
+const EXECUTION_HISTORY_LIMIT = 30;
 const EXECUTION_HISTORY_WINDOW_DAYS = 14;
 
 /**
@@ -336,25 +340,35 @@ export async function getExecutionSlice(
     EXECUTION_HISTORY_WINDOW_DAYS
   );
 
-  const preview = mapExecutionPositions({
+  // Split all mapped positions into open/redeemable (live) vs closed before
+  // fetching CLOB price history. Closed positions have a complete trade-derived
+  // timeline; CLOB history is only needed for live holdings.
+  const allMapped = mapExecutionPositions({
     positions,
     trades,
     asOfIso: capturedAt,
-  }).slice(0, EXECUTION_POSITION_LIMIT);
+  });
+
+  const livePreview = allMapped
+    .filter((p) => p.status === "open" || p.status === "redeemable")
+    .slice(0, EXECUTION_OPEN_LIMIT);
+  const closedPreview = allMapped
+    .filter((p) => p.status === "closed")
+    .slice(0, EXECUTION_HISTORY_LIMIT);
+
+  // Fetch CLOB price history for live positions only.
   const priceHistoryByAsset = new Map<
     string,
     Awaited<ReturnType<PolymarketClobPublicClient["getPriceHistory"]>>
   >();
 
   await Promise.all(
-    preview.map(async (position) => {
+    livePreview.map(async (position) => {
       const startTs = Math.max(
         0,
         Math.floor(new Date(position.openedAt).getTime() / 1000) - 3600
       );
-      const endTs = position.closedAt
-        ? Math.floor(new Date(position.closedAt).getTime() / 1000) + 3600
-        : Math.floor(new Date(capturedAt).getTime() / 1000);
+      const endTs = Math.floor(new Date(capturedAt).getTime() / 1000);
       const fidelity = pickPriceHistoryFidelity(startTs, endTs);
 
       const history = await coalesce(
@@ -375,19 +389,22 @@ export async function getExecutionSlice(
     })
   );
 
-  const mapped = mapExecutionPositions({
+  // Re-map live positions with fetched price history timelines.
+  const liveAssets = new Set(livePreview.map((p) => p.asset));
+  const liveWithHistory = mapExecutionPositions({
     positions,
     trades,
     priceHistoryByAsset,
     asOfIso: capturedAt,
-    assets: preview.map((position) => position.asset),
+    assets: [...liveAssets],
   });
 
   return {
     address: addr.toLowerCase() as PolyWalletExecutionOutput["address"],
     capturedAt,
     dailyTradeCounts: dailyTradeCountsResult,
-    positions: mapped.map(toExecutionContractPosition),
+    live_positions: liveWithHistory.map(toExecutionContractPosition),
+    closed_positions: closedPreview.map(toExecutionContractPosition),
     warnings,
   };
 }

@@ -10,7 +10,7 @@
 #   - MANIFEST_DRIVEN_DEPLOY: Promotion = overlay change → Argo CD syncs
 # Usage:
 #   scripts/ci/promote-k8s-image.sh --env candidate-a --app operator --digest ghcr.io/cogni-dao/cogni-template@sha256:abc...
-#   scripts/ci/promote-k8s-image.sh --env candidate-a --app operator --digest ... --migrator-digest ...
+#   scripts/ci/promote-k8s-image.sh --env candidate-a --app operator --digest ...
 #   scripts/ci/promote-k8s-image.sh --env production --app operator --digest ...
 #   scripts/ci/promote-k8s-image.sh --env preview --no-commit --app operator --digest ...
 #
@@ -29,7 +29,6 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # Parse args
 APP=""
 DIGEST=""
-MIGRATOR_DIGEST=""
 ENV=""
 DEPLOY_BRANCH=""
 NO_COMMIT=false
@@ -38,7 +37,6 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --app) APP="$2"; shift 2 ;;
     --digest) DIGEST="$2"; shift 2 ;;
-    --migrator-digest) MIGRATOR_DIGEST="$2"; shift 2 ;;
     --env) ENV="$2"; shift 2 ;;
     --deploy-branch) DEPLOY_BRANCH="$2"; shift 2 ;;
     --no-commit) NO_COMMIT=true; shift ;;
@@ -80,23 +78,6 @@ if grep -q 'newTag:' "$OVERLAY_FILE"; then
   sed -i.bak "0,/newTag: .*/s|.*newTag:.*|    digest: \"${IMAGE_DIGEST}\"|" "$OVERLAY_FILE"
 elif grep -q 'digest:' "$OVERLAY_FILE"; then
   sed -i.bak "0,/digest: .*/s|digest: .*|digest: \"${IMAGE_DIGEST}\"|" "$OVERLAY_FILE"
-fi
-
-# Handle migrator digest if provided (node apps have a second image entry)
-if [[ -n "$MIGRATOR_DIGEST" ]]; then
-  MIGRATOR_IMAGE_NAME="${MIGRATOR_DIGEST%%@*}"
-  MIGRATOR_IMAGE_DIGEST="${MIGRATOR_DIGEST#*@}"
-  log_info "  Migrator: $MIGRATOR_IMAGE_NAME"
-  log_info "  Migrator digest: $MIGRATOR_IMAGE_DIGEST"
-  # Update the second image entry (migrator) — target the line after cogni-template-migrate
-  # Use awk to find the migrate image block and replace its digest line
-  awk -v new_digest="$MIGRATOR_IMAGE_DIGEST" -v new_name="$MIGRATOR_IMAGE_NAME" '
-    /name: .*cogni-template-migrate/ { in_migrate=1 }
-    in_migrate && /newName:/ { $0 = "    newName: " new_name; }
-    in_migrate && /digest:/ { $0 = "    digest: \"" new_digest "\""; in_migrate=0 }
-    in_migrate && /newTag:/ { $0 = "    digest: \"" new_digest "\""; in_migrate=0 }
-    { print }
-  ' "$OVERLAY_FILE" > "${OVERLAY_FILE}.tmp" && mv "${OVERLAY_FILE}.tmp" "$OVERLAY_FILE"
 fi
 
 rm -f "${OVERLAY_FILE}.bak"

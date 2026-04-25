@@ -3,37 +3,29 @@
 
 /**
  * Module: `@app/(app)/dashboard/_components/ExecutionActivityCard`
- * Purpose: Unified Polymarket execution surface for the dashboard — real
- * operator-wallet positions as the primary view, with recent mirror-order
- * history one tab away for HFT inspection.
- * Scope: Client component. Read-only. Positions are sourced from the operator
- * wallet execution route; history is sourced from the copy-trade order ledger.
+ * Purpose: Unified Polymarket execution surface for the dashboard — open
+ * positions as the primary view, closed position history one tab away.
+ * Scope: Client component. Read-only. Open positions sourced from
+ * live_positions; closed history from closed_positions.
  * Invariants:
- *   - LEGACY_ACTIVE_ORDERS_REMOVED: the old Active Orders card no longer stands alone on the dashboard.
- *   - HISTORY_ALWAYS_AVAILABLE: recent mirror orders remain accessible behind the History tab with the same status filters and copy payload affordance.
- *   - POSITION_VIEW_IS_DATA_BACKED: position rows reflect Data API trades and positions plus CLOB public price history.
- *   - NO_FAKE_BALANCE_CURVE: the card does not render a fabricated balance chart.
+ *   - LIVE_POSITIONS_ONLY_IN_OPEN_TAB: the Open tab renders only live_positions rows.
+ *   - CLOSE_BUTTON_ONLY_ON_OPEN_TAB: History tab is read-only (variant="history").
+ *   - NO_STALE_OPEN_ROW_AFTER_CLOSE: recentlyClosedIds suppresses closed rows
+ *     until the next live_positions refetch confirms they are gone.
  * Side-effects: IO (React Query), clipboard (user-triggered).
- * Links: [fetchExecution](../_api/fetchExecution.ts), [fetchOrders](../_api/fetchOrders.ts)
+ * Links: [fetchExecution](../_api/fetchExecution.ts)
  * @public
  */
 
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy } from "lucide-react";
-import { type ReactElement, useMemo, useState } from "react";
+import { type ReactElement, useCallback, useMemo, useState } from "react";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components";
@@ -41,138 +33,26 @@ import {
   PositionsTable,
   type WalletPosition,
 } from "@/features/wallet-analysis";
-import { cn } from "@/shared/util/cn";
 import { fetchExecution } from "../_api/fetchExecution";
-import { fetchOrders, type OrdersStatusFilter } from "../_api/fetchOrders";
 import {
   postClosePosition,
   postRedeemPosition,
 } from "../_api/fetchPositionActions";
-import { formatPrice, formatUsdc, timeAgo } from "./wallet-format";
 
-type ExecutionView = "positions" | "history";
-
-const HISTORY_FILTERS: readonly { value: OrdersStatusFilter; label: string }[] =
-  [
-    { value: "open", label: "Open" },
-    { value: "filled", label: "Filled" },
-    { value: "closed", label: "Closed" },
-    { value: "all", label: "All" },
-  ] as const;
-
-const HISTORY_STATUS_BUCKETS: Record<
-  OrdersStatusFilter,
-  | readonly (
-      | "pending"
-      | "open"
-      | "partial"
-      | "filled"
-      | "canceled"
-      | "error"
-    )[]
-  | "all"
-> = {
-  all: "all",
-  open: ["pending", "open", "partial"],
-  filled: ["filled"],
-  closed: ["canceled", "error"],
-};
-
-const STATUS_DOT: Record<string, string> = {
-  pending: "bg-muted-foreground animate-pulse",
-  open: "bg-success",
-  partial: "bg-warning",
-  filled: "bg-success",
-  canceled: "bg-muted-foreground",
-  error: "bg-destructive",
-};
-
-type ExecutionOrder = Awaited<ReturnType<typeof fetchOrders>>["orders"][number];
-
-function buildAgentPayload(row: ExecutionOrder): string {
-  return JSON.stringify(
-    {
-      action: "inspect-copy-trade-order",
-      hint: "Review this order and verify status against recent positions or trades when sync data looks stale.",
-      order: row,
-      ground_truth: {
-        target_wallet_positions: row.target_wallet
-          ? `https://data-api.polymarket.com/positions?user=${row.target_wallet}`
-          : null,
-        target_wallet_trades: row.target_wallet
-          ? `https://data-api.polymarket.com/trades?user=${row.target_wallet}&limit=10`
-          : null,
-        polygon_tx: row.market_tx_hash
-          ? `https://polygonscan.com/tx/${row.market_tx_hash}`
-          : null,
-      },
-    },
-    null,
-    2
-  );
-}
-
-function RowCopyButton({ row }: { row: ExecutionOrder }): ReactElement {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      aria-label="Copy order JSON"
-      title="Copy order JSON"
-      onClick={(e) => {
-        e.stopPropagation();
-        void navigator.clipboard.writeText(buildAgentPayload(row)).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        });
-      }}
-      className="inline-flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-    >
-      {copied ? (
-        <Check className="size-3.5 text-success" />
-      ) : (
-        <Copy className="size-3.5" />
-      )}
-    </button>
-  );
-}
-
-const STALE_THRESHOLD_MS = 60_000;
-
-function StalenessDot({
-  synced_at,
-  staleness_ms,
-}: {
-  synced_at: string | null;
-  staleness_ms: number | null;
-}): ReactElement | null {
-  if (synced_at !== null && (staleness_ms ?? 0) <= STALE_THRESHOLD_MS) {
-    return null;
-  }
-
-  const isNeverSynced = synced_at === null;
-  const tooltip = isNeverSynced
-    ? "Never synced"
-    : `Last synced ${timeAgo(synced_at)} ago`;
-
-  return (
-    <span
-      title={tooltip}
-      className={cn(
-        "inline-block size-1.5 rounded-full",
-        isNeverSynced ? "bg-muted-foreground" : "bg-warning"
-      )}
-    />
-  );
-}
+type ExecutionView = "open" | "history";
 
 export function ExecutionActivityCard(): ReactElement {
   const queryClient = useQueryClient();
-  const [view, setView] = useState<ExecutionView>("positions");
-  const [historyFilter, setHistoryFilter] = useState<OrdersStatusFilter>("all");
+  const [view, setView] = useState<ExecutionView>("open");
   const [positionActionError, setPositionActionError] = useState<string | null>(
     null
   );
+
+  // Per-item suppression: ids added on close success, removed when refetch
+  // confirms the position is gone from live_positions.
+  const [recentlyClosedIds, setRecentlyClosedIds] = useState<
+    ReadonlySet<string>
+  >(new Set());
 
   const positionAction = useMutation({
     mutationFn: async (args: {
@@ -184,8 +64,11 @@ export function ExecutionActivityCard(): ReactElement {
       }
       return postRedeemPosition(args.position.conditionId);
     },
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       setPositionActionError(null);
+      setRecentlyClosedIds(
+        (prev) => new Set([...prev, vars.position.positionId])
+      );
       void queryClient.invalidateQueries({
         queryKey: ["dashboard-wallet-execution"],
       });
@@ -214,25 +97,43 @@ export function ExecutionActivityCard(): ReactElement {
     staleTime: 10_000,
     gcTime: 60_000,
     retry: 1,
+    select: useCallback((data: Awaited<ReturnType<typeof fetchExecution>>) => {
+      // Per-item eviction: remove any id from recentlyClosedIds that is no
+      // longer present in the freshly fetched live_positions.
+      const liveIds = new Set(data.live_positions.map((p) => p.positionId));
+      setRecentlyClosedIds((prev) => {
+        const next = new Set([...prev].filter((id) => liveIds.has(id)));
+        return next.size === prev.size ? prev : next;
+      });
+      return data;
+    }, []),
   });
 
-  const {
-    data: ordersData,
-    isLoading: isOrdersLoading,
-    isError: isOrdersError,
-  } = useQuery({
-    queryKey: ["dashboard-execution-orders"],
-    queryFn: () => fetchOrders({ status: "all", limit: 120 }),
-    refetchInterval: 10_000,
-    staleTime: 5_000,
-    gcTime: 60_000,
-    retry: 1,
-  });
-
-  const orders = ordersData?.orders ?? [];
-  const positions = useMemo<WalletPosition[]>(
+  const openPositions = useMemo<WalletPosition[]>(
     () =>
-      (executionData?.positions ?? []).map((position) => ({
+      (executionData?.live_positions ?? [])
+        .filter((p) => !recentlyClosedIds.has(p.positionId))
+        .map((position) => ({
+          ...position,
+          ...(position.marketSlug !== null
+            ? { marketSlug: position.marketSlug }
+            : {}),
+          ...(position.eventSlug !== null
+            ? { eventSlug: position.eventSlug }
+            : {}),
+          ...(position.marketUrl !== null
+            ? { marketUrl: position.marketUrl }
+            : {}),
+          ...(position.closedAt !== null
+            ? { closedAt: position.closedAt }
+            : {}),
+        })),
+    [executionData?.live_positions, recentlyClosedIds]
+  );
+
+  const closedPositions = useMemo<WalletPosition[]>(
+    () =>
+      (executionData?.closed_positions ?? []).map((position) => ({
         ...position,
         ...(position.marketSlug !== null
           ? { marketSlug: position.marketSlug }
@@ -245,11 +146,7 @@ export function ExecutionActivityCard(): ReactElement {
           : {}),
         ...(position.closedAt !== null ? { closedAt: position.closedAt } : {}),
       })),
-    [executionData?.positions]
-  );
-  const historyRows = useMemo(
-    () => filterHistoryOrders(orders, historyFilter).slice(0, 60),
-    [orders, historyFilter]
+    [executionData?.closed_positions]
   );
 
   return (
@@ -262,51 +159,28 @@ export function ExecutionActivityCard(): ReactElement {
             </CardTitle>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <ToggleGroup
-              type="single"
-              value={view}
-              onValueChange={(value) => {
-                if (value) setView(value as ExecutionView);
-              }}
-              className="rounded-lg border"
-            >
-              <ToggleGroupItem value="positions" className="px-3 text-xs">
-                Positions
-              </ToggleGroupItem>
-              <ToggleGroupItem value="history" className="px-3 text-xs">
-                History
-              </ToggleGroupItem>
-            </ToggleGroup>
-
-            {view === "history" ? (
-              <ToggleGroup
-                type="single"
-                value={historyFilter}
-                onValueChange={(value) => {
-                  if (value) setHistoryFilter(value as OrdersStatusFilter);
-                }}
-                className="rounded-lg border"
-              >
-                {HISTORY_FILTERS.map((filter) => (
-                  <ToggleGroupItem
-                    key={filter.value}
-                    value={filter.value}
-                    className="px-3 text-xs"
-                  >
-                    {filter.label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            ) : null}
-          </div>
+          <ToggleGroup
+            type="single"
+            value={view}
+            onValueChange={(value) => {
+              if (value) setView(value as ExecutionView);
+            }}
+            className="rounded-lg border"
+          >
+            <ToggleGroupItem value="open" className="px-3 text-xs">
+              Open
+            </ToggleGroupItem>
+            <ToggleGroupItem value="history" className="px-3 text-xs">
+              History
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
       </CardHeader>
 
       <CardContent className="p-0">
-        {view === "positions" ? (
-          <PositionsPanel
-            positions={positions}
+        {view === "open" ? (
+          <OpenPositionsPanel
+            positions={openPositions}
             warnings={executionData?.warnings ?? []}
             isLoading={isExecutionLoading}
             isError={isExecutionError}
@@ -317,11 +191,10 @@ export function ExecutionActivityCard(): ReactElement {
             positionActionError={positionActionError}
           />
         ) : (
-          <HistoryPanel
-            rows={historyRows}
-            isLoading={isOrdersLoading}
-            isError={isOrdersError}
-            filter={historyFilter}
+          <ClosedPositionsPanel
+            positions={closedPositions}
+            isLoading={isExecutionLoading}
+            isError={isExecutionError}
           />
         )}
       </CardContent>
@@ -329,7 +202,7 @@ export function ExecutionActivityCard(): ReactElement {
   );
 }
 
-function PositionsPanel({
+function OpenPositionsPanel({
   positions,
   warnings,
   isLoading,
@@ -361,7 +234,7 @@ function PositionsPanel({
     <div className="space-y-3 px-5 pb-4">
       <div className="space-y-2">
         <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
-          Positions
+          Open Positions
         </h3>
         {warnings.length > 0 ? (
           <p className="text-muted-foreground text-xs">
@@ -377,7 +250,7 @@ function PositionsPanel({
         <PositionsTable
           positions={positions}
           isLoading={isLoading}
-          emptyMessage="No positions yet."
+          emptyMessage="No open positions."
           onPositionAction={onPositionAction}
           pendingActionPositionId={pendingActionPositionId}
         />
@@ -386,148 +259,36 @@ function PositionsPanel({
   );
 }
 
-function HistoryPanel({
-  rows,
+function ClosedPositionsPanel({
+  positions,
   isLoading,
   isError,
-  filter,
 }: {
-  rows: readonly ExecutionOrder[];
+  positions: readonly WalletPosition[];
   isLoading: boolean;
   isError: boolean;
-  filter: OrdersStatusFilter;
 }): ReactElement {
-  if (isLoading) {
-    return (
-      <div className="animate-pulse space-y-px px-5 pb-4">
-        <div className="h-9 rounded bg-muted" />
-        <div className="h-9 rounded bg-muted" />
-        <div className="h-9 rounded bg-muted" />
-      </div>
-    );
-  }
-
   if (isError) {
     return (
       <p className="px-5 py-6 text-center text-muted-foreground text-sm">
-        Failed to load order history. Try again shortly.
-      </p>
-    );
-  }
-
-  if (rows.length === 0) {
-    return (
-      <p className="px-5 py-6 text-center text-muted-foreground text-sm">
-        No {filter === "all" ? "" : `${filter} `}orders yet.
+        Failed to load position history. Try again shortly.
       </p>
     );
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-32">Status</TableHead>
-          <TableHead>Market</TableHead>
-          <TableHead className="w-16 text-center">Side</TableHead>
-          <TableHead className="text-right">Size</TableHead>
-          <TableHead className="text-right">Filled</TableHead>
-          <TableHead className="text-right">Price</TableHead>
-          <TableHead className="text-right">Placed</TableHead>
-          <TableHead className="w-10" />
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row) => {
-          const href = row.market_tx_hash
-            ? `https://polygonscan.com/tx/${row.market_tx_hash}`
-            : null;
-          const display = row.market_title ?? "";
-
-          const openHref = () => {
-            if (href) window.open(href, "_blank", "noopener");
-          };
-
-          return (
-            <TableRow
-              key={`${row.target_id}:${row.fill_id}`}
-              role={href ? "link" : undefined}
-              tabIndex={href ? 0 : undefined}
-              onClick={openHref}
-              onAuxClick={(event) => {
-                if (event.button === 1) openHref();
-              }}
-              onKeyDown={(event) => {
-                if (href && (event.key === "Enter" || event.key === " ")) {
-                  event.preventDefault();
-                  openHref();
-                }
-              }}
-              className={cn(
-                href &&
-                  "cursor-pointer hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:outline-none"
-              )}
-            >
-              <TableCell className="text-muted-foreground text-sm">
-                <span className="inline-flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "inline-block size-2 rounded-full",
-                      STATUS_DOT[row.status] ?? "bg-muted-foreground"
-                    )}
-                  />
-                  {row.status}
-                  <StalenessDot
-                    synced_at={row.synced_at}
-                    staleness_ms={row.staleness_ms}
-                  />
-                </span>
-              </TableCell>
-              <TableCell className="font-medium text-sm">{display}</TableCell>
-              <TableCell className="text-center">
-                {row.side === "BUY" ? (
-                  <span className="font-mono font-semibold text-success text-xs tracking-wide">
-                    BUY
-                  </span>
-                ) : row.side === "SELL" ? (
-                  <span className="font-mono font-semibold text-destructive text-xs tracking-wide">
-                    SELL
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </TableCell>
-              <TableCell className="text-right text-sm tabular-nums">
-                {row.size_usdc !== null ? formatUsdc(row.size_usdc) : "—"}
-              </TableCell>
-              <TableCell className="text-right text-muted-foreground text-sm tabular-nums">
-                {row.filled_size_usdc !== null
-                  ? formatUsdc(row.filled_size_usdc)
-                  : "—"}
-              </TableCell>
-              <TableCell className="text-right text-muted-foreground text-sm tabular-nums">
-                {formatPrice(row.limit_price)}
-              </TableCell>
-              <TableCell className="text-right text-muted-foreground text-sm">
-                {timeAgo(row.observed_at)}
-              </TableCell>
-              <TableCell className="pl-0 text-right">
-                <RowCopyButton row={row} />
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+    <div className="space-y-3 px-5 pb-4">
+      <div className="space-y-2">
+        <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+          Position History
+        </h3>
+        <PositionsTable
+          positions={positions}
+          isLoading={isLoading}
+          variant="history"
+          emptyMessage="No closed positions yet."
+        />
+      </div>
+    </div>
   );
-}
-
-function filterHistoryOrders(
-  orders: readonly ExecutionOrder[],
-  filter: OrdersStatusFilter
-): ExecutionOrder[] {
-  const bucket = HISTORY_STATUS_BUCKETS[filter];
-  if (bucket === "all") return [...orders];
-  const allowed = new Set(bucket);
-  return orders.filter((order) => allowed.has(order.status));
 }

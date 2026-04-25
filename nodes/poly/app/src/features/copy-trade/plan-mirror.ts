@@ -47,11 +47,19 @@ export function applySizingPolicy(
         minUsdcNotional === undefined ? 0 : minUsdcNotional / price;
       const floorShares = Math.max(minShares ?? 0, sharesForUsdcFloor);
       const targetShares = Math.max(desiredShares, floorShares);
-      const effectiveUsdc = targetShares * price;
-      if (effectiveUsdc > policy.max_usdc_per_trade) {
+      // The share×price round-trip (e.g. `1/0.09 * 0.09 = 0.9999…`) can leave
+      // targetShares×price a hair below minUsdcNotional even though targetShares
+      // itself clears the share floor. Clamp up so the adapter's own USDC-floor
+      // re-check doesn't bounce the intent. bug.0342.
+      const rawUsdc = targetShares * price;
+      const size_usdc =
+        minUsdcNotional !== undefined && rawUsdc < minUsdcNotional
+          ? minUsdcNotional
+          : rawUsdc;
+      if (size_usdc > policy.max_usdc_per_trade) {
         return { ok: false, reason: "below_market_min" };
       }
-      return { ok: true, size_usdc: effectiveUsdc };
+      return { ok: true, size_usdc };
     }
   }
 }

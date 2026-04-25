@@ -9,6 +9,7 @@
  *   - Address is always the configured tenant wallet (or zero-address when unconfigured).
  *   - Position timelines are price-series traces, not fabricated balance curves.
  *   - Market links must come from upstream slugs, never title guessing.
+ *   - live_positions contains open/redeemable rows only; closed_positions contains closed rows only.
  * Side-effects: none
  * Links: docs/design/poly-dashboard-balance-and-positions.md, docs/design/wallet-analysis-components.md
  * @public
@@ -100,7 +101,10 @@ export const PolyWalletExecutionOutputSchema = z.object({
   address: PolyAddressSchema,
   capturedAt: z.string(),
   dailyTradeCounts: z.array(WalletExecutionDailyCountSchema),
-  positions: z.array(WalletExecutionPositionSchema),
+  /** Currently held positions (status open or redeemable). Powers the Open tab. */
+  live_positions: z.array(WalletExecutionPositionSchema),
+  /** Trade-derived closed position history. Powers the Position History tab. */
+  closed_positions: z.array(WalletExecutionPositionSchema),
   warnings: z.array(WalletExecutionWarningSchema),
 });
 export type PolyWalletExecutionOutput = z.infer<
@@ -112,7 +116,7 @@ export const polyWalletExecutionOperation = {
   summary:
     "Trading-wallet execution positions and trades-per-day with traceable price timelines",
   description:
-    "Returns the signed-in user's live daily trade counts and execution positions derived from Polymarket Data API trades and positions plus public CLOB price history.",
+    "Returns the signed-in user's live daily trade counts, open positions (live_positions), and closed position history (closed_positions) derived from Polymarket Data API trades and positions plus public CLOB price history.",
   input: z.object({}),
   output: PolyWalletExecutionOutputSchema,
 } as const;

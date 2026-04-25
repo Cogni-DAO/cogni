@@ -14,9 +14,6 @@ images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
     newTag: "prod-placeholder-resy"
-  - name: ghcr.io/cogni-dao/cogni-template-migrate
-    newName: ghcr.io/cogni-dao/cogni-template
-    newTag: "prod-placeholder-resy"
 
 patches:
   # Node-specific ConfigMap values.
@@ -66,6 +63,12 @@ patches:
         path: /spec/template/spec/containers/0/envFrom/1/secretRef/name
         value: "resy-node-app-secrets"
       - op: replace
+        path: /spec/template/spec/initContainers/0/envFrom/1/secretRef/name
+        value: "resy-node-app-secrets"
+      - op: replace
+        path: /spec/template/spec/initContainers/0/envFrom/1/secretRef/name
+        value: "resy-node-app-secrets"
+      - op: replace
         path: /spec/template/spec/containers/0/ports/0/containerPort
         value: 3300
       - op: add
@@ -75,13 +78,6 @@ patches:
         path: /spec/template/metadata/labels/app.kubernetes.io~1instance
         value: "resy"
   # Migration: skip until node-template builds its own -migrate image (task.0260).
-  - target:
-      kind: Job
-      name: migrate-node-app
-    patch: |
-      - op: replace
-        path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
-        value: "resy-node-app-secrets"
 
   # bug.0295: VM discovery via DNS (production.vm.cognidao.org).
   # Convert base headless Services → ExternalName; delete EndpointSlices.

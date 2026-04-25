@@ -76,10 +76,13 @@ Instead add:
 
 - market / outcome / side labeling
 - sparkline cell
-- current value column
+- current value column (default variant) or Closed timestamp (history variant)
 - `P/L` dollar column
 - `P/L %` column
 - `Held` column formatted as `holding (x hr) N min` or `held (x hr) N min`
+- Action column (default) or omitted (history variant — read-only, no Close/Redeem buttons)
+
+Accepts `variant?: "default" | "history"`. The dashboard "Position History" tab passes `variant="history"` to render closed positions without action controls.
 
 ## Data mapping
 
@@ -106,8 +109,8 @@ Important constraint on current `main`:
 ## Current direction
 
 - Use Data API `positions` + `trades` for lifecycle semantics.
-- Use CLOB public `prices-history` for the actual row trace.
-- Keep the execution card positions-first, with history in a sibling tab.
+- Use CLOB public `prices-history` for the actual row trace (open/redeemable positions only; closed rows rely on trade-derived timelines).
+- Execution card tabs: "Open" from `live_positions`, "Position History" from `closed_positions`. History tab is read-only (`variant="history"` on `PositionsTable`).
 - Revisit a balance card only after we have deterministic cash + locked + MTM history.
 
 ## Reuse rules
