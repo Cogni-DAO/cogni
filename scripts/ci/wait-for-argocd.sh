@@ -208,6 +208,20 @@ rollout_check() {
   local deadline="$2"
   local deployment namespace remaining
 
+  # bug.0371: rollout_check exists to close the bug.0326 hole — Argo Healthy
+  # fires before the old ReplicaSet drains, so /version still serves the prior
+  # buildSha. That hole only matters for HTTP-served apps (verify-buildsha.sh
+  # explicitly filters scheduler-worker + migrator out for the same reason).
+  # For non-HTTP apps, blocking on `kubectl rollout status` until the old RS
+  # is gone is pure cost — slow drains false-fail verify-deploy and drop the
+  # preview lease on healthy deploys. Skip them; mirror verify-buildsha's list.
+  case "$(echo "$app_name" | sed -E "s/^${DEPLOY_ENVIRONMENT}-//")" in
+    scheduler-worker|*-migrator|migrator)
+      echo "    ⚠️  ${app_name}: non-HTTP app — skipping rollout-status check (bug.0371)"
+      return 0
+      ;;
+  esac
+
   deployment=$(resolve_deployment "$app_name")
   if [ -z "$deployment" ]; then
     echo "    ⚠️  ${app_name}: no Deployment mapping — skipping rollout-status check"
