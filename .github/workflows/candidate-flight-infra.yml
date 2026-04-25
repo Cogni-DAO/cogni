@@ -122,6 +122,29 @@ jobs:
       POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
       COGNI_NODE_DBS: ${{ secrets.COGNI_NODE_DBS }}
     steps:
+      - name: Pre-check no candidate-flight in progress (best-effort, GR-5)
+        # task.0372 / GR-5: best-effort warning when an app-lever flight is
+        # already running. The infra lever rsyncs compose state which can
+        # interleave with app-lever pod restarts. v0 is a noisy ::warning::
+        # only — hardening to a real lease is task.0372 follow-up.
+        # Workflow-name match must stay byte-identical to candidate-flight.yml's
+        # `name:` field; CI will catch drift via grep test in pr-build.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          in_progress=$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow="Candidate Flight" \
+            --status=in_progress \
+            --json databaseId \
+            --jq 'length' 2>/dev/null || echo 0)
+          if [ "$in_progress" != "0" ]; then
+            echo "::warning::${in_progress} candidate-flight (app lever) run(s) in progress — infra changes may interleave with app promotions"
+          else
+            echo "✓ No app-lever candidate-flight runs in progress"
+          fi
+
       - name: Checkout (for scripts)
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
