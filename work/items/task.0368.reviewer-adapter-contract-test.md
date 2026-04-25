@@ -13,7 +13,7 @@ spec_refs:
 assignees: []
 project: proj.vcs-integration
 branch: test/task-reviewer-adapter-contract
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/1052
 reviewer:
 revision: 2
 blocked_by:
