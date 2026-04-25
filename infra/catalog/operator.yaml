@@ -16,3 +16,10 @@ image_tag_suffix: ""
 # allow-tags regex won't match anything, so argocd-image-updater
 # silently skips.
 migrator_tag_suffix: "-operator-migrate"
+# task.0320 — per-env deploy branches. Each node flights to its own
+# per-env branch so one node's failed verify cannot block another node's
+# lane. Consumed by the cogni-{candidate-a,preview,production}
+# ApplicationSet git generators.
+candidate_a_branch: deploy/candidate-a-operator
+preview_branch: deploy/preview-operator
+production_branch: deploy/production-operator
