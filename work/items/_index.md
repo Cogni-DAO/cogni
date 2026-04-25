@@ -199,7 +199,6 @@
 | 2 | 3 | 1 | needs_triage | bug.0012 | pre-commit check:docs validates all files, not just staged — blocks unrelated commits |  |  |
 | 2 | 3 | 3 | needs_design | story.0128 | Governance ops: manual workflow triggers, run history, and admin role gating | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
 | 2 | 3 | 5 | needs_design | story.0263 | Doltgres Node Lifecycle — clone/pull from remotes, repo-spec linking, permission model | Cogni Poly | proj.poly-prediction-bot |
-| 2 | 3 | 1 | needs_design | bug.0371 | operator pr-build doesn't bust BUILD_SHA layer cache on CI-only PRs | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 4 | 2 | needs_triage | bug.0013 | Sandbox stack tests flaky — proxy container vanishes during readiness check | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 2 | 5 | 1 | needs_merge | bug.0233 | Model picker shows wrong icons, leaks codex models into OpenRouter tab, shows embedding models |  |  |
 | 2 | 5 | 1 | needs_review | bug.0275 | k8s migration Job fails — standalone app image lacks tsx + drizzle-kit | CI/CD Pipeline | proj.cicd-services-gitops |
