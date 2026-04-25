@@ -13,6 +13,7 @@ spec_refs:
   - ci-cd
 assignees: []
 project: proj.cicd-services-gitops
+pr: https://github.com/Cogni-DAO/node-template/pull/1053
 created: 2026-04-25
 updated: 2026-04-25
 labels: [ci-cd, infra, ssot, task.0372-blocker]
