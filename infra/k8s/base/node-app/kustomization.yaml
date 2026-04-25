@@ -7,4 +7,5 @@ resources:
   - deployment.yaml
   - service.yaml
   - configmap.yaml
+  - migration-job.yaml
   - external-services.yaml
