@@ -503,16 +503,32 @@ jobs:
           NODE: ${{ matrix.node }}
         run: |
           set -euo pipefail
-          PROMOTED=$(cat "${{ runner.temp }}/promoted-${NODE}.txt" 2>/dev/null || echo false)
-          DEPLOY_SHA=$(cat "${{ runner.temp }}/deploy-sha-${NODE}.txt" 2>/dev/null || true)
+          PROMOTED_FILE="${{ runner.temp }}/promoted-${NODE}.txt"
+          DEPLOY_SHA_FILE="${{ runner.temp }}/deploy-sha-${NODE}.txt"
+          if [ ! -f "$PROMOTED_FILE" ]; then
+            echo "::error::cell-${NODE} artifact missing promoted-${NODE}.txt — promote-k8s did not emit per-cell state (Axiom 14)"
+            exit 1
+          fi
+          PROMOTED=$(cat "$PROMOTED_FILE")
+          DEPLOY_SHA=$(cat "$DEPLOY_SHA_FILE" 2>/dev/null || true)
           echo "promoted=$PROMOTED" >> "$GITHUB_OUTPUT"
           echo "deploy_branch_sha=$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
-          if [ "$PROMOTED" != "true" ]; then
-            echo "ℹ️  cell skipped promotion — verify will skip"
+
+      - name: Assert preconditions when promoted
+        if: steps.cell.outputs.promoted == 'true'
+        run: |
+          set -euo pipefail
+          if [ -z "${VM_HOST:-}" ]; then
+            echo "::error::VM_HOST missing in env '${{ needs.decide.outputs.environment }}' but cell promoted — Axiom 19 fail-closed"
+            exit 1
+          fi
+          if [ -z "${{ steps.cell.outputs.deploy_branch_sha }}" ]; then
+            echo "::error::deploy_branch_sha empty but cell promoted — Axiom 19 fail-closed"
+            exit 1
           fi
 
       - name: Setup SSH
-        if: env.VM_HOST != '' && steps.cell.outputs.promoted == 'true'
+        if: steps.cell.outputs.promoted == 'true'
         env:
           SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
         run: |
@@ -522,7 +538,7 @@ jobs:
           ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Wait for ArgoCD sync (per-node)
-        if: env.VM_HOST != '' && steps.cell.outputs.promoted == 'true'
+        if: steps.cell.outputs.promoted == 'true'
         env:
           SSH_OPTS: "-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
           EXPECTED_SHA: ${{ steps.cell.outputs.deploy_branch_sha }}
@@ -532,18 +548,32 @@ jobs:
         run: bash app-src/scripts/ci/wait-for-argocd.sh
 
       - name: Wait for in-cluster services (per-node)
-        if: env.VM_HOST != '' && steps.cell.outputs.promoted == 'true'
+        if: steps.cell.outputs.promoted == 'true'
         env:
           PROMOTED_APPS: ${{ matrix.node }}
         run: bash app-src/scripts/ci/wait-for-in-cluster-services.sh
 
       - name: Verify buildSha (per-node)
-        if: env.VM_HOST != '' && steps.cell.outputs.promoted == 'true'
+        if: steps.cell.outputs.promoted == 'true'
         env:
           SOURCE_SHA_MAP: deploy-branch/.promote-state/source-sha-by-app.json
           EXPECTED_BUILDSHA: ${{ needs.decide.outputs.build_sha }}
           NODES: ${{ matrix.node }}
         run: bash app-src/scripts/ci/verify-buildsha.sh
+
+      - name: Emit verified marker
+        if: steps.cell.outputs.promoted == 'true'
+        env:
+          NODE: ${{ matrix.node }}
+        run: |
+          mkdir -p out
+          printf 'true' > "out/verified-${NODE}.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: steps.cell.outputs.promoted == 'true'
+        with:
+          name: cell-verify-${{ matrix.node }}
+          path: out/
+          retention-days: 1
 
       - name: CI Telemetry
         if: always()
@@ -710,22 +740,26 @@ jobs:
           CELLS_DIR: ${{ runner.temp }}/cells
         run: |
           set -euo pipefail
-          # Require at least one cell to have actually promoted. All-cells-skipped
-          # (e.g., all GHCR resolves missed) would otherwise silent-green the
-          # aggregator and lock-preview at unchanged current-sha.
           any_promoted=false
+          unverified=()
           if [ -d "$CELLS_DIR" ]; then
             shopt -s nullglob
             for f in "$CELLS_DIR"/promoted-*.txt; do
+              node=$(basename "$f" .txt | sed 's/^promoted-//')
               if [ "$(cat "$f" 2>/dev/null || true)" = "true" ]; then
                 any_promoted=true
-                break
+                if [ "$(cat "$CELLS_DIR/verified-${node}.txt" 2>/dev/null || true)" != "true" ]; then
+                  unverified+=("$node")
+                fi
               fi
             done
           fi
           echo "any_promoted=$any_promoted"
           if [ "$any_promoted" != "true" ]; then
             echo "::error::aggregate-preview: no cell reported promoted=true — refusing to advance lease"
+            echo "outcome=failed" >> "$GITHUB_OUTPUT"
+          elif [ ${#unverified[@]} -gt 0 ]; then
+            echo "::error::aggregate-preview: cells promoted but did not verify — Axiom 19 contradiction: ${unverified[*]}"
             echo "outcome=failed" >> "$GITHUB_OUTPUT"
           elif [ "$PROMOTE_RESULT" = "success" ] \
              && [ "$VERIFY_RESULT" = "success" ] \
@@ -797,21 +831,29 @@ jobs:
           path: ${{ runner.temp }}/cells/
           merge-multiple: true
 
-      - name: Require at least one cell promoted
+      - name: Assert promoted cells were verified
         env:
           CELLS_DIR: ${{ runner.temp }}/cells
         run: |
           set -euo pipefail
           any_promoted=false
+          unverified=()
           shopt -s nullglob
           for f in "$CELLS_DIR"/promoted-*.txt; do
+            node=$(basename "$f" .txt | sed 's/^promoted-//')
             if [ "$(cat "$f" 2>/dev/null || true)" = "true" ]; then
               any_promoted=true
-              break
+              if [ "$(cat "$CELLS_DIR/verified-${node}.txt" 2>/dev/null || true)" != "true" ]; then
+                unverified+=("$node")
+              fi
             fi
           done
           if [ "$any_promoted" != "true" ]; then
             echo "::error::aggregate-production: no cell reported promoted=true — refusing to advance current-sha"
+            exit 1
+          fi
+          if [ ${#unverified[@]} -gt 0 ]; then
+            echo "::error::aggregate-production: cells promoted but did not verify — Axiom 19 contradiction: ${unverified[*]}"
             exit 1
           fi
 
