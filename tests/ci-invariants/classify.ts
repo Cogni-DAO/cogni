@@ -7,7 +7,7 @@
  *          Mirrors the bash logic in `.github/workflows/ci.yaml#single-node-scope`
  *          and is the surface task.0382's runtime resolver must match.
  * Scope: Pure function used by parity tests. Does NOT read the filesystem or invoke git.
- * Invariants: SINGLE_DOMAIN_HARD_FAIL, OPERATOR_IS_A_NODE, LOCKFILE_INHERITS (see work/items/task.0381.* §Invariants).
+ * Invariants: SINGLE_DOMAIN_HARD_FAIL, OPERATOR_IS_A_NODE, RIDE_ALONG (see work/items/task.0381.* §Invariants).
  * Side-effects: none
  * Notes: When task.0382 lands, it should import this same function (or replicate
  *        it identically) and run the same fixtures.
@@ -22,21 +22,40 @@ export interface ClassifyResult {
   domains: Domain[];
   /** True iff the gate would pass. */
   pass: boolean;
-  /** Set when LOCKFILE_INHERITS bumped a 2-domain diff down to 1. */
-  lockfileInheritsApplied: boolean;
+  /** Set when RIDE_ALONG bumped a 2-domain diff down to 1. */
+  rideAlongApplied: boolean;
 }
 
-const LOCKFILE_PATH = "pnpm-lock.yaml";
 const NODES_PREFIX = "nodes/";
 const OPERATOR_NODE = "operator";
+
+/**
+ * Operator-domain paths that may ride along a single non-operator node PR.
+ * These are mechanical side-effects or cross-cutting node intent that lives
+ * outside `nodes/<X>/` only because we have not yet migrated it (work items
+ * → Dolt). Adding to this list weakens the gate; do so deliberately.
+ *
+ * - `pnpm-lock.yaml`: mechanical side-effect of node-level package.json edits.
+ * - `work/items/**`: per-task work items; high merge-conflict + index-regen
+ *   churn. Ride-along until task tracking moves to Dolt.
+ */
+const RIDE_ALONG_PATTERNS: ReadonlyArray<(p: string) => boolean> = [
+  (p) => p === "pnpm-lock.yaml",
+  (p) => p.startsWith("work/items/"),
+];
+
+function isRideAlong(path: string): boolean {
+  return RIDE_ALONG_PATTERNS.some((m) => m(path));
+}
 
 /**
  * Classify a list of changed paths against the set of known non-operator nodes.
  * The rule:
  *   domain(path) = X         if path starts with `nodes/<X>/` for X in nonOperatorNodes
  *                = "operator" otherwise
- * Lockfile-inherits: if the operator-domain entries are exactly `[pnpm-lock.yaml]`
- * and exactly one non-operator domain is also present, drop "operator" from the set.
+ * Ride-along: if every operator-domain entry matches a RIDE_ALONG_PATTERNS
+ * predicate and exactly one non-operator domain is also present, drop
+ * "operator" from the set.
  */
 export function classify(
   changedPaths: string[],
@@ -62,21 +81,21 @@ export function classify(
     if (assigned === OPERATOR_NODE) operatorPaths.push(p);
   }
 
-  let lockfileInheritsApplied = false;
+  let rideAlongApplied = false;
   if (
     domains.size === 2 &&
     domains.has(OPERATOR_NODE) &&
-    operatorPaths.length === 1 &&
-    operatorPaths[0] === LOCKFILE_PATH
+    operatorPaths.length > 0 &&
+    operatorPaths.every(isRideAlong)
   ) {
     domains.delete(OPERATOR_NODE);
-    lockfileInheritsApplied = true;
+    rideAlongApplied = true;
   }
 
   const sorted = [...domains].sort();
   return {
     domains: sorted,
     pass: sorted.length <= 1,
-    lockfileInheritsApplied,
+    rideAlongApplied,
   };
 }

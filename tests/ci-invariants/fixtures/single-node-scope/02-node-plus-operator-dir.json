@@ -4,6 +4,6 @@
   "expected": {
     "domains": ["operator", "poly"],
     "pass": false,
-    "lockfileInheritsApplied": false
+    "rideAlongApplied": false
   }
 }

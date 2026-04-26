@@ -1,0 +1,14 @@
+{
+  "name": "ride-along: poly + pnpm-lock.yaml + work/items/_index.md (combined whitelist)",
+  "paths": [
+    "nodes/poly/app/package.json",
+    "pnpm-lock.yaml",
+    "work/items/_index.md",
+    "work/items/wi.poly-feature.md"
+  ],
+  "expected": {
+    "domains": ["poly"],
+    "pass": true,
+    "rideAlongApplied": true
+  }
+}

@@ -9,6 +9,6 @@
   "expected": {
     "domains": ["operator"],
     "pass": true,
-    "lockfileInheritsApplied": false
+    "rideAlongApplied": false
   }
 }

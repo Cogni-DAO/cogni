@@ -1,8 +1,8 @@
 {
-  "name": "lockfile-inherits is bounded: poly + lockfile + .github/foo defeats it",
+  "name": "ride-along is bounded: work/items/ + .github/foo defeats it",
   "paths": [
-    "nodes/poly/app/package.json",
-    "pnpm-lock.yaml",
+    "nodes/poly/app/src/foo.ts",
+    "work/items/wi.poly-feature.md",
     ".github/workflows/foo.yml"
   ],
   "expected": {

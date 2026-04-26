@@ -4,6 +4,6 @@
   "expected": {
     "domains": [],
     "pass": true,
-    "lockfileInheritsApplied": false
+    "rideAlongApplied": false
   }
 }

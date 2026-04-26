@@ -141,7 +141,12 @@ describe("single-node-scope workflow gate · structural pins", () => {
     );
     expect(
       enforce.run,
-      "lockfile-inherits exception must be present in the inline run: block"
+      "ride-along whitelist must include pnpm-lock.yaml in the inline run: block"
     ).toContain("pnpm-lock.yaml");
+    expect(
+      enforce.run,
+      "ride-along whitelist must include work/items/ prefix in the inline run: block " +
+        "(must mirror RIDE_ALONG_PATTERNS in tests/ci-invariants/classify.ts)"
+    ).toContain("work/items/");
   });
 });

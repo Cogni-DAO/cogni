@@ -74,8 +74,11 @@ jobs:
   # Single-node-scope policy gate (task.0381). Each non-operator node owns
   # nodes/<X>/; operator owns nodes/operator/ + everything else (expressed as
   # the negation of the other-node filters). PRs may touch exactly one domain.
-  # Lockfile-inherits exception: pnpm-lock.yaml may ride a single non-operator
-  # node PR (mechanical side-effect of node-level package.json changes).
+  # Ride-along exception: a bounded whitelist of operator paths may ride a
+  # single non-operator node PR — pnpm-lock.yaml (mechanical side-effect of
+  # node-level package.json changes) and work/items/** (per-task work items;
+  # ride-along until task tracking moves to Dolt). Whitelist must mirror
+  # RIDE_ALONG_PATTERNS in tests/ci-invariants/classify.ts.
   # Lands non-required initially; promote via gh api after a real cross-node
   # test PR proves the diagnostic (see work/items/task.0381.* §Manual Steps).
   single-node-scope:
@@ -113,12 +116,13 @@ jobs:
           count=$(jq 'length' <<<"$MATCHED")
           if [ "$count" -le 1 ]; then exit 0; fi
 
-          # Lockfile-inherits exception: |S|=2, operator ∈ S, and the only
-          # operator-matched path is pnpm-lock.yaml. Treat as the other domain.
+          # Ride-along exception: |S|=2, operator ∈ S, and every operator-
+          # matched path is in the whitelist (pnpm-lock.yaml or work/items/**).
+          # Whitelist must mirror RIDE_ALONG_PATTERNS in classify.ts.
           if [ "$count" -eq 2 ] \
              && jq -e 'index("operator") != null' <<<"$MATCHED" >/dev/null \
-             && [ "$(jq -r '. | sort | join(",")' <<<"$OPERATOR_FILES")" = "pnpm-lock.yaml" ]; then
-            echo "single-domain scope OK (lockfile-inherits applied)"
+             && jq -e 'all(. == "pnpm-lock.yaml" or startswith("work/items/"))' <<<"$OPERATOR_FILES" >/dev/null; then
+            echo "single-domain scope OK (ride-along applied)"
             exit 0
           fi
 

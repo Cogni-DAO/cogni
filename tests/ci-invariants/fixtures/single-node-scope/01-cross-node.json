@@ -4,6 +4,6 @@
   "expected": {
     "domains": ["poly", "resy"],
     "pass": false,
-    "lockfileInheritsApplied": false
+    "rideAlongApplied": false
   }
 }

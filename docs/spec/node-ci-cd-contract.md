@@ -9,7 +9,7 @@ read_when: Modifying CI workflows, adding checks to merge gate, or planning mult
 implements: []
 owner: cogni-dev
 created: 2025-12-22
-verified: 2026-04-25
+verified: 2026-04-26
 tags:
   - ci-cd
   - deployment
@@ -48,7 +48,7 @@ Define the CI/CD invariants, merge gate, and file ownership boundaries that ensu
 
 7. **SINGLE_RESPONSIBILITY**: Each workflow file owns one concern (build, promote+deploy, E2E+release). No monoliths.
 
-8. **SINGLE_DOMAIN_HARD_FAIL**: PRs may touch exactly one node's domain. Each non-operator node owns `nodes/<X>/`; the operator node owns `nodes/operator/` plus everything else in the repo (infra, packages, .github, docs, work, scripts, root configs) as one domain. Cross-domain PRs are rejected by the `single-node-scope` job in `ci.yaml`. Bounded exception: `pnpm-lock.yaml` may ride a single non-operator node PR (mechanical side-effect of node-level `package.json` changes). See `## Single-Domain Scope` below.
+8. **SINGLE_DOMAIN_HARD_FAIL**: PRs may touch exactly one node's domain. Each non-operator node owns `nodes/<X>/`; the operator node owns `nodes/operator/` plus everything else in the repo (infra, packages, .github, docs, work, scripts, root configs) as one domain. Cross-domain PRs are rejected by the `single-node-scope` job in `ci.yaml`. Bounded ride-along whitelist: `pnpm-lock.yaml` (mechanical side-effect of node-level `package.json` changes) and `work/items/**` (per-task work items; ride-along until task tracking moves to Dolt) may ride a single non-operator node PR. See `## Single-Domain Scope` below.
 
 ---
 
@@ -83,24 +83,31 @@ The operator node's domain is broader because the operator IS the control plane 
 domain(path) = X         if path matches  nodes/<X>/**  for X ∈ {poly, resy, node-template}
              = operator   otherwise   (i.e., nodes/operator/** OR anywhere outside nodes/)
 
-PR passes iff |distinct domains touched| ≤ 1, with one bounded exception below.
+PR passes iff |distinct domains touched| ≤ 1, with the bounded ride-along whitelist below.
 ```
 
 The set of non-operator domains is derived from the `nodes/*` directory listing minus `operator` — meta-tested in `tests/ci-invariants/single-node-scope-meta.spec.ts`. The repo-spec `nodes` registry must mirror the same set (enforced at the resolver boundary; meta-test asserts both directions). Adding `nodes/<X>/` requires updating the workflow filter list AND the registry — both meta-tests fire until they agree.
 
-### Lockfile-inherits exception
+### Ride-along exceptions
 
-If `|S| = 2`, `operator ∈ S`, and the **only** path matched by the operator filter is `pnpm-lock.yaml`, the lockfile inherits the other domain and the PR passes.
+If `|S| = 2`, `operator ∈ S`, and **every** path matched by the operator filter is in the ride-along whitelist, the operator paths inherit the other domain and the PR passes.
 
-Bounded — applies only to `pnpm-lock.yaml` at repo root, no other operator paths inherit. **The lockfile is a mechanical side-effect of node-level `package.json` intent; operator paths are intent themselves.** Intent does not ride along.
+Whitelist (must mirror `RIDE_ALONG_PATTERNS` in `tests/ci-invariants/classify.ts` and the inline `run:` block in `ci.yaml#single-node-scope`):
 
-The long-term fix is per-node lockfiles via pnpm `shared-workspace-lockfile=false`; tracked as a follow-up.
+| Pattern          | Why                                                                                  | Long-term fix                                                             |
+| ---------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `pnpm-lock.yaml` | Mechanical side-effect of node-level `package.json` intent — not intent itself.      | Per-node lockfiles via pnpm `shared-workspace-lockfile=false`.            |
+| `work/items/**`  | Per-task work items + auto-regenerated `_index.md`; high merge-conflict churn today. | Move task tracking to Dolt; `work/items/` empties out and exits the list. |
+
+Each entry has an explicit long-term fix that ends the ride-along. The whitelist is a v0 unblock, not a permanent carve-out — adding to it weakens the gate, so do so deliberately and pair the addition with the exit plan that drains the entry.
+
+**Operator paths NOT in the whitelist (specs, .github, packages, infra, scripts, root configs) do not ride along.** They are intent. A `poly` PR that needs an operator-spec change is two PRs, not one — that's the design.
 
 ### Why Reading A (operator-is-a-domain) over Reading B (operator-is-an-exemption)
 
 The early flood of "node X needs operator change Y" PRs is the **substrate-request signal**, not noise. Each rejection by the gate is a row in operator's prioritization queue ("which seams are load-bearing? which need first-class APIs?"). Weakening the gate to absorb the friction loses that signal — operator never learns which substrates contributors actually push on. Same framing as the noisy-neighbor / attribution thesis: the boundary is where the test happens, not where the test is suppressed.
 
-Sovereignty contracts only hold when the false-positive cost is accepted. Carving "reasonable exceptions" for the common case is the standard failure mode — within a year the boundary is theater. The lockfile carve-out is bounded specifically because it covers mechanical side-effects, not intent.
+Sovereignty contracts only hold when the false-positive cost is accepted. Carving "reasonable exceptions" for the common case is the standard failure mode — within a year the boundary is theater. The ride-along whitelist is bounded specifically because each entry covers mechanical side-effects or transitional storage that is migrating out (work items → Dolt), not intent that belongs in operator's domain.
 
 ### Rejected — Reading B (operator-is-an-exemption)
 

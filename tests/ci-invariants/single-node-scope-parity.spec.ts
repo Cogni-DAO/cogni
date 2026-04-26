@@ -5,7 +5,7 @@
  * Module: `@tests/ci-invariants/single-node-scope-parity`
  * Purpose: Asserts the reference single-node-scope classifier matches every fixture's expected outcome.
  * Scope: Pure-data fixture replay backed by a reference classifier. Does NOT invoke the GitHub Action or shell out to git.
- * Invariants: POLICY_PARITY_WITH_0382, LOCKFILE_INHERITS, SINGLE_DOMAIN_HARD_FAIL.
+ * Invariants: POLICY_PARITY_WITH_0382, RIDE_ALONG, SINGLE_DOMAIN_HARD_FAIL.
  * Side-effects: IO (reads fixture JSON + nodes/ listing)
  * Notes: Fixtures are the shared source of truth. When task.0382 imports
  *        `classify` (or implements its equivalent), it should run against
@@ -71,7 +71,7 @@ describe("single-node-scope · runtime resolver side (task.0382)", () => {
   it.todo(
     "task.0382 resolver classifies every fixture identically to the CI gate"
   );
-  it.todo("task.0382 resolver applies the lockfile-inherits exception");
+  it.todo("task.0382 resolver applies the ride-along exception");
   it.todo(
     "task.0382 resolver treats nodes/operator as a domain, not an exemption"
   );
