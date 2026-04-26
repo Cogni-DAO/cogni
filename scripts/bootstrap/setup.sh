@@ -63,9 +63,9 @@ echo -e "${GREEN}╚════════════════════
 
 # Determine step count
 if [[ "$INSTALL_ALL" == "true" ]]; then
-    TOTAL_STEPS=6
+    TOTAL_STEPS=7
 else
-    TOTAL_STEPS=4
+    TOTAL_STEPS=5
 fi
 
 CURRENT_STEP=0
@@ -85,7 +85,12 @@ log_step "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Installing Docker"
 log_step "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Installing ripgrep (brain repo search)"
 "$INSTALL_DIR/install-ripgrep.sh"
 
-# Step 4: Project dependencies and packages
+# Step 4: yq (required by catalog reads — CATALOG_IS_SSOT axiom)
+((CURRENT_STEP++))
+log_step "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Installing yq (catalog reads)"
+"$INSTALL_DIR/install-yq.sh"
+
+# Step 5: Project dependencies and packages
 ((CURRENT_STEP++))
 log_step "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Installing project dependencies"
 "$INSTALL_DIR/install-project.sh"
@@ -113,6 +118,8 @@ log_info "All tools and dependencies installed successfully."
 if [[ "$INSTALL_ALL" != "true" ]]; then
     log_info "Note: Run with --all to also install OpenTofu and REUSE."
 fi
+
+log_info "Opt-in: editing infra/catalog/? Run bash scripts/bootstrap/install/install-check-jsonschema.sh for local schema validation. CI validates on every PR regardless."
 
 # Fail-fast checks before offering dev:stack
 echo ""

@@ -3,24 +3,31 @@
 
 /**
  * Module: `@app/(app)/credits/TradingWalletPanel`
- * Purpose: Money page panel for the user's Polymarket trading wallet —
- *   funder address, USDC.e | POL readout, the 1-click `TradingReadinessSection`
- *   Enable Trading call-to-action (task.0355), and stubbed Fund | Withdraw
+ * Purpose: Money page panel hosting the whole trading-wallet lifecycle —
+ *   create (inline `TradingWalletConnectFlow` when `configured && !connected`),
+ *   fund (USDC.e / POL readout + Polygon bridge link), enable trading
+ *   (`TradingReadinessSection`, task.0355), and stubbed fund/withdraw
  *   (task.0351 / task.0352).
- * Scope: Client component. React Query fetches `/wallet/status` + `/wallet/balances`.
- *   Delegates the Enable Trading ceremony to `TradingReadinessSection`. Funding
- *   and withdrawal remain stubbed.
+ * Scope: Client component. React Query fetches `/wallet/status` + `/wallet/balances`;
+ *   reads the session via `next-auth/react` only to surface `userId` to the
+ *   inline connect flow. On `onConnected`, invalidates `poly-wallet-status`
+ *   so the panel flips from "create" to "balances" without a reload.
  * Invariants:
  *   - ENABLE_TRADING_VISIBLE: when connected AND `trading_ready=false`, the
  *     readiness section is the primary above-the-fold CTA on this card.
  *     Without it the user cannot reach the CLOB — APPROVALS_BEFORE_PLACE
  *     blocks `authorizeIntent`. Losing this CTA bricks every trade.
+ *   - PROFILE_IS_IDENTITY_ONLY (task.0361): this panel owns the "create a
+ *     trading wallet" action; `/profile` no longer has a wallet row.
  *   - PARTIAL_FAILURE_VISIBLE: render USDC.e/POL as "—" when the RPC errored.
- * Side-effects: IO (fetch API via React Query).
+ * Side-effects: IO (fetch API via React Query; `onConnected` triggers
+ *   `poly-wallet-status` invalidation).
  * Links: packages/node-contracts/src/poly.wallet.connection.v1.contract.ts,
  *        packages/node-contracts/src/poly.wallet.balances.v1.contract.ts,
  *        packages/node-contracts/src/poly.wallet.enable-trading.v1.contract.ts,
  *        work/items/task.0355.poly-trading-wallet-enable-trading.md,
+ *        work/items/task.0361.poly-first-user-onboarding-flow-v0.md,
+ *        work/items/task.0365.poly-onboarding-ux-polish-v0-1.md,
  *        work/items/task.0351.poly-trading-wallet-withdrawal.md,
  *        work/items/task.0352.poly-trading-wallet-fund-flow.md
  * @public
@@ -32,11 +39,14 @@ import type {
   PolyWalletBalancesOutput,
   PolyWalletStatusOutput,
 } from "@cogni/node-contracts";
-import { useQuery } from "@tanstack/react-query";
-import { Info } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, Info } from "lucide-react";
+import Link from "next/link";
+import { useSession } from "next-auth/react";
 import type { ReactElement } from "react";
 import { AddressChip, Card, HintText } from "@/components";
 import { TradingReadinessSection } from "./TradingReadinessSection";
+import { TradingWalletConnectFlow } from "./TradingWalletConnectFlow";
 
 async function fetchWalletStatus(): Promise<PolyWalletStatusOutput> {
   const res = await fetch("/api/v1/poly/wallet/status", {
@@ -69,9 +79,15 @@ function formatDecimal(n: number | null, fractionDigits: number): string {
 const stubBtn =
   "w-full cursor-not-allowed rounded-md border border-border/60 bg-muted/50 px-3 py-2 font-medium text-muted-foreground text-sm";
 
+const POLY_WALLET_STATUS_QUERY_KEY = ["poly-wallet-status"] as const;
+
 export function TradingWalletPanel(): ReactElement {
+  const queryClient = useQueryClient();
+  const { data: session } = useSession();
+  const userId = session?.user?.id ?? null;
+
   const statusQuery = useQuery({
-    queryKey: ["poly-wallet-status"],
+    queryKey: POLY_WALLET_STATUS_QUERY_KEY,
     queryFn: fetchWalletStatus,
     staleTime: 10_000,
     gcTime: 60_000,
@@ -111,17 +127,20 @@ export function TradingWalletPanel(): ReactElement {
           Trading wallet not enabled on this deployment.
         </p>
       ) : !connected ? (
-        <div className="flex flex-col gap-2">
+        userId ? (
+          <TradingWalletConnectFlow
+            userId={userId}
+            onConnected={() => {
+              void queryClient.invalidateQueries({
+                queryKey: POLY_WALLET_STATUS_QUERY_KEY,
+              });
+            }}
+          />
+        ) : (
           <p className="text-muted-foreground text-sm">
-            Create a wallet in Profile to deposit.
+            Sign in to create your trading wallet.
           </p>
-          <a
-            href="/profile"
-            className="w-fit rounded-md bg-primary px-3 py-1.5 text-primary-foreground text-sm hover:bg-primary/90"
-          >
-            Profile
-          </a>
-        </div>
+        )
       ) : (
         <div className="flex flex-col gap-3">
           {/* Balances immediately above stub actions — compact, no semantic mix-up */}
@@ -145,9 +164,20 @@ export function TradingWalletPanel(): ReactElement {
           </div>
           <TradingReadinessSection
             tradingReady={status.trading_ready}
+            isFunded={(balances?.usdc_e ?? 0) > 0}
             polBalance={balances?.pol ?? null}
             usdcBalance={balances?.usdc_e ?? null}
           />
+
+          {status.trading_ready ? (
+            <Link
+              href="/research"
+              className="inline-flex items-center justify-between gap-2 rounded-md border border-primary/40 bg-primary/10 px-4 py-3 font-medium text-primary text-sm transition-colors hover:bg-primary/20"
+            >
+              <span>Next — pick a wallet to copy on Research</span>
+              <ArrowRight size={16} />
+            </Link>
+          ) : null}
 
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -175,7 +205,17 @@ export function TradingWalletPanel(): ReactElement {
           ) : null}
 
           <p className="text-muted-foreground text-xs leading-snug">
-            Deposit USDC.e + POL on Polygon from any wallet; one-click flows
+            Send USDC.e on Polygon to your trading-wallet address above — any
+            wallet or{" "}
+            <a
+              href="https://portal.polygon.technology/bridge"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="underline decoration-muted-foreground/40 hover:decoration-foreground"
+            >
+              Polygon Portal bridge
+            </a>
+            . You also need ~0.2 POL for gas. One-click deposit/withdraw flows
             next.
           </p>
         </div>

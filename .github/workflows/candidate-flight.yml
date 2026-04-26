@@ -1,23 +1,6 @@
 name: Candidate Flight
 
-# Pre-merge APP LEVER for an open PR (task.0314): acquires the candidate-a
-# slot, promotes the PR's digests into the deploy/candidate-a overlay,
-# reconciles the ArgoCD ApplicationSet on the VM from repo state, and waits
-# for Argo to roll the pods. Does NOT touch Compose infra — that's the infra
-# lever (see candidate-flight-infra.yml). An app PR can flight without any
-# SSH to the VM's Compose layer, upholding "Argo owns reconciliation"
-# (docs/spec/ci-cd.md).
-#
-# Structure (bug.0321): three jobs.
-#   1. flight          — acquire slot, promote digests, push deploy branch,
-#                        reconcile AppSet. Emits promoted_apps + deploy_branch_sha.
-#   2. verify-candidate — gated `if: flight.outputs.promoted_apps != ''`.
-#                        Waits for Argo sync + rollout + smoke + /version.buildSha verify. When
-#                        promoted_apps is empty, this job is visibly SKIPPED
-#                        (grey in the checks list), never a silent-green.
-#   3. release-slot    — always() && flight acquired. Releases lease based on
-#                        verify-candidate.result (free on success, failed
-#                        otherwise) and reports the terminal commit status.
+# Spec: work/items/task.0372 (per-node lane isolation, matrix fan-out).
 
 on:
   workflow_dispatch:
@@ -47,26 +30,27 @@ env:
   OVERLAY_ENV: candidate-a
 
 jobs:
-  flight:
+  decide:
     runs-on: ubuntu-latest
-    environment: candidate-a
     outputs:
       head_sha: ${{ steps.meta.outputs.head_sha }}
+      image_tag: ${{ steps.meta.outputs.image_tag }}
       status_url: ${{ steps.meta.outputs.status_url }}
-      promoted_apps: ${{ steps.promote.outputs.promoted_apps }}
-      deploy_branch_sha: ${{ steps.push-deploy.outputs.deploy_branch_sha }}
-      acquired: ${{ steps.acquire-summary.outputs.acquired }}
+      digests_json: ${{ steps.images.outputs.digests_json }}
+      targets_json: ${{ steps.detect.outputs.targets_json }}
+      has_targets: ${{ steps.detect.outputs.has_targets }}
     steps:
       - name: Checkout workflow source
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
-          path: ci-src
+          fetch-depth: 0
 
       - name: Resolve PR metadata
         id: meta
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           BASE_REF=$(gh api "repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}" --jq '.base.ref')
           HEAD_SHA_INPUT="${{ inputs.head_sha }}"
           if [ -n "$HEAD_SHA_INPUT" ]; then
@@ -79,13 +63,6 @@ jobs:
           echo "image_tag=pr-${{ inputs.pr_number }}-${HEAD_SHA}" >> "$GITHUB_OUTPUT"
           echo "status_url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout app source
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
-        with:
-          ref: ${{ steps.meta.outputs.head_sha }}
-          fetch-depth: 0
-          path: app-src
-
       - name: Report pending candidate-flight status
         env:
           GH_TOKEN: ${{ github.token }}
@@ -94,12 +71,24 @@ jobs:
           STATE: pending
           DESCRIPTION: Candidate flight in progress
           TARGET_URL: ${{ steps.meta.outputs.status_url }}
-        run: bash ci-src/scripts/ci/report-candidate-status.sh
+        run: bash scripts/ci/report-candidate-status.sh
+
+      - name: Detect affected nodes
+        id: detect
+        env:
+          TURBO_SCM_BASE: origin/main
+          TURBO_SCM_HEAD: ${{ steps.meta.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin "${{ steps.meta.outputs.head_sha }}" --depth=100 || true
+          bash scripts/ci/detect-affected.sh
 
       - name: Set up Docker Buildx
+        if: steps.detect.outputs.has_targets == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
+        if: steps.detect.outputs.has_targets == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -108,106 +97,49 @@ jobs:
 
       - name: Resolve PR image digests
         id: images
+        if: steps.detect.outputs.has_targets == 'true'
         env:
           IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
           OUTPUT_FILE: ${{ runner.temp }}/resolved-pr-images.json
-        run: bash ci-src/scripts/ci/resolve-pr-build-images.sh
+        run: bash scripts/ci/resolve-pr-build-images.sh
 
       - name: Require at least one built image
-        if: steps.images.outputs.has_images != 'true'
+        if: steps.detect.outputs.has_targets == 'true' && steps.images.outputs.has_images != 'true'
         run: |
-          echo "No pushed PR images found for ${{ steps.meta.outputs.image_tag }}"
+          echo "::error::No pushed PR images found for ${{ steps.meta.outputs.image_tag }}"
           exit 1
 
-      - name: Prepare deploy branch workspace
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          git clone "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" deploy-branch
-          cd deploy-branch
-          if git ls-remote --exit-code origin "refs/heads/deploy/${SLOT}" >/dev/null 2>&1; then
-            git fetch origin "deploy/${SLOT}"
-            git checkout -B "deploy/${SLOT}" "origin/deploy/${SLOT}"
-          else
-            git fetch origin "${{ steps.meta.outputs.head_sha }}"
-            git checkout -B "deploy/${SLOT}" "${{ steps.meta.outputs.head_sha }}"
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Upload resolved-pr-images artifact
+        if: steps.detect.outputs.has_targets == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: resolved-pr-images
+          path: ${{ runner.temp }}/resolved-pr-images.json
+          retention-days: 1
 
-      - name: Sync base and catalog to deploy branch
-        run: |
-          rsync -a --delete app-src/infra/k8s/base/ deploy-branch/infra/k8s/base/
-          rsync -a --delete app-src/infra/catalog/ deploy-branch/infra/catalog/
-          rsync -a --delete app-src/infra/k8s/overlays/candidate-a/ deploy-branch/infra/k8s/overlays/candidate-a/
+  reconcile-appset:
+    needs: decide
+    if: needs.decide.outputs.has_targets == 'true'
+    # Single shared write to the candidate-a VM (kubectl apply on the AppSet).
+    # Without this guard, two concurrent flights from different PRs race the
+    # apply. See work/items/bug.0378.reconcile-appset-shared-write-race.md.
+    concurrency:
+      group: reconcile-appset-candidate-a
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    environment: candidate-a
+    steps:
+      - name: Checkout workflow source (for AppSet YAML)
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
 
-      - name: Acquire candidate slot
-        id: acquire
-        continue-on-error: true
-        working-directory: deploy-branch
-        env:
-          PR_NUMBER: ${{ inputs.pr_number }}
-          HEAD_SHA: ${{ steps.meta.outputs.head_sha }}
-          RUN_ID: ${{ github.run_id }}
-          STATUS_URL: ${{ steps.meta.outputs.status_url }}
-        run: bash ../ci-src/scripts/ci/acquire-candidate-slot.sh
-
-      - name: Record acquire outcome
-        id: acquire-summary
-        # Job-level output flag: true iff we own the lease and must release it.
-        # Consumed by the release-slot job's `if:` to decide whether to run at all.
-        run: |
-          if [ "${{ steps.acquire.outcome }}" = "success" ] && [ "${{ steps.acquire.outputs.slot_busy }}" != "true" ]; then
-            echo "acquired=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "acquired=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Stop when candidate-a is busy
-        if: steps.acquire.outputs.slot_busy == 'true'
-        run: |
-          echo "candidate-a busy with PR #${{ steps.acquire.outputs.busy_pr_number }}"
-          exit 1
-
-      - name: Promote resolved digests into candidate-a overlay
-        id: promote
-        if: steps.acquire-summary.outputs.acquired == 'true'
-        working-directory: deploy-branch
-        env:
-          PAYLOAD_FILE: ${{ runner.temp }}/resolved-pr-images.json
-          OVERLAY_ENV: candidate-a
-        run: bash ../ci-src/scripts/ci/promote-build-payload.sh
-
-      - name: Commit and push deploy/candidate-a
-        id: push-deploy
-        if: steps.acquire-summary.outputs.acquired == 'true'
-        working-directory: deploy-branch
-        run: |
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No deploy-state changes to push"
-            DEPLOY_SHA=$(git rev-parse HEAD)
-            echo "deploy_branch_sha=$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          git commit -m "candidate-flight: pr-${{ inputs.pr_number }} ${{ steps.meta.outputs.head_sha }}"
-          git push origin "HEAD:deploy/${SLOT}"
-          DEPLOY_SHA=$(git rev-parse HEAD)
-          echo "deploy_branch_sha=$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
-
-      # ── Reconcile the ApplicationSet on the candidate-a VM (bug.0312 fix —
-      # see promote-and-deploy.yml for the rationale). Kept in the flight job
-      # because it's a one-shot state write, not verification: without it the
-      # AppSet template drifts and subsequent Argo-sync waits hang forever.
       - name: Setup SSH to candidate-a VM
         id: ssh-setup
-        if: steps.acquire-summary.outputs.acquired == 'true'
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
         run: |
           if [ -z "$VM_HOST" ]; then
-            echo "⚠️ No VM_HOST secret set on candidate-a environment — skipping Compose reconcile"
+            echo "⚠️ No VM_HOST secret set on candidate-a — skipping AppSet reconcile"
             echo "has_vm=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -217,52 +149,187 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-          echo "Testing SSH connection to $VM_HOST..."
-          set +e
-          OUT=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6 root@"$VM_HOST" "echo SSH test successful" 2>&1)
-          RC=$?
-          set -e
-          echo "$OUT"
-          if [ $RC -ne 0 ]; then
-            echo "❌ SSH failed (rc=$RC)"
-            exit 1
-          fi
-          echo "✅ SSH connection successful"
-
-      - name: Reconcile ArgoCD ApplicationSet from repo
-        if: |
-          steps.acquire-summary.outputs.acquired == 'true' &&
-          steps.ssh-setup.outputs.has_vm == 'true'
+      - name: Apply candidate-a-applicationset.yaml
+        if: steps.ssh-setup.outputs.has_vm == 'true'
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           SSH_OPTS: "-i /home/runner/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
         run: |
-          # The workflow ref owns the CI control plane. App content still
-          # comes from the target PR checkout (`app-src`), but the
-          # ApplicationSet used by this workflow should track the branch that
-          # dispatched the run so workflow / Argo-wait fixes are self-validating.
-          APPSET_FILE="ci-src/infra/k8s/argocd/candidate-a-applicationset.yaml"
-          if [ ! -f "$APPSET_FILE" ]; then
-            echo "⚠️  No ApplicationSet file at ${APPSET_FILE} — skipping"
-            exit 0
-          fi
+          set -euo pipefail
+          APPSET_FILE="infra/k8s/argocd/candidate-a-applicationset.yaml"
           # shellcheck disable=SC2086
           scp $SSH_OPTS "$APPSET_FILE" root@"$VM_HOST":/tmp/appset.yaml
           # shellcheck disable=SC2086
           ssh $SSH_OPTS root@"$VM_HOST" "kubectl apply -f /tmp/appset.yaml -n argocd && rm -f /tmp/appset.yaml"
-          echo "✅ candidate-a ApplicationSet reconciled"
 
-      # VM compose infra is an independent lever — see candidate-flight-infra.yml
-      # and docs/spec/ci-cd.md. This workflow (the "app lever") only writes
-      # deploy-branch state and lets Argo CD reconcile pods. See task.0314.
+  flight:
+    needs: [decide, reconcile-appset]
+    if: needs.decide.outputs.has_targets == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [candidate-a]
+        node: ${{ fromJson(needs.decide.outputs.targets_json) }}
+    concurrency:
+      group: flight-${{ matrix.env }}-${{ matrix.node }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    environment: candidate-a
+    outputs:
+      head_sha: ${{ needs.decide.outputs.head_sha }}
+    steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          path: ci-src
 
-  # ── Verification job — gated at the JOB level on promoted_apps.
-  # Empty promoted_apps → this job is visibly SKIPPED in the checks list
-  # (grey), never a silent-green-skipped-step-in-running-job. The gating
-  # discipline here is the structural primitive that closes bug.0321.
+      - name: Checkout app source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          ref: ${{ needs.decide.outputs.head_sha }}
+          fetch-depth: 0
+          path: app-src
+
+      - name: Download resolved-pr-images
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.1.8
+        with:
+          name: resolved-pr-images
+          path: ${{ runner.temp }}/
+
+      - name: Prepare per-node deploy branch workspace
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PER_NODE_BRANCH: deploy/${{ matrix.env }}-${{ matrix.node }}
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" deploy-branch
+          cd deploy-branch
+          git fetch origin "+refs/heads/deploy/*:refs/remotes/origin/deploy/*"
+          if git rev-parse --verify --quiet "refs/remotes/origin/${PER_NODE_BRANCH}" >/dev/null; then
+            git checkout -B "${PER_NODE_BRANCH}" "origin/${PER_NODE_BRANCH}"
+          else
+            echo "::warning::Per-node branch ${PER_NODE_BRANCH} missing — bootstrapping from deploy/${{ matrix.env }}"
+            git fetch origin "deploy/${{ matrix.env }}"
+            git checkout -B "${PER_NODE_BRANCH}" "origin/deploy/${{ matrix.env }}"
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Snapshot deploy-branch overlay digests (pre-rsync)
+        id: snapshot
+        working-directory: deploy-branch
+        env:
+          OVERLAY_ENV: candidate-a
+          SNAPSHOT_FILE: ${{ runner.temp }}/candidate-a-overlay-snapshot.tsv
+        run: |
+          bash ../ci-src/scripts/ci/snapshot-overlay-digests.sh > "$SNAPSHOT_FILE"
+          echo "ℹ️  Pre-rsync overlay snapshot ($(wc -l < "$SNAPSHOT_FILE" | tr -d ' ') rows):"
+          sed 's/^/  /' "$SNAPSHOT_FILE"
+
+      - name: Sync base + per-node overlay + per-node catalog to deploy branch
+        env:
+          NODE: ${{ matrix.node }}
+        run: |
+          set -euo pipefail
+          rsync -a --delete app-src/infra/k8s/base/ deploy-branch/infra/k8s/base/
+          mkdir -p "deploy-branch/infra/k8s/overlays/candidate-a/${NODE}"
+          rsync -a --delete \
+            "app-src/infra/k8s/overlays/candidate-a/${NODE}/" \
+            "deploy-branch/infra/k8s/overlays/candidate-a/${NODE}/"
+          mkdir -p deploy-branch/infra/catalog
+          cp "app-src/infra/catalog/${NODE}.yaml" "deploy-branch/infra/catalog/${NODE}.yaml"
+
+      - name: Promote this node's digest
+        id: promote
+        working-directory: deploy-branch
+        env:
+          PAYLOAD_FILE: ${{ runner.temp }}/resolved-pr-images.json
+          OVERLAY_ENV: candidate-a
+          NODE: ${{ matrix.node }}
+          HEAD_SHA: ${{ needs.decide.outputs.head_sha }}
+        run: NODES="$NODE" bash ../ci-src/scripts/ci/promote-build-payload.sh
+
+      - name: Restore non-promoted overlay digests (post-rsync self-heal)
+        working-directory: deploy-branch
+        env:
+          PROMOTED_APPS: ${{ steps.promote.outputs.promoted_apps }}
+          SNAPSHOT_FILE: ${{ runner.temp }}/candidate-a-overlay-snapshot.tsv
+        run: |
+          set -euo pipefail
+          if [ ! -s "$SNAPSHOT_FILE" ]; then
+            echo "ℹ️  No snapshot rows (cold-start) — nothing to restore"
+            exit 0
+          fi
+          # shellcheck source=../ci-src/scripts/ci/lib/image-tags.sh
+          . ../ci-src/scripts/ci/lib/image-tags.sh
+          declare -A snap=()
+          while IFS=$'\t' read -r app ref; do
+            [ -n "$app" ] && snap["$app"]="$ref"
+          done < "$SNAPSHOT_FILE"
+          promoted_padded=" $(echo "$PROMOTED_APPS" | tr ',' ' ' | tr -s ' ') "
+          for target in "${ALL_TARGETS[@]}"; do
+            if [[ "$promoted_padded" == *" $target "* ]]; then
+              continue
+            fi
+            ref="${snap[$target]:-}"
+            [ -z "$ref" ] && continue
+            [[ "$ref" != *"@sha256:"* ]] && continue
+            bash ../ci-src/scripts/ci/promote-k8s-image.sh --no-commit \
+              --env candidate-a --app "$target" --digest "$ref"
+          done
+
+      - name: Commit and push to per-node deploy branch
+        id: push-deploy
+        working-directory: deploy-branch
+        env:
+          PER_NODE_BRANCH: deploy/${{ matrix.env }}-${{ matrix.node }}
+          NODE: ${{ matrix.node }}
+          HEAD_SHA: ${{ needs.decide.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No deploy-state changes to push"
+            DEPLOY_SHA=$(git rev-parse HEAD)
+            echo "deploy_branch_sha=$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m "candidate-flight ${NODE}: pr-${{ inputs.pr_number }} ${HEAD_SHA}"
+          git push origin "HEAD:${PER_NODE_BRANCH}"
+          DEPLOY_SHA=$(git rev-parse HEAD)
+          echo "deploy_branch_sha=$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
+
+      # GHA matrix-job outputs collapse to the last cell's value; per-node
+      # artifact is the per-cell contract verify-candidate reads.
+      - name: Upload per-cell deploy_branch_sha artifact
+        if: always()
+        env:
+          NODE: ${{ matrix.node }}
+          DEPLOY_SHA: ${{ steps.push-deploy.outputs.deploy_branch_sha }}
+        run: |
+          mkdir -p deploy-sha-out
+          printf '%s' "${DEPLOY_SHA:-}" > "deploy-sha-out/deploy-sha-${NODE}.txt"
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: deploy-sha-${{ matrix.node }}
+          path: deploy-sha-out/deploy-sha-${{ matrix.node }}.txt
+          retention-days: 1
+
   verify-candidate:
-    needs: flight
-    if: needs.flight.result == 'success' && needs.flight.outputs.promoted_apps != ''
+    needs: [decide, flight]
+    if: |
+      needs.decide.outputs.has_targets == 'true' &&
+      needs.flight.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [candidate-a]
+        node: ${{ fromJson(needs.decide.outputs.targets_json) }}
+    concurrency:
+      group: verify-candidate-${{ matrix.env }}-${{ matrix.node }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: candidate-a
     steps:
@@ -274,15 +341,34 @@ jobs:
       - name: Checkout app source
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
-          ref: ${{ needs.flight.outputs.head_sha }}
+          ref: ${{ needs.decide.outputs.head_sha }}
           path: app-src
 
-      - name: Checkout deploy/candidate-a (for .promote-state/source-sha-by-app.json)
+      - name: Checkout per-node deploy branch (for source-sha map)
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
-          ref: deploy/candidate-a
+          ref: deploy/${{ matrix.env }}-${{ matrix.node }}
           path: deploy-branch
           token: ${{ github.token }}
+
+      - name: Download per-cell deploy_branch_sha
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.1.8
+        with:
+          name: deploy-sha-${{ matrix.node }}
+          path: ${{ runner.temp }}/
+
+      - name: Resolve EXPECTED_SHA
+        id: expected
+        env:
+          ARTIFACT_FILE: ${{ runner.temp }}/deploy-sha-${{ matrix.node }}.txt
+        run: |
+          set -euo pipefail
+          DEPLOY_SHA=$(cat "$ARTIFACT_FILE" 2>/dev/null || true)
+          if [ -z "$DEPLOY_SHA" ]; then
+            echo "::error::Per-cell deploy_branch_sha artifact empty for ${{ matrix.node }}"
+            exit 1
+          fi
+          echo "deploy_branch_sha=$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Setup SSH to candidate-a VM
         id: ssh-setup
@@ -291,7 +377,7 @@ jobs:
           SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
         run: |
           if [ -z "$VM_HOST" ]; then
-            echo "⚠️ No VM_HOST secret set on candidate-a environment — skipping"
+            echo "⚠️ No VM_HOST secret set on candidate-a — skipping verification"
             echo "has_vm=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -301,22 +387,16 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      # Argo sync gate. EXPECTED_SHA MUST be the deploy-branch tip SHA written
-      # by the flight job, NOT the source PR head SHA. See the header of
-      # scripts/ci/wait-for-argocd.sh — passing the wrong SHA silently times
-      # out because Argo tracks the deploy branch, not main.
-      #
-      # On success wait-for-argocd.sh writes ARGOCD_SYNC_VERIFIED=true to
-      # $GITHUB_ENV — wait-for-candidate-ready refuses to run without it
-      # (gate-ordering invariant, bug.0321 Fix 4).
-      - name: Wait for ArgoCD sync on candidate-a
+      - name: Wait for ArgoCD sync (per-node)
         if: steps.ssh-setup.outputs.has_vm == 'true'
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           SSH_OPTS: "-i /home/runner/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
           DEPLOY_ENVIRONMENT: candidate-a
-          EXPECTED_SHA: ${{ needs.flight.outputs.deploy_branch_sha }}
-          PROMOTED_APPS: ${{ needs.flight.outputs.promoted_apps }}
+          EXPECTED_SHA: ${{ steps.expected.outputs.deploy_branch_sha }}
+          PROMOTED_APPS: ${{ matrix.node }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: bash ci-src/scripts/ci/wait-for-argocd.sh
 
       - name: Wait for candidate readiness
@@ -325,169 +405,79 @@ jobs:
           DOMAIN: ${{ vars.DOMAIN }}
         run: bash ci-src/scripts/ci/wait-for-candidate-ready.sh
 
-      - name: Wait for in-cluster services
+      - name: Wait for in-cluster services (per-node)
         if: steps.ssh-setup.outputs.has_vm == 'true'
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           DEPLOY_ENVIRONMENT: candidate-a
+          PROMOTED_APPS: ${{ matrix.node }}
         run: bash ci-src/scripts/ci/wait-for-in-cluster-services.sh
 
-      - name: Run candidate smoke checks
+      - name: Run candidate smoke checks (per-node)
         if: steps.ssh-setup.outputs.has_vm == 'true'
         env:
           DOMAIN: ${{ vars.DOMAIN }}
-          PROMOTED_APPS: ${{ needs.flight.outputs.promoted_apps }}
+          PROMOTED_APPS: ${{ matrix.node }}
         run: bash ci-src/scripts/ci/smoke-candidate.sh
 
-      # Authoritative contract probe: promoted pods serve the SHA that built
-      # their overlay digest. SOURCE_SHA_MAP mode (bug.0321 Fix 4) reads
-      # deploy-branch/.promote-state/source-sha-by-app.json written by
-      # promote-build-payload.sh and asserts each promoted app's /version.buildSha.
-      # Falls back to EXPECTED_BUILDSHA + NODES if the map is absent.
-      - name: Verify buildSha on endpoints
+      - name: Verify buildSha on endpoint (per-node)
         if: steps.ssh-setup.outputs.has_vm == 'true'
         env:
           DOMAIN: ${{ vars.DOMAIN }}
           SOURCE_SHA_MAP: deploy-branch/.promote-state/source-sha-by-app.json
-          EXPECTED_BUILDSHA: ${{ needs.flight.outputs.head_sha }}
-          NODES: ${{ needs.flight.outputs.promoted_apps }}
+          EXPECTED_BUILDSHA: ${{ needs.decide.outputs.head_sha }}
+          NODES: ${{ matrix.node }}
         run: bash ci-src/scripts/ci/verify-buildsha.sh
 
-  # ── Release + report — always() on flight acquisition. Decides lease
-  # STATE and commit status from verify-candidate.result. Skipped entirely
-  # when flight never owned the lease (acquire failed or slot was busy).
-  release-slot:
-    needs: [flight, verify-candidate]
-    if: always() && needs.flight.outputs.acquired == 'true'
+  report-status:
+    needs: [decide, flight, verify-candidate]
+    if: always() && needs.decide.result == 'success'
     runs-on: ubuntu-latest
-    environment: candidate-a
     steps:
       - name: Checkout workflow source
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
-        with:
-          path: ci-src
 
-      - name: Checkout app source
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
-        with:
-          ref: ${{ needs.flight.outputs.head_sha }}
-          path: app-src
-
-      - name: Prepare deploy branch workspace
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          git clone "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" deploy-branch
-          cd deploy-branch
-          git fetch origin "deploy/${SLOT}"
-          git checkout -B "deploy/${SLOT}" "origin/deploy/${SLOT}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Decide lease state
+      - name: Decide aggregate state
         id: decide
-        # STATE=free only when the deploy was verified, OR when nothing was
-        # promoted and verify-candidate therefore legitimately skipped. The
-        # latter case is only valid when needs.flight.outputs.promoted_apps
-        # is empty — that is the same signal the verify-candidate job-level
-        # `if:` gate used to decide whether to run.
-        #
-        # bug.0328: a VERIFY_RESULT=skipped with non-empty promoted_apps is
-        # a contradiction — the flight job pushed real promotions to
-        # deploy/candidate-a but verification never ran (promoted_apps got
-        # wedged empty in $GITHUB_OUTPUT because promote-build-payload
-        # aborted after the overlay writes but before the trailing output
-        # line). Treating that skip as success is exactly the silent-green
-        # class PR #921 eliminated; this gate closes the remaining path.
+        env:
+          HAS_TARGETS: ${{ needs.decide.outputs.has_targets }}
+          FLIGHT_RESULT: ${{ needs.flight.result }}
+          VERIFY_RESULT: ${{ needs.verify-candidate.result }}
+          TARGETS_JSON: ${{ needs.decide.outputs.targets_json }}
         run: |
-          FLIGHT_RESULT="${{ needs.flight.result }}"
-          VERIFY_RESULT="${{ needs.verify-candidate.result }}"
-          PROMOTED_APPS="${{ needs.flight.outputs.promoted_apps }}"
-          echo "flight=${FLIGHT_RESULT} verify=${VERIFY_RESULT} promoted_apps='${PROMOTED_APPS}'"
-          if [ "$FLIGHT_RESULT" != "success" ]; then
-            STATE=failed; STATUS=failure; DESC="Candidate flight failed"
-          elif [ "$VERIFY_RESULT" = "success" ]; then
-            STATE=free; STATUS=success; DESC="Candidate flight passed"
-          elif [ "$VERIFY_RESULT" = "skipped" ] && [ -z "$PROMOTED_APPS" ]; then
-            STATE=free; STATUS=success; DESC="Candidate flight passed (no-op — nothing to verify)"
-          elif [ "$VERIFY_RESULT" = "skipped" ]; then
-            # Contradiction: flight promoted apps but verify was skipped.
-            STATE=failed; STATUS=failure
-            DESC="Candidate flight failed: promoted apps (${PROMOTED_APPS}) but verify-candidate was skipped"
+          set -euo pipefail
+          echo "has_targets=${HAS_TARGETS} flight=${FLIGHT_RESULT} verify=${VERIFY_RESULT} targets=${TARGETS_JSON}"
+          if [ "$HAS_TARGETS" != "true" ]; then
+            STATE=success
+            DESC="Candidate flight no-op (no affected nodes)"
+          elif [ "$FLIGHT_RESULT" = "success" ] && [ "$VERIFY_RESULT" = "success" ]; then
+            STATE=success
+            DESC="Candidate flight passed (matrix: ${TARGETS_JSON})"
+          elif [ "$FLIGHT_RESULT" = "failure" ] || [ "$VERIFY_RESULT" = "failure" ]; then
+            STATE=failure
+            DESC="Candidate flight failed (flight=${FLIGHT_RESULT} verify=${VERIFY_RESULT})"
+          elif [ "$FLIGHT_RESULT" = "cancelled" ] || [ "$VERIFY_RESULT" = "cancelled" ]; then
+            STATE=failure
+            DESC="Candidate flight cancelled"
           else
-            STATE=failed; STATUS=failure; DESC="Candidate flight failed in verify-candidate"
+            STATE=failure
+            DESC="Candidate flight indeterminate (flight=${FLIGHT_RESULT} verify=${VERIFY_RESULT})"
           fi
           echo "state=${STATE}" >> "$GITHUB_OUTPUT"
-          echo "status=${STATUS}" >> "$GITHUB_OUTPUT"
           echo "description=${DESC}" >> "$GITHUB_OUTPUT"
-          if [ "$STATUS" = "failure" ]; then
-            echo "::error::${DESC}"
-          fi
-
-      - name: Release candidate slot
-        working-directory: deploy-branch
-        env:
-          STATE: ${{ steps.decide.outputs.state }}
-        run: bash ../ci-src/scripts/ci/release-candidate-slot.sh
-
-      - name: Commit and push released candidate slot
-        working-directory: deploy-branch
-        run: |
-          git add "infra/control/candidate-lease.json"
-          if git diff --cached --quiet; then
-            echo "No released lease changes to push"
-            exit 0
-          fi
-          git commit -m "candidate-flight: release pr-${{ inputs.pr_number }} ${{ needs.flight.outputs.head_sha }}"
-          git push origin "HEAD:deploy/${SLOT}"
 
       - name: Report terminal candidate-flight status
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          SHA: ${{ needs.flight.outputs.head_sha }}
-          STATE: ${{ steps.decide.outputs.status }}
+          SHA: ${{ needs.decide.outputs.head_sha }}
+          STATE: ${{ steps.decide.outputs.state }}
           DESCRIPTION: ${{ steps.decide.outputs.description }}
-          TARGET_URL: ${{ needs.flight.outputs.status_url }}
-        run: bash ci-src/scripts/ci/report-candidate-status.sh
+          TARGET_URL: ${{ needs.decide.outputs.status_url }}
+        run: bash scripts/ci/report-candidate-status.sh
 
-      # bug.0328: when Decide chose STATUS=failure, the commit status has
-      # been reported and the lease released; now fail the job itself so
-      # the workflow run shows red in the GitHub UI and downstream
-      # automations (the pr-coordinator loop) don't auto-advance as if
-      # this were a green flight.
-      - name: Fail job on decided failure
-        if: steps.decide.outputs.status == 'failure'
+      - name: Fail job on aggregate failure
+        if: steps.decide.outputs.state == 'failure'
         run: |
           echo "::error::${{ steps.decide.outputs.description }}"
           exit 1
-
-  # ── Failure reporting when flight never acquired the lease (acquire
-  # failed or slot was busy). No release needed — we don't own the lease.
-  # Separate job so the commit status is still posted back to the PR.
-  report-no-acquire-failure:
-    needs: flight
-    if: always() && needs.flight.result != 'success' && needs.flight.outputs.acquired != 'true'
-    runs-on: ubuntu-latest
-    environment: candidate-a
-    steps:
-      - name: Checkout workflow source
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
-        with:
-          path: ci-src
-
-      - name: Checkout app source
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
-        with:
-          ref: ${{ needs.flight.outputs.head_sha }}
-          path: app-src
-
-      - name: Report failure status
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          SHA: ${{ needs.flight.outputs.head_sha }}
-          STATE: failure
-          DESCRIPTION: Candidate flight failed before slot acquisition
-          TARGET_URL: ${{ needs.flight.outputs.status_url }}
-        run: bash ci-src/scripts/ci/report-candidate-status.sh

@@ -37,22 +37,25 @@ Consolidate all VCS integration into this repo: a shared auth package (`packages
 
 **Goal:** Extract auth into `packages/github-core/`, resolve installation IDs dynamically (drop `REVIEW_INSTALLATION_ID`), stand up `services/git-daemon/` with webhook routing, and absorb review + admin + proposal-launcher logic.
 
-| Deliverable                                                                           | Status      | Est | Work Item            |
-| ------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
-| `packages/github-core/` — JWT, token cache, webhook verify, client factory            | Not Started | 2   | (create at P1 start) |
-| Dynamic installation ID resolution via `GET /repos/{owner}/{repo}/installation`       | Not Started | 0.5 | (create at P1 start) |
-| Token cache keyed by (app, installationId) with early-expiry refresh                  | Not Started | 0.5 | (create at P1 start) |
-| Node registration lifecycle — core port, webhook handler, scope reconciliation        | Not Started | 5   | task.0122            |
-| `services/git-daemon/` scaffold — main, config, health, Fastify, per-app webhook URLs | Not Started | 1   | (create at P1 start) |
-| Create Admin GitHub App (contents:write, admin:write, members:write)                  | Not Started | 0.5 | (create at P1 start) |
-| Review handler — PR review via graphExecutor                                          | In Review   | 3   | task.0153            |
-| Admin handler — merge PR, grant/revoke collaborator (on-chain authorized)             | Not Started | 2   | (create at P1 start) |
-| Onchain webhook — Alchemy HMAC verify + CogniAction parse                             | Not Started | 1   | (create at P1 start) |
-| Authorization policy — DAO allowlist enforcement                                      | Not Started | 1   | (create at P1 start) |
-| Proposal launcher — absorb cogni-proposal-launcher into Node UI                       | Not Started | 2   | (create at P1 start) |
-| Docker Compose entry for git-daemon                                                   | Not Started | 0.5 | (create at P1 start) |
-| E2E test — webhook → handler → GitHub API roundtrip                                   | Not Started | 2   | (create at P1 start) |
-| Archive `cogni-git-review`, `cogni-git-admin`, and `cogni-proposal-launcher` repos    | Not Started | 0.5 | (create at P1 start) |
+| Deliverable                                                                           | Status       | Est | Work Item            |
+| ------------------------------------------------------------------------------------- | ------------ | --- | -------------------- |
+| `packages/github-core/` — JWT, token cache, webhook verify, client factory            | Not Started  | 2   | (create at P1 start) |
+| Dynamic installation ID resolution via `GET /repos/{owner}/{repo}/installation`       | Not Started  | 0.5 | (create at P1 start) |
+| Token cache keyed by (app, installationId) with early-expiry refresh                  | Not Started  | 0.5 | (create at P1 start) |
+| Node registration lifecycle — core port, webhook handler, scope reconciliation        | Not Started  | 5   | task.0122            |
+| `services/git-daemon/` scaffold — main, config, health, Fastify, per-app webhook URLs | Not Started  | 1   | (create at P1 start) |
+| Create Admin GitHub App (contents:write, admin:write, members:write)                  | Not Started  | 0.5 | (create at P1 start) |
+| Review handler — PR review via graphExecutor                                          | In Review    | 3   | task.0153            |
+| Reviewer adapter-boundary contract test — lock ReviewHandlerDeps                      | Done         | 1   | task.0368            |
+| `extractNodePath` accessor + `@cogni/repo-spec/testing` fixtures                      | In Review    | 1   | task.0380            |
+| **`extractOwningNode` resolver — paths → owning nodeId (P0)**                         | Needs Design | 1   | task.0382            |
+| Admin handler — merge PR, grant/revoke collaborator (on-chain authorized)             | Not Started  | 2   | (create at P1 start) |
+| Onchain webhook — Alchemy HMAC verify + CogniAction parse                             | Not Started  | 1   | (create at P1 start) |
+| Authorization policy — DAO allowlist enforcement                                      | Not Started  | 1   | (create at P1 start) |
+| Proposal launcher — absorb cogni-proposal-launcher into Node UI                       | Not Started  | 2   | (create at P1 start) |
+| Docker Compose entry for git-daemon                                                   | Not Started  | 0.5 | (create at P1 start) |
+| E2E test — webhook → handler → GitHub API roundtrip                                   | Not Started  | 2   | (create at P1 start) |
+| Archive `cogni-git-review`, `cogni-git-admin`, and `cogni-proposal-launcher` repos    | Not Started  | 0.5 | (create at P1 start) |
 
 ### Run (P2+) — GitLab Adapter + Multi-Tenant
 

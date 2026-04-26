@@ -254,14 +254,21 @@ services:
         condition: service_healthy
 
   db-migrate:
-    image: ${MIGRATOR_IMAGE}
+    # task.0370 step 1: same image as the app, invoking the bundled migrate.mjs.
+    image: ${APP_IMAGE?APP_IMAGE is required}
     profiles:
       - bootstrap
     restart: "no"
     networks:
       - internal
+    entrypoint: []
+    command:
+      [
+        "node",
+        "/app/nodes/operator/app/migrate.mjs",
+        "/app/nodes/operator/app/migrations",
+      ]
     environment:
-      # Only DB env var (least-secret exposure). Migrator uses DATABASE_URL directly.
       - DATABASE_URL=${DATABASE_URL?DATABASE_URL is required}
     depends_on:
       postgres:

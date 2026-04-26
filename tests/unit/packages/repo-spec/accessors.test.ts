@@ -17,11 +17,17 @@ import {
   extractLedgerApprovers,
   extractLedgerConfig,
   extractNodeId,
+  extractNodePath,
   extractPaymentConfig,
   extractScopeId,
   parseRepoSpec,
   type RepoSpec,
 } from "@cogni/repo-spec";
+import {
+  buildTestRepoSpec,
+  TEST_NODE_ENTRIES,
+  TEST_NODE_IDS,
+} from "@cogni/repo-spec/testing";
 import { describe, expect, it } from "vitest";
 
 const TEST_NODE_ID = "00000000-0000-4000-8000-000000000001";
@@ -286,5 +292,82 @@ describe("extractLedgerApprovers", () => {
       },
     });
     expect(extractLedgerApprovers(spec)).toEqual([]);
+  });
+});
+
+describe("extractNodePath", () => {
+  it("scenario 1: returns the registered path on match", () => {
+    const spec = buildTestRepoSpec({
+      nodes: [TEST_NODE_ENTRIES.poly, TEST_NODE_ENTRIES.resy],
+    });
+    expect(extractNodePath(spec, TEST_NODE_IDS.poly)).toBe("nodes/poly");
+    expect(extractNodePath(spec, TEST_NODE_IDS.resy)).toBe("nodes/resy");
+  });
+
+  it("scenario 2: returns null when nodeId is not in the registry", () => {
+    const spec = buildTestRepoSpec({ nodes: [TEST_NODE_ENTRIES.poly] });
+    expect(extractNodePath(spec, TEST_NODE_IDS.unregistered)).toBeNull();
+  });
+
+  it("scenario 3: returns null when nodes[] is empty", () => {
+    const spec = buildTestRepoSpec({ nodes: [] });
+    expect(extractNodePath(spec, TEST_NODE_IDS.poly)).toBeNull();
+  });
+
+  it("scenario 4: returns null when nodes[] is missing entirely", () => {
+    // No `nodes` override → builder omits the field, exercising the optional-registry path.
+    const spec = buildTestRepoSpec();
+    expect(extractNodePath(spec, TEST_NODE_IDS.poly)).toBeNull();
+  });
+
+  it("scenario 5: does NOT special-case the operator's own node_id", () => {
+    const spec = buildTestRepoSpec({
+      nodes: [TEST_NODE_ENTRIES.operator, TEST_NODE_ENTRIES.poly],
+    });
+    // Locks: registry path is returned verbatim even when nodeId is the operator's.
+    // Caller decides whether to map "nodes/operator" to repoRoot/.cogni or nodes/operator/.cogni.
+    expect(extractNodePath(spec, TEST_NODE_IDS.operator)).toBe(
+      "nodes/operator"
+    );
+  });
+
+  it("scenario 6: returns null for an empty-string nodeId (no spurious match)", () => {
+    const spec = buildTestRepoSpec({ nodes: [TEST_NODE_ENTRIES.poly] });
+    expect(extractNodePath(spec, "")).toBeNull();
+  });
+
+  it("scenario 7: returns the registered path verbatim — no normalization", () => {
+    // Registry can declare any min(1) string. The function must not trim, normalize,
+    // strip slashes, or modify the result. Path-safety is a caller responsibility.
+    const cases = [
+      "nodes/poly",
+      "nodes/poly/",
+      "./nodes/poly",
+      "  spaced-path  ",
+    ];
+    for (const path of cases) {
+      const spec = buildTestRepoSpec({
+        nodes: [{ ...TEST_NODE_ENTRIES.poly, path }],
+      });
+      expect(extractNodePath(spec, TEST_NODE_IDS.poly)).toBe(path);
+    }
+  });
+
+  it("scenario 8: on duplicate node_id, returns the first match (Array.find semantics)", () => {
+    const spec = buildTestRepoSpec({
+      nodes: [
+        {
+          ...TEST_NODE_ENTRIES.poly,
+          node_name: "Poly A",
+          path: "nodes/poly-a",
+        },
+        {
+          ...TEST_NODE_ENTRIES.poly,
+          node_name: "Poly B",
+          path: "nodes/poly-b",
+        },
+      ],
+    });
+    expect(extractNodePath(spec, TEST_NODE_IDS.poly)).toBe("nodes/poly-a");
   });
 });

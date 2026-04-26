@@ -137,13 +137,40 @@ Already tracked in DATABASE_RLS_SPEC.md P1:
 
 **Goal:** Each node owns its DB schema — no cross-node table leak, no shared migration numbering.
 
-| Deliverable                                                        | Status       | Est | Work Item                                                                  |
-| ------------------------------------------------------------------ | ------------ | --- | -------------------------------------------------------------------------- |
-| Per-node drizzle configs + per-node migrator images + legacy purge | in-review    | 2   | task.0324 ([PR #916](https://github.com/Cogni-DAO/node-template/pull/916)) |
-| Un-no-op prod poly/resy migration Jobs (gated on DB inspection)    | needs_design | 1   | task.0324 Phase 3 (follow-up)                                              |
-| **Future:** Atlas + GitOps migrations (declarative schema, CRD)    | needs_design | 5   | task.0325                                                                  |
+| Deliverable                                                                                       | Status       | Est | Work Item                                                                    |
+| ------------------------------------------------------------------------------------------------- | ------------ | --- | ---------------------------------------------------------------------------- |
+| Per-node drizzle configs + per-node migrator images + legacy purge                                | done         | 2   | task.0324 ([PR #916](https://github.com/Cogni-DAO/node-template/pull/916))   |
+| Migrator rebased on runtime image (`FROM runner AS migrator` + drizzle-orm programmatic migrator) | done         | 2   | task.0370 ([PR #1041](https://github.com/Cogni-DAO/node-template/pull/1041)) |
+| Migrations as Deployment initContainer + retire `cogni-template-migrate` GHCR build               | in-review    | 2   | task.0371 ([PR #1043](https://github.com/Cogni-DAO/node-template/pull/1043)) |
+| Un-no-op prod poly/resy migration Jobs (gated on DB inspection)                                   | obviated     | —   | superseded by task.0371 — Jobs deleted entirely                              |
+| **Future:** Atlas + GitOps migrations (declarative schema, CRD)                                   | needs_design | 5   | task.0325                                                                    |
 
-task.0324 is the current-priority minimal fix (no new tooling). task.0325 preserves the Atlas adoption plan for when contributor scale or destructive-change linting warrants the investment.
+**As-shipped state after task.0371:**
+
+- Each node app ships a single runtime image; `cogni-template-migrate` GHCR package retired.
+- Migrations run as a Deployment initContainer (`base/node-app/deployment.yaml`) using the same image as the main container; CMD reads `NODE_NAME` from configmap and invokes `node /app/nodes/$(NODE_NAME)/app/migrate.mjs ...`.
+- Postgres migrators (operator/poly/resy) wrap `migrate()` in a blocking `pg_advisory_lock(0x436f676e6901)` — single-writer guard for concurrent initContainers (replicas > 1, HPA scale-out, rolling-update overlap). Drizzle's journal makes the post-acquire migration a no-op when schema is already current.
+- Poly Doltgres runs as a second initContainer in the poly Deployment (added via overlay patch on candidate-a + preview only — production-poly doesn't run Doltgres). The Doltgres script does **not** wrap in advisory lock today: support is unverified and postgres.js extended-protocol has known compat gaps. Single-writer is fine at `replicas: 1`.
+- Argo PreSync hook Jobs are gone everywhere; `wait-for-argocd.sh` lost ~80 lines of hook-Job babysitting.
+
+**Remaining open items:**
+
+- Doltgres advisory-lock validation when poly scales beyond `replicas: 1` (multi-writer Doltgres safety).
+- task.0325 — Atlas / declarative schema / destructive-change linting — when contributor scale warrants it.
+
+### Migrator Image Layer Sharing (task.0370 — bug.0368)
+
+**Goal:** kill the per-flight migrator image-pull tax. Pre-task.0370 migrator was `FROM base` with full dev `node_modules` (~480 MB unique blob). k3s pulled it cold every flight (~3m45s per affected node), turning candidate-flight verify-candidate into a 4–9 min wait while the migration itself ran in ~8 s.
+
+| Deliverable                                                                                                                                  | Status       | Est | Work Item                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | --- | --------------------------------------------------------- |
+| bug.0368 — diagnose & evidence                                                                                                               | done         | 1   | bug.0368                                                  |
+| Rebase each migrator stage `FROM runner`; replace `pnpm db:migrate` with programmatic `migrate.mjs` using `drizzle-orm/postgres-js/migrator` | **done**     | 2   | task.0370 (PR #1041, validated on candidate-a 2026-04-24) |
+| Validate operator + resy + poly Postgres + poly Doltgres all run programmatic migrator successfully                                          | done         | 1   | task.0370 (4/4 image digests match, 4/4 logs ✅)          |
+| Follow-up: runner image bloat (~285 MB codex SDK)                                                                                            | needs_triage | 1   | bug.0369 (file)                                           |
+| Follow-up: `wait-for-argocd.sh` `clear_stale_missing_hook_operation` only fires once → wedged apps after first kick are unrecoverable        | needs_triage | 1   | bug.0370-followup (file)                                  |
+
+**Hard invariant inherited:** `FORWARD_COMPAT_MIGRATIONS` — migrations must be backward-compatible with the prior app version. Rolling-update overlap means old pods serve traffic against the new schema briefly. Same obligation as before task.0370; made explicit in [databases.md](../../docs/spec/databases.md) §5.2.
 
 ### P3 — DSN-Only Provisioning
 

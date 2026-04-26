@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/market-provider/adapters/polymarket/ctf-redeem`
- * Purpose: Polygon Conditional Tokens `redeemPositions` calldata for resolved binary markets, which returns USDC.e after resolution (distinct from CLOB SELL while a book is live).
- * Scope: Exports pinned mainnet addresses, a minimal ABI, and a condition-id normalizer for viem callers. Does not submit transactions, hold signers, or implement grant checks.
+ * Module: `@cogni/market-provider/adapters/polymarket/ctf`
+ * Purpose: Polygon Conditional Tokens read+write surface used by the poly node — `redeemPositions` calldata for resolved markets plus the ERC1155 `balanceOf` view used by the redeem sweep to confirm the funder still holds redeemable shares before submitting a tx.
+ * Scope: Exports pinned mainnet addresses, the minimal ABI, and a condition-id normalizer for viem callers. Does not submit transactions, hold signers, or implement grant checks.
  * Invariants:
  *   - POLYGON_MAINNET_ONLY — addresses match `approve-polymarket-allowances.ts` / Polymarket docs for chain id 137.
- *   - BINARY_INDEX_SETS — `[1, 2]` matches Polymarket binary resolution semantics; multi-outcome markets need a different path.
+ *   - BINARY_INDEX_SETS_WRITE_ONLY — `[1, 2]` applies only to the `redeemPositions` write path (indexSets argument). The `balanceOf` read path takes an arbitrary ERC1155 token id (e.g. `Position.asset` from the Data-API) and is outcome-cardinality agnostic.
  * Side-effects: none (pure constants + parseAbi)
  * Links: Polymarket agent-skills ctf-operations.md; scripts/experiments/approve-polymarket-allowances.ts
  * @public
@@ -34,6 +34,7 @@ export const BINARY_REDEEM_INDEX_SETS: readonly [bigint, bigint] = [1n, 2n];
 
 export const polymarketCtfRedeemAbi = parseAbi([
   "function redeemPositions(address collateralToken, bytes32 parentCollectionId, bytes32 conditionId, uint256[] indexSets) external",
+  "function balanceOf(address account, uint256 id) view returns (uint256)",
 ]);
 
 /** Normalize API / DB condition ids to a 32-byte hex string. */

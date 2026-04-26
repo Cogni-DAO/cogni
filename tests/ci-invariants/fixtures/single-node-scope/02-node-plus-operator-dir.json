@@ -1,0 +1,9 @@
+{
+  "name": "node + operator dir: poly + nodes/operator",
+  "paths": ["nodes/poly/app/foo.ts", "nodes/operator/app/x.ts"],
+  "expected": {
+    "domains": ["operator", "poly"],
+    "pass": false,
+    "lockfileInheritsApplied": false
+  }
+}

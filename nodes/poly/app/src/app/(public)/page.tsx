@@ -3,7 +3,7 @@
 
 /**
  * Module: `@app/(public)/page`
- * Purpose: Homepage with hero section and feature showcase. Redirects signed-in users to /chat.
+ * Purpose: Homepage with hero section and feature showcase. Redirects signed-in users to /dashboard (poly hub, task.0361).
  * Scope: Server component that checks session and redirects or renders landing page. Does not handle authentication logic — proxy.ts handles primary auth routing; server-side check here is defense-in-depth.
  * Invariants: Responsive design; uses Hero layout component.
  * Side-effects: IO (session check, redirect)
@@ -24,7 +24,7 @@ import { AuthRedirect } from "./AuthRedirect";
 export default async function HomePage(): Promise<ReactElement> {
   const user = await getServerSessionUser();
   if (user) {
-    redirect("/chat");
+    redirect("/dashboard");
   }
 
   return (

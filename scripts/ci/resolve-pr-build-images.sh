@@ -21,8 +21,6 @@
 #   IMAGE_NAME           (default ghcr.io/cogni-dao/cogni-template) legacy
 #                        APP-repo override; feeds IMAGE_NAME_APP.
 #   IMAGE_NAME_APP       (default = IMAGE_NAME) APP-repo override.
-#   IMAGE_NAME_MIGRATOR  (default = ${IMAGE_NAME_APP}-migrate) migrator-repo
-#                        override (bug.0344 GHCR split).
 #   IMAGE_TAG            (required) the pr-{N}-{sha} tag
 #   SOURCE_SHA           (optional) the 40-char PR head SHA — overrides IMAGE_TAG parse
 #   OUTPUT_FILE          (default $RUNNER_TEMP/resolved-pr-images.json)
@@ -106,7 +104,6 @@ fi
 cat > "$OUTPUT_FILE" <<EOF
 {
   "image_name": "${IMAGE_NAME_APP}",
-  "image_name_migrator": "${IMAGE_NAME_MIGRATOR}",
   "image_tag": "${IMAGE_TAG}",
   "source_sha": "${SOURCE_SHA}",
   "targets": [

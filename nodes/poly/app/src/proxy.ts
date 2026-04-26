@@ -94,9 +94,9 @@ export async function proxy(req: NextRequest): Promise<NextResponse> {
 
   // --- Page-level routing (single authority, replaces client-side redirects) ---
 
-  // Authenticated on landing page → redirect to /chat
+  // Authenticated on landing page → redirect to /dashboard (task.0361: dashboard is the hub).
   if (pathname === "/" && isLoggedIn) {
-    return NextResponse.redirect(new URL("/chat", req.url));
+    return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
   // Unauthenticated on app routes → redirect to /

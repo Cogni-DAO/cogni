@@ -278,11 +278,17 @@ export class PolymarketClobAdapter implements MarketProviderPort {
       // not exposed per-market. Hardcoded here; kept in lock-step with
       // getMarketConstraints.minUsdcNotional. bug.0342.
       const POLY_MARKETABLE_BUY_MIN_USDC = 1;
-      const belowShareMin = Number.isFinite(minShares) && shareSize < minShares;
+      // `shareSize = size_usdc / price` and `effectiveUsdc = shareSize * price`
+      // is a lossy float round-trip (e.g. `1/0.09 * 0.09 = 0.9999999999999999`).
+      // Compare with a 1µ-unit tolerance so intents that clear the floor by
+      // design don't get bounced by precision noise. bug.0342.
+      const FLOOR_EPSILON = 1e-6;
+      const belowShareMin =
+        Number.isFinite(minShares) && shareSize < minShares - FLOOR_EPSILON;
       const belowUsdcMin =
         intent.side === "BUY" &&
         intent.attributes?.post_only !== true &&
-        effectiveUsdc < POLY_MARKETABLE_BUY_MIN_USDC;
+        effectiveUsdc < POLY_MARKETABLE_BUY_MIN_USDC - FLOOR_EPSILON;
       if (belowShareMin || belowUsdcMin) {
         throw makeBelowMarketMinError(
           `PolymarketClobAdapter.placeOrder: intent below market floor (gotShares=${shareSize}, minShares=${minShares}, gotUsdc=${effectiveUsdc}, minUsdc=${POLY_MARKETABLE_BUY_MIN_USDC}, tokenId=${tokenId}). Coordinator should have scaled or skipped. bug.0342.`

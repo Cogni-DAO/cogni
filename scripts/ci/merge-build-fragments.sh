@@ -48,8 +48,8 @@ if os.path.isdir(fragments_dir):
                     seen.add(key)
                     targets.append(entry)
 
-# Stable order: per-node app then its migrator, then scheduler-worker. (task.0322 per-node migrators.)
-canonical_order = ["operator", "operator-migrator", "poly", "poly-migrator", "resy", "resy-migrator", "scheduler-worker"]
+# Stable order: per-node apps, then scheduler-worker. (task.0370 step 1 retired the per-node migrator companions.)
+canonical_order = ["operator", "poly", "resy", "scheduler-worker"]
 targets.sort(key=lambda t: (
     canonical_order.index(t["target"]) if t["target"] in canonical_order else len(canonical_order),
     t["target"],

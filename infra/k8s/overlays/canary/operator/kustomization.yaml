@@ -15,9 +15,6 @@ images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
     digest: "sha256:34f5abf960a233b5960dc76f49d20b733f7ea0873e7e3451bb064fe84327ea64"
-  - name: ghcr.io/cogni-dao/cogni-template-migrate
-    newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:f6c723a29c402c89fffd805c3707f0200d9dc0bf252418a771043027a8d3352c"
 
 patches:
   # Node-specific ConfigMap values.
@@ -66,19 +63,18 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/envFrom/1/secretRef/name
         value: "operator-node-app-secrets"
+      - op: replace
+        path: /spec/template/spec/initContainers/0/envFrom/1/secretRef/name
+        value: "operator-node-app-secrets"
+      - op: replace
+        path: /spec/template/spec/initContainers/0/envFrom/1/secretRef/name
+        value: "operator-node-app-secrets"
       - op: add
         path: /spec/selector/matchLabels/app.kubernetes.io~1instance
         value: "operator"
       - op: add
         path: /spec/template/metadata/labels/app.kubernetes.io~1instance
         value: "operator"
-  - target:
-      kind: Job
-      name: migrate-node-app
-    patch: |
-      - op: replace
-        path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
-        value: "operator-node-app-secrets"
   - target:
       kind: EndpointSlice
       name: postgres-external-1

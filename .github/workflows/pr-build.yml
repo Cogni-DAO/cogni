@@ -37,6 +37,22 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
+      - id: changed-catalog
+        name: Detect catalog changes
+        run: |
+          if git diff --name-only "origin/${{ github.event.pull_request.base.ref }}...HEAD" \
+             | grep -qE '^infra/catalog/'; then
+            echo "catalog_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "catalog_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate infra/catalog/*.yaml against schema
+        if: steps.changed-catalog.outputs.catalog_changed == 'true'
+        run: |
+          pipx install 'check-jsonschema==0.37.1'
+          check-jsonschema --schemafile infra/catalog/_schema.json infra/catalog/*.yaml
+
       - name: Detect affected image targets
         id: detect
         env:

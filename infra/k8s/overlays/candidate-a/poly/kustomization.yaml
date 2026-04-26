@@ -7,17 +7,13 @@ namespace: cogni-candidate-a
 
 resources:
   - ../../../base/node-app
-  - ../../../base/poly-doltgres
 
 namePrefix: poly-
 
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:ec28887a0bbdc433442129c368dd8664c31cea8ca594abe3a39de0e57bf69d4b"
-  - name: ghcr.io/cogni-dao/cogni-template-migrate
-    newName: ghcr.io/cogni-dao/cogni-template-migrate
-    digest: "sha256:d6b699d197cd3a6dc1f0ca8b6cfe6e68110b2d6799a28dc3d86bc48150a9102b"
+    digest: "sha256:c18feaf648c48245fc1af5f921c83e1a90681f8f791fae2f48474dfe4ec18eda"
 
 patches:
   - target:
@@ -63,6 +59,9 @@ patches:
         path: /spec/template/spec/containers/0/envFrom/1/secretRef/name
         value: "poly-node-app-secrets"
       - op: replace
+        path: /spec/template/spec/initContainers/0/envFrom/1/secretRef/name
+        value: "poly-node-app-secrets"
+      - op: replace
         path: /spec/template/spec/containers/0/ports/0/containerPort
         value: 3100
       - op: add
@@ -71,21 +70,39 @@ patches:
       - op: add
         path: /spec/template/metadata/labels/app.kubernetes.io~1instance
         value: "poly"
-  - target:
-      kind: Job
-      name: migrate-node-app
-    patch: |
-      - op: replace
-        path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
-        value: "poly-node-app-secrets"
-  - target:
-      kind: Job
-      name: migrate-poly-doltgres
-    patch: |
-      - op: replace
-        path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
-        value: "poly-node-app-secrets"
 
+  # task.0370 step 1: Doltgres knowledge-plane migrator runs as a second initContainer
+  # on the poly Deployment. DATABASE_URL maps to DOLTGRES_URL_POLY (separate from
+  # the Postgres DATABASE_URL the main container + first initContainer use).
+  - target:
+      kind: Deployment
+      name: node-app
+    patch: |
+      - op: add
+        path: /spec/template/spec/initContainers/-
+        value:
+          name: migrate-doltgres
+          image: ghcr.io/cogni-dao/cogni-template:placeholder
+          command:
+            - /bin/sh
+            - -c
+            - exec node /app/nodes/$(NODE_NAME)/app/migrate-doltgres.mjs /app/nodes/$(NODE_NAME)/app/doltgres-migrations
+          envFrom:
+            - configMapRef:
+                name: poly-node-app-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: poly-node-app-secrets
+                  key: DOLTGRES_URL_POLY
+          resources:
+            requests:
+              memory: "384Mi"
+              cpu: "200m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
   # bug.0295: VM discovery via DNS (candidate-a.vm.cognidao.org).
   # Convert base headless Services → ExternalName; delete EndpointSlices.
   # No env-state.yaml, no `replacements:` — reprovision = DNS update only.

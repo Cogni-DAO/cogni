@@ -3,18 +3,28 @@
 
 /**
  * Module: `@app/(app)/dashboard/_components/TradingWalletCard`
- * Purpose: Dashboard tile — caller's own per-tenant trading-wallet summary:
- *          address, gas, and one coherent live balance model across
- *          available cash, locked open orders, and live positions.
- * Scope: Client component. React Query poll against `/api/v1/poly/wallet/overview`.
- *        Read-only.
+ * Purpose: Dashboard tile — caller's own per-tenant trading-wallet summary
+ *   (address, gas, live balance model) plus first-user onboarding nudges:
+ *   renders "Connect →" → `/credits` when no wallet exists, and
+ *   "Enable trading →" → `/credits` when connected but `trading_ready=false`.
+ * Scope: Client component. Two React Query reads — `/api/v1/poly/wallet/overview`
+ *   for the balance snapshot and `/api/v1/poly/wallet/status` (shared cache key
+ *   with `/credits` via `poly-wallet-status`, deduped across routes) to drive
+ *   the onboarding CTA branch. Read-only.
  * Invariants:
  *   - TENANT_SCOPED: the backing route resolves the caller's own wallet from
  *     the session — no address plumbing at the UI boundary.
  *   - NO_TOMBSTONE_ROUTE: never reads the legacy `/api/v1/poly/wallet/balance`
  *     route.
  *   - NO_FAKE_HISTORY: this card renders current wallet truth only.
+ *   - STATE_DRIVEN_UI (task.0361): the onboarding CTA is derived from
+ *     `poly.wallet.status.v1`; no persisted onboarding-progress.
+ *   - FUNDED_GATES_LIVE (task.0365): when approvals are signed but the
+ *     wallet has zero USDC.e, the card surfaces an "Add USDC.e" CTA in
+ *     place of the balance breakdown — silent zeros let users assume
+ *     "trading is on" when they actually can't place a single order.
  * Side-effects: IO (via React Query).
+ * Links: work/items/task.0361.poly-first-user-onboarding-flow-v0.md
  * @public
  */
 
@@ -23,6 +33,7 @@
 import type {
   PolyWalletOverviewInterval,
   PolyWalletOverviewOutput,
+  PolyWalletStatusOutput,
 } from "@cogni/node-contracts";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
@@ -55,6 +66,16 @@ function formatUsd(n: number | null): string {
   })}`;
 }
 
+async function fetchWalletStatus(): Promise<PolyWalletStatusOutput> {
+  const res = await fetch("/api/v1/poly/wallet/status", {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new Error(`wallet status failed: ${res.status}`);
+  }
+  return (await res.json()) as PolyWalletStatusOutput;
+}
+
 export function TradingWalletCard(): ReactElement {
   const [interval, setInterval] = useState<PolyWalletOverviewInterval>("ALL");
   const { data, isLoading, isError } = useQuery({
@@ -64,6 +85,16 @@ export function TradingWalletCard(): ReactElement {
     staleTime: 10_000,
     gcTime: 60_000,
     retry: 1,
+  });
+  // Shares the "poly-wallet-status" key with /credits, so navigating between
+  // pages hits the cache rather than refetching.
+  const { data: statusData } = useQuery({
+    queryKey: ["poly-wallet-status"],
+    queryFn: fetchWalletStatus,
+    staleTime: 10_000,
+    gcTime: 60_000,
+    retry: 1,
+    enabled: data?.connected === true,
   });
 
   const lowGas = data?.connected === true && (data.pol_gas ?? 0) <= 0.1;
@@ -131,17 +162,23 @@ export function TradingWalletCard(): ReactElement {
             Trading-wallet adapter is not configured on this pod yet.
           </p>
         ) : !data.connected ? (
-          <div className="flex items-center justify-between gap-3 py-2 text-sm">
-            <p className="text-muted-foreground">
-              No trading wallet connected yet.
-            </p>
-            <Link
-              href="/credits"
-              className="rounded-md border border-border/60 bg-muted/40 px-3 py-1 font-medium hover:bg-muted"
-            >
-              Connect →
-            </Link>
-          </div>
+          <OnboardingCta
+            message="No trading wallet connected yet."
+            ctaLabel="Connect wallet →"
+            href="/credits"
+          />
+        ) : statusData && statusData.connected && !statusData.trading_ready ? (
+          <OnboardingCta
+            message="Trading not enabled — finish approvals to copy-trade."
+            ctaLabel="Enable trading →"
+            href="/credits"
+          />
+        ) : (data.usdc_total ?? 0) <= 0 ? (
+          <OnboardingCta
+            message="Wallet is empty — send USDC.e on Polygon to start trading."
+            ctaLabel="Fund wallet →"
+            href="/credits"
+          />
         ) : (
           <div className="space-y-5 py-1">
             {fullBreakdown ? (
@@ -195,6 +232,34 @@ function hasOverviewBreakdown(
     data.usdc_locked !== null &&
     data.usdc_positions_mtm !== null &&
     data.usdc_total !== null
+  );
+}
+
+/**
+ * Centered, primary-accented onboarding CTA shown when the caller hasn't yet
+ * reached the next step (no wallet / !trading_ready). Matches the login
+ * button's `bg-primary/10 border-primary/40 text-primary` treatment so it
+ * reads as the obvious next action.
+ */
+function OnboardingCta({
+  message,
+  ctaLabel,
+  href,
+}: {
+  message: string;
+  ctaLabel: string;
+  href: string;
+}): ReactElement {
+  return (
+    <div className="flex flex-col items-center gap-3 py-8 text-center">
+      <p className="text-muted-foreground text-sm">{message}</p>
+      <Link
+        href={href}
+        className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-5 py-2 font-semibold text-primary text-sm transition-colors hover:bg-primary/20"
+      >
+        {ctaLabel}
+      </Link>
+    </div>
   );
 }
 

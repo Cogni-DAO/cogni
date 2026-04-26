@@ -56,19 +56,25 @@ This coordinator flights PRs to the `test` environment (slot `candidate-a`). Pre
 
 ## Observability Anchors
 
-**Primary rollout proof channel: Grafana Loki.** The flight workflow already runs its own `wait-for-candidate-ready.sh` smoke test (endpoint 200s). The coordinator's extra gate is the app startup log:
+**Primary rollout proof: `/version` endpoint `buildSha` match.** For each affected node, `curl -s https://<url>/version` and confirm `buildSha` equals the PR head SHA. Three endpoints:
+
+- https://test.cognidao.org/version (operator)
+- https://poly-test.cognidao.org/version (poly)
+- https://resy-test.cognidao.org/version (resy)
+
+`/version` is served by the _app_ (same pod Argo just rolled), not the ingress readyz. A matching buildSha means the new pod is live. Deterministic, always available, no MCP dependency.
+
+**Secondary (when grafana MCP is connected): Loki.** Richer signal — app-startup log, per-pod buildSha, feature-specific events via `grafana-watcher` sub-agent:
 
 ```logql
 {namespace="cogni-candidate-a"} |= "app started" | json | buildSha = "<PR head SHA>"
 ```
 
-If that line exists for the affected pods, the new image booted. Don't poll `/readyz` yourself — ingress lags pod rollout by minutes and is a known false-positive channel.
-
-**Also from Loki:** Argo sync events (`{namespace="argocd"} |= "<app-name>"`), pod startup errors, and feature-specific "success" signals the `grafana-watcher` sub-agent is tasked with reading.
+Bound every Loki query with `startRfc3339` = flight dispatch time. Nice-to-have, not gate.
 
 ## Dependencies
 
-- **grafana MCP is required.** The `grafana-watcher` sub-agent cannot function without it. At loop start, verify the grafana MCP tools are loaded (`ToolSearch` query `grafana` should return `mcp__grafana__*` tools). If not loaded, **halt the loop** and ask Derek to run `/mcp` to reconnect. Do not dispatch a flight without an observability channel.
+- **grafana MCP is optional, not blocking.** If loaded, use it for richer observability via the `grafana-watcher` sub-agent. If not loaded, proceed — `/version` buildSha match is a sufficient rollout gate. Never halt the loop on a missing grafana MCP.
 - **gh CLI** authenticated for `Cogni-DAO/node-template` (workflow_dispatch + PR write).
 - **Local git worktree** with read access to `origin/deploy/candidate-a`, `origin/deploy/preview`, `origin/deploy/production`.
 
@@ -90,7 +96,7 @@ Authoritative source for candidate-a: `origin/deploy/candidate-a` HEAD commit me
 
 Scan open PRs in `Cogni-DAO/node-template`. Filter **ready to flight**:
 
-- All required CI checks green. Expected-failing non-blocking: `require-pinned-release-branch` fails by design on every non-release PR to main; mention it in the scorecard, don't halt on it.
+- All required CI checks green. Expected-failing non-blocking: `require-pinned-release-branch` fails by design on every non-release PR to main; mention it in the scorecard, don't halt on it. `stack-test` is flaky — a single failure does NOT block candidate-a flight. It only blocks merge-to-main. Note it in the scorecard and flight anyway; re-run stack-test post-QA.
 - `PR Build` workflow succeeded AND images exist in GHCR as `pr-<N>-<SHA>-*`. If the image list is empty, the PR is infra-only — route it to the infra lever (`candidate-flight-infra.yml`) instead of the app lever.
 - Head SHA not currently the one flighted on candidate-a (check `deploy/candidate-a` last commit)
 
@@ -141,16 +147,19 @@ On flight failure, collect the failing step's logs, summarize, **halt the loop**
 
 ### 3a. Proof of rollout (REQUIRED)
 
-The workflow's own `wait-for-candidate-ready.sh` is endpoint-only and passes before ingress switches over. The coordinator's gate is the **app startup log in Loki**:
+**Primary gate: `/version` buildSha match.** Curl each affected node's `/version`, confirm `buildSha` equals PR head SHA:
 
-```logql
-{namespace="cogni-candidate-a", pod=~"<app>-node-app-.*"}
-  |= "app started" | json | buildSha = "<PR head SHA>"
+```bash
+for url in test.cognidao.org poly-test.cognidao.org resy-test.cognidao.org; do
+  echo "=== $url ==="; curl -s https://$url/version; echo
+done
 ```
 
-For each app the PR affects (poly / resy / operator): **first** poll Argo logs (`{namespace="argocd"} |= "candidate-a-<app>"`) until you see `Progressing → Healthy` for the flight's commit SHA. **Then** query the `app started` log and confirm `buildSha` exactly matches the PR head SHA. Do not report rollout success until both are observed — pod-hash changes, `/readyz` 200s, and "new pod appeared" are not proof. If Argo hasn't gone Healthy within ~10 min, escalate.
+Allow ~3–5 min between dispatch and first poll; retry until all affected nodes match or ~10 min elapses (escalate if still mismatched).
 
-**Don't `curl /readyz` yourself.** Ingress serves the old pod for minutes after Argo reports Healthy; `/readyz` is a known false-positive channel. The workflow already runs endpoint checks internally.
+**Secondary (when grafana MCP is connected):** Loki app-startup log for richer confirmation. Bound queries with `startRfc3339` = flight dispatch time to avoid matching prior flights.
+
+**Don't `curl /readyz`.** That's ingress-layer, not app-layer — it flips green before the new pod takes traffic. Use `/version`.
 
 ### 4. Observe
 
@@ -256,12 +265,13 @@ Use the `Agent` tool with `subagent_type: general-purpose`. Give each a tight, s
 
 - **One slot, one PR.** Never flight while `candidate-lease.state == busy`.
 - **Always confirm the triage pick** with 2 alternates before dispatching.
-- **grafana MCP must be loaded** before any flight. Halt the loop otherwise.
+- **grafana MCP is optional, not blocking.** If disconnected, proceed — /version buildSha match is the primary rollout gate.
+- **`stack-test` is flaky and never blocks flight.** A failing stack-test only blocks merge-to-main; candidate-a flight proceeds regardless. Re-run it post-QA when ready to merge.
 - **Decision is automatic** once scorecard is issued — PASS merges, FAIL leaves a request-changes review. No silent skips.
 - **Flight failures halt the loop.** Collect logs, escalate, do not auto-advance.
 - **Never `--admin` on merge.** Non-release PRs to main will always require human admin-merge until `release/*` policy lands — this is **expected, not a failure**. Post the scorecard, name it as the blocker, hand off to Derek.
 - **Verify rollout before opening QA window.** Run the Proof of Rollout ritual (step 3a) after every flight. An unrolled flight silently serves the previous build — worse than a hard failure.
-- **Trust Loki, not `/readyz`.** Rollout proof = app-startup log with matching buildSha. Don't curl endpoints as a gate.
+- **Trust `/version`, not `/readyz`.** Rollout proof = `/version` buildSha matching PR head SHA. `/readyz` is ingress-layer and flips green before the new pod takes traffic.
 - **Read `flight-preview.yml`'s checks correctly.** On merge to main, two jobs appear in the commit's checks list:
   - `flight ✓` + `deploy-preview ✓` — preview actually deployed. Proof-of-rollout applies to `cogni-preview` pods.
   - `flight ✓` + `deploy-preview ⊘ skipped` — preview lease was locked (a prior SHA still `reviewing`/`dispatching`). The merged SHA is queued as `deploy/preview:.promote-state/candidate-sha`, **nothing rolled**. Do not proof-of-rollout preview for this SHA — it won't match. Wait for the prior reviewer to release the lease (or `set-preview-review-state.sh unlocked`) for the drain to fire.

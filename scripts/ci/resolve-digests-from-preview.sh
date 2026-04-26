@@ -30,13 +30,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/image-tags.sh
 . "${SCRIPT_DIR}/lib/image-tags.sh"
 
-# Read an overlay's images[] and print "<app_digest>|<migrator_digest>" where
-# each value is `<newName>@<digest>` or empty. App entry is the one whose
-# `name:` does NOT contain `-migrate`; migrator entry is the one that does.
-read_overlay_digests() {
+# Read an overlay's images[] and print the single `<newName>@<digest>` (or empty).
+# After task.0370 step 1, every overlay has exactly one image entry per app —
+# the runtime image, which the Deployment uses for both initContainer + main.
+read_overlay_digest() {
   local overlay_file="$1"
   if [ ! -f "$overlay_file" ]; then
-    echo "|"
+    echo ""
     return 0
   fi
   python3 - "$overlay_file" <<'PY'
@@ -44,29 +44,21 @@ import re, sys
 path = sys.argv[1]
 with open(path) as f:
     text = f.read()
-# Extract the images: block (stops at next top-level key or EOF).
 m = re.search(r'(?m)^images:\s*\n((?:[ \t]+.*\n)+)', text)
 if not m:
-    print("|"); sys.exit(0)
+    print(""); sys.exit(0)
 block = m.group(1)
-# Split into per-item chunks on lines starting with `  - name:` (2-space indent).
 entries = re.split(r'(?m)^(?=[ \t]*-\s+name:)', block)
-app = ""
-mig = ""
 for e in entries:
     e = e.strip()
-    if not e: continue
-    name_m    = re.search(r'-\s*name:\s*(\S+)', e)
+    if not e:
+        continue
     newname_m = re.search(r'newName:\s*(\S+)', e)
     digest_m  = re.search(r'digest:\s*"?([^"\s]+)"?', e)
-    if not (name_m and newname_m and digest_m):
-        continue
-    ref = f"{newname_m.group(1)}@{digest_m.group(1)}"
-    if "-migrate" in name_m.group(1):
-        mig = ref
-    else:
-        app = ref
-print(f"{app}|{mig}")
+    if newname_m and digest_m:
+        print(f"{newname_m.group(1)}@{digest_m.group(1)}")
+        sys.exit(0)
+print("")
 PY
 }
 
@@ -80,19 +72,13 @@ upsert() {
 
 for node in "${NODE_TARGETS[@]}"; do
   overlay="${PREVIEW_OVERLAY_ROOT}/${node}/kustomization.yaml"
-  pair=$(read_overlay_digests "$overlay")
-  app="${pair%%|*}"
-  mig="${pair#*|}"
+  app=$(read_overlay_digest "$overlay")
   upsert "$node" "$app"
-  upsert "${node}-migrator" "$mig"
-  printf '  %-20s %s\n' "${node}:"           "${app:-(missing)}"
-  printf '  %-20s %s\n' "${node}-migrator:"  "${mig:-(missing)}"
+  printf '  %-20s %s\n' "${node}:" "${app:-(missing)}"
 done
 
-# scheduler-worker has its own overlay and no migrator entry.
 sw_overlay="${PREVIEW_OVERLAY_ROOT}/scheduler-worker/kustomization.yaml"
-sw_pair=$(read_overlay_digests "$sw_overlay")
-sw_app="${sw_pair%%|*}"
+sw_app=$(read_overlay_digest "$sw_overlay")
 upsert "scheduler-worker" "$sw_app"
 printf '  %-20s %s\n' "scheduler-worker:" "${sw_app:-(missing)}"
 

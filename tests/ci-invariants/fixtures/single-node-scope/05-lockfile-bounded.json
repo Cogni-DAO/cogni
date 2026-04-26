@@ -1,0 +1,13 @@
+{
+  "name": "lockfile-inherits is bounded: poly + lockfile + .github/foo defeats it",
+  "paths": [
+    "nodes/poly/app/package.json",
+    "pnpm-lock.yaml",
+    ".github/workflows/foo.yml"
+  ],
+  "expected": {
+    "domains": ["operator", "poly"],
+    "pass": false,
+    "lockfileInheritsApplied": false
+  }
+}

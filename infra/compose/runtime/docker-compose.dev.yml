@@ -372,19 +372,27 @@ services:
         condition: service_healthy
 
   db-migrate:
-    image: ${MIGRATOR_IMAGE:-cogni-template-migrate-local}
+    # task.0370 step 1: db-migrate runs the same runtime image as the app, invoking
+    # the bundled migrate.mjs runner. No more separate migrator image / target.
+    image: ${APP_IMAGE:-cogni-template-local}
     build:
       context: ../../..
       dockerfile: ./nodes/operator/app/Dockerfile
-      target: migrator
+      target: runner
     container_name: db-migrate
     profiles:
       - bootstrap
     restart: "no"
     networks:
       - cogni-edge
+    entrypoint: []
+    command:
+      [
+        "node",
+        "/app/nodes/operator/app/migrate.mjs",
+        "/app/nodes/operator/app/migrations",
+      ]
     environment:
-      # Only DB env var (least-secret exposure). Migrator uses DATABASE_URL directly.
       - DATABASE_URL=${DATABASE_URL?DATABASE_URL is required}
     depends_on:
       postgres:

@@ -122,6 +122,26 @@ jobs:
       POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
       COGNI_NODE_DBS: ${{ secrets.COGNI_NODE_DBS }}
     steps:
+      - name: Pre-check no candidate-flight in progress (best-effort, GR-5)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh_output=$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow="Candidate Flight" \
+            --status=in_progress \
+            --json databaseId \
+            --jq 'length' 2>&1); then
+            echo "::warning::Pre-check could not query workflow runs: ${gh_output}"
+            in_progress=0
+          else
+            in_progress="$gh_output"
+          fi
+          if [ "$in_progress" != "0" ]; then
+            echo "::warning::${in_progress} candidate-flight run(s) in progress — infra changes may interleave"
+          fi
+
       - name: Checkout (for scripts)
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:

@@ -1,0 +1,147 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
+/**
+ * Module: `@tests/ci-invariants/single-node-scope-meta`
+ * Purpose: Pins the `single-node-scope` job in `.github/workflows/ci.yaml` to the `nodes/*`
+ *          directory listing, and asserts `dorny/paths-filter` is SHA-pinned.
+ * Scope: Static structural test that reads two files. Does NOT shell out to git or invoke the action.
+ * Invariants: DIRECTORY_IS_SOURCE_OF_TRUTH, NO_INFRA_ENUMERATION, ACTION_PINNED_BY_SHA (see work/items/task.0381.* §Invariants).
+ * Side-effects: IO (reads .github/workflows/ci.yaml and nodes/ listing)
+ * Notes: Adding `nodes/<X>/` and forgetting to update the workflow filters
+ *        causes this test to fail with an actionable message.
+ * Links: .github/workflows/ci.yaml, docs/spec/node-ci-cd-contract.md
+ * @public
+ */
+
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+import yaml from "yaml";
+
+const REPO_ROOT = path.resolve(__dirname, "../..");
+const WORKFLOW_PATH = path.join(REPO_ROOT, ".github/workflows/ci.yaml");
+const NODES_DIR = path.join(REPO_ROOT, "nodes");
+const OPERATOR_NODE = "operator";
+const SHA40 = /^[0-9a-f]{40}$/;
+
+function listNonOperatorNodes(): string[] {
+  return readdirSync(NODES_DIR, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && d.name !== OPERATOR_NODE)
+    .map((d) => d.name)
+    .sort();
+}
+
+function loadJob() {
+  const doc = yaml.parse(readFileSync(WORKFLOW_PATH, "utf8")) as {
+    jobs: Record<string, { steps: Array<Record<string, unknown>> }>;
+  };
+  const job = doc.jobs["single-node-scope"];
+  expect(job, "single-node-scope job must exist in ci.yaml").toBeDefined();
+  return job;
+}
+
+function findStep<T extends Record<string, unknown>>(
+  job: { steps: Array<Record<string, unknown>> },
+  predicate: (s: Record<string, unknown>) => boolean
+): T {
+  const step = job.steps.find(predicate);
+  expect(step, "expected step not found").toBeDefined();
+  return step as T;
+}
+
+describe("single-node-scope workflow gate · structural pins", () => {
+  it("filter list matches `nodes/*` directory listing minus operator", () => {
+    const job = loadJob();
+    const filterStep = findStep<{ with: { filters: string } }>(
+      job,
+      (s) =>
+        typeof s.uses === "string" && s.uses.startsWith("dorny/paths-filter@")
+    );
+    const filters = yaml.parse(filterStep.with.filters) as Record<
+      string,
+      unknown
+    >;
+
+    const nonOperatorFilters = Object.keys(filters)
+      .filter((k) => k !== OPERATOR_NODE)
+      .sort();
+    const expected = listNonOperatorNodes();
+
+    expect(
+      nonOperatorFilters,
+      `Workflow filter list must equal nodes/* minus operator. ` +
+        `Got [${nonOperatorFilters.join(", ")}], expected [${expected.join(", ")}]. ` +
+        `Add or remove the matching filter (and update the operator negation list) ` +
+        `in .github/workflows/ci.yaml.`
+    ).toEqual(expected);
+  });
+
+  it("operator filter is `**` plus negations of every other filter (no positive infra paths)", () => {
+    const job = loadJob();
+    const filterStep = findStep<{ with: { filters: string } }>(
+      job,
+      (s) =>
+        typeof s.uses === "string" && s.uses.startsWith("dorny/paths-filter@")
+    );
+    const filters = yaml.parse(filterStep.with.filters) as Record<
+      string,
+      string[]
+    >;
+    const operator = filters[OPERATOR_NODE];
+
+    expect(operator, "operator filter must exist").toBeDefined();
+    expect(operator[0], "operator filter must start with '**'").toBe("**");
+
+    const negations = operator.slice(1);
+    for (const pattern of negations) {
+      expect(
+        pattern.startsWith("!"),
+        `operator filter entry "${pattern}" must be a negation. ` +
+          `Adding positive infra paths to operator is forbidden ` +
+          `(NO_INFRA_ENUMERATION) — operator owns "everything not under another node".`
+      ).toBe(true);
+    }
+
+    const negatedNodes = negations
+      .map((p) => p.replace(/^!nodes\//, "").replace(/\/\*\*$/, ""))
+      .sort();
+    const expected = listNonOperatorNodes();
+    expect(
+      negatedNodes,
+      `operator filter negations must exactly cover every other-node filter. ` +
+        `Got [${negatedNodes.join(", ")}], expected [${expected.join(", ")}].`
+    ).toEqual(expected);
+  });
+
+  it("`dorny/paths-filter` is pinned by full 40-char SHA, not by tag", () => {
+    const job = loadJob();
+    const step = findStep<{ uses: string }>(
+      job,
+      (s) =>
+        typeof s.uses === "string" && s.uses.startsWith("dorny/paths-filter@")
+    );
+    const ref = step.uses.split("@")[1].split(/\s/)[0];
+    expect(
+      SHA40.test(ref),
+      `dorny/paths-filter must be pinned by full commit SHA (got "${ref}"). ` +
+        `Tag pins like @v3 are forbidden (ACTION_PINNED_BY_SHA).`
+    ).toBe(true);
+  });
+
+  it("enforce step uses `dorny/paths-filter` outputs (changes + operator_files) inline", () => {
+    const job = loadJob();
+    const enforce = findStep<{ env: Record<string, string>; run: string }>(
+      job,
+      (s) => s.name === "Enforce single-domain scope"
+    );
+    expect(enforce.env.MATCHED).toContain("steps.domains.outputs.changes");
+    expect(enforce.env.OPERATOR_FILES).toContain(
+      "steps.domains.outputs.operator_files"
+    );
+    expect(
+      enforce.run,
+      "lockfile-inherits exception must be present in the inline run: block"
+    ).toContain("pnpm-lock.yaml");
+  });
+});

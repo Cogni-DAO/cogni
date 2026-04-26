@@ -1,0 +1,9 @@
+{
+  "name": "lockfile-inherits: poly package.json + pnpm-lock.yaml",
+  "paths": ["nodes/poly/app/package.json", "pnpm-lock.yaml"],
+  "expected": {
+    "domains": ["poly"],
+    "pass": true,
+    "lockfileInheritsApplied": true
+  }
+}

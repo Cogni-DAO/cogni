@@ -46,10 +46,16 @@ Pure parsing and typed extraction for `.cogni/repo-spec.yaml` — the governance
   - `extractLedgerApprovers(spec)` — Lowercased EVM approver addresses
   - `extractNodeId(spec)` — Node identity UUID
   - `extractNodes(spec)` — Node registry entries (operator-only, returns `[]` for non-operator specs)
+  - `extractNodePath(spec, nodeId)` — Resolve a node UUID to its registered relative path; returns `null` on miss (caller decides fallback)
   - `extractScopeId(spec)` — Scope identity UUID (throws if missing)
   - `extractChainId(spec)` — Numeric chain ID from cogni_dao section
   - Zod schemas: `repoSpecSchema`, `nodeRegistryEntrySchema`, `creditsTopupSpecSchema`, `governanceScheduleSchema`, etc.
   - Types: `RepoSpec`, `NodeRegistryEntry`, `InboundPaymentConfig`, `GovernanceConfig`, `GovernanceSchedule`, `LedgerConfig`, `LedgerPoolConfig`
+- **Subpath `@cogni/repo-spec/testing`** — test-only fixtures; never imported from production code:
+  - `TEST_NODE_IDS`, `TEST_NODE_ENTRIES`, `TEST_SCOPE_ID`, `TEST_CHAIN_ID`, `TEST_RECEIVING_ADDRESS`, `TEST_APPROVER_ADDRESS`
+  - `buildTestRepoSpec(overrides?)` — parsed `RepoSpec` from minimal-valid input + overrides
+  - `buildTestRepoSpecYaml(opts?)` — YAML string variant for tests that round-trip through `parseRepoSpec`
+  - `buildTestRule(overrides?)` / `buildTestRuleYaml()` — `Rule` fixture builders
 
 ## Ports
 

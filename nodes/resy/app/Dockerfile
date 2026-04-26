@@ -57,21 +57,6 @@ ENV AUTH_SECRET=${AUTH_SECRET_BUILD}
 RUN --mount=type=cache,id=next-cache-resy,target=/app/nodes/resy/app/.next/cache,sharing=locked \
     pnpm --filter @cogni/resy-app build
 
-# Migrator — resy-only migration image (task.0322).
-# Carries only resy's schema + migrations + nodes/resy/drizzle.config.ts, plus shared
-# packages/db-schema/src for core tables.
-FROM base AS migrator
-WORKDIR /app
-
-COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/nodes/resy/drizzle.config.ts ./nodes/resy/drizzle.config.ts
-COPY --from=builder /app/packages/db-schema/src ./packages/db-schema/src
-COPY --from=builder /app/nodes/resy/app/src/shared/db ./nodes/resy/app/src/shared/db
-COPY --from=builder /app/nodes/resy/app/src/adapters/server/db/migrations ./nodes/resy/app/src/adapters/server/db/migrations
-
-CMD ["pnpm", "db:migrate:resy:container"]
-
 # Runner – lean production image
 FROM node:22-alpine AS runner
 WORKDIR /app
@@ -121,6 +106,11 @@ ARG BUILD_SHA
 ENV APP_BUILD_SHA=$BUILD_SHA
 
 USER nextjs
+
+# Migrate runner — bundled into runtime image so Deployment initContainers can
+# invoke `node migrate.mjs` directly. task.0370 step 1.
+COPY --from=builder --chown=nextjs:nodejs /app/nodes/resy/app/src/adapters/server/db/migrations /app/nodes/resy/app/migrations
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/db/migrate.mjs /app/nodes/resy/app/migrate.mjs
 
 EXPOSE 3300
 

@@ -9,7 +9,7 @@
  *   - TENANT_SCOPED — condition id selects the caller's Data API redeemable row; no cross-wallet redeem.
  *   - REDEEM_GATE — executor refuses when Data API does not mark the position redeemable for that wallet.
  * Side-effects: Polygon RPC writes (signed redeem tx), HTTPS to Data API for position preflight.
- * Links: packages/market-provider/src/adapters/polymarket/polymarket.ctf.redeem.ts,
+ * Links: packages/market-provider/src/adapters/polymarket/polymarket.ctf.ts,
  *        nodes/poly/app/src/bootstrap/capabilities/poly-trade-executor.ts
  * @public
  */

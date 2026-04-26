@@ -655,11 +655,11 @@ append_env_if_set "$RUNTIME_ENV" CONNECTIONS_ENCRYPTION_KEY "${CONNECTIONS_ENCRY
 # Grafana observability (for OpenClaw grafana-health skill)
 append_env_if_set "$RUNTIME_ENV" GRAFANA_URL "${GRAFANA_URL-}"
 append_env_if_set "$RUNTIME_ENV" GRAFANA_SERVICE_ACCOUNT_TOKEN "${GRAFANA_SERVICE_ACCOUNT_TOKEN-}"
-# Per-node endpoints (LiteLLM billing callback routing: Compose → k8s NodePorts)
-# LiteLLM runs in Docker Compose and must reach k8s node-app Services via NodePort.
-# k8s service names don't resolve from Compose — use host.docker.internal:NodePort.
-# Note: the k8s scheduler-worker gets its own COGNI_NODE_ENDPOINTS from the k8s overlay ConfigMap.
-LITELLM_NODE_ENDPOINTS="4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://host.docker.internal:30000,5ed2d64f-2745-4676-983b-2fb7e05b2eba=http://host.docker.internal:30100,f6d2a17d-b7f6-4ad1-a86b-f0ad2380999e=http://host.docker.internal:30300"
+# LiteLLM (Compose) → node apps (k3s NodePorts) via bug.0295 VM DNS.
+# NodePorts pinned in infra/k8s/base/node-app/service.yaml; UUIDs in each
+# node's .cogni/repo-spec.yaml. Scheduler-worker uses its own k8s ConfigMap.
+LITELLM_NODE_HOST="${DEPLOY_ENVIRONMENT}.vm.cognidao.org"
+LITELLM_NODE_ENDPOINTS="4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://${LITELLM_NODE_HOST}:30000,5ed2d64f-2745-4676-983b-2fb7e05b2eba=http://${LITELLM_NODE_HOST}:30100,f6d2a17d-b7f6-4ad1-a86b-f0ad2380999e=http://${LITELLM_NODE_HOST}:30300"
 printf '%s=%s\n' COGNI_NODE_ENDPOINTS "$LITELLM_NODE_ENDPOINTS" >> "$RUNTIME_ENV"
 # Multi-node DB provisioning
 append_env_if_set "$RUNTIME_ENV" COGNI_NODE_DBS "${COGNI_NODE_DBS-}"

@@ -325,20 +325,12 @@ jobs:
           fi
 
           promote_app() {
-            local app="$1" digest="$2" migrator="${3:-}"
+            local app="$1" digest="$2"
             [ -z "$digest" ] && return 0
-            if [ -n "$migrator" ]; then
-              ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
-                --env "$OVERLAY_ENV" \
-                --app "$app" \
-                --digest "$digest" \
-                --migrator-digest "$migrator"
-            else
-              ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
-                --env "$OVERLAY_ENV" \
-                --app "$app" \
-                --digest "$digest"
-            fi
+            ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
+              --env "$OVERLAY_ENV" \
+              --app "$app" \
+              --digest "$digest"
             # Resolve source_sha BEFORE marking the app as promoted. A
             # missing preview-map entry is a hard fail: the overlay digest
             # is about to be written, and verify-buildsha (SOURCE_SHA_MAP
@@ -359,23 +351,18 @@ jobs:
             PROMOTED+=("$app")
           }
 
-          # Per-node migrator pairing (task.0324): each node is promoted with
-          # its own `<node>-migrator` digest, not a shared single one. Closes
-          # the half that PR #923 flagged. Iterates NODE_TARGETS from the lib
-          # so adding a new node `mynode` is a one-line lib edit — no change
-          # to this step.
+          # task.0370 step 1 retired the per-node migrator companion target —
+          # promote one digest per app (initContainer + main share the runtime image).
           # shellcheck source=../../scripts/ci/lib/image-tags.sh
           . ../app-src/scripts/ci/lib/image-tags.sh
           DIGESTS="$DIGESTS_JSON"
 
           for node in "${NODE_TARGETS[@]}"; do
             app_digest=$(printf '%s' "$DIGESTS" | jq -r --arg k "$node" '.[$k] // ""')
-            mig_digest=$(printf '%s' "$DIGESTS" | jq -r --arg k "${node}-migrator" '.[$k] // ""')
-            promote_app "$node" "$app_digest" "$mig_digest"
+            promote_app "$node" "$app_digest"
           done
-          # scheduler-worker has no migrator pairing.
           sw_digest=$(printf '%s' "$DIGESTS" | jq -r '."scheduler-worker" // ""')
-          promote_app scheduler-worker "$sw_digest" ""
+          promote_app scheduler-worker "$sw_digest"
 
           # Export for deploy-push step
           echo "PROMOTED_CSV=$(IFS=,; echo "${PROMOTED[*]}")" >> $GITHUB_ENV
@@ -699,6 +686,8 @@ jobs:
           # Scope the wait to apps actually promoted this run. Untouched apps
           # (e.g. sandbox-openclaw placeholder) would false-fail.
           PROMOTED_APPS: ${{ needs.promote-k8s.outputs.promoted_apps }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: bash app-src/scripts/ci/wait-for-argocd.sh
 
       - name: Wait for in-cluster services

@@ -21,6 +21,7 @@ export {
   extractLedgerApprovers,
   extractLedgerConfig,
   extractNodeId,
+  extractNodePath,
   extractNodes,
   extractOperatorWalletConfig,
   extractPaymentConfig,

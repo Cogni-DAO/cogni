@@ -97,8 +97,10 @@ is_global_build_input() {
     tsconfig.app.json | \
     tsconfig.scripts.json | \
     config/* | \
+    infra/catalog/* | \
     scripts/ci/build-and-push-images.sh | \
     scripts/ci/detect-affected.sh | \
+    scripts/ci/lib/image-tags.sh | \
     scripts/ci/write-build-manifest.sh)
       return 0
       ;;
@@ -110,6 +112,11 @@ is_global_build_input() {
 if [ "$scope_mode" = "full" ]; then
   add_all_targets
 else
+  declare -A target_prefix=()
+  for target in "${ALL_TARGETS[@]}"; do
+    target_prefix["$target"]=$(yq '.path_prefix' "${_image_tags_catalog_root}/${target}.yaml")
+  done
+
   while IFS= read -r path; do
     [ -z "$path" ] && continue
 
@@ -130,62 +137,17 @@ else
         selection_reason="shared-package-change:${path}"
         break
         ;;
-      nodes/operator/packages/*)
-        add_target operator
-        add_target operator-migrator
-        ;;
-      nodes/poly/packages/*)
-        add_target poly
-        add_target poly-migrator
-        ;;
-      nodes/resy/packages/*)
-        add_target resy
-        add_target resy-migrator
-        ;;
-      nodes/node-template/packages/*)
-        selection_reason="non-deployable-node-template-change:${path}"
-        ;;
-      nodes/operator/app/src/shared/db/* | \
-      nodes/operator/app/src/adapters/server/db/migrations/*)
-        add_target operator
-        add_target operator-migrator
-        ;;
-      nodes/operator/*)
-        add_target operator
-        add_target operator-migrator
-        ;;
-      nodes/poly/app/src/shared/db/* | \
-      nodes/poly/app/src/adapters/server/db/migrations/*)
-        add_target poly
-        add_target poly-migrator
-        ;;
-      nodes/poly/*)
-        add_target poly
-        # bug.0343: app and migrator share one Dockerfile + package.json, so
-        # rebuild them together. Skipping the migrator lets stale digests
-        # (e.g. the pre-#894 image missing `db:migrate:poly:doltgres:container`)
-        # ride through on main's overlay and break the Doltgres PreSync hook.
-        add_target poly-migrator
-        ;;
-      nodes/resy/app/src/shared/db/* | \
-      nodes/resy/app/src/adapters/server/db/migrations/*)
-        add_target resy
-        add_target resy-migrator
-        ;;
-      nodes/resy/*)
-        add_target resy
-        # bug.0343: pair app+migrator — see poly case above.
-        add_target resy-migrator
-        ;;
-      services/scheduler-worker/*)
-        add_target scheduler-worker
-        ;;
       nodes/node-template/*)
         selection_reason="non-deployable-node-template-change:${path}"
         ;;
-      # Per-node drizzle configs live at nodes/<node>/drizzle.config.ts and are
-      # handled by the nodes/<node>/* catchall above (adds node + node-migrator).
-      # No drizzle-specific case needed.
+      *)
+        for target in "${ALL_TARGETS[@]}"; do
+          prefix="${target_prefix[$target]}"
+          case "$path" in
+            "${prefix}"*) add_target "$target" ;;
+          esac
+        done
+        ;;
     esac
   done <<< "$changed_paths"
 fi

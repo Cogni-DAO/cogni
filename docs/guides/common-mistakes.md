@@ -26,6 +26,7 @@ tags: [agents, mistakes, troubleshooting]
 - Create manual type definitions for contract shapes (use `z.infer`)
 - Modify contracts without updating dependent routes/services
 - Skip contract-first: always update `src/contracts/*.contract.ts` before touching routes
+- Two PRs claim "parity" on a shared policy without a parity test that runs **identical fixtures** through **both** implementations. Parallel test suites that each pass independently prove only self-consistency, not agreement. See `tests/ci-invariants/single-node-scope-parity.spec.ts` for the pattern (shared JSON fixtures + reference classifier; both sides assert against the same expected outcomes).
 
 ## Tooling Misunderstandings
 

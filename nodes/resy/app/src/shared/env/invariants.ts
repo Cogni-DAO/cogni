@@ -179,42 +179,97 @@ export function assertEvmRpcConfig(env: EnvWithRpc): void {
 }
 
 /**
- * Tests EVM RPC connectivity by fetching current block number.
- * Only runs in non-test mode. Throws if RPC unreachable or times out.
- * Budget: 3 seconds timeout for single RPC call.
+ * Cached result of the last EVM RPC connectivity probe.
+ * Why: K8s probes /readyz every 5s. Across 9 pods that is ~4.7M Alchemy reads
+ * per month for zero user activity, which trips the monthly capacity cap and
+ * 429s the entire fleet. Cache hits avoid the network call entirely.
+ */
+const EVM_RPC_OK_TTL_MS = 60_000;
+const EVM_RPC_FAIL_TTL_MS = 30_000;
+let _evmRpcLastCheckMs = 0;
+let _evmRpcLastErrorMessage: string | null = null;
+
+/** Test-only hook to reset the cache between cases. */
+export function _resetEvmRpcConnectivityCacheForTest(): void {
+  _evmRpcLastCheckMs = 0;
+  _evmRpcLastErrorMessage = null;
+}
+
+/**
+ * Result of the EVM RPC connectivity probe. Non-fatal: callers decide whether
+ * to escalate `ok=false` to a 503 or just log and continue.
+ */
+export interface EvmRpcProbeResult {
+  ok: boolean;
+  /** "live" = just probed, "cached" = served from TTL cache, "skipped" = test mode */
+  source: "live" | "cached" | "skipped";
+  errorMessage?: string;
+}
+
+/**
+ * Tests EVM RPC connectivity by fetching current block number, with TTL caching.
+ * Returns a result instead of throwing so /readyz can degrade non-fatally.
  *
- * @param evmClient - EvmOnchainClient to test (uses lazy initialization)
- * @param env - Server environment for mode check
+ * Cache: 60s on success, 30s on failure. Test mode short-circuits to ok=true.
+ */
+export async function checkEvmRpcConnectivity(
+  evmClient: { getBlockNumber(): Promise<bigint> },
+  env: ParsedEnv
+): Promise<EvmRpcProbeResult> {
+  if (env.APP_ENV === "test") return { ok: true, source: "skipped" };
+
+  const now = Date.now();
+  const ageMs = now - _evmRpcLastCheckMs;
+  const lastWasOk = _evmRpcLastErrorMessage === null;
+  const ttl = lastWasOk ? EVM_RPC_OK_TTL_MS : EVM_RPC_FAIL_TTL_MS;
+  if (_evmRpcLastCheckMs > 0 && ageMs < ttl) {
+    return lastWasOk
+      ? { ok: true, source: "cached" }
+      : {
+          ok: false,
+          source: "cached",
+          errorMessage: _evmRpcLastErrorMessage ?? "unknown",
+        };
+  }
+
+  try {
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      setTimeout(() => reject(new Error("RPC timeout")), 3000);
+    });
+    const blockNumber = await Promise.race([
+      evmClient.getBlockNumber(),
+      timeoutPromise,
+    ]);
+    if (blockNumber <= 0n) {
+      throw new Error("Invalid block number returned from RPC");
+    }
+    _evmRpcLastCheckMs = now;
+    _evmRpcLastErrorMessage = null;
+    return { ok: true, source: "live" };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown RPC error";
+    _evmRpcLastCheckMs = now;
+    _evmRpcLastErrorMessage = message;
+    return { ok: false, source: "live", errorMessage: message };
+  }
+}
+
+/**
+ * Legacy throwing variant. Kept for callers that still want fail-fast semantics
+ * (stack-test bootstrap, dev preflight). /readyz should use checkEvmRpcConnectivity
+ * so a flaky upstream RPC doesn't drain the pod.
+ *
  * @throws RuntimeSecretError if RPC unreachable or invalid response
  */
 export async function assertEvmRpcConnectivity(
   evmClient: { getBlockNumber(): Promise<bigint> },
   env: ParsedEnv
 ): Promise<void> {
-  // Test mode uses FakeEvmOnchainClient - skip connectivity check
-  if (env.APP_ENV === "test") return;
-
-  // Production/preview/dev: Verify RPC connection works
-  try {
-    // 3 second timeout budget for readyz probe
-    const timeoutPromise = new Promise<never>((_resolve, reject) => {
-      setTimeout(() => reject(new Error("RPC timeout")), 3000);
-    });
-
-    const blockNumber = await Promise.race([
-      evmClient.getBlockNumber(),
-      timeoutPromise,
-    ]);
-
-    // Sanity check: block number should be positive
-    if (blockNumber <= 0n) {
-      throw new Error("Invalid block number returned from RPC");
-    }
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown RPC error";
+  const result = await checkEvmRpcConnectivity(evmClient, env);
+  if (!result.ok) {
     throw new RuntimeSecretError(
-      `EVM RPC connectivity check failed: ${message}. ` +
+      `EVM RPC connectivity check failed: ${result.errorMessage ?? "unknown"}. ` +
         "Verify EVM_RPC_URL is correct and the RPC endpoint is accessible."
     );
   }

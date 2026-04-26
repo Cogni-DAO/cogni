@@ -148,48 +148,6 @@ build_target() {
         --push \
         .
       ;;
-    operator-migrator)
-      docker buildx build \
-        --platform "$PLATFORM" \
-        --file nodes/operator/app/Dockerfile \
-        --target migrator \
-        --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni-template" \
-        --label "org.opencontainers.image.revision=${git_sha}" \
-        --label "org.opencontainers.image.created=${build_timestamp}" \
-        --cache-from "type=gha,scope=build-operator-migrator" \
-        --cache-to "type=gha,mode=max,scope=build-operator-migrator" \
-        --tag "$tag" \
-        --push \
-        .
-      ;;
-    poly-migrator)
-      docker buildx build \
-        --platform "$PLATFORM" \
-        --file nodes/poly/app/Dockerfile \
-        --target migrator \
-        --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni-template" \
-        --label "org.opencontainers.image.revision=${git_sha}" \
-        --label "org.opencontainers.image.created=${build_timestamp}" \
-        --cache-from "type=gha,scope=build-poly-migrator" \
-        --cache-to "type=gha,mode=max,scope=build-poly-migrator" \
-        --tag "$tag" \
-        --push \
-        .
-      ;;
-    resy-migrator)
-      docker buildx build \
-        --platform "$PLATFORM" \
-        --file nodes/resy/app/Dockerfile \
-        --target migrator \
-        --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni-template" \
-        --label "org.opencontainers.image.revision=${git_sha}" \
-        --label "org.opencontainers.image.created=${build_timestamp}" \
-        --cache-from "type=gha,scope=build-resy-migrator" \
-        --cache-to "type=gha,mode=max,scope=build-resy-migrator" \
-        --tag "$tag" \
-        --push \
-        .
-      ;;
     scheduler-worker)
       docker buildx build \
         --platform "$PLATFORM" \
