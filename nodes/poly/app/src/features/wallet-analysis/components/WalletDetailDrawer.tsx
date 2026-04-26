@@ -18,6 +18,7 @@ import Link from "next/link";
 import type { ReactElement } from "react";
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components";
+import { CopyWalletButton } from "./CopyWalletButton";
 import { WalletAnalysisSurface } from "./WalletAnalysisSurface";
 
 export type WalletDetailDrawerProps = {
@@ -43,16 +44,19 @@ export function WalletDetailDrawer({
           <SheetTitle className="font-semibold text-sm uppercase tracking-widest">
             Wallet analysis
           </SheetTitle>
-          {addr && (
-            <Link
-              href={`/research/w/${addr.toLowerCase()}`}
-              className="inline-flex items-center gap-1 text-muted-foreground text-xs hover:text-foreground"
-              title="Open the full page (shareable URL)"
-            >
-              Open in page
-              <ExternalLink className="size-3" aria-hidden />
-            </Link>
-          )}
+          <div className="flex flex-1 items-center justify-end gap-3">
+            {addr && <CopyWalletButton addr={addr} />}
+            {addr && (
+              <Link
+                href={`/research/w/${addr.toLowerCase()}`}
+                className="inline-flex items-center gap-1 text-muted-foreground text-xs hover:text-foreground"
+                title="Open the full page (shareable URL)"
+              >
+                Open in page
+                <ExternalLink className="size-3" aria-hidden />
+              </Link>
+            )}
+          </div>
           <button
             type="button"
             onClick={() => onOpenChange(false)}

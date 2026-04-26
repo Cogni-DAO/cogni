@@ -20,7 +20,10 @@
 import { PolyAddressSchema } from "@cogni/node-contracts";
 import { notFound, redirect } from "next/navigation";
 import type { ReactElement } from "react";
-import { WalletAnalysisSurface } from "@/features/wallet-analysis";
+import {
+  CopyWalletButton,
+  WalletAnalysisSurface,
+} from "@/features/wallet-analysis";
 import { getServerSessionUser } from "@/lib/auth/server";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +45,9 @@ export default async function WalletAnalysisPage({
 
   return (
     <main className="px-4 py-6 md:px-8 md:py-10">
+      <div className="mb-3 flex justify-end">
+        <CopyWalletButton addr={addr} />
+      </div>
       <WalletAnalysisSurface addr={addr} variant="page" size="default" />
     </main>
   );

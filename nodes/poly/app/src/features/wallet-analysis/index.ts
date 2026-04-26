@@ -12,6 +12,7 @@
 export { useWalletAnalysis } from "./client/use-wallet-analysis";
 export { BalanceBar } from "./components/BalanceBar";
 export { BalanceOverTimeChart } from "./components/BalanceOverTimeChart";
+export { CopyWalletButton } from "./components/CopyWalletButton";
 export { EdgeHypothesis } from "./components/EdgeHypothesis";
 export { PositionsTable } from "./components/PositionsTable";
 export { PositionTimelineChart } from "./components/PositionTimelineChart";
