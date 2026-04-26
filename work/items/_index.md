@@ -241,6 +241,7 @@
 | 2 | 50 | 3 | needs_triage | bug.0330 | poly /api/v1/chat/completions intermittently returns empty body on candidate-a | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 50 | 2 | needs_triage | bug.0337 | Per-node testcontainers setup uses operator's migrations — drift once any node diverges | Database Operations | proj.database-ops |
 | 2 | 50 | 3 | needs_triage | task.0377 | poly CTF redeem sweep — reactive architecture (replace per-tick RPC fan-out) | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
+| 2 | 60 | 1 | needs_implement | bug.0378 | reconcile-appset has no concurrency group — two concurrent flights race a shared kubectl apply | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 60 | 3 | needs_triage | task.0378 | poly anvil-fork test harness — verify CTF semantics against real Polygon chain state | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
 | 2 | 99 | 1 | needs_design | bug.0093 | Ownership facade N+1 — sequential DB queries per epoch | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 2 | 99 | 2 | needs_design | task.0104 | Ledger production hardening — upsert batching, connection pooling, activity tests | Transparent Credit Payouts | proj.transparent-credit-payouts |
