@@ -183,6 +183,7 @@
 | 1 | 25 | 3 | needs_implement | task.0130 | Tokenomics Crawl: Budget Policy + kill Score UI | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 25 | 2 | needs_closeout | task.0165 | Live money e2e test — full OpenRouter top-up chain on Base mainnet | AI Operator Wallet | proj.ai-operator-wallet |
 | 1 | 30 | 1 | needs_review | bug.0336 | candidate-flight false-fails on rolling-update endpoint cutover race | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 35 | 2 | needs_design | task.0383 | Enable GitHub Merge Queue on main — prevent stale-branch merge order bugs without blocking external contributors | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 40 | 3 | needs_triage | bug.0322 | Runs made on poly are visible via operator's /api/v1/agent/runs (cross-node data pollution) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 50 | 2 | needs_triage | bug.0329 | Polymarket CLOB adapter SELL on neg_risk markets returns empty error — positions unclosable | Cogni Poly | proj.poly-copy-trading |
 | 1 | 99 | 3 | needs_triage | story.0089 | Discord Bot Conversation Evals |  |  |
@@ -246,6 +247,7 @@
 | 2 | 50 | 3 | needs_triage | bug.0330 | poly /api/v1/chat/completions intermittently returns empty body on candidate-a | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 50 | 2 | needs_triage | bug.0337 | Per-node testcontainers setup uses operator's migrations — drift once any node diverges | Database Operations | proj.database-ops |
 | 2 | 50 | 3 | needs_triage | task.0377 | poly CTF redeem sweep — reactive architecture (replace per-tick RPC fan-out) | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
+| 2 | 50 | 2 | needs_design | bug.0382 | promote-and-deploy runs deploy-infra parallel with promote-k8s — Argo pulls new pods before infra prereqs land | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 60 | 1 | needs_implement | bug.0378 | reconcile-appset has no concurrency group — two concurrent flights race a shared kubectl apply | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 60 | 3 | needs_triage | task.0378 | poly anvil-fork test harness — verify CTF semantics against real Polygon chain state | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
 | 2 | 99 | 1 | needs_design | bug.0093 | Ownership facade N+1 — sequential DB queries per epoch | Transparent Credit Payouts | proj.transparent-credit-payouts |
