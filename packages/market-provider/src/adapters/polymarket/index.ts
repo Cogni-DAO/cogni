@@ -46,14 +46,34 @@ export {
   polymarketCtfRedeemAbi,
 } from "./polymarket.ctf.js";
 export {
+  type GetHoldersParams,
+  type GetValueParams,
+  type ListActivityParams,
+  type ListMarketTradesParams,
   type ListTopTradersParams,
   type ListUserActivityParams,
   type ListUserPositionsParams,
   type ListUserTradesParams,
+  PolyDataApiValidationError,
   PolymarketDataApiClient,
   type PolymarketDataApiClientConfig,
+  type ResolveUsernameParams,
 } from "./polymarket.data-api.client.js";
 export {
+  type ActivityEvent,
+  ActivityEventSchema,
+  ActivityEventsResponseSchema,
+  type ActivityEventType,
+  ActivityEventTypeSchema,
+  type GammaProfile,
+  GammaProfileSchema,
+  GammaPublicSearchResponseSchema,
+  type MarketHolder,
+  MarketHolderSchema,
+  MarketHoldersResponseSchema,
+  type MarketTrade,
+  MarketTradeSchema,
+  MarketTradesResponseSchema,
   type PolymarketLeaderboardEntry,
   PolymarketLeaderboardEntrySchema,
   type PolymarketLeaderboardOrderBy,
@@ -67,6 +87,8 @@ export {
   type PolymarketUserTrade,
   PolymarketUserTradeSchema,
   PolymarketUserTradesResponseSchema,
+  UserValueEntrySchema,
+  UserValueResponseSchema,
 } from "./polymarket.data-api.types.js";
 export {
   normalizePolymarketDataApiFill,

@@ -32,6 +32,7 @@ import {
 } from "@cogni/knowledge-store/adapters/doltgres";
 import { parseMcpConfigFromEnv } from "@cogni/langgraph-graphs";
 import { noopMetrics as noopMetricsForExecutor } from "@cogni/market-provider";
+import { PolymarketDataApiClient } from "@cogni/market-provider/adapters/polymarket";
 import {
   COGNI_SYSTEM_PRINCIPAL_USER_ID,
   EVENT_NAMES,
@@ -111,6 +112,7 @@ import {
   createMetricsCapability,
   derivePrometheusQueryUrl,
 } from "@/bootstrap/capabilities/metrics";
+import { createPolyResearchCapability } from "@/bootstrap/capabilities/poly-research";
 import {
   createPolyTradeExecutorFactory,
   type PolyTradeExecutor,
@@ -661,6 +663,14 @@ function createContainer(): Container {
   // WalletCapability for AI tools (Polymarket wallet scoreboard — public Data API)
   const walletCapability = createWalletCapability();
 
+  // PolyDataCapability for the 7 `core__poly_data_*` research tools (task.0386).
+  // Public Data API (no auth). Client is dedicated to this capability; the
+  // mirror poll below still constructs its own client lazily inside the lazy
+  // import block so pods without Polymarket creds avoid loading that code path.
+  const polyDataCapability = createPolyResearchCapability({
+    dataApiClient: new PolymarketDataApiClient(),
+  });
+
   // Copy-trade target source — always DB-backed. Component + stack tests
   // have a real Postgres (testcontainers), so there's no need to fall back to
   // an in-memory env impl. Pure unit tests that want a deterministic list
@@ -901,6 +911,7 @@ function createContainer(): Container {
     knowledgeCapability,
     marketCapability,
     metricsCapability,
+    polyDataCapability,
     webSearchCapability,
     repoCapability,
     scheduleCapability,

@@ -52,9 +52,23 @@ import {
   MARKET_LIST_NAME,
   METRICS_QUERY_NAME,
   POLY_CANCEL_ORDER_NAME,
+  POLY_DATA_ACTIVITY_NAME,
+  POLY_DATA_HELP_NAME,
+  POLY_DATA_HOLDERS_NAME,
+  POLY_DATA_POSITIONS_NAME,
+  POLY_DATA_RESOLVE_USERNAME_NAME,
+  POLY_DATA_TRADES_MARKET_NAME,
+  POLY_DATA_VALUE_NAME,
   POLY_LIST_ORDERS_NAME,
   POLY_PLACE_TRADE_NAME,
   polyCancelOrderStubImplementation,
+  polyDataActivityStubImplementation,
+  polyDataHelpImplementation,
+  polyDataHoldersStubImplementation,
+  polyDataPositionsStubImplementation,
+  polyDataResolveUsernameStubImplementation,
+  polyDataTradesMarketStubImplementation,
+  polyDataValueStubImplementation,
   polyListOrdersStubImplementation,
   polyPlaceTradeStubImplementation,
   REPO_LIST_NAME,
@@ -151,6 +165,23 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
     // Poly cancel-order: poly-only tool. Stub here for the same reason.
     [POLY_CANCEL_ORDER_NAME]:
       polyCancelOrderStubImplementation as AnyToolImplementation,
+
+    // Poly Data-API research tools (task.0386): poly-only. Stubs here so
+    // the shared TOOL_CATALOG iteration in createBoundToolSource does not
+    // throw. The help tool is static (no IO) and can use the real impl.
+    [POLY_DATA_POSITIONS_NAME]:
+      polyDataPositionsStubImplementation as AnyToolImplementation,
+    [POLY_DATA_ACTIVITY_NAME]:
+      polyDataActivityStubImplementation as AnyToolImplementation,
+    [POLY_DATA_VALUE_NAME]:
+      polyDataValueStubImplementation as AnyToolImplementation,
+    [POLY_DATA_HOLDERS_NAME]:
+      polyDataHoldersStubImplementation as AnyToolImplementation,
+    [POLY_DATA_TRADES_MARKET_NAME]:
+      polyDataTradesMarketStubImplementation as AnyToolImplementation,
+    [POLY_DATA_RESOLVE_USERNAME_NAME]:
+      polyDataResolveUsernameStubImplementation as AnyToolImplementation,
+    [POLY_DATA_HELP_NAME]: polyDataHelpImplementation as AnyToolImplementation,
 
     [METRICS_QUERY_NAME]: createMetricsQueryImplementation({
       metricsCapability: deps.metricsCapability,

@@ -130,6 +130,7 @@
 | 1 | 4 | 1 | needs_design | bug.0009 | Mock-LLM SSE streaming incompatible with OpenClaw pi-ai parser — gateway returns empty payloads | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 4 | 2 | needs_merge | bug.0197 | Scheduled runs accumulate messages in a single shared thread per schedule |  |  |
 | 1 | 4 | 5 | needs_design | task.0234 | Design: node repo creation + CI/CD onboarding pipeline | Node Formation & Launch | proj.node-formation-ui |
+| 1 | 4 | 3 | needs_merge | task.0386 | Poly agent wallet research v0 — Data-API tools + poly-research graph | Cogni Poly | proj.poly-prediction-bot |
 | 1 | 5 | 2 | needs_triage | bug.0044 | Gateway billing reader finds 0 entries in stale audit log — kills execution after graph switch | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 5 | 2 | needs_triage | bug.0069 | Stack tests flaky — all 5 waitForReceipts tests time out when run as full suite |  |  |
 | 1 | 5 | 2 | needs_design | bug.0200 | setup-secrets has no validation that generated secrets are deploy-safe | Database Operations | proj.database-ops |
@@ -139,11 +140,13 @@
 | 1 | 5 | 3 | needs_design | bug.0297 | POST /api/v1/agent/register is an unauthenticated account + API-key factory | Accounts, API Keys & Wallet Authentication | proj.accounts-api-keys |
 | 1 | 5 | 3 | needs_triage | bug.0327 | No client-side crash telemetry — node apps can serve broken UX to users and we don't know | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 5 | 1 | needs_merge | bug.0333 | Base audit — move envs-identical ConfigMap values out of overlay patches into base | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 5 | 1 | needs_implement | bug.0379 | core__poly_data_holders schema is wrong — real /holders response is grouped per outcome token | Cogni Poly | proj.poly-prediction-bot |
 | 1 | 6 | 1 | needs_triage | bug.0036 | Chat route enqueues to closed assistant-stream controller — unhandled TypeError |  |  |
 | 1 | 6 | 1 | needs_triage | bug.0070 | OpenClaw CLI binary not executable as `openclaw` — agent CLI commands fail | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 6 | 2 | needs_design | task.0183 | Run list API: GET /api/v1/ai/runs — query graph_runs with filtering | Live Operations Dashboard | proj.live-dashboard |
 | 1 | 6 | 2 | needs_triage | task.0185 | Migrate spy-based observability tests to correct test pyramid layer | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | 6 | 2 | needs_implement | bug.0345 | Polymarket neg-risk SELL close fails unless CTF setApprovalForAll also covers the Neg-Risk Adapter | Cogni Poly | proj.poly-copy-trading |
+| 1 | 6 | 1 | needs_implement | bug.0380 | core__poly_data_resolve_username silently returns empty — Gamma /public-search?profile=true does not serve profiles | Cogni Poly | proj.poly-prediction-bot |
 | 1 | 7 | 2 | needs_triage | bug.0051 | Gateway model routing has no E2E verification — spend/logs can't correlate gateway calls | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 7 | 5 | needs_merge | task.0189 | Dashboard P0→P1 bridge: thread linking, page consolidation, public Cogni Live, streaming status | Live Operations Dashboard | proj.live-dashboard |
 | 1 | 8 | 3 | needs_triage | bug.0004 | /activity dashboard cost column broken — charge_receipts needs linked telemetry | Payments & Billing Enhancements | proj.payments-enhancements |
@@ -222,6 +225,7 @@
 | 2 | 10 | 2 | needs_design | bug.0198 | Single Privy app shared across preview and production — no env isolation | Reliability & Uptime | proj.reliability |
 | 2 | 10 | 1 | needs_implement | bug.0201 | Runbook gap: secret changes require container recreation, not just workflow re-runs | Reliability & Uptime | proj.reliability |
 | 2 | 10 | 2 | needs_design | bug.0295 | VM IPs committed to public repo via deploy branch env-endpoints.yaml | CI/CD Pipeline | proj.cicd-services-gitops |
+| 2 | 10 | 1 | needs_triage | bug.0385 | core__market_list drops Polymarket conditionId → /holders + /trades unreachable to the agent | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 11 | 3 | needs_triage | task.0048 | Sub-agent billing attribution — track which OpenClaw sub-agent made each LLM call | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 2 | 12 | 3 | needs_triage | task.0040 | Gateway memory curation worker — scan ephemeral state, persist valuable context, reset container | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 2 | 14 | 1 | needs_design | task.0079 | Create bot-generated Discord invite link for website |  |  |

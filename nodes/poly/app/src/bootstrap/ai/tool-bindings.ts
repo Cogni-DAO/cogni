@@ -18,6 +18,7 @@ import type {
   KnowledgeCapability,
   MarketCapability,
   MetricsCapability,
+  PolyDataCapability,
   PolyTradeCapability,
   RepoCapability,
   ScheduleCapability,
@@ -34,6 +35,12 @@ import {
   createMarketListImplementation,
   createMetricsQueryImplementation,
   createPolyCancelOrderImplementation,
+  createPolyDataActivityImplementation,
+  createPolyDataHoldersImplementation,
+  createPolyDataPositionsImplementation,
+  createPolyDataResolveUsernameImplementation,
+  createPolyDataTradesMarketImplementation,
+  createPolyDataValueImplementation,
   createPolyListOrdersImplementation,
   createPolyPlaceTradeImplementation,
   createRepoListImplementation,
@@ -58,9 +65,17 @@ import {
   MARKET_LIST_NAME,
   METRICS_QUERY_NAME,
   POLY_CANCEL_ORDER_NAME,
+  POLY_DATA_ACTIVITY_NAME,
+  POLY_DATA_HELP_NAME,
+  POLY_DATA_HOLDERS_NAME,
+  POLY_DATA_POSITIONS_NAME,
+  POLY_DATA_RESOLVE_USERNAME_NAME,
+  POLY_DATA_TRADES_MARKET_NAME,
+  POLY_DATA_VALUE_NAME,
   POLY_LIST_ORDERS_NAME,
   POLY_PLACE_TRADE_NAME,
   polyCancelOrderStubImplementation,
+  polyDataHelpImplementation,
   polyListOrdersStubImplementation,
   polyPlaceTradeStubImplementation,
   REPO_LIST_NAME,
@@ -93,6 +108,11 @@ export interface ToolBindingDeps {
    * OPERATOR_WALLET_ADDRESS / POLY_CLOB_* / PRIVY_* env is incomplete.
    */
   readonly polyTradeCapability?: PolyTradeCapability | undefined;
+  /**
+   * PolyDataCapability — backs the 7 `core__poly_data_*` research tools (task.0386).
+   * Always required on poly (Data API is public).
+   */
+  readonly polyDataCapability: PolyDataCapability;
   readonly repoCapability: RepoCapability;
   readonly scheduleCapability: ScheduleCapability;
   readonly vcsCapability: VcsCapability;
@@ -174,6 +194,29 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
           polyTradeCapability: deps.polyTradeCapability,
         })
       : polyCancelOrderStubImplementation) as AnyToolImplementation,
+
+    // Poly Data-API research tools (task.0386) — poly brains can call these
+    // to research arbitrary proxy-wallets. Backed by public Data API (no auth).
+    [POLY_DATA_POSITIONS_NAME]: createPolyDataPositionsImplementation({
+      polyDataCapability: deps.polyDataCapability,
+    }) as AnyToolImplementation,
+    [POLY_DATA_ACTIVITY_NAME]: createPolyDataActivityImplementation({
+      polyDataCapability: deps.polyDataCapability,
+    }) as AnyToolImplementation,
+    [POLY_DATA_VALUE_NAME]: createPolyDataValueImplementation({
+      polyDataCapability: deps.polyDataCapability,
+    }) as AnyToolImplementation,
+    [POLY_DATA_HOLDERS_NAME]: createPolyDataHoldersImplementation({
+      polyDataCapability: deps.polyDataCapability,
+    }) as AnyToolImplementation,
+    [POLY_DATA_TRADES_MARKET_NAME]: createPolyDataTradesMarketImplementation({
+      polyDataCapability: deps.polyDataCapability,
+    }) as AnyToolImplementation,
+    [POLY_DATA_RESOLVE_USERNAME_NAME]:
+      createPolyDataResolveUsernameImplementation({
+        polyDataCapability: deps.polyDataCapability,
+      }) as AnyToolImplementation,
+    [POLY_DATA_HELP_NAME]: polyDataHelpImplementation as AnyToolImplementation,
 
     [WEB_SEARCH_NAME]: createWebSearchImplementation({
       webSearchCapability: deps.webSearchCapability,

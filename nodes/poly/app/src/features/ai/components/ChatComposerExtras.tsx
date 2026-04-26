@@ -42,6 +42,12 @@ const AVAILABLE_GRAPHS: readonly GraphOption[] = [
     description: "Prediction market analyst with live market data",
   },
   {
+    graphId: "langgraph:poly-research" satisfies GraphId,
+    name: "Poly Research",
+    description:
+      "Wallet-research analyst — profiles Polymarket proxy-wallets via Data-API and returns a ranked PolyResearchReport",
+  },
+  {
     graphId: "langgraph:brain" satisfies GraphId,
     name: "Brain",
     description: "Code-aware assistant with repo access",
