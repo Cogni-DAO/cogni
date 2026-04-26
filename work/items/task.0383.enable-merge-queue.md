@@ -73,3 +73,7 @@ User feedback note explicitly cautions against platform-stage abstractions befor
 
 - exercise: open a PR, click "Merge when ready", confirm GH queues it. Push a second PR while the first is queued — confirm the second waits, auto-rebases on the first's merge, re-runs checks, merges.
 - observability: GH branch-protection event log shows queue activity. Branch-protection config matches the committed yaml (`gh api ... | diff`).
+
+## PR / Links
+
+- Handoff: [handoff](../handoffs/task.0383.handoff.md)
