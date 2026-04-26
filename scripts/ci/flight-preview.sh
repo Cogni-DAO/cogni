@@ -52,15 +52,14 @@ set -euo pipefail
 # explicitly — the bug.0361 SHA-mismatch regression returns if it silently
 # falls back to SHA (the main merge commit).
 
-SHA="${1:?Usage: flight-preview.sh <sha> <repo> <deploy-branch> <gh-token> <build-sha>}"
+SHA="${1:?Usage: flight-preview.sh <sha> <repo> <deploy-branch> <gh-token> <build-sha> [nodes-csv]}"
 REPO="${2:?}"
 DEPLOY_BRANCH="${3:-deploy/preview}"
 GH_TOKEN="${4:-${GH_TOKEN:-}}"
-# Explicit positional arg > env var > SHA fallback. The env-var leg keeps
-# flight-preview.yml's current `BUILD_SHA:` step env working during migration;
-# the SHA fallback is only correct on direct-push-to-main where source_sha
-# and build_sha are the same commit.
 BUILD_SHA="${5:-${BUILD_SHA:-$SHA}}"
+# task.0376: scope promote-and-deploy.yml's matrix to affected nodes.
+# Empty (legacy callers) → promote-and-deploy.yml falls back to ALL_TARGETS.
+NODES_CSV="${6:-${NODES_CSV:-}}"
 
 # Emit `status=<value>` to $GITHUB_OUTPUT when running under Actions.
 # No-op from a plain shell so CLI/test callers aren't surprised.
@@ -172,13 +171,14 @@ push_with_retry() {
 push_with_retry
 
 if [ "${WILL_DISPATCH:-0}" = "1" ] && [ "$FLIGHT_LEASE_LOST" = "0" ]; then
-  echo "🚀 Dispatching promote-and-deploy env=preview for ${SHORT_SHA}..."
+  echo "🚀 Dispatching promote-and-deploy env=preview for ${SHORT_SHA} (nodes=${NODES_CSV:-all})..."
   gh workflow run promote-and-deploy.yml \
     --repo "$REPO" \
     --ref main \
     -f environment=preview \
     -f source_sha="$SHA" \
     -f build_sha="$BUILD_SHA" \
+    -f nodes="$NODES_CSV" \
     -f skip_infra=true
   echo "✅ Preview flight dispatched for ${SHORT_SHA}"
   emit_status "dispatched"

@@ -16,6 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import {
+  PolyDataApiValidationError,
   PolymarketDataApiClient,
   PolymarketLeaderboardEntrySchema,
 } from "../src/adapters/polymarket/index.js";
@@ -214,5 +215,230 @@ describe("PolymarketDataApiClient.listUserPositions", () => {
     const positions = await client.listUserPositions(wallet);
     expect(positions).toHaveLength(1);
     expect(positions[0]?.cashPnl).toBe(4);
+  });
+
+  it("forwards sizeThreshold + offset when provided", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse([]));
+    const client = new PolymarketDataApiClient({ fetch: fetchImpl });
+    await client.listUserPositions(wallet, {
+      sizeThreshold: 100,
+      limit: 25,
+      offset: 50,
+    });
+    const call = fetchImpl.mock.calls[0]?.[0] as string;
+    expect(call).toContain("sizeThreshold=100");
+    expect(call).toContain("limit=25");
+    expect(call).toContain("offset=50");
+  });
+});
+
+describe("PolymarketDataApiClient.listActivity", () => {
+  const wallet = "0x9f2fe025f84839ca81dd8e0338892605702d2ca8";
+
+  it("hits /activity with type/side/start/end/limit/offset and parses the response", async () => {
+    const body = [
+      {
+        proxyWallet: wallet,
+        type: "TRADE",
+        side: "BUY",
+        timestamp: 1776000000,
+        size: 10,
+        price: 0.5,
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));
+    const client = new PolymarketDataApiClient({ fetch: fetchImpl });
+    const events = await client.listActivity(wallet, {
+      type: "TRADE",
+      side: "BUY",
+      start: 1770000000,
+      end: 1780000000,
+      limit: 50,
+      offset: 0,
+    });
+    expect(events).toHaveLength(1);
+    const call = fetchImpl.mock.calls[0]?.[0] as string;
+    expect(call).toContain("/activity?user=");
+    expect(call).toContain("type=TRADE");
+    expect(call).toContain("side=BUY");
+    expect(call).toContain("start=1770000000");
+    expect(call).toContain("end=1780000000");
+    expect(call).toContain("limit=50");
+  });
+
+  it("throws on schema mismatch (fails closed)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse([{ totally: "wrong" }]));
+    const client = new PolymarketDataApiClient({ fetch: fetchImpl });
+    await expect(client.listActivity(wallet)).rejects.toThrow();
+  });
+
+  it("rejects malformed wallet addresses", async () => {
+    const fetchImpl = vi.fn();
+    const client = new PolymarketDataApiClient({ fetch: fetchImpl });
+    await expect(client.listActivity("not-a-wallet")).rejects.toThrow(
+      /Invalid wallet/
+    );
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("PolymarketDataApiClient.getValue", () => {
+  const wallet = "0x9f2fe025f84839ca81dd8e0338892605702d2ca8";
+
+  it("returns the first `{ user, value }` entry from /value", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse([{ user: wallet, value: 123.45 }]));
+    const client = new PolymarketDataApiClient({ fetch: fetchImpl });
+    const result = await client.getValue(wallet, { market: "0xabc" });
+    expect(result.user).toBe(wallet);
+    expect(result.value).toBeCloseTo(123.45);
+    const call = fetchImpl.mock.calls[0]?.[0] as string;
+    expect(call).toContain("/value?user=");
+    expect(call).toContain("market=0xabc");
+  });
+
+  it("returns zero when the endpoint yields an empty array", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse([]));
+    const client = new PolymarketDataApiClient({ fetch: fetchImpl });
+    const result = await client.getValue(wallet);
+    expect(result.value).toBe(0);
+  });
+});
+
+describe("PolymarketDataApiClient.getHolders", () => {
+  it("hits /holders?market=<id>&limit and returns parsed holders", async () => {
+    const body = [
+      {
+        proxyWallet: "0xAAA",
+        outcomeIndex: 0,
+        outcome: "Yes",
+        amount: 500,
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));
+    const client = new PolymarketDataApiClient({ fetch: fetchImpl });
+    const holders = await client.getHolders("0xCONDITION", { limit: 10 });
+    expect(holders).toHaveLength(1);
+    const call = fetchImpl.mock.calls[0]?.[0] as string;
+    expect(call).toContain("/holders?market=0xCONDITION");
+    expect(call).toContain("limit=10");
+  });
+
+  it("throws on empty market", async () => {
+    const client = new PolymarketDataApiClient({ fetch: vi.fn() });
+    await expect(client.getHolders("")).rejects.toThrow(/market/);
+  });
+});
+
+describe("PolymarketDataApiClient.listMarketTrades", () => {
+  it("hits /trades?market=<id> (no user) and sets takerOnly", async () => {
+    const body = [
+      {
+        proxyWallet: "0xTAKER",
+        makerAddress: "0xMAKER",
+        side: "BUY",
+        asset: "a",
+        conditionId: "c",
+        size: 10,
+        price: 0.5,
+        timestamp: 1776000000,
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));
+    const client = new PolymarketDataApiClient({ fetch: fetchImpl });
+    const trades = await client.listMarketTrades("0xCONDITION", {
+      takerOnly: true,
+      limit: 50,
+      offset: 0,
+    });
+    expect(trades).toHaveLength(1);
+    const call = fetchImpl.mock.calls[0]?.[0] as string;
+    expect(call).toContain("/trades?market=0xCONDITION");
+    expect(call).toContain("takerOnly=true");
+    expect(call).not.toContain("user=");
+  });
+});
+
+describe("PolymarketDataApiClient.resolveUsername", () => {
+  it("hits Gamma /public-search with profile=true and returns profiles[]", async () => {
+    const body = {
+      profiles: [
+        {
+          name: "alice",
+          proxyWallet: "0xABC",
+          displayUsername: "alice",
+        },
+      ],
+      events: [],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));
+    const client = new PolymarketDataApiClient({ fetch: fetchImpl });
+    const profiles = await client.resolveUsername("alice", { limit: 5 });
+    expect(profiles).toHaveLength(1);
+    expect(profiles[0]?.proxyWallet).toBe("0xABC");
+    const call = fetchImpl.mock.calls[0]?.[0] as string;
+    expect(call).toContain("gamma-api.polymarket.com");
+    expect(call).toContain("/public-search");
+    expect(call).toContain("q=alice");
+    expect(call).toContain("profile=true");
+    expect(call).toContain("limit=5");
+  });
+
+  it("uses a custom gammaBaseUrl when provided", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ profiles: [] }));
+    const client = new PolymarketDataApiClient({
+      fetch: fetchImpl,
+      gammaBaseUrl: "http://fake-gamma.test",
+    });
+    await client.resolveUsername("bob");
+    const call = fetchImpl.mock.calls[0]?.[0] as string;
+    expect(call).toContain("fake-gamma.test");
+  });
+
+  it("rejects queries shorter than 2 chars", async () => {
+    const client = new PolymarketDataApiClient({ fetch: vi.fn() });
+    await expect(client.resolveUsername("a")).rejects.toThrow(/≥2/);
+  });
+});
+
+describe("PolymarketDataApiClient Zod envelope", () => {
+  const wallet = "0x1234567890abcdef1234567890abcdef12345678";
+
+  it("throws PolyDataApiValidationError with endpoint + issues when /activity response is malformed", async () => {
+    // Missing required `proxyWallet` on the event — should fail the envelope parse.
+    const malformed = [{ type: "TRADE", timestamp: 1700000000 }];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(malformed));
+    const client = new PolymarketDataApiClient({
+      fetch: fetchImpl,
+      baseUrl: "http://fake.test",
+    });
+    await expect(client.listActivity(wallet)).rejects.toBeInstanceOf(
+      PolyDataApiValidationError
+    );
+    try {
+      await client.listActivity(wallet);
+    } catch (err) {
+      expect(err).toBeInstanceOf(PolyDataApiValidationError);
+      const typed = err as PolyDataApiValidationError;
+      expect(typed.code).toBe("VALIDATION_FAILED");
+      expect(typed.endpoint).toBe("/activity");
+      expect(typed.issues.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("throws PolyDataApiValidationError when /holders returns a non-array", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: "not an array" }));
+    const client = new PolymarketDataApiClient({
+      fetch: fetchImpl,
+      baseUrl: "http://fake.test",
+    });
+    await expect(
+      client.getHolders("0xabc", { limit: 10 })
+    ).rejects.toBeInstanceOf(PolyDataApiValidationError);
   });
 });

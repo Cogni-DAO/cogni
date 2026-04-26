@@ -34,6 +34,7 @@
 | 0 | 1 | 2 | needs_merge | bug.0376 | poly CTF redeem sweep burns POL on a runaway loop, re-redeeming already-redeemed positions | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
 | 0 | 1 | 5 | needs_triage | task.0379 | Poly redemption sweep — top-0.1% production-grade hardening (gates + spec + anvil-fork validation) | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
 | 0 | 1 | 1 | needs_design | task.0382 | `extractOwningNode(spec, paths)` — TS resolver for files-changed → owning nodeId in operator runtime | VCS Integration | proj.vcs-integration |
+| 0 | 1 | 1 | needs_merge | bug.0384 | poly CTF redeem sweep — read-then-write race burns gas on duplicate redeems | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
 | 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
 | 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -64,7 +65,7 @@
 | 0 | 25 | 2 | needs_implement | task.0090 | Keep Cogni Alive - direct system account funding on credits page | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
 | 0 | 99 | 2 | needs_closeout | task.0320 | Per-node flighting substrate — per-env deploy branches + per-node AppSets (candidate-a + preview + production) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 99 | 4 | needs_merge | task.0372 | Per-node candidate-flight matrix + AppSet substrate | CI/CD Pipeline | proj.cicd-services-gitops |
-| 0 | 99 | 3 | needs_implement | task.0376 | Preview + production matrix cutover — flight-preview.yml + promote-and-deploy.yml + cleanup | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | 99 | 3 | needs_merge | task.0376 | Preview + production matrix cutover — flight-preview.yml + promote-and-deploy.yml + cleanup | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 0 | 2 | needs_triage | task.0108 | Collection completeness verification for epoch ingestion | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 1 | 2 | needs_design | bug.0060 | Cost authority bug: OpenRouter billed cost not flowing through LiteLLM callback (response_cost=0) | Reliability & Uptime | proj.reliability |
 | 1 | 1 | 4 | needs_implement | task.0119 | Epoch approver UI — EIP-712 signing, review/edit/finalize admin panel | Transparent Credit Payouts | proj.transparent-credit-payouts |
@@ -129,6 +130,7 @@
 | 1 | 4 | 1 | needs_design | bug.0009 | Mock-LLM SSE streaming incompatible with OpenClaw pi-ai parser — gateway returns empty payloads | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 4 | 2 | needs_merge | bug.0197 | Scheduled runs accumulate messages in a single shared thread per schedule |  |  |
 | 1 | 4 | 5 | needs_design | task.0234 | Design: node repo creation + CI/CD onboarding pipeline | Node Formation & Launch | proj.node-formation-ui |
+| 1 | 4 | 3 | needs_merge | task.0386 | Poly agent wallet research v0 — Data-API tools + poly-research graph | Cogni Poly | proj.poly-prediction-bot |
 | 1 | 5 | 2 | needs_triage | bug.0044 | Gateway billing reader finds 0 entries in stale audit log — kills execution after graph switch | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 5 | 2 | needs_triage | bug.0069 | Stack tests flaky — all 5 waitForReceipts tests time out when run as full suite |  |  |
 | 1 | 5 | 2 | needs_design | bug.0200 | setup-secrets has no validation that generated secrets are deploy-safe | Database Operations | proj.database-ops |
@@ -138,11 +140,13 @@
 | 1 | 5 | 3 | needs_design | bug.0297 | POST /api/v1/agent/register is an unauthenticated account + API-key factory | Accounts, API Keys & Wallet Authentication | proj.accounts-api-keys |
 | 1 | 5 | 3 | needs_triage | bug.0327 | No client-side crash telemetry — node apps can serve broken UX to users and we don't know | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 5 | 1 | needs_merge | bug.0333 | Base audit — move envs-identical ConfigMap values out of overlay patches into base | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 5 | 1 | needs_implement | bug.0379 | core__poly_data_holders schema is wrong — real /holders response is grouped per outcome token | Cogni Poly | proj.poly-prediction-bot |
 | 1 | 6 | 1 | needs_triage | bug.0036 | Chat route enqueues to closed assistant-stream controller — unhandled TypeError |  |  |
 | 1 | 6 | 1 | needs_triage | bug.0070 | OpenClaw CLI binary not executable as `openclaw` — agent CLI commands fail | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 6 | 2 | needs_design | task.0183 | Run list API: GET /api/v1/ai/runs — query graph_runs with filtering | Live Operations Dashboard | proj.live-dashboard |
 | 1 | 6 | 2 | needs_triage | task.0185 | Migrate spy-based observability tests to correct test pyramid layer | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | 6 | 2 | needs_implement | bug.0345 | Polymarket neg-risk SELL close fails unless CTF setApprovalForAll also covers the Neg-Risk Adapter | Cogni Poly | proj.poly-copy-trading |
+| 1 | 6 | 1 | needs_implement | bug.0380 | core__poly_data_resolve_username silently returns empty — Gamma /public-search?profile=true does not serve profiles | Cogni Poly | proj.poly-prediction-bot |
 | 1 | 7 | 2 | needs_triage | bug.0051 | Gateway model routing has no E2E verification — spend/logs can't correlate gateway calls | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 7 | 5 | needs_merge | task.0189 | Dashboard P0→P1 bridge: thread linking, page consolidation, public Cogni Live, streaming status | Live Operations Dashboard | proj.live-dashboard |
 | 1 | 8 | 3 | needs_triage | bug.0004 | /activity dashboard cost column broken — charge_receipts needs linked telemetry | Payments & Billing Enhancements | proj.payments-enhancements |
@@ -221,6 +225,7 @@
 | 2 | 10 | 2 | needs_design | bug.0198 | Single Privy app shared across preview and production — no env isolation | Reliability & Uptime | proj.reliability |
 | 2 | 10 | 1 | needs_implement | bug.0201 | Runbook gap: secret changes require container recreation, not just workflow re-runs | Reliability & Uptime | proj.reliability |
 | 2 | 10 | 2 | needs_design | bug.0295 | VM IPs committed to public repo via deploy branch env-endpoints.yaml | CI/CD Pipeline | proj.cicd-services-gitops |
+| 2 | 10 | 1 | needs_triage | bug.0385 | core__market_list drops Polymarket conditionId → /holders + /trades unreachable to the agent | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 11 | 3 | needs_triage | task.0048 | Sub-agent billing attribution — track which OpenClaw sub-agent made each LLM call | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 2 | 12 | 3 | needs_triage | task.0040 | Gateway memory curation worker — scan ephemeral state, persist valuable context, reset container | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 2 | 14 | 1 | needs_design | task.0079 | Create bot-generated Discord invite link for website |  |  |
@@ -332,6 +337,7 @@
 | 0 | bug.0344 | Hand-curated overlay digests drift on every unrelated flight — adopt a digest-update controller | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | task.0361 | Poly — first-user onboarding flow v0 (sign-on → provision → fund → select targets) | Cogni Poly | proj.poly-copy-trading |
 | 0 | task.0381 | Single-node-scope CI gate — reject PRs that touch >1 node domain (operator owns repo infra) | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | bug.0383 | poly CTF redeem sweep loops on losing-outcome ERC1155 — bug.0376 fix-of-fix | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
 | 1 | task.0006 | Collapse GraphProvider into GraphExecutorPort — single execution interface + namespace routing | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0007 | Billing enforcement decorator at GraphExecutorPort level | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0010 | OpenClaw gateway model selection — session-level override or agent-per-specialty | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
@@ -409,6 +415,7 @@
 | 1 | bug.0338 | Phase A targets never copy-trade — POST doesn't upsert kill-switch config, enumerator is boot-time only | Cogni Poly | proj.poly-copy-trading |
 | 1 | task.0358 | Poly dashboard — open vs closed positions, position history replaces order history | Cogni Poly | proj.poly-copy-trading |
 | 1 | bug.0360 | Poly research Day tab hangs indefinitely — no timeout, no error state | Cogni Poly | proj.poly-prediction-bot |
+| 1 | bug.0381 | wait-for-in-cluster-services.sh ignores PROMOTED_APPS — every matrix cell waits for every Deployment | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 2 | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |

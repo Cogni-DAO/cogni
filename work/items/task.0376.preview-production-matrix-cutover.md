@@ -2,7 +2,7 @@
 id: task.0376
 type: task
 title: Preview + production matrix cutover — flight-preview.yml + promote-and-deploy.yml + cleanup
-status: needs_implement
+status: needs_merge
 priority: 0
 rank: 99
 estimate: 3
@@ -22,6 +22,8 @@ spec_refs:
   - docs/spec/ci-cd.md
 assignees: []
 project: proj.cicd-services-gitops
+branch: feat/task.0376-preview-prod-matrix
+pr: https://github.com/Cogni-DAO/node-template/pull/1062
 created: 2026-04-25
 updated: 2026-04-25
 labels: [cicd, deployment, task.0372-followup]
@@ -66,6 +68,25 @@ Each step is its own commit cycle with workflow_dispatch dry-run between.
 - **`workflow_call` semantics.** Caller-cell concurrency applies to the cell job, not to inner jobs of the called workflow; test that disjoint-node parallel cells don't deadlock on inner promote-k8s concurrency.
 - **Aggregator rebase-retry depth.** With many concurrent flights, the aggregator may hit retry exhaustion. Set retry count generously (≥5) and surface failures loudly.
 
+## Review Feedback (2026-04-25, /review-implementation on PR #1062)
+
+**Verdict: REQUEST CHANGES → fixed in same iteration.** Three blocking issues found via critical review; all addressed in commits on top of the live-test fix `ff69c245a`. `pnpm check` PASS.
+
+### Blocking — fixed
+
+1. **`scripts/ci/aggregate-rollup.sh:38`** — `--depth=1` clone broke the rebase-retry safety net under push contention (no merge-base in history). Fixed: `--depth=50` on clone + per-node fetch.
+2. **`promote-and-deploy.yml`** — silent-green when all per-cell GHCR resolves miss (every cell exits success with `promoted=false` → aggregate-preview locks at unchanged current-sha). Fixed: aggregate-preview + aggregate-production now download all `cell-*` artifacts and require ≥1 `promoted-*.txt = true`, else outcome=failed.
+3. **`promote-and-deploy.yml` preview-forward Python regex** — bespoke overlay parser duplicated logic that `resolve-digests-from-preview.sh` already handles. Fixed: replaced inline Python with `bash resolve-digests-from-preview.sh | jq` indexed to `matrix.node`. OSS_OVER_BESPOKE.
+
+### Non-blocking observations
+
+- `verify-deploy.if` gates on aggregate `promote-k8s.result == 'success'` — one failed cell short-circuits ALL verify cells. Inherited from candidate-flight.yml (task.0372); LANE_ISOLATION holds within a matrix job but not across job boundaries. Not introduced here; flag for future work.
+- `flight-preview.yml NODES_CSV` normalization is space-only; multiple consecutive spaces would produce empty CSV elements. Pre-existing `RESOLVED_TARGETS` source shouldn't have those.
+
+### Validation plan (post-revision)
+
+See PR #1062 comment for the 5-stage validation plan: (1) PR-branch dispatch single-cell preview with non-squash SHA, (2) full-matrix preview, (3) concurrent disjoint-node, (4) preview-forward production single-node, (5) post-merge soak + production cutover.
+
 ## Validation
 
 - (c) Merge to main triggering preview promotion with one affected node → only that node's preview matrix cell runs; sibling per-node preview branches untouched; `aggregate-preview` updates `deploy/preview/.promote-state/current-sha` to `git merge-base` of the 4 per-node tips.
@@ -74,3 +95,7 @@ Each step is its own commit cycle with workflow_dispatch dry-run between.
 - (f) Concurrent flights on the same node → second waits on `concurrency: flight-${{ matrix.env }}-${{ matrix.node }}` group, eventually succeeds or fails cleanly.
 - Lease semantics confirmed: `aggregate-preview` is the SOLE writer of `lock-preview-on-success` / `unlock-preview-on-failure`; per-cell jobs cannot push `.promote-state/lease.json` (AGGREGATOR_OWNS_LEASE).
 - `release.yml` byte-unchanged; `create-release.sh:22` still reads `current-sha` from `deploy/preview/.promote-state/`.
+
+## PR / Links
+
+- Handoff: [handoff](../handoffs/task.0376.handoff.md)

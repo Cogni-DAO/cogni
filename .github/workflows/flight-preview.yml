@@ -212,19 +212,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
-          # PR branch head SHA — the SHA baked into images at build time.
-          # Differs from HEAD_SHA on squash-merge (HEAD_SHA = new main commit).
-          # Passed as positional arg 5 so the contract is explicit; a silent
-          # env-var fallback reintroduces the bug.0361 SHA-mismatch regression.
           BUILD_SHA: ${{ steps.pr.outputs.pr_head_sha }}
           REPOSITORY: ${{ github.repository }}
+          # task.0376: scope promote-and-deploy.yml's matrix to affected
+          # targets (RESOLVED_TARGETS is space-delimited; convert to CSV).
+          RESOLVED_TARGETS: ${{ steps.images.outputs.resolved_targets }}
         run: |
+          NODES_CSV=$(echo "${RESOLVED_TARGETS}" | tr ' ' ',' | sed 's/^,//;s/,$//')
           bash scripts/ci/flight-preview.sh \
             "$HEAD_SHA" \
             "$REPOSITORY" \
             "deploy/preview" \
             "$GH_TOKEN" \
-            "$BUILD_SHA"
+            "$BUILD_SHA" \
+            "$NODES_CSV"
         continue-on-error: true
 
       - name: Propagate flight failure

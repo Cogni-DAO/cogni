@@ -5,7 +5,7 @@
  * Module: `@app/readyz`
  * Purpose: HTTP endpoint providing readiness check with full validation (env, secrets, EVM RPC, Temporal).
  * Scope: Returns service readiness status; validates env, runtime secrets, EVM RPC connectivity, Temporal connectivity, and system tenant presence. Does not check DB connectivity beyond system tenant lookup.
- * Invariants: Always returns valid readyz schema; force-dynamic runtime; returns 503 if env/secrets/infra connectivity invalid.
+ * Invariants: Always returns valid readyz schema; force-dynamic runtime; returns 503 only on env/secrets/Temporal/scheduler/tenant failure. EVM RPC is checked with TTL caching and treated as non-fatal (logged warning, still 200) so an upstream RPC blip can't drain the pod.
  * Side-effects: IO (HTTP response, structured logging, network calls to RPC and Temporal)
  * Notes: Used by Docker HEALTHCHECK, deployment validation, K8s readiness probes.
  *        HTTP status is primary truth: 200 = ready, 503 = not ready.
@@ -22,10 +22,10 @@ import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { EnvValidationError, serverEnv } from "@/shared/env";
 import {
   assertEvmRpcConfig,
-  assertEvmRpcConnectivity,
   assertRuntimeSecrets,
   assertSchedulerWorkerConnectivity,
   assertTemporalConnectivity,
+  checkEvmRpcConnectivity,
   InfraConnectivityError,
   RuntimeSecretError,
 } from "@/shared/env/invariants";
@@ -99,12 +99,27 @@ export const GET = wrapRouteHandlerWithLogging(
       // MVP readiness: Validate env + runtime secrets + EVM RPC + Temporal connectivity
       assertRuntimeSecrets(env);
 
-      // EVM RPC checks: skip when payment rails not activated (nodes without payments_in config).
-      // Payment config comes from repo-spec; nodes that haven't activated payments yet are still
-      // healthy for chat/AI — they just can't process crypto payments.
+      // EVM RPC: required-config is fatal (missing URL = misconfig), but live
+      // connectivity is non-fatal. K8s probes /readyz every 5s on every pod;
+      // failing the pod when an upstream RPC 429s or blips would drain the
+      // fleet for a transient issue that doesn't affect chat/AI traffic.
+      // Payment processing has its own retry/verification path.
       if (container.paymentRailsActive) {
         assertEvmRpcConfig(env);
-        await assertEvmRpcConnectivity(container.evmOnchainClient, env);
+        const evmRpcResult = await checkEvmRpcConnectivity(
+          container.evmOnchainClient,
+          env
+        );
+        if (!evmRpcResult.ok) {
+          ctx.log.warn(
+            {
+              reason: "EVM_RPC_DEGRADED",
+              source: evmRpcResult.source,
+              error: evmRpcResult.errorMessage,
+            },
+            "readiness: EVM RPC unreachable, returning ready (non-fatal)"
+          );
+        }
       }
 
       // Test Temporal connectivity (5s budget, triggers lazy connection)

@@ -47,13 +47,18 @@ vi.mock("viem", () => ({
   createWalletClient: vi.fn(() => ({ writeContract })),
   createPublicClient: vi.fn(() => ({ waitForTransactionReceipt, multicall })),
   http: vi.fn(() => "transport"),
+  parseAbi: vi.fn(() => []),
 }));
 
 vi.mock("viem/chains", () => ({
   polygon: { id: 137 },
 }));
 
-import { createPolyTradeExecutorFactory } from "@/bootstrap/capabilities/poly-trade-executor";
+import {
+  _resetRedeemCooldownForTests,
+  _resetSweepMutexForTests,
+  createPolyTradeExecutorFactory,
+} from "@/bootstrap/capabilities/poly-trade-executor";
 
 const BILLING_ACCOUNT_ID = "billing-account-1";
 const FUNDER = "0x1111111111111111111111111111111111111111" as const;
@@ -137,6 +142,10 @@ describe("createPolyTradeExecutorFactory", () => {
     writeContract.mockReset();
     waitForTransactionReceipt.mockReset();
     multicall.mockReset();
+    // bug.0384: module-scope cooldown + mutex must reset between tests
+    // to prevent state leakage from one redeem call into the next.
+    _resetRedeemCooldownForTests();
+    _resetSweepMutexForTests();
     getMarketConstraints.mockResolvedValue({ minShares: 1 });
     listOpenOrders.mockResolvedValue([]);
     waitForTransactionReceipt.mockResolvedValue({ status: "success" });
@@ -296,13 +305,19 @@ describe("createPolyTradeExecutorFactory", () => {
   it("redeemResolvedPosition requires only an active tenant wallet connection, not grant authorization or trading approvals", async () => {
     listUserPositions.mockResolvedValue([
       {
-        asset: "token-1",
+        asset: "1",
         size: 2,
         curPrice: 1,
         conditionId: CONDITION_ID,
         outcome: "YES",
+        outcomeIndex: 0,
         redeemable: true,
       },
+    ]);
+    // bug.0383 precheck: balance>0 AND payoutNumerator>0 → ok to redeem
+    multicall.mockResolvedValue([
+      { status: "success", result: 100n },
+      { status: "success", result: 1n },
     ]);
     writeContract.mockResolvedValue("0xtxhash");
     const walletPort = makeWalletPort();
@@ -331,8 +346,10 @@ describe("createPolyTradeExecutorFactory", () => {
   });
 
   // bug.0376: redeem sweep predicate is on-chain ERC1155 balance, not the
-  // Data-API `redeemable` flag.
-  describe("redeemAllRedeemableResolvedPositions (bug.0376 predicate)", () => {
+  // Data-API `redeemable` flag. bug.0383 adds a paired `payoutNumerators`
+  // read and gates submission on it (skips losing-outcome no-ops). Each
+  // candidate produces 2 multicall entries: [balanceOf, payoutNumerators].
+  describe("redeemAllRedeemableResolvedPositions (bug.0376 + bug.0383 predicate)", () => {
     const CONDITION_A =
       "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
     const CONDITION_B =
@@ -365,10 +382,14 @@ describe("createPolyTradeExecutorFactory", () => {
           curPrice: 1,
           conditionId: CONDITION_A,
           outcome: "YES",
+          outcomeIndex: 0,
           redeemable: true,
         },
       ]);
-      multicall.mockResolvedValue([{ status: "success", result: 0n }]);
+      multicall.mockResolvedValue([
+        { status: "success", result: 0n }, // balanceOf
+        { status: "success", result: 1n }, // payoutNumerators (would-win)
+      ]);
 
       const { factory } = makeFactory();
       const executor =
@@ -380,7 +401,33 @@ describe("createPolyTradeExecutorFactory", () => {
       expect(writeContract).not.toHaveBeenCalled();
     });
 
-    it("redeems positions where balance > 0 (one writeContract per non-zero)", async () => {
+    it("skips positions where payoutNumerator is zero (losing outcome) — bug.0383 gate", async () => {
+      listUserPositions.mockResolvedValue([
+        {
+          asset: "1",
+          size: 50,
+          curPrice: 0,
+          conditionId: CONDITION_A,
+          outcome: "NO",
+          outcomeIndex: 1,
+          redeemable: true,
+        },
+      ]);
+      multicall.mockResolvedValue([
+        { status: "success", result: 50n }, // balanceOf > 0
+        { status: "success", result: 0n }, // payoutNumerators[heldIdx] = 0 (losing)
+      ]);
+
+      const { factory } = makeFactory();
+      const executor =
+        await factory.getPolyTradeExecutorFor(BILLING_ACCOUNT_ID);
+      const result = await executor.redeemAllRedeemableResolvedPositions();
+
+      expect(result).toEqual([]);
+      expect(writeContract).not.toHaveBeenCalled();
+    });
+
+    it("skips positions where Data-API outcomeIndex is missing (bug.0383 fail-loud)", async () => {
       listUserPositions.mockResolvedValue([
         {
           asset: "1",
@@ -388,40 +435,53 @@ describe("createPolyTradeExecutorFactory", () => {
           curPrice: 1,
           conditionId: CONDITION_A,
           outcome: "YES",
-          redeemable: true,
-        },
-        {
-          asset: "2",
-          size: 3,
-          curPrice: 1,
-          conditionId: CONDITION_B,
-          outcome: "NO",
+          // outcomeIndex intentionally absent — schema is now optional
           redeemable: true,
         },
       ]);
+      // Predicate's missing-outcome guard fires before the read could matter,
+      // but the multicall still runs for layout simplicity (placeholder idx=0).
       multicall.mockResolvedValue([
         { status: "success", result: 100n },
-        { status: "success", result: 0n },
+        { status: "success", result: 1n },
       ]);
-      // Sweep re-reads positions inside `redeemResolvedPosition` to look up
-      // the per-condition match — return both positions for that lookup too.
-      listUserPositions.mockResolvedValueOnce([
+
+      const { factory } = makeFactory();
+      const executor =
+        await factory.getPolyTradeExecutorFor(BILLING_ACCOUNT_ID);
+      const result = await executor.redeemAllRedeemableResolvedPositions();
+
+      expect(result).toEqual([]);
+      expect(writeContract).not.toHaveBeenCalled();
+    });
+
+    it("redeems positions where balance>0 AND payoutNumerator>0 (one writeContract per winner)", async () => {
+      listUserPositions.mockResolvedValue([
         {
           asset: "1",
           size: 5,
           curPrice: 1,
           conditionId: CONDITION_A,
           outcome: "YES",
+          outcomeIndex: 0,
           redeemable: true,
         },
         {
           asset: "2",
           size: 3,
-          curPrice: 1,
+          curPrice: 0,
           conditionId: CONDITION_B,
           outcome: "NO",
+          outcomeIndex: 1,
           redeemable: true,
         },
+      ]);
+      // 2N layout: [bal_A, num_A, bal_B, num_B]
+      multicall.mockResolvedValue([
+        { status: "success", result: 100n }, // A: balance > 0
+        { status: "success", result: 1n }, // A: winner
+        { status: "success", result: 50n }, // B: balance > 0
+        { status: "success", result: 0n }, // B: loser → skip
       ]);
       writeContract.mockResolvedValue("0xredeemA");
 
@@ -436,12 +496,10 @@ describe("createPolyTradeExecutorFactory", () => {
       expect(writeContract).toHaveBeenCalledTimes(1);
     });
 
-    it("ignores Position.redeemable flag — sweep selects positions by balance, not by redeemable=true", async () => {
-      // The bug being fixed: the sweep used to filter on `p.redeemable`
-      // (Data-API) and submit `redeemPositions` even when the funder had
-      // zero balance. The fix flips the predicate to on-chain balance and
-      // drops the `redeemable` check entirely. Regression gate: a position
-      // with redeemable=false MUST still be enumerated and balanceOf'd.
+    it("ignores Position.redeemable flag — sweep selects by chain truth, not Data-API", async () => {
+      // bug.0376 regression gate: a position with redeemable=false MUST still
+      // be enumerated and on-chain-checked. bug.0383 extends this with the
+      // payoutNumerators gate.
       listUserPositions.mockResolvedValue([
         {
           asset: "1",
@@ -449,26 +507,31 @@ describe("createPolyTradeExecutorFactory", () => {
           curPrice: 1,
           conditionId: CONDITION_A,
           outcome: "YES",
+          outcomeIndex: 0,
           redeemable: false,
         },
       ]);
-      multicall.mockResolvedValue([{ status: "success", result: 0n }]);
+      multicall.mockResolvedValue([
+        { status: "success", result: 0n },
+        { status: "success", result: 0n },
+      ]);
 
       const { factory } = makeFactory();
       const executor =
         await factory.getPolyTradeExecutorFor(BILLING_ACCOUNT_ID);
       await executor.redeemAllRedeemableResolvedPositions();
 
-      // The sweep called multicall WITH this position (predicate inverted).
       expect(multicall).toHaveBeenCalledTimes(1);
       const call = multicall.mock.calls[0]?.[0] as
-        | { contracts: Array<{ args: readonly [unknown, unknown] }> }
+        | { contracts: Array<{ functionName: string }> }
         | undefined;
-      expect(call?.contracts).toHaveLength(1);
-      expect(call?.contracts[0]?.args[1]).toBe(1n);
+      // 2N layout per candidate: balanceOf + payoutNumerators
+      expect(call?.contracts).toHaveLength(2);
+      expect(call?.contracts[0]?.functionName).toBe("balanceOf");
+      expect(call?.contracts[1]?.functionName).toBe("payoutNumerators");
     });
 
-    it("makes a single multicall regardless of position count (no per-position eth_call fan-out)", async () => {
+    it("makes a single multicall regardless of position count (no per-position fan-out)", async () => {
       listUserPositions.mockResolvedValue([
         {
           asset: "1",
@@ -476,6 +539,7 @@ describe("createPolyTradeExecutorFactory", () => {
           curPrice: 1,
           conditionId: CONDITION_A,
           outcome: "YES",
+          outcomeIndex: 0,
           redeemable: false,
         },
         {
@@ -484,10 +548,13 @@ describe("createPolyTradeExecutorFactory", () => {
           curPrice: 1,
           conditionId: CONDITION_B,
           outcome: "NO",
+          outcomeIndex: 1,
           redeemable: false,
         },
       ]);
       multicall.mockResolvedValue([
+        { status: "success", result: 0n },
+        { status: "success", result: 0n },
         { status: "success", result: 0n },
         { status: "success", result: 0n },
       ]);
@@ -501,10 +568,10 @@ describe("createPolyTradeExecutorFactory", () => {
       const call = multicall.mock.calls[0]?.[0] as
         | { contracts: Array<unknown> }
         | undefined;
-      expect(call?.contracts).toHaveLength(2);
+      expect(call?.contracts).toHaveLength(4); // 2N
     });
 
-    it("redeems every position when all balances are non-zero (in order)", async () => {
+    it("redeems every position when all balances are non-zero AND all winners (in order)", async () => {
       const positionList = [
         {
           asset: "1",
@@ -512,6 +579,7 @@ describe("createPolyTradeExecutorFactory", () => {
           curPrice: 1,
           conditionId: CONDITION_A,
           outcome: "YES",
+          outcomeIndex: 0,
           redeemable: true,
         },
         {
@@ -520,16 +588,30 @@ describe("createPolyTradeExecutorFactory", () => {
           curPrice: 1,
           conditionId: CONDITION_B,
           outcome: "NO",
+          outcomeIndex: 1,
           redeemable: true,
         },
       ];
-      // First call (sweep enumeration) + two re-fetches inside
-      // redeemResolvedPosition's per-condition match.
       listUserPositions.mockResolvedValue(positionList);
-      multicall.mockResolvedValue([
-        { status: "success", result: 100n },
-        { status: "success", result: 200n },
-      ]);
+      // Sweep multicall (2N) + per-redeem precheck multicall (single 2)
+      // Sweep enumerates 2 positions, sees both as winners, then for each
+      // condition the manual route's precheck ALSO does its own 2-call
+      // multicall before writeContract.
+      multicall
+        .mockResolvedValueOnce([
+          { status: "success", result: 100n },
+          { status: "success", result: 1n },
+          { status: "success", result: 200n },
+          { status: "success", result: 1n },
+        ])
+        .mockResolvedValueOnce([
+          { status: "success", result: 100n },
+          { status: "success", result: 1n },
+        ])
+        .mockResolvedValueOnce([
+          { status: "success", result: 200n },
+          { status: "success", result: 1n },
+        ]);
       writeContract
         .mockResolvedValueOnce("0xredeemA")
         .mockResolvedValueOnce("0xredeemB");
@@ -546,7 +628,7 @@ describe("createPolyTradeExecutorFactory", () => {
       expect(writeContract).toHaveBeenCalledTimes(2);
     });
 
-    it("skips positions where balanceOf multicall element failed; later successes still redeem", async () => {
+    it("skips positions where multicall element failed (read_failed); later successes still redeem", async () => {
       const positionList = [
         {
           asset: "1",
@@ -554,6 +636,7 @@ describe("createPolyTradeExecutorFactory", () => {
           curPrice: 1,
           conditionId: CONDITION_A,
           outcome: "YES",
+          outcomeIndex: 0,
           redeemable: true,
         },
         {
@@ -561,15 +644,24 @@ describe("createPolyTradeExecutorFactory", () => {
           size: 1,
           curPrice: 1,
           conditionId: CONDITION_B,
-          outcome: "NO",
+          outcome: "YES",
+          outcomeIndex: 0,
           redeemable: true,
         },
       ];
       listUserPositions.mockResolvedValue(positionList);
-      multicall.mockResolvedValue([
-        { status: "failure", error: new Error("rpc down") },
-        { status: "success", result: 100n },
-      ]);
+      multicall
+        .mockResolvedValueOnce([
+          { status: "failure", error: new Error("rpc down") }, // bal_A failed
+          { status: "success", result: 1n },
+          { status: "success", result: 100n }, // bal_B ok
+          { status: "success", result: 1n },
+        ])
+        // precheck inside redeemResolvedPosition for B
+        .mockResolvedValueOnce([
+          { status: "success", result: 100n },
+          { status: "success", result: 1n },
+        ]);
       writeContract.mockResolvedValue("0xredeemB");
 
       const { factory } = makeFactory();
@@ -607,6 +699,7 @@ describe("createPolyTradeExecutorFactory", () => {
           curPrice: 1,
           conditionId: withPrefix,
           outcome: "YES",
+          outcomeIndex: 0,
           redeemable: true,
         },
         {
@@ -615,10 +708,14 @@ describe("createPolyTradeExecutorFactory", () => {
           curPrice: 1,
           conditionId: withoutPrefix,
           outcome: "YES",
+          outcomeIndex: 0,
           redeemable: true,
         },
       ]);
-      multicall.mockResolvedValue([{ status: "success", result: 0n }]);
+      multicall.mockResolvedValue([
+        { status: "success", result: 0n },
+        { status: "success", result: 0n },
+      ]);
 
       const { factory } = makeFactory();
       const executor =
@@ -629,7 +726,160 @@ describe("createPolyTradeExecutorFactory", () => {
       const call = multicall.mock.calls[0]?.[0] as
         | { contracts: Array<unknown> }
         | undefined;
-      expect(call?.contracts).toHaveLength(1);
+      expect(call?.contracts).toHaveLength(2); // one candidate × 2N
+    });
+  });
+
+  // bug.0384 race regression: per-condition cooldown + sweep mutex.
+  describe("redeemAllRedeemableResolvedPositions race guards (bug.0384)", () => {
+    const CONDITION_W =
+      "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" as const;
+
+    function makeFactory() {
+      const walletPort = makeWalletPort();
+      vi.mocked(walletPort.getConnectionSummary).mockResolvedValue({
+        connectionId: "connection-1",
+        funderAddress: FUNDER,
+        tradingApprovalsReadyAt: null,
+      });
+      return createPolyTradeExecutorFactory({
+        walletPort,
+        logger: makeLogger() as never,
+        metrics: makeMetrics() as never,
+        host: "https://clob.polymarket.com",
+        polygonRpcUrl: "https://polygon.example",
+      });
+    }
+
+    function winnerPositions() {
+      return [
+        {
+          asset: "1",
+          size: 5,
+          curPrice: 1,
+          conditionId: CONDITION_W,
+          outcome: "YES",
+          outcomeIndex: 0,
+          redeemable: true,
+        },
+      ];
+    }
+
+    function winnerMulticall() {
+      // 2N: balanceOf=100 (winner held), payoutNumerators=1 (winner)
+      return [
+        { status: "success", result: 100n },
+        { status: "success", result: 1n },
+      ];
+    }
+
+    it("cooldown: second sweep within 60s does not re-fire writeContract on the same condition", async () => {
+      // Tick A: sweep finds winner, fires writeContract once, marks pending.
+      // Tick B: same chain state (multicall still says balance>0 because
+      // tx A hasn't mined). Cooldown short-circuits the candidate.
+      listUserPositions.mockResolvedValue(winnerPositions());
+      multicall.mockResolvedValue(winnerMulticall());
+      writeContract.mockResolvedValue("0xtxA");
+
+      const factory = makeFactory();
+      const executor =
+        await factory.getPolyTradeExecutorFor(BILLING_ACCOUNT_ID);
+
+      const a = await executor.redeemAllRedeemableResolvedPositions();
+      expect(a).toEqual([{ condition_id: CONDITION_W, tx_hash: "0xtxA" }]);
+      expect(writeContract).toHaveBeenCalledTimes(1);
+
+      // Re-mock multicall (sweep B reads same pre-burn balance) — would
+      // race-fire pre-bug.0384. Cooldown must skip.
+      multicall.mockResolvedValue(winnerMulticall());
+      const b = await executor.redeemAllRedeemableResolvedPositions();
+
+      expect(b).toEqual([]); // no new redeem
+      expect(writeContract).toHaveBeenCalledTimes(1); // still just one
+    });
+
+    it("cooldown lifts after 60s: same condition can fire again once expired", async () => {
+      vi.useFakeTimers();
+      try {
+        listUserPositions.mockResolvedValue(winnerPositions());
+        multicall.mockResolvedValue(winnerMulticall());
+        writeContract.mockResolvedValue("0xtxA");
+
+        const factory = makeFactory();
+        const executor =
+          await factory.getPolyTradeExecutorFor(BILLING_ACCOUNT_ID);
+
+        await executor.redeemAllRedeemableResolvedPositions();
+        expect(writeContract).toHaveBeenCalledTimes(1);
+
+        // Advance past 60s cooldown window.
+        vi.advanceTimersByTime(61_000);
+
+        multicall.mockResolvedValue(winnerMulticall());
+        writeContract.mockResolvedValue("0xtxC");
+        const c = await executor.redeemAllRedeemableResolvedPositions();
+
+        expect(c).toEqual([{ condition_id: CONDITION_W, tx_hash: "0xtxC" }]);
+        expect(writeContract).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("mutex: concurrent sweep calls do not double-fire — second call short-circuits", async () => {
+      // Two sweeps started before the first writeContract completes.
+      // Without the mutex, both would compute the same predicate and both
+      // would call writeContract. With the mutex, the second returns [].
+      listUserPositions.mockResolvedValue(winnerPositions());
+      multicall.mockResolvedValue(winnerMulticall());
+      // Block the first writeContract until we release it manually so we
+      // can definitively start a second sweep mid-way through the first.
+      let releaseWrite!: (h: string) => void;
+      const writePromise = new Promise<string>((res) => {
+        releaseWrite = res;
+      });
+      writeContract.mockReturnValue(writePromise);
+
+      const factory = makeFactory();
+      const executor =
+        await factory.getPolyTradeExecutorFor(BILLING_ACCOUNT_ID);
+
+      const sweepA = executor.redeemAllRedeemableResolvedPositions();
+      // Yield once so sweepA's redeem path hits the awaited writeContract.
+      await Promise.resolve();
+      await Promise.resolve();
+      const sweepB = executor.redeemAllRedeemableResolvedPositions();
+      const b = await sweepB;
+      // sweepB must have short-circuited via the mutex BEFORE doing any
+      // multicall reads or writeContract calls.
+      expect(b).toEqual([]);
+
+      // Now let sweepA finish.
+      releaseWrite("0xtxA");
+      const a = await sweepA;
+      expect(a).toEqual([{ condition_id: CONDITION_W, tx_hash: "0xtxA" }]);
+      expect(writeContract).toHaveBeenCalledTimes(1);
+    });
+
+    it("manual redeemResolvedPosition rejects with pending_redeem after a recent sweep redeem", async () => {
+      // Sweep fires for the winner → cooldown set.
+      listUserPositions.mockResolvedValue(winnerPositions());
+      multicall.mockResolvedValue(winnerMulticall());
+      writeContract.mockResolvedValue("0xtxA");
+
+      const factory = makeFactory();
+      const executor =
+        await factory.getPolyTradeExecutorFor(BILLING_ACCOUNT_ID);
+
+      await executor.redeemAllRedeemableResolvedPositions();
+      expect(writeContract).toHaveBeenCalledTimes(1);
+
+      // Manual redeem on the same condition immediately after must reject.
+      multicall.mockResolvedValue(winnerMulticall());
+      await expect(
+        executor.redeemResolvedPosition({ condition_id: CONDITION_W })
+      ).rejects.toThrow(/redeem already pending/);
+      expect(writeContract).toHaveBeenCalledTimes(1); // no new write
     });
   });
 });

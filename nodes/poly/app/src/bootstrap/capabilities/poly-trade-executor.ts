@@ -38,14 +38,24 @@
  *     call. Subsequent calls reuse the cached instance until the process exits.
  *   - SHARED_PUBLIC_CLIENT — the `viem.PublicClient` used for RPC reads is a
  *     process-level singleton; wallet clients fan out per tenant.
- *   - SWEEP_TRIGGERED_BY_ON_CHAIN_BALANCE — `redeemAllRedeemableResolvedPositions`
- *     selects redemption candidates by ERC1155 `balanceOf(funder, asset) > 0`
- *     against `POLYGON_CONDITIONAL_TOKENS`, NOT by Data-API `Position.redeemable`.
- *     Predicate is on-chain truth; Data-API positions are only the enumeration
- *     source. Sweep emits structured events: `poly.ctf.redeem.skip_zero_balance`
- *     (info), `poly.ctf.redeem.balance_read_failed` (warn, multicall element
- *     failure), `poly.ctf.redeem.error` (warn, post-balance-check redeem failure).
- *     See bug.0376.
+ *   - REDEEM_PRECHECK_ON_CHAIN — both manual `redeemResolvedPosition` and the
+ *     autonomous sweep gate `redeemPositions` on `decideRedeem`: balance>0
+ *     AND payoutNumerator>0. Data-API `redeemable` is enumeration-only.
+ *     See bug.0376 (chain-truth predicate) and bug.0383 (winning-outcome gate).
+ *   - REDEEM_RACE_GUARDS — bug.0384: (1) module-scope `sweepInFlight` mutex
+ *     blocks inter-tick sweep overlap; (2) module-scope
+ *     `redeemCooldownByConditionId` 60s cooldown blocks manual ↔ sweep
+ *     races and double-clicks on the manual route. Both load-bearing for
+ *     different scenarios — see code docs at `REDEEM_COOLDOWN_MS` /
+ *     `sweepInFlight` for justification. Sweep wall-clock duration is
+ *     emitted on every completion (`poly.ctf.redeem.sweep_completed`) so
+ *     the next race-class issue is visible in Loki within the hour.
+ *   - SINGLE_POD_ASSUMPTION — the cooldown Map and mutex are in-process.
+ *     Scaling poly to >1 replica reintroduces the race; the deployment
+ *     must stay single-replica until task.0377 (event-driven sweep via
+ *     CTF `ConditionResolution` + own `PayoutRedemption` event subscription)
+ *     replaces this polling architecture entirely. **bug.0384 is a
+ *     band-aid; task.0377 is the real fix.**
  * Side-effects: on first `placeIntent` for a new tenant: HTTPS to
  *   Polymarket CLOB + Privy API. Subsequent calls reuse cached clients. Sweep
  *   path additionally issues one `eth_call` (multicall) per tick.
@@ -166,6 +176,113 @@ export class PolyTradeExecutorError extends Error {
 export interface RedeemResolvedParams {
   /** Polymarket condition id (`0x` + 64 hex). */
   condition_id: string;
+}
+
+/** Pure redeem precheck — see bug.0383 fixtures for the canonical decision matrix. */
+export type RedeemSkipReason =
+  | "zero_balance"
+  | "losing_outcome"
+  | "missing_outcome_index"
+  | "read_failed"
+  | "pending_redeem";
+
+export function decideRedeem(input: {
+  balance: bigint | null;
+  payoutNumerator: bigint | null;
+  outcomeIndex: number | null | undefined;
+}): { ok: true } | { ok: false; reason: RedeemSkipReason } {
+  if (input.outcomeIndex == null || !Number.isFinite(input.outcomeIndex)) {
+    return { ok: false, reason: "missing_outcome_index" };
+  }
+  if (input.balance === null || input.payoutNumerator === null) {
+    return { ok: false, reason: "read_failed" };
+  }
+  if (input.balance === 0n) return { ok: false, reason: "zero_balance" };
+  if (input.payoutNumerator === 0n) {
+    return { ok: false, reason: "losing_outcome" };
+  }
+  return { ok: true };
+}
+
+/**
+ * bug.0384 — per-condition in-process cooldown.
+ *
+ * Why this AND the sweep mutex? They cover different races:
+ *   - Mutex: catches inter-tick sweep overlap (tick B starts before tick A
+ *     finishes its serial per-candidate await). This is the prod-observed
+ *     case from 2026-04-26 (82 txs / 3 payouts after 1 POL refund).
+ *   - Cooldown: catches manual ↔ sweep races and double-clicks on
+ *     /api/v1/poly/wallet/positions/redeem. Mutex doesn't help these
+ *     because the manual route doesn't take the sweep mutex.
+ *
+ * Window rationale (60s = REDEEM_COOLDOWN_MS):
+ *   Polygon block time 2s, probabilistic finality ~3-5 blocks (~10s),
+ *   Alchemy RPC propagation lag adds a few seconds → mined-and-readable
+ *   ≈ 15-30s end-to-end. 60s is a 2× safety margin without being so long
+ *   that a legitimate retry-after-failure stalls.
+ *
+ * Map is module-scope so all tenant executors in this process share one
+ * cooldown table. SINGLE_POD_ASSUMPTION: this and the mutex below break
+ * the moment the poly node scales to >1 replica. Multi-pod idempotency
+ * (Redis SETNX, on-chain event-driven sweep) tracked in task.0377 +
+ * task.0379. Until then, the deployment must stay single-replica.
+ */
+const REDEEM_COOLDOWN_MS = 60_000;
+const redeemCooldownByConditionId = new Map<string, number>();
+
+/** Test-only: clear the cooldown table (used by unit tests). @internal */
+export function _resetRedeemCooldownForTests(): void {
+  redeemCooldownByConditionId.clear();
+}
+
+/** Returns ms remaining until cooldown expires, or 0 if not pending. */
+function pendingRedeemMsRemaining(conditionIdHex: string): number {
+  const expiry = redeemCooldownByConditionId.get(conditionIdHex);
+  if (expiry === undefined) return 0;
+  const remaining = expiry - Date.now();
+  if (remaining <= 0) {
+    redeemCooldownByConditionId.delete(conditionIdHex);
+    return 0;
+  }
+  return remaining;
+}
+
+/** Mark a condition as pending redeem; called immediately after `writeContract`. */
+function markRedeemPending(conditionIdHex: string): void {
+  redeemCooldownByConditionId.set(
+    conditionIdHex,
+    Date.now() + REDEEM_COOLDOWN_MS
+  );
+}
+
+/**
+ * bug.0384 — sweep-level mutex. `redeemAllRedeemableResolvedPositions`
+ * iterates candidates with `await redeemResolvedPosition(...)`, which itself
+ * awaits `waitForTransactionReceipt`. With N winners, total sweep wall-clock
+ * = N × (writeContract + receipt wait) ≈ 5-30s per condition. mirror-pipeline
+ * ticks every ~30s. With even 2 winners under load, ticks overlap.
+ *
+ * Without this mutex: tick B starts mid-tick-A, multicall reads all balances
+ * pre-burn (tick A still on candidate 1), predicate passes for candidates
+ * 2..N (cooldown only set on candidate 1), tick B fires writes that race
+ * tick A's still-pending writes. Cooldown alone can't prevent this because
+ * cooldown for candidates 2..N hasn't been set yet.
+ *
+ * SINGLE_POD_ASSUMPTION applies (see cooldown doc above).
+ */
+let sweepInFlight = false;
+
+/** Test-only: clear the mutex (used by unit tests). @internal */
+export function _resetSweepMutexForTests(): void {
+  sweepInFlight = false;
+}
+
+function errMsg(
+  r: { status: "success" } | { status: "failure"; error: unknown } | undefined
+): string | null {
+  if (!r) return "missing";
+  if (r.status === "success") return null;
+  return r.error instanceof Error ? r.error.message : String(r.error);
 }
 
 /**
@@ -317,8 +434,17 @@ async function buildExecutor(
     PolymarketDataApiClient,
     polymarketCtfRedeemAbi,
   } = await import("@cogni/market-provider/adapters/polymarket");
-  const { createPublicClient, createWalletClient, http } = await import("viem");
+  const { createPublicClient, createWalletClient, http, parseAbi } =
+    await import("viem");
   const { polygon } = await import("viem/chains");
+
+  // bug.0383 precheck reads. Local fragment to keep this fix scoped to the
+  // poly node (single-domain CI gate). Promote to packages/market-provider
+  // when the next non-hotfix touches that package.
+  const ctfPrecheckAbi = parseAbi([
+    "function balanceOf(address account, uint256 id) view returns (uint256)",
+    "function payoutNumerators(bytes32 conditionId, uint256 outcomeIndex) view returns (uint256)",
+  ]);
 
   // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
   const accountAny: any = resolved.account;
@@ -615,6 +741,62 @@ async function buildExecutor(
       );
     }
 
+    // bug.0384 cooldown gate: refuse if a redeem is already in flight for
+    // this conditionId. Defeats double-click on the dashboard and any
+    // sweep-vs-manual race window.
+    const pendingMs = pendingRedeemMsRemaining(normalized);
+    if (pendingMs > 0) {
+      throw new PolyTradeExecutorError(
+        "not_redeemable",
+        `poly-trade-executor: redeem already pending for conditionId=${params.condition_id} (${pendingMs}ms remaining)`,
+        "pending_redeem"
+      );
+    }
+
+    // bug.0383 precheck: balance > 0 AND payoutNumerator > 0. CTF
+    // `redeemPositions` succeeds-with-payout=0 on losers; gate before signing.
+    let positionId: bigint;
+    try {
+      if (!match.asset) throw new Error("missing asset");
+      positionId = BigInt(match.asset);
+    } catch {
+      throw new PolyTradeExecutorError(
+        "not_redeemable",
+        `poly-trade-executor: invalid asset positionId for conditionId=${params.condition_id}`
+      );
+    }
+    const reads = await publicClient.multicall({
+      contracts: [
+        {
+          address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
+          abi: ctfPrecheckAbi,
+          functionName: "balanceOf" as const,
+          args: [funderAddress as `0x${string}`, positionId] as const,
+        },
+        {
+          address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
+          abi: ctfPrecheckAbi,
+          functionName: "payoutNumerators" as const,
+          args: [normalized, BigInt(match.outcomeIndex ?? 0)] as const,
+        },
+      ],
+      allowFailure: true,
+    });
+    const verdict = decideRedeem({
+      balance:
+        reads[0]?.status === "success" ? (reads[0].result as bigint) : null,
+      payoutNumerator:
+        reads[1]?.status === "success" ? (reads[1].result as bigint) : null,
+      outcomeIndex: match.outcomeIndex,
+    });
+    if (!verdict.ok) {
+      throw new PolyTradeExecutorError(
+        "not_redeemable",
+        `poly-trade-executor: precheck refused redeem conditionId=${params.condition_id}`,
+        verdict.reason
+      );
+    }
+
     await authorizeWalletExit({
       action: "redeem",
       requireTradingReady: false,
@@ -634,6 +816,10 @@ async function buildExecutor(
         chain: polygon,
         account: accountAny,
       });
+      // bug.0384: mark pending immediately after submission so the next
+      // sweep tick (within ~30s, possibly before this tx mines) skips this
+      // condition rather than re-firing it.
+      markRedeemPending(normalized);
       const receipt = await publicClient.waitForTransactionReceipt({
         hash,
       });
@@ -667,23 +853,73 @@ async function buildExecutor(
   async function redeemAllRedeemableResolvedPositions(): Promise<
     Array<{ condition_id: string; tx_hash: `0x${string}` }>
   > {
-    // Predicate is on-chain ERC1155 balance, NOT Data-API `redeemable`. The
-    // Data-API flag is the bug source (it stays true for already-redeemed
-    // positions); the chain is the truth source. The positions list is just
-    // the *enumeration source* — which token ids to check. See bug.0376.
+    // bug.0384 mutex: one sweep cycle in flight per process. mirror-pipeline
+    // ticks every ~30s but a sweep with N winners + receipt waits exceeds
+    // that. Without this, two ticks compute predicates against pre-burn
+    // chain state and both fire the same conditions.
+    if (sweepInFlight) {
+      deps.logger.info(
+        {
+          event: "poly.ctf.redeem.sweep_skip_in_flight",
+          billing_account_id: billingAccountId,
+          funder: funderAddress,
+        },
+        "poly-trade-executor: redeem sweep tick skipped — previous sweep still in flight"
+      );
+      return [];
+    }
+    sweepInFlight = true;
+    const startedAt = Date.now();
+    try {
+      const out = await runRedeemSweep();
+      // bug.0384 observability: this race went undetected for 24h because
+      // we had no signal for "sweep wall-clock > tick interval." Emit on
+      // every completion so the next race-class bug shows up in Loki the
+      // same hour it ships. Alert: `duration_ms > tick_interval_ms` =
+      // ticks are guaranteed to overlap (mutex saves us, but it's a smell).
+      deps.logger.info(
+        {
+          event: "poly.ctf.redeem.sweep_completed",
+          billing_account_id: billingAccountId,
+          funder: funderAddress,
+          duration_ms: Date.now() - startedAt,
+          redeems: out.length,
+        },
+        "poly-trade-executor: redeem sweep completed"
+      );
+      return out;
+    } finally {
+      sweepInFlight = false;
+    }
+  }
+
+  async function runRedeemSweep(): Promise<
+    Array<{ condition_id: string; tx_hash: `0x${string}` }>
+  > {
+    // Predicate is on-chain (`balanceOf` + `payoutNumerators`), NOT Data-API
+    // `redeemable`. The Data-API flag is the bug.0376 source (stays true for
+    // already-redeemed positions); the chain is the truth source. bug.0383
+    // adds the `payoutNumerators` gate so we don't fire on losing outcomes.
+    // bug.0384 adds a per-condition cooldown so pending-tx don't re-fire.
+    // Positions list is the *enumeration source* only.
     const positions = await dataApiClient.listUserPositions(funderAddress);
-    const candidates: Array<{ condition_id: string; asset: bigint }> = [];
+    const candidates: Array<{
+      condition_id: string;
+      conditionIdHex: `0x${string}`;
+      asset: bigint;
+      outcomeIndex: number | null;
+    }> = [];
     const seen = new Set<string>();
     for (const p of positions) {
       if (!p.conditionId) continue;
-      let norm: string;
+      let conditionIdHex: `0x${string}`;
       try {
-        norm = normalizePolygonConditionId(p.conditionId);
+        conditionIdHex = normalizePolygonConditionId(p.conditionId);
       } catch {
         continue;
       }
-      if (seen.has(norm)) continue;
-      seen.add(norm);
+      if (seen.has(conditionIdHex)) continue;
+      seen.add(conditionIdHex);
       if (!p.asset) continue;
       let asset: bigint;
       try {
@@ -691,66 +927,124 @@ async function buildExecutor(
       } catch {
         continue;
       }
-      candidates.push({ condition_id: p.conditionId, asset });
+      candidates.push({
+        condition_id: p.conditionId,
+        conditionIdHex,
+        asset,
+        outcomeIndex: p.outcomeIndex ?? null,
+      });
     }
     if (candidates.length === 0) return [];
 
-    const balances = await publicClient.multicall({
-      contracts: candidates.map((c) => ({
-        address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
-        abi: polymarketCtfRedeemAbi,
-        functionName: "balanceOf" as const,
-        args: [funderAddress as `0x${string}`, c.asset] as const,
-      })),
+    // 2N batched read: balanceOf + payoutNumerators per candidate. One RPC
+    // round-trip via multicall.
+    const reads = await publicClient.multicall({
+      contracts: candidates.flatMap((c) => [
+        {
+          address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
+          abi: ctfPrecheckAbi,
+          functionName: "balanceOf" as const,
+          args: [funderAddress as `0x${string}`, c.asset] as const,
+        },
+        {
+          address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
+          abi: ctfPrecheckAbi,
+          functionName: "payoutNumerators" as const,
+          // outcomeIndex `null` becomes 0 here; decideRedeem still routes to
+          // missing_outcome_index, so the multicall layout stays a clean 2N.
+          args: [c.conditionIdHex, BigInt(c.outcomeIndex ?? 0)] as const,
+        },
+      ]),
       allowFailure: true,
     });
 
     const out: Array<{ condition_id: string; tx_hash: `0x${string}` }> = [];
     for (let i = 0; i < candidates.length; i++) {
       const c = candidates[i];
-      const result = balances[i];
       if (!c) continue;
-      if (!result || result.status !== "success") {
-        deps.logger.warn(
-          {
-            event: "poly.ctf.redeem.balance_read_failed",
-            billing_account_id: billingAccountId,
-            condition_id: c.condition_id,
-            asset: c.asset.toString(),
-            err:
-              result?.status === "failure"
-                ? result.error instanceof Error
-                  ? result.error.message
-                  : String(result.error)
-                : "missing result",
-          },
-          "poly-trade-executor: balanceOf read failed; skipping condition"
-        );
+      const balRes = reads[i * 2];
+      const numRes = reads[i * 2 + 1];
+
+      const verdict = decideRedeem({
+        balance:
+          balRes && balRes.status === "success"
+            ? (balRes.result as bigint)
+            : null,
+        payoutNumerator:
+          numRes && numRes.status === "success"
+            ? (numRes.result as bigint)
+            : null,
+        outcomeIndex: c.outcomeIndex,
+      });
+
+      if (!verdict.ok) {
+        const base = {
+          billing_account_id: billingAccountId,
+          condition_id: c.condition_id,
+          asset: c.asset.toString(),
+          funder: funderAddress,
+          outcome_index: c.outcomeIndex,
+        };
+        switch (verdict.reason) {
+          case "zero_balance":
+            deps.logger.info(
+              { event: "poly.ctf.redeem.skip_zero_balance", ...base },
+              "poly-trade-executor: redeem sweep skipped — funder holds zero ERC1155 balance"
+            );
+            break;
+          case "losing_outcome":
+            deps.logger.info(
+              { event: "poly.ctf.redeem.skip_losing_outcome", ...base },
+              "poly-trade-executor: redeem sweep skipped — losing outcome (payoutNumerator=0)"
+            );
+            break;
+          case "missing_outcome_index":
+            deps.logger.warn(
+              { event: "poly.ctf.redeem.skip_missing_outcome_index", ...base },
+              "poly-trade-executor: redeem sweep skipped — Data-API position missing outcomeIndex"
+            );
+            break;
+          case "read_failed":
+            deps.logger.warn(
+              {
+                event: "poly.ctf.redeem.balance_read_failed",
+                ...base,
+                bal_err: errMsg(balRes),
+                num_err: errMsg(numRes),
+              },
+              "poly-trade-executor: precheck read failed; skipping condition"
+            );
+            break;
+        }
         continue;
       }
-      const balance = result.result as bigint;
-      if (balance === 0n) {
+
+      // bug.0384 cooldown gate (post-predicate): if we just submitted a
+      // redeem for this condition, skip — its tx may not have mined yet
+      // and the multicall above is reading pre-burn balance.
+      const pendingMs = pendingRedeemMsRemaining(c.conditionIdHex);
+      if (pendingMs > 0) {
         deps.logger.info(
           {
-            event: "poly.ctf.redeem.skip_zero_balance",
+            event: "poly.ctf.redeem.skip_pending_redeem",
             billing_account_id: billingAccountId,
             condition_id: c.condition_id,
-            asset: c.asset.toString(),
             funder: funderAddress,
+            expires_in_ms: pendingMs,
           },
-          "poly-trade-executor: redeem sweep skipped — funder holds zero ERC1155 balance"
+          "poly-trade-executor: redeem sweep skipped — redeem already pending in cooldown"
         );
         continue;
       }
+
       try {
         const r = await redeemResolvedPosition({
           condition_id: c.condition_id,
         });
         out.push({ condition_id: c.condition_id, tx_hash: r.tx_hash });
       } catch (err) {
-        // Post-balance-check error path: balanceOf said >0 but
-        // redeemResolvedPosition's own Data-API match failed (e.g. Data-API
-        // marked the position not redeemable, RPC failure). Rare; warn-level.
+        // Post-precheck error path: precheck passed but `redeemResolvedPosition`
+        // failed (Data-API match drift, RPC error, write failure). Rare.
         deps.logger.warn(
           {
             event: "poly.ctf.redeem.error",
@@ -758,7 +1052,7 @@ async function buildExecutor(
             condition_id: c.condition_id,
             err: err instanceof Error ? err.message : String(err),
           },
-          "poly-trade-executor: redeem failed after balance precheck"
+          "poly-trade-executor: redeem failed after on-chain precheck"
         );
       }
     }

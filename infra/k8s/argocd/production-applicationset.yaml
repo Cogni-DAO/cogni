@@ -1,23 +1,38 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 #
-# ApplicationSet for production environment.
-# Same pattern as preview — reads infra/catalog/*.yaml from main branch.
+# Spec: work/items/task.0376 (per-node lane isolation, GR-1 four-generator shape).
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
   name: cogni-production
   namespace: argocd
 spec:
+  goTemplate: true
   generators:
     - git:
         repoURL: https://github.com/cogni-dao/cogni-template.git
-        revision: deploy/production
+        revision: deploy/production-operator
         files:
-          - path: "infra/catalog/*.yaml"
+          - path: "infra/catalog/operator.yaml"
+    - git:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        revision: deploy/production-poly
+        files:
+          - path: "infra/catalog/poly.yaml"
+    - git:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        revision: deploy/production-resy
+        files:
+          - path: "infra/catalog/resy.yaml"
+    - git:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        revision: deploy/production-scheduler-worker
+        files:
+          - path: "infra/catalog/scheduler-worker.yaml"
   template:
     metadata:
-      name: "production-{{name}}"
+      name: "production-{{.name}}"
       namespace: argocd
       finalizers:
         - resources-finalizer.argocd.argoproj.io
@@ -25,8 +40,8 @@ spec:
       project: default
       source:
         repoURL: https://github.com/cogni-dao/cogni-template.git
-        targetRevision: deploy/production
-        path: "infra/k8s/overlays/production/{{name}}"
+        targetRevision: "deploy/production-{{.name}}"
+        path: "infra/k8s/overlays/production/{{.name}}"
       destination:
         server: https://kubernetes.default.svc
         namespace: cogni-production

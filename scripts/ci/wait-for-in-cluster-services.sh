@@ -31,8 +31,16 @@
 #                             for the post-rollout endpoint cutover wait.
 #                             60s comfortably covers the default 30s
 #                             terminationGracePeriodSeconds.
+#   PROMOTED_APPS            (required) CSV of node names whose Deployments
+#                             this run promoted (e.g. "poly", "operator,resy").
+#                             Per-node matrix cells pass their single
+#                             matrix.node value. Empty/unset is rejected —
+#                             callers with no promotions must skip the step,
+#                             not silent-pass it (Axiom 11).
 #
-# Adds: edit SERVICES below when a new in-cluster deployment needs gating.
+# Adds: extend the case statement below when a new in-cluster deployment
+# needs gating. Promotion to a `k8s_deployment` field on infra/catalog/*.yaml
+# (CATALOG_IS_SSOT, axiom 16) is the right home if/when a fifth node lands.
 
 set -euo pipefail
 
@@ -50,11 +58,23 @@ SSH_OPTS=(
   -o ServerAliveCountMax=6
 )
 
-# All k8s Deployments managed by candidate-a / preview / production overlays.
-# Add a new deployment name here when a new service lands in the catalog.
-# Each entry must be a Deployment AND a Service of the same name (the
-# endpoint-cutover gate dereferences `kubectl get endpoints/<name>`).
-SERVICES=(operator-node-app poly-node-app resy-node-app scheduler-worker)
+IFS=',' read -ra _NODES <<< "${PROMOTED_APPS:?PROMOTED_APPS required (CSV of node names)}"
+SERVICES=()
+for node in "${_NODES[@]}"; do
+  case "$node" in
+    operator | poly | resy) SERVICES+=("${node}-node-app") ;;
+    scheduler-worker) SERVICES+=("scheduler-worker") ;;
+    *)
+      echo "::error::wait-for-in-cluster-services: unknown node '$node' in PROMOTED_APPS"
+      exit 1
+      ;;
+  esac
+done
+
+if [ ${#SERVICES[@]} -eq 0 ]; then
+  echo "::error::wait-for-in-cluster-services: PROMOTED_APPS resolved to zero services"
+  exit 1
+fi
 
 NS="cogni-${DEPLOY_ENVIRONMENT}"
 
