@@ -257,3 +257,8 @@ Plan immediately following bug.0384's merge:
 bug.0384 stays in production until task.0377 ships and passes
 `deploy_verified: true`. After that, bug.0384's mutex + cooldown can be
 deleted as dead code.
+
+## PR / Links
+
+- PR: https://github.com/Cogni-DAO/node-template/pull/1070
+- Handoff: [handoff](../handoffs/bug.0384.handoff.md)
