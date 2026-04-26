@@ -13,7 +13,7 @@
 "use client";
 
 import { CloudSun, ExternalLink } from "lucide-react";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 import { Badge } from "@/components";
 import type {
@@ -26,6 +26,8 @@ export type WalletIdentityHeaderProps = {
   identity: WalletIdentity;
   size?: WalletAnalysisSize | undefined;
   resolvedCount?: number | undefined;
+  /** Inline actions rendered next to the Polymarket / Polygonscan links. */
+  actions?: ReactNode | undefined;
 };
 
 export function WalletIdentityHeader({
@@ -33,6 +35,7 @@ export function WalletIdentityHeader({
   identity,
   size = "default",
   resolvedCount,
+  actions,
 }: WalletIdentityHeaderProps): ReactElement {
   const isHero = size === "hero";
   const titleCls = isHero
@@ -86,6 +89,7 @@ export function WalletIdentityHeader({
         >
           Polygonscan <ExternalLink className="size-3" />
         </a>
+        {actions}
       </div>
     </div>
   );
