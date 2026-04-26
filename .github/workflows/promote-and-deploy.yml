@@ -497,35 +497,13 @@ jobs:
           name: cell-${{ matrix.node }}
           path: ${{ runner.temp }}/
 
-      - name: Resolve EXPECTED_SHA + promoted flag
+      - name: Resolve cell state
         id: cell
         env:
           NODE: ${{ matrix.node }}
-        run: |
-          set -euo pipefail
-          PROMOTED_FILE="${{ runner.temp }}/promoted-${NODE}.txt"
-          DEPLOY_SHA_FILE="${{ runner.temp }}/deploy-sha-${NODE}.txt"
-          if [ ! -f "$PROMOTED_FILE" ]; then
-            echo "::error::cell-${NODE} artifact missing promoted-${NODE}.txt — promote-k8s did not emit per-cell state (Axiom 14)"
-            exit 1
-          fi
-          PROMOTED=$(cat "$PROMOTED_FILE")
-          DEPLOY_SHA=$(cat "$DEPLOY_SHA_FILE" 2>/dev/null || true)
-          echo "promoted=$PROMOTED" >> "$GITHUB_OUTPUT"
-          echo "deploy_branch_sha=$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
-
-      - name: Assert preconditions when promoted
-        if: steps.cell.outputs.promoted == 'true'
-        run: |
-          set -euo pipefail
-          if [ -z "${VM_HOST:-}" ]; then
-            echo "::error::VM_HOST missing in env '${{ needs.decide.outputs.environment }}' but cell promoted — Axiom 19 fail-closed"
-            exit 1
-          fi
-          if [ -z "${{ steps.cell.outputs.deploy_branch_sha }}" ]; then
-            echo "::error::deploy_branch_sha empty but cell promoted — Axiom 19 fail-closed"
-            exit 1
-          fi
+          CELL_DIR: ${{ runner.temp }}
+          ENVIRONMENT: ${{ needs.decide.outputs.environment }}
+        run: bash app-src/scripts/ci/resolve-cell-state.sh
 
       - name: Setup SSH
         if: steps.cell.outputs.promoted == 'true'
@@ -559,15 +537,9 @@ jobs:
           SOURCE_SHA_MAP: deploy-branch/.promote-state/source-sha-by-app.json
           EXPECTED_BUILDSHA: ${{ needs.decide.outputs.build_sha }}
           NODES: ${{ matrix.node }}
+          MARKER_DIR: out
         run: bash app-src/scripts/ci/verify-buildsha.sh
 
-      - name: Emit verified marker
-        if: steps.cell.outputs.promoted == 'true'
-        env:
-          NODE: ${{ matrix.node }}
-        run: |
-          mkdir -p out
-          printf 'true' > "out/verified-${NODE}.txt"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: steps.cell.outputs.promoted == 'true'
         with:
@@ -721,6 +693,12 @@ jobs:
       group: aggregate-preview
       cancel-in-progress: false
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          token: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
+
       - name: Download all per-cell artifacts
         if: always()
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.1.8
@@ -732,51 +710,14 @@ jobs:
       - name: Decide outcome
         id: outcome
         env:
+          ENV: preview
+          CELLS_DIR: ${{ runner.temp }}/cells
           PROMOTE_RESULT: ${{ needs.promote-k8s.result }}
           DEPLOY_INFRA_RESULT: ${{ needs.deploy-infra.result }}
           VERIFY_RESULT: ${{ needs.verify.result }}
           VERIFY_DEPLOY_RESULT: ${{ needs.verify-deploy.result }}
           E2E_RESULT: ${{ needs.e2e.result }}
-          CELLS_DIR: ${{ runner.temp }}/cells
-        run: |
-          set -euo pipefail
-          any_promoted=false
-          unverified=()
-          if [ -d "$CELLS_DIR" ]; then
-            shopt -s nullglob
-            for f in "$CELLS_DIR"/promoted-*.txt; do
-              node=$(basename "$f" .txt | sed 's/^promoted-//')
-              if [ "$(cat "$f" 2>/dev/null || true)" = "true" ]; then
-                any_promoted=true
-                if [ "$(cat "$CELLS_DIR/verified-${node}.txt" 2>/dev/null || true)" != "true" ]; then
-                  unverified+=("$node")
-                fi
-              fi
-            done
-          fi
-          echo "any_promoted=$any_promoted"
-          if [ "$any_promoted" != "true" ]; then
-            echo "::error::aggregate-preview: no cell reported promoted=true — refusing to advance lease"
-            echo "outcome=failed" >> "$GITHUB_OUTPUT"
-          elif [ ${#unverified[@]} -gt 0 ]; then
-            echo "::error::aggregate-preview: cells promoted but did not verify — Axiom 19 contradiction: ${unverified[*]}"
-            echo "outcome=failed" >> "$GITHUB_OUTPUT"
-          elif [ "$PROMOTE_RESULT" = "success" ] \
-             && [ "$VERIFY_RESULT" = "success" ] \
-             && [ "$VERIFY_DEPLOY_RESULT" = "success" ] \
-             && [ "$E2E_RESULT" = "success" ] \
-             && [ "$DEPLOY_INFRA_RESULT" != "failure" ] && [ "$DEPLOY_INFRA_RESULT" != "cancelled" ]; then
-            echo "outcome=dispatched" >> "$GITHUB_OUTPUT"
-          else
-            echo "outcome=failed" >> "$GITHUB_OUTPUT"
-          fi
-          echo "promote=$PROMOTE_RESULT verify=$VERIFY_RESULT verify-deploy=$VERIFY_DEPLOY_RESULT e2e=$E2E_RESULT deploy-infra=$DEPLOY_INFRA_RESULT"
-
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 1
-          token: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
+        run: bash scripts/ci/aggregate-decide-outcome.sh
 
       - name: Update deploy/preview rollup (current-sha + source-sha-by-app)
         if: steps.outcome.outputs.outcome == 'dispatched'
@@ -824,6 +765,12 @@ jobs:
       group: aggregate-production
       cancel-in-progress: false
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          token: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
+
       - name: Download all per-cell artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.1.8
         with:
@@ -833,35 +780,14 @@ jobs:
 
       - name: Assert promoted cells were verified
         env:
+          ENV: production
           CELLS_DIR: ${{ runner.temp }}/cells
-        run: |
-          set -euo pipefail
-          any_promoted=false
-          unverified=()
-          shopt -s nullglob
-          for f in "$CELLS_DIR"/promoted-*.txt; do
-            node=$(basename "$f" .txt | sed 's/^promoted-//')
-            if [ "$(cat "$f" 2>/dev/null || true)" = "true" ]; then
-              any_promoted=true
-              if [ "$(cat "$CELLS_DIR/verified-${node}.txt" 2>/dev/null || true)" != "true" ]; then
-                unverified+=("$node")
-              fi
-            fi
-          done
-          if [ "$any_promoted" != "true" ]; then
-            echo "::error::aggregate-production: no cell reported promoted=true — refusing to advance current-sha"
-            exit 1
-          fi
-          if [ ${#unverified[@]} -gt 0 ]; then
-            echo "::error::aggregate-production: cells promoted but did not verify — Axiom 19 contradiction: ${unverified[*]}"
-            exit 1
-          fi
-
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 1
-          token: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
+          PROMOTE_RESULT: ${{ needs.promote-k8s.result }}
+          VERIFY_RESULT: ${{ needs.verify.result }}
+          VERIFY_DEPLOY_RESULT: ${{ needs.verify-deploy.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+          STRICT_FAIL: "1"
+        run: bash scripts/ci/aggregate-decide-outcome.sh
 
       - name: Update deploy/production rollup (current-sha + source-sha-by-app)
         env:

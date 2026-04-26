@@ -64,6 +64,11 @@ set -euo pipefail
 
 DOMAIN="${DOMAIN:?DOMAIN required}"
 SOURCE_SHA_MAP="${SOURCE_SHA_MAP:-}"
+# When set, write verified-<node>.txt = "true" for each node whose /version
+# contract holds. The verify-deploy matrix uploads this dir as the
+# cell-verify-<node> artifact; aggregate-decide-outcome.sh asserts every
+# promoted cell has a matching marker (Axiom 19).
+MARKER_DIR="${MARKER_DIR:-}"
 
 # Cutover polling (task.0341): Argo "Healthy" fires before ingress endpoints
 # fully cut over to new pods, so a one-shot probe can hit the old pod
@@ -221,7 +226,14 @@ for node in "${NODE_ARR[@]}"; do
   fi
   url="https://${host}/version"
 
-  check_node "$node" "$expected" "$url" || FAILED=1
+  if check_node "$node" "$expected" "$url"; then
+    if [ -n "$MARKER_DIR" ]; then
+      mkdir -p "$MARKER_DIR"
+      printf 'true' > "${MARKER_DIR}/verified-${node}.txt"
+    fi
+  else
+    FAILED=1
+  fi
 done
 
 if [ "$FAILED" -ne 0 ]; then
