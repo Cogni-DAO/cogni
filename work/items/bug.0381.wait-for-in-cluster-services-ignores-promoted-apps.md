@@ -2,7 +2,7 @@
 id: bug.0381
 type: bug
 title: "wait-for-in-cluster-services.sh ignores PROMOTED_APPS — every matrix cell waits for every Deployment"
-status: needs_implement
+status: done
 priority: 1
 rank: 30
 estimate: 1
