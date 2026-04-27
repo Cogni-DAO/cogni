@@ -54,13 +54,11 @@ As of 2026-04-27 ~05:00Z, 5 neg-risk conditions on funder `0x95e407fE03996602Ed1
 
 **This task IS the fix.** The NegRiskAdapter contract address + ABI + `[yes, no]` 2-arg `redeemPositions` shape pinned in the frontmatter `summary` are the load-bearing pieces. CP1's worker MUST route any neg-risk position through the NegRiskAdapter (`0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296`), not standard CTF. Without that routing change, this task ships another rate-limited bleed instead of a fix.
 
-**Defense in depth — sequenced against the merged CP1 → CP2 → CP3 plan.**
+**Defense in depth — sequenced against the 2-CP plan.**
 
-The active v0.1 bleed produces only level-30 (info) events; `level≥warn` alerts see nothing. **CP2** of the merged plan deletes the legacy sweep AND the legacy `poly.ctf.redeem.ok` event. So bleed-class observability has to migrate from "alert on the legacy event" to "structural gate in the new worker" — and the migration must complete **no later than CP1**, before CP2 rips the legacy path. If CP2 ships first, we lose all bleed visibility.
+The active v0.1 bleed produces only level-30 (info) events; `level≥warn` alerts see nothing. **CP1 of this task deletes the legacy sweep AND the legacy `poly.ctf.redeem.ok` event in the same PR.** Bleed-class observability therefore has exactly one transition point: the moment CP1 deploys, the old alert dies and the new structural gate takes over. Both must be in place at that single transition.
 
-(This is the load-bearing reason CP1 in the plan above bundles "job table + dispatch split + burn-verify gate" together — splitting any of those into a later CP would leave a window where neither the legacy alert nor the new gate covers the bleed class.)
-
-1. **Interim Loki alert — ship NOW, before task.0388 work begins.** Temporary belt-and-suspenders against the v0.1 bleed already in prod. Auto-retires when CP2 deletes the legacy event (no signal → no alerts → dies quietly).
+1. **Interim Loki alert — ship NOW, standalone, before CP1 work begins.** Belt-and-suspenders against the v0.1 bleed for the duration of CP1 implementation. Auto-retires the moment CP1 deploys (no `poly.ctf.redeem.ok` events from the new code path → no alert signal → dies quietly).
 
    ```logql
    sum by (condition_id) (
@@ -68,13 +66,13 @@ The active v0.1 bleed produces only level-30 (info) events; `level≥warn` alert
    ) > 1
    ```
 
-   `condition_id` firing ≥2 `.ok` events in 10 min = bleed signature (first redeem didn't burn). Page on-call.
+   Same `condition_id` firing ≥2 `.ok` events in 10 min = bleed signature (first redeem didn't burn). Page on-call.
 
-2. **Post-tx burn-verification gate — MUST land in CP1 (gate condition for CP2).** CP1's worker fires txs against CTF + NegRiskAdapter via the dispatch split. After each receipt, the worker decodes its own logs and asserts: **at least one** `TransferSingle(from=funder, value>0)` (CTF path) OR `NegRiskAdapter.PayoutRedemption(redeemer=funder)` (adapter path). If absent: emit `poly.ctf.redeem.bleed_detected` at **level=50** AND transition the job to `abandoned/class: "malformed"`. This is the **structural successor** to #1 — once it's live, a generic `level≥warn` alert covers the bleed class regardless of which contract is wrong, and CP2 can safely rip the legacy event because new coverage is already in place. **CP2 must not merge until #2 is observed firing correctly on candidate-a (or proven inert against a synthetic `success-with-no-burn` test fixture in CP1's test suite).**
+2. **Post-tx burn-verification gate — lands inside CP1, structural successor to #1.** The worker decodes every receipt and asserts ≥1 burn event from funder; absence → `poly.ctf.redeem.bleed_detected` at `level=50` + `abandoned/class:"malformed"`. Once CP1 ships, the legacy event-based alert is replaced by this structural gate — a generic `level≥warn` alert on `bleed_detected` covers the entire bleed class regardless of which contract is wrong. Captured as invariant `REDEEM_REQUIRES_BURN_OBSERVATION` (see Invariants below).
 
-3. **NegRiskAdapter routing — lands in CP1 (worker's first writeContract path).** The structural fix from the root-cause section above. Closes v0.1's specific hole. #2 catches the next routing mistake; #3 fixes the known one. Both ride together in the bleed-stop CP1 because either alone is a partial fix.
+3. **NegRiskAdapter routing — lands inside CP1, dispatch split by `decision.flavor`.** Closes v0.1's specific hole. #2 catches the next routing mistake structurally; #3 fixes the known one. Both ride in CP1 because either alone is a partial fix.
 
-Skip none. Order matters: #1 lights up the radar today, #2 transfers coverage onto the new architecture before CP2 demolishes the old one, #3 fixes the immediate defect that necessitated this task in the first place.
+Order matters in absolute time, not in CP sequence: ship #1 (alert) NOW so prod has visibility while #2 + #3 are being built. When CP1 lands, #2 takes over from #1 atomically. If CP1 ships before #1 is filed, there's a window with no bleed visibility at all.
 
 ## Why
 
@@ -99,24 +97,22 @@ Even with Capability A's predicate correct (task.0387), the polling sweep is the
 
 ## Plan — checkpoints
 
-Three checkpoints, each PR-sized. **CP2 fuses event subscriptions + catch-up replay + sweep retirement** into one PR — there is no transitional "subscriptions + sweep both alive" state. The job table's unique key already dedups across enqueue sources, so a brief overlap during deploy is harmless; the value of the transitional CP is zero (subscriptions add capacity, sweep adds duplicate work that the unique key throws away). Catch-up replay is the structural fallback that makes "remove sweep" safe — no backwards-compat shim ever exists in the codebase.
+**Two checkpoints.** No transitional bleed-stop CP. The original three-CP plan staged a "stop the bleed first via a sweep-as-enqueue transitional path" CP1 that CP2 immediately deleted — pure throwaway code shaped by bleed urgency rather than architecture. Demoted because the bleed is bounded operator funds (~$0.40/hr), not user funds, and saving ~$10/day of bleed by rushing a transitional CP isn't worth the throwaway sweep-as-enqueue code + extra review/deploy/flight cycle. **The bleed stops as a side effect of CP1 landing the real architecture, not as its own sprint.** Pre-CP1, the interim Loki alert (recording rule, no code) is the only TINY thing worth doing for visibility while the work is in flight.
 
-- [ ] **CP1 — Bleed-stop (job table + dispatch split + burn-verify gate)**
-  - Job table `poly_redeem_jobs` + worker drains via `FOR UPDATE SKIP LOCKED`.
-  - **Dispatch split**: `decision.flavor` selects CTF (binary / multi-outcome) vs NegRiskAdapter (neg-risk-parent / neg-risk-adapter) — fixes the active prod bleed.
-  - **Post-tx burn-verification gate**: after every receipt, decode logs and require ≥1 burn event from funder; absence → `level=50` Loki + `abandoned/malformed`. Catches future routing mistakes structurally.
-  - **Interim Loki alert** (no code; ship before this PR or alongside): recording rule on `count_over_time(poly.ctf.redeem.ok by condition_id) > 1 in 10m`.
-  - Sweep stays as enqueue source temporarily; mutex + cooldown Map deleted (the table's unique key replaces them).
-  - Manual route writes job row + awaits worker outcome with 30 s timeout.
-  - **This is the bleed-stop.** Validate on candidate-a + prod by watching the same 5 condition_ids (`0x86c171b7…`, `0x18ec34d0…`, `0x6178933348…`, `0xeb7627b6…`, `0x941012e7…`) stop firing `.ok` events.
+- [ ] **Pre-CP1 (TINY, ships standalone) — Interim Loki alert against the active v0.1 bleed.** Recording rule + alert: `sum by (condition_id) (count_over_time({env="production",service="app"} | json | event="poly.ctf.redeem.ok" [10m])) > 1`. Pages on-call when the same `condition_id` fires `.ok` ≥2 times in 10 min (the bleed signature: first redeem didn't burn). Auto-retires when CP1 deletes the legacy `poly.ctf.redeem.ok` event (no signal → no alerts → dies quietly). 5 min to file; not a CP, just hygiene.
 
-- [ ] **CP2 — Event-driven subscriptions + catch-up replay + sweep retirement (combined — no split-brain)**
-  - Three viem `watchContractEvent` subscriptions (CTF `ConditionResolution`, CTF `PayoutRedemption`, NegRiskAdapter `PayoutRedemption`) writing to job table.
-  - Startup + daily-cron catch-up replay over `[last_processed_block, head]` — the only legitimate sweep, bounded by chain history.
-  - **Rip in the same PR**: `runRedeemSweep`, `redeemAllRedeemableResolvedPositions`, mirror-pipeline sweep tick, all `SINGLE_POD_ASSUMPTION` docstrings, `replicas: 1` Deployment constraint.
-  - Why merge with CP3: the transitional state where both subscriptions and sweep enqueue is pure overhead — unique key dedups, sweep adds duplicate RPC for nothing. Catch-up replay is the safety net that covers any subscription gap (reorg edges, viem reconnect bugs); it ships with this CP, so no fallback is lost.
+- [ ] **CP1 — Full event-driven redeem architecture (one PR, one state transition)**
+  - Job table `poly_redeem_jobs` + worker draining `WHERE status = 'pending' FOR UPDATE SKIP LOCKED`.
+  - **Dispatch split**: `decision.flavor` selects CTF (binary / multi-outcome) vs NegRiskAdapter (neg-risk-parent / neg-risk-adapter) — fixes the v0.1 routing defect.
+  - **Post-tx burn-verification gate** (`REDEEM_REQUIRES_BURN_OBSERVATION`): every receipt is decoded; absence of `TransferSingle(from=funder, value>0)` (CTF) or `NegRiskAdapter.PayoutRedemption(redeemer=funder)` → `level=50` Loki + `abandoned/class:malformed`. No retries. Bounds per-user blast radius to one tx of POL on any future routing mistake.
+  - **Three viem `watchContractEvent` subscriptions** (CTF `ConditionResolution`, CTF `PayoutRedemption`, NegRiskAdapter `PayoutRedemption`) writing to the job table.
+  - **Startup + daily-cron catch-up replay** over `[last_processed_block, head]` — the only legitimate sweep in the system, bounded by chain history. Structural fallback for any subscription gap (reorg edges, viem reconnect bugs).
+  - **Sweep + cooldown + mutex deleted in the same PR**: `runRedeemSweep`, `redeemAllRedeemableResolvedPositions`, `sweepInFlight`, `redeemCooldownByConditionId`, `REDEEM_COOLDOWN_MS`, `pendingRedeemMsRemaining`, `markRedeemPending`, mirror-pipeline sweep tick, all `SINGLE_POD_ASSUMPTION` docstrings, `replicas: 1` Deployment constraint.
+  - Manual route writes a job row + awaits the worker outcome with 30 s HTTP timeout (falls back to `202 + job_id` past the timeout).
+  - **No transitional state** — neither "sweep + subscriptions both enqueue" nor "burn-verify gate without dispatch split." Either both correctness pieces are in, or neither is. The job table's unique key handles dedup across enqueue sources; catch-up replay handles subscription gaps; burn-verify handles routing mistakes.
+  - **Validation**: on candidate-a, observe 5 v0.1-bleeding condition_ids (`0x86c171b7…`, `0x18ec34d0…`, `0x6178933348…`, `0xeb7627b6…`, `0x941012e7…`) stop firing redeem txs entirely. After deploy, prod `poly.ctf.redeem.bleed_detected` event count = 0; on-chain ERC-1155 balance for those positions drops to 0 only when payout actually lands.
 
-- [ ] **CP3 — Dashboard projection (dust-state UI)**
+- [ ] **CP2 — Dashboard projection (dust-state UI)** — independent of CP1's redeem path; can ship together or after.
   - `lifecycle_state` enum column on `poly_redeem_jobs`, written by worker per `decideRedeem` evaluation.
   - `GET /api/v1/poly/wallet/execution` gains `lifecycle_state` per row.
   - Dashboard splits Open vs History on `lifecycle_state ∈ terminal-set`.
@@ -182,7 +178,7 @@ Three checkpoints, each PR-sized. **CP2 fuses event subscriptions + catch-up rep
 
 ## Per-user wallet exposure (the safety-net argument)
 
-`task.0318` Phase B shipped per-tenant Privy trading wallets. Every redeem the worker fires through a tenant's wallet spends that tenant's POL — not operator funds. Today's v0.1 bleed (§ "🔴 v0.1 bleed is LIVE") is on the operator's funder; the moment a per-tenant funder hits the same neg-risk routing path, the same bleed pattern drains their wallet at ~$0.40/hour until manual intervention. **Without `REDEEM_REQUIRES_BURN_OBSERVATION` we cannot ethically expose redemption to user-funded wallets.** With it, per-user blast radius is bounded at one tx of POL before the job transitions to `abandoned` and Loki pages on-call. The invariant is therefore a **precondition for any per-user redeem traffic**, not a CP3 nice-to-have.
+`task.0318` Phase B shipped per-tenant Privy trading wallets. Every redeem the worker fires through a tenant's wallet spends that tenant's POL — not operator funds. Today's v0.1 bleed (§ "🔴 v0.1 bleed is LIVE") is on the operator's funder; the moment a per-tenant funder hits the same neg-risk routing path, the same bleed pattern drains their wallet at ~$0.40/hour until manual intervention. **Without `REDEEM_REQUIRES_BURN_OBSERVATION` we cannot ethically expose redemption to user-funded wallets.** With it, per-user blast radius is bounded at one tx of POL before the job transitions to `abandoned` and Loki pages on-call. The invariant is therefore a **precondition for any per-user redeem traffic**, not a follow-up nice-to-have — it ships in CP1 alongside the dispatch split.
 
 This is also why CP1 of the plan above bundles the burn-verify gate with the dispatch split — they both ride in the bleed-stop PR, and the gate is what makes "we shipped a routing change" trustworthy without manual on-chain audit.
 
@@ -200,7 +196,7 @@ Two issues confirmed in production after task.0387 deployed (commit `20a42237f`)
 
 2. **Dust losers misclassified in dashboard UI.** Resolved-loser positions (lifecycle state: `dust`) currently render in the **Open** tab with a no-op `Redeem` button, and the **Position History** tab is empty. The user's wallet shows ~14 such rows on candidate-a (all `-$1` to `-$4` cost basis, $0 current value, all `-99.99% / -100%`). The lifecycle design already names this state and its terminal edge; the dashboard does not yet honour it. Fix is a projection, not a chain-read change — see `docs/design/poly-positions.md` § Dust-state UI semantics.
 
-### Adds to this task's scope (v0.2 CP3 — dashboard projection; see § Plan above)
+### Adds to this task's scope (CP2 — dashboard projection; see § Plan above)
 
 - New column on `poly_redeem_jobs`: `lifecycle_state` enum mirroring the design-doc state set (`unresolved | open | closing | closed | resolving | winner | redeem_pending | redeemed | loser | dust | abandoned`). Defaults to `unresolved` until the worker classifies.
 - Worker writes `lifecycle_state` on every `decideRedeem` evaluation:
@@ -212,7 +208,7 @@ Two issues confirmed in production after task.0387 deployed (commit `20a42237f`)
 - `GET /api/v1/poly/wallet/execution` contract gains `lifecycle_state` per row; dashboard splits Open vs History on `lifecycle_state ∈ terminal-set`. The Redeem button on rows that resolve to a non-`redeem` decision class is removed entirely (no more "Redeem this losing position" UX trap).
 - Backfill: on first deploy, run a one-shot reconciliation that classifies every existing live position via `decideRedeem` and writes `lifecycle_state` rows. Idempotent on re-run.
 
-This is CP3 in the plan above. Folded here (vs. a sibling task) because the lifecycle state machine + UI presentation are two views of the same data and shouldn't drift; splitting would risk a release where the worker writes `lifecycle_state` but the API endpoint doesn't surface it (or vice versa).
+This is CP2 in the plan above. Folded into this task (vs. a sibling task) because the lifecycle state machine + UI presentation are two views of the same data and shouldn't drift; splitting would risk a release where the worker writes `lifecycle_state` but the API endpoint doesn't surface it (or vice versa).
 
 ## Pre-implement investigations (already complete — values pinned 2026-04-27)
 
