@@ -131,6 +131,12 @@ export class DrizzleRedeemJobsAdapter implements RedeemJobsPort {
     // each fire a redeem tx. The CTE here selects with SKIP LOCKED inside
     // the same statement that flips status to 'claimed', so two pods get
     // distinct rows or nothing.
+    //
+    // RETURNING is intentionally id-only: `db.execute(sql`…`)` yields raw
+    // snake_case rows from postgres, but every consumer of `RedeemJob`
+    // expects the drizzle camelCase shape. Re-reading the row through the
+    // typed builder keeps column-mapping in one place (`mapRow`) rather
+    // than forking a second snake_case-aware mapper.
     const result = await this.db.execute(sql`
       WITH next_job AS (
         SELECT id FROM ${polyRedeemJobs}
@@ -143,11 +149,19 @@ export class DrizzleRedeemJobsAdapter implements RedeemJobsPort {
       SET status = 'claimed', updated_at = now()
       FROM next_job
       WHERE j.id = next_job.id
-      RETURNING j.*
+      RETURNING j.id
     `);
 
-    const rows = result as unknown as Row[];
-    const row = rows[0];
+    const rows = result as unknown as Array<{ id: string }>;
+    const claimedId = rows[0]?.id;
+    if (claimedId === undefined) return null;
+
+    const fetched = await this.db
+      .select()
+      .from(polyRedeemJobs)
+      .where(eq(polyRedeemJobs.id, claimedId))
+      .limit(1);
+    const row = fetched[0];
     if (row === undefined) return null;
     return mapRow(row);
   }

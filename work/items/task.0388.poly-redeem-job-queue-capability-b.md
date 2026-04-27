@@ -265,7 +265,7 @@ In Postgres, `WHERE revoked_at = NULL` is **always NULL (never TRUE)** — `IS N
 
 The `null as unknown as Date` cast is the smoking gun — typecheck was actively suppressed to make it compile. **Action**: this review patches it inline with `isNull(polyWalletConnections.revokedAt)`.
 
-### 🔴 SHIP-BLOCKER #2 — `onConflictDoNothing` strands the resolving → winner transition
+### ✅ SHIP-BLOCKER #2 — fixed by Option B (skip-persistence is for terminal reasons only)
 
 `DrizzleRedeemJobsAdapter.enqueue` UPSERTs with `onConflictDoNothing` on `(funder_address, condition_id)`. CP2's backfill writes a `status='skipped' / lifecycle_state='resolving'` row for every currently-unresolved position the funder holds. When that market later resolves on-chain:
 
@@ -285,14 +285,17 @@ The CP2 commit message acknowledges _decision-time_ staleness ("subscriber's Con
 
 I'd take (a) and add a transitions-module event `skip_reclassified_to_redeem` so the state machine stays the source of truth on what's allowed.
 
-**Action**: NOT fixing in this review — the semantic shape is the dev's call. Flagged here as a CP1.8 follow-up that must land before the PR merges. Repro for stack test:
+**Resolution**: chose option (a)-adjacent — but at the input layer rather than the adapter. `decisionToEnqueueInput` now returns `null` for `market_not_resolved` and `read_failed`, so the trap rows are never written; `losing_outcome` and `zero_balance` (terminal) keep producing rows because they cannot transition back into a `redeem` decision. New invariant `TRANSIENT_SKIP_REASONS_NOT_PERSISTED` documents this. Single-user edge case (re-acquiring shares after a `zero_balance/redeemed` row) is acknowledged as manual-purge for v0.2 — Derek explicitly accepted this.
 
-```
-1. Boot pipeline with funder F holding position P on unresolved condition C.
-2. Backfill writes (F, C, status='skipped', lifecycle='resolving').
-3. Resolve C on-chain (synthesize a ConditionResolution log into the mock public client).
-4. Wait for subscriber tick → assert (F, C, status='pending', lifecycle='winner'). Currently fails.
-```
+Coverage: `tests/unit/features/redeem/decision-to-enqueue-input.test.ts` (7 tests) pins the boundary; component test below covers the adapter end of it.
+
+### ✅ Latent bug found + fixed in `claimNextPending` adapter mapping
+
+While writing the component test, the adapter's `claimNextPending` was returning a half-broken `RedeemJob` after every claim. Root cause: the atomic-claim CTE used `RETURNING j.*` and `db.execute(sql\`…\`)` yields raw snake_case rows (`lifecycle_state`, `funder_address`, ...), but the result was cast to drizzle's camelCase `Row`type via`as unknown as Row[]`and passed to`mapRow`— every camelCase field came back`undefined`. The worker's downstream `buildSubmitArgs`would then read`job.flavor === undefined`and bail, leaving claimed rows pinned in`'claimed'` forever.
+
+Fixed inline in the same commit: atomic UPDATE returns `id` only; a typed `db.select().from(polyRedeemJobs).where(eq(id))` re-reads the row through drizzle's mapper. One extra query on the hot path; correctness >> avoiding it. The existing CP1.5b adapter unit tests didn't catch this because they mocked the database client; the testcontainers-backed component test added in this commit catches it cleanly.
+
+Coverage: `tests/component/db/drizzle-redeem-jobs.adapter.int.test.ts` — 5 tests covering enqueue idempotency, atomic claim, multi-claimer SKIP LOCKED contention, and the "terminal-skip-not-promoted" invariant the adapter must hold.
 
 ### 🟡 Should-fix — minor
 
@@ -302,6 +305,6 @@ I'd take (a) and add a transitions-module event `skip_reclassified_to_redeem` so
 
 ### Verdict
 
-🟡 **NOT YET APPROVED FOR FLIGHT.** Fix #1 is a 1-line correctness blocker patched inline by this review. Fix #2 is a design call requiring a follow-up commit on this branch before PR. Once both are in and a stack test in CP1.8 covers the resolving→winner repro, the PR is shippable.
+🟢 **CODE BLOCKERS CLEARED.** Both ship-blockers fixed inline; latent `claimNextPending` mapping bug fixed in the same commit. The B1/B2/B3 blocker fixes themselves and the real-mainnet fixture coverage continue to look solid.
 
-The B1/B2/B3 blocker fixes themselves and the real-mainnet fixture coverage are solid. The remaining work is small, scoped, and well-understood.
+CI gates `single-node-scope` and `SonarCloud` remain red but are explicitly out of scope for this round (per Derek 2026-04-27 — `single-node-scope` to be addressed by moving poly-only shared packages into `nodes/poly/`; SonarCloud coverage gate not load-bearing given the v0.2 single-user posture).
