@@ -13,7 +13,7 @@ assignees: [derekg1729]
 credit:
 project: proj.poly-copy-trading
 branch: feat/task-0388-redeem-job-queue
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/1082
 reviewer:
 revision: 0
 blocked_by: []
