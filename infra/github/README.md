@@ -35,7 +35,7 @@ jq 'del(._comment)' infra/github/branch-protection.json \
 # 4. Verify.
 gh api repos/Cogni-DAO/node-template/branches/main/protection \
   | jq '.required_status_checks.contexts'
-# expected: ["CodeQL","Validate PR title","static","unit","component","stack-test"]
+# expected: ["CodeQL","Validate PR title","static","unit","component","stack-test","manifest"]
 ```
 
 ## Drift detection

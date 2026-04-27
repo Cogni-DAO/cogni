@@ -124,11 +124,11 @@ After a successful flight, hit your own feature endpoint on `test.cognidao.org` 
 When validation passes, request merge. GitHub Merge Queue is enabled on `main` (see `infra/github/`):
 
 - Marking the PR for merge (UI "Merge when ready", `gh pr merge --auto --squash`, or `core__vcs_merge_pr`) enqueues it.
-- The queue rebases the PR onto current `main`, re-runs the required checks (`static`, `unit`, `component`, `stack-test`, `CodeQL`, `Validate PR title`) on the rebased candidate, and merges in order on green.
+- The queue rebases the PR onto current `main`, re-runs the required checks (`static`, `unit`, `component`, `stack-test`, `manifest`, `CodeQL`, `Validate PR title`) on the rebased candidate, and merges in order on green.
 - The agent does not rebase. The vendor primitive owns rebase + retest + merge, deterministically.
 - The agentic contribution loop terminates here. Post-merge, `push:main` triggers `flight-preview`, which auto-promotes the merged SHA to the preview environment for human review.
 
-The merge queue exists to defeat a real bug class observed in `main` history (PR #924, PR #1033): a PR squash-merging at a head SHA that predates a more recent main, silently rolling back the more recent change in downstream promotions. The queue rebases before merge, structurally extincting the class.
+The merge queue's load-bearing guarantee in our pipeline is **anchoring preview-environment content to the merged tree**. Mechanism: `pr-build.yml` accepts `merge_group:` events and overwrites the `pr-{N}-{X}` image tag with the rebased-tree content. The `manifest` job is required-on-merge_group, so the queue cannot squash-merge until the rebased image is in GHCR. `flight-preview.yml` then re-tags `pr-{N}-{X}` → `preview-{mainSHA}` on `push:main` — the existing re-tag path, but now sourcing correct content. Without this, flight-preview would re-tag pre-rebase content (the bug class observed in PR #924 and PR #1033).
 
 ### Responsibility Table
 

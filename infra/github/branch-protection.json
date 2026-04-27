@@ -13,7 +13,8 @@
       "static",
       "unit",
       "component",
-      "stack-test"
+      "stack-test",
+      "manifest"
     ]
   },
   "enforce_admins": null,
