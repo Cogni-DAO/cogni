@@ -303,3 +303,174 @@ export function extractNodePath(spec: RepoSpec, nodeId: string): string | null {
   const entry = (spec.nodes ?? []).find((n) => n.node_id === nodeId);
   return entry?.path ?? null;
 }
+
+// ---------------------------------------------------------------------------
+// Owning-node resolution (paths → owning domain)
+// ---------------------------------------------------------------------------
+
+/**
+ * Discriminated outcome of `extractOwningNode`. The reviewer dispatches on `kind`:
+ *
+ * - `single`   — exactly one domain owns every path. When `nodeId` is the operator,
+ *                this is an "operator-only" PR — `nodes/operator/**` ∪ `packages/**` ∪
+ *                `.github/**` ∪ `docs/**` ∪ root configs are all the operator's territory.
+ *                `rideAlongApplied: true` flags a bounded carve-out where operator-domain
+ *                paths matching the ride-along whitelist (`pnpm-lock.yaml`, `work/items/**`)
+ *                tagged along a single non-operator node PR.
+ * - `conflict` — two or more domains touched. Refuse to review (post diagnostic).
+ * - `miss`     — empty input. The reviewer surfaces a no-op neutral check.
+ *
+ * Mirrors `tests/ci-invariants/classify.ts` (the CI gate's reference classifier);
+ * locked by `tests/ci-invariants/single-node-scope-parity.spec.ts`.
+ */
+export type OwningNode =
+  | {
+      kind: "single";
+      nodeId: string;
+      path: string;
+      rideAlongApplied?: true;
+    }
+  | {
+      kind: "conflict";
+      nodes: ReadonlyArray<{ nodeId: string; path: string }>;
+    }
+  | { kind: "miss" };
+
+const OPERATOR_TOP = "operator";
+const NODES_PREFIX = "nodes/";
+
+/**
+ * Operator-domain paths that may ride along a single non-operator node PR.
+ * Mirrors `tests/ci-invariants/classify.ts` `RIDE_ALONG_PATTERNS`. Adding to
+ * this list weakens the gate; do so deliberately and only for mechanical
+ * side-effects or cross-cutting node intent that hasn't yet been migrated out
+ * of operator territory.
+ *
+ * - `pnpm-lock.yaml`: mechanical side-effect of node-level package.json edits.
+ * - `work/items/**`: per-task work items; high merge-conflict + index-regen
+ *   churn. Ride-along until task tracking moves to Dolt.
+ */
+const RIDE_ALONG_PATTERNS: ReadonlyArray<(p: string) => boolean> = [
+  (p) => p === "pnpm-lock.yaml",
+  (p) => p.startsWith("work/items/"),
+];
+
+function isRideAlong(p: string): boolean {
+  return RIDE_ALONG_PATTERNS.some((m) => m(p));
+}
+
+/** Top-level segment under `nodes/`, or null if the path is not under `nodes/<x>/`. */
+function topUnderNodes(p: string): string | null {
+  if (!p.startsWith(NODES_PREFIX)) return null;
+  const rest = p.slice(NODES_PREFIX.length);
+  const slash = rest.indexOf("/");
+  if (slash <= 0) return null;
+  return rest.slice(0, slash);
+}
+
+/**
+ * Resolve which domain owns a set of changed paths. Pure — no I/O, no env, no logging.
+ * Implements `SINGLE_DOMAIN_HARD_FAIL` from
+ * `docs/spec/node-ci-cd-contract.md § Single-Domain Scope`:
+ *
+ * - `domain(path) = X`         if path starts with `nodes/<X>/` for X in non-operator registry entries
+ * - `domain(path) = operator`  otherwise (includes `nodes/operator/**`, `packages/`, `.github/`, etc.)
+ *
+ * Aggregation:
+ * - empty input → `miss` (CI passes; the reviewer has nothing to dispatch on)
+ * - exactly one distinct domain → `single`
+ * - two or more → `conflict` (sorted by `nodeId.localeCompare`)
+ *
+ * `RIDE_ALONG` exception: when domains is exactly `{operator, X}` and every operator-domain
+ * path matches the ride-along whitelist (`pnpm-lock.yaml`, `work/items/**`), drop operator →
+ * `single { X, rideAlongApplied: true }`.
+ *
+ * Path safety: paths are consumed verbatim — no `..` rejection. Same boundary as `extractNodePath`.
+ *
+ * Registry mirror invariant: per the spec, `spec.nodes` mirrors the `nodes/*` filesystem
+ * listing (meta-test enforces both directions). Paths under an unregistered `nodes/<x>/`
+ * fall through to the operator-domain default — matching the bash gate. The meta-test
+ * catches the underlying registry/filesystem drift; this function does not defend against it.
+ */
+export function extractOwningNode(
+  spec: RepoSpec,
+  paths: readonly string[]
+): OwningNode {
+  if (paths.length === 0) return { kind: "miss" };
+
+  const registry = spec.nodes ?? [];
+  const operatorEntry = registry.find(
+    (e) => topUnderNodes(`${e.path}/`) === OPERATOR_TOP
+  );
+
+  // Index non-operator registry entries by their top-level segment under nodes/.
+  const nonOperatorByTop = new Map<string, NodeRegistryEntry>();
+  for (const e of registry) {
+    if (e === operatorEntry) continue;
+    const top = topUnderNodes(`${e.path}/`);
+    if (top != null) nonOperatorByTop.set(top, e);
+  }
+
+  const sovereigns = new Map<string, { nodeId: string; path: string }>();
+  const operatorPaths: string[] = [];
+
+  for (const p of paths) {
+    const top = topUnderNodes(p);
+    const sov = top != null ? nonOperatorByTop.get(top) : undefined;
+    if (sov) {
+      sovereigns.set(sov.node_id, { nodeId: sov.node_id, path: sov.path });
+    } else {
+      operatorPaths.push(p);
+    }
+  }
+
+  // Ride-along exception: drop operator from a 2-domain {operator, X} diff
+  // when EVERY operator-domain path matches the ride-along whitelist.
+  let rideAlongApplied = false;
+  let operatorTouched = operatorPaths.length > 0;
+  if (
+    sovereigns.size === 1 &&
+    operatorPaths.length > 0 &&
+    operatorPaths.every(isRideAlong)
+  ) {
+    operatorTouched = false;
+    rideAlongApplied = true;
+  }
+
+  const totalDomains = sovereigns.size + (operatorTouched ? 1 : 0);
+
+  if (totalDomains === 1) {
+    if (sovereigns.size === 1) {
+      const [only] = sovereigns.values();
+      const owner = only as { nodeId: string; path: string };
+      return rideAlongApplied
+        ? {
+            kind: "single",
+            nodeId: owner.nodeId,
+            path: owner.path,
+            rideAlongApplied: true,
+          }
+        : { kind: "single", nodeId: owner.nodeId, path: owner.path };
+    }
+    // Operator-only PR. Requires the operator to be in the registry.
+    if (!operatorEntry) {
+      throw new Error(
+        "[repo-spec] extractOwningNode: operator entry missing from nodes registry; meta-test invariant violated"
+      );
+    }
+    return {
+      kind: "single",
+      nodeId: operatorEntry.node_id,
+      path: operatorEntry.path,
+    };
+  }
+
+  // totalDomains >= 2 → conflict
+  const all: Array<{ nodeId: string; path: string }> = [];
+  if (operatorTouched && operatorEntry) {
+    all.push({ nodeId: operatorEntry.node_id, path: operatorEntry.path });
+  }
+  for (const s of sovereigns.values()) all.push(s);
+  all.sort((a, b) => a.nodeId.localeCompare(b.nodeId));
+  return { kind: "conflict", nodes: all };
+}

@@ -47,6 +47,7 @@ Pure parsing and typed extraction for `.cogni/repo-spec.yaml` — the governance
   - `extractNodeId(spec)` — Node identity UUID
   - `extractNodes(spec)` — Node registry entries (operator-only, returns `[]` for non-operator specs)
   - `extractNodePath(spec, nodeId)` — Resolve a node UUID to its registered relative path; returns `null` on miss (caller decides fallback)
+  - `extractOwningNode(spec, paths)` — Paths → owning domain. Returns `single | conflict | miss`. Operator is a sovereign domain (catches `nodes/operator/**`, `packages/`, `.github/`, root configs); cross-domain mixing returns `conflict`. Bounded ride-along carve-out via `rideAlongApplied` flag (currently `pnpm-lock.yaml` + `work/items/**`). Mirrors `tests/ci-invariants/classify.ts` per spec § Single-Domain Scope.
   - `extractScopeId(spec)` — Scope identity UUID (throws if missing)
   - `extractChainId(spec)` — Numeric chain ID from cogni_dao section
   - Zod schemas: `repoSpecSchema`, `nodeRegistryEntrySchema`, `creditsTopupSpecSchema`, `governanceScheduleSchema`, etc.

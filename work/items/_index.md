@@ -33,7 +33,7 @@
 | 0 | 1 | 4 | needs_merge | task.0374 | Catalog-as-SSoT — make infra/catalog/*.yaml the single node declaration | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 1 | 2 | needs_merge | bug.0376 | poly CTF redeem sweep burns POL on a runaway loop, re-redeeming already-redeemed positions | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
 | 0 | 1 | 5 | needs_triage | task.0379 | Poly redemption sweep — top-0.1% production-grade hardening (gates + spec + anvil-fork validation) | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
-| 0 | 1 | 1 | needs_design | task.0382 | `extractOwningNode(spec, paths)` — TS resolver for files-changed → owning nodeId in operator runtime | VCS Integration | proj.vcs-integration |
+| 0 | 1 | 1 | needs_merge | task.0382 | `extractOwningNode(spec, paths)` — TS resolver for files-changed → owning nodeId in operator runtime | VCS Integration | proj.vcs-integration |
 | 0 | 1 | 1 | needs_merge | bug.0384 | poly CTF redeem sweep — read-then-write race burns gas on duplicate redeems | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
 | 0 | 1 | 3 | needs_closeout | task.0387 | Capability A — pure redeem policy + fixture audit (stops the bleed) | Cogni Poly | proj.poly-copy-trading |
 | 0 | 1 | 2 | needs_implement | task.0402 | Restore SSR — adopt wagmi's canonical Next.js App Router SSR pattern |  |  |
@@ -265,6 +265,7 @@
 | 2 | 99 | 3 | needs_review | task.0323 | Poly copy-trade v1 hardening — close the v0 gaps uncovered during candidate-a validation | Cogni Poly | proj.poly-copy-trading |
 | 3 | 3 | 2 | needs_design | task.0362 | Node-owned hostname declaration for verify + ingress | CI/CD Pipeline | proj.cicd-services-gitops |
 | 3 | 5 | 5 | needs_design | story.0248 | Dolt Branching CI/CD — experiment branches, A/B evaluation, confidence-gated promotion to main | Cogni Poly | proj.poly-prediction-bot |
+| 3 | 5 | 2 | needs_design | task.0383 | First-class shared `readyz`/env-invariants into operator territory so cross-cutting infra fixes can land as a single PR | CI/CD Pipeline | proj.cicd-services-gitops |
 | 3 | 6 | 2 | needs_design | task.0326 | Ledger/attribution worker: rename DATABASE_URL and enforce no-DB-creds invariant on scheduler-worker | Unified Graph Launch | proj.unified-graph-launch |
 | 3 | 7 | 2 | needs_triage | bug.0034 | Secrets redaction uses regex on serialized JSON — adopt fast-redact for structured fields |  |  |
 | 3 | 7 | 2 | needs_design | task.0327 | Drain legacy Temporal queue + add HTTP circuit breaker on scheduler-worker | Unified Graph Launch | proj.unified-graph-launch |

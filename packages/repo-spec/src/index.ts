@@ -24,6 +24,7 @@ export {
   extractNodePath,
   extractNodes,
   extractOperatorWalletConfig,
+  extractOwningNode,
   extractPaymentConfig,
   extractScopeId,
   type GatesConfig,
@@ -32,6 +33,7 @@ export {
   type InboundPaymentConfig,
   type LedgerConfig,
   type LedgerPoolConfig,
+  type OwningNode,
 } from "./accessors.js";
 export { parseRepoSpec } from "./parse.js";
 export { parseRule } from "./rules.js";

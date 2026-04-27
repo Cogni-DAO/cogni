@@ -2,25 +2,25 @@
 id: task.0382
 type: task
 title: "`extractOwningNode(spec, paths)` — TS resolver for files-changed → owning nodeId in operator runtime"
-status: needs_design
+status: needs_merge
 priority: 0
 rank: 1
 estimate: 1
-summary: "Pure TS function in `@cogni/repo-spec` that takes a `RepoSpec` and a list of changed file paths and returns the owning node identity: `{ kind: 'single', nodeId } | { kind: 'operator-infra' } | { kind: 'conflict', nodes } | { kind: 'miss' }`. The load-bearing function for routing AI PR reviews to per-node `.cogni/rules/`. Inverse direction of task.0380's `extractNodePath`. Pairs with task.0381's CI gate (which uses turbo at the shell level); this function provides the same routing inside the operator's review-handler runtime where shelling to turbo is not available."
+summary: "Pure TS function in `@cogni/repo-spec` that takes a `RepoSpec` and a list of changed file paths and returns the owning domain: `{ kind: 'single', nodeId, rideAlongApplied? } | { kind: 'conflict', nodes } | { kind: 'miss' }`. The load-bearing function for routing AI PR reviews per-node. Inverse direction of task.0380's `extractNodePath`. Mirrors `tests/ci-invariants/classify.ts` (the CI gate's reference classifier) byte-for-byte; locked by shared-fixture parity test. Operator is a sovereign domain (Reading A per spec § Single-Domain Scope), not an infra exemption."
 outcome: "When the AI reviewer fires on a PR webhook, `dispatch.server.ts` can call `extractOwningNode(rootSpec, changedPaths)` and route the review handler to the correct per-node `.cogni/rules/` directory deterministically — or refuse to review (returning a clear status) when the PR violates the single-node-scope policy that task.0381 enforces statically. Same routing logic, two enforcement points (CI for hard fail, reviewer for graceful skip + diagnostic comment)."
 spec_refs:
   - vcs-integration
   - node-operator-contract
 assignees: []
 project: proj.vcs-integration
-branch:
-pr:
-reviewer:
-revision: 0
+branch: feat/task-0382-extract-owning-node-resolver
+pr: https://github.com/Cogni-DAO/node-template/pull/1057
+reviewer: claude-code
+revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-04-25
-updated: 2026-04-25
+updated: 2026-04-26
 labels: [vcs, review, repo-spec, accessor, monorepo]
 ---
 
@@ -42,58 +42,60 @@ This is the single largest missing piece in the per-node review pipeline. Buildi
 
 ### Outcome
 
-`@cogni/repo-spec` exports `extractOwningNode(spec, paths): OwningNode` where `OwningNode` is a discriminated union over the four meaningful outcomes:
+`@cogni/repo-spec` exports `extractOwningNode(spec, paths): OwningNode` — three-case discriminated union:
 
 ```ts
 type OwningNode =
-  | { kind: "single"; nodeId: string; path: string }
-  | { kind: "operator-infra" }
+  | {
+      kind: "single";
+      nodeId: string;
+      path: string;
+      rideAlongApplied?: true;
+    }
   | { kind: "conflict"; nodes: ReadonlyArray<{ nodeId: string; path: string }> }
   | { kind: "miss" };
 ```
 
 The reviewer dispatches on `kind`:
 
-- `single` → load `nodes/<path>/.cogni/rules/` and review.
-- `operator-infra` → load root `.cogni/rules/` and review (operator owns infra-policy rules).
-- `conflict` → post a "PR violates single-node-scope, split before review" comment; do not invoke gates.
-- `miss` → post "PR touches no recognized scope" diagnostic; neutral check run.
+- `single` → load `nodes/<path>/.cogni/rules/` and review. When `nodeId` is the operator, this is an "operator-only" PR (operator territory: `nodes/operator/**` ∪ `packages/**` ∪ `.github/**` ∪ `docs/**` ∪ root configs).
+- `conflict` → post a "PR spans N domains, split before review" comment naming the conflicting nodes and the operator-territory paths; do not invoke gates.
+- `miss` → empty diff; neutral no-op check.
 
 ### Approach
 
-**Solution**: One new exported function in `packages/repo-spec/src/accessors.ts`, sibling to `extractNodes` and `extractNodePath`. Pure: no I/O, no env, no globals. Algorithm:
+One new exported function in `packages/repo-spec/src/accessors.ts`, sibling to `extractNodes` and `extractNodePath`. Pure — no I/O, no env, no globals. Mirrors `tests/ci-invariants/classify.ts`.
 
-```
-1. For each path in `paths`:
-   a. Find the longest matching prefix among `spec.nodes[].path` (registry).
-   b. Classify: which registry entry owns this path, or "infra" if no node prefix matches.
-2. Aggregate the per-path classifications:
-   - All paths classified as one node → { kind: "single", nodeId, path }
-   - All paths classified as infra → { kind: "operator-infra" }
-   - Mix of nodes (or one node + infra mix is allowed if the operator is in the registry) → { kind: "conflict", nodes }
-   - All paths fail to classify (path under nodes/ but no registry match) → { kind: "miss" }
-```
+**Domain classification** — must match `tests/ci-invariants/classify.ts` byte-for-byte (Reading A per `docs/spec/node-ci-cd-contract.md § Single-Domain Scope`):
 
-**Operator-infra recognition**: derived from the registry. The operator's registry entry has `path: "nodes/operator"` (or whatever root declares). Paths that match `packages/**`, `infra/**`, `.github/**`, `docs/**`, `work/**`, `services/**`, `scripts/**`, root configs — i.e., paths that are _not_ under any registered node — are classified as "infra" and silently ignored when computing the owning node. A PR touching only infra paths returns `{ kind: "operator-infra" }`.
+- `domain(path) = X` if path starts with `nodes/<X>/` for X in non-operator registry entries.
+- `domain(path) = operator` otherwise (catches `nodes/operator/**` ∪ `packages/**` ∪ `.github/**` ∪ `docs/**` ∪ `work/**` ∪ root configs).
 
-**Mixed infra + single-node**: a PR touching `packages/repo-spec/src/foo.ts` AND `nodes/poly/app/bar.ts` returns `{ kind: "single", nodeId: poly }` — the single sovereign node owns the review, with infra changes riding along. This matches task.0381's exemption logic (infra is allowed alongside any other path).
+Operator IS a domain — not an exemption. The operator owns its own node directory, the shared workspace packages, and all repo infra. A non-operator node cannot ride changes to operator territory along with its own code; that's a request into operator's domain and must be a separate, operator-owned PR.
 
-### Path-prefix matching — "longest prefix wins"
+**Mixed sovereign + operator → conflict**: `nodes/poly/foo.ts + nodes/operator/app/bar.ts` returns `{ kind: "conflict", nodes: [operator, poly] }`. Same for `nodes/poly/foo.ts + packages/repo-spec/x.ts` — packages/ is operator territory.
 
-Required because registry paths can nest: a hypothetical `path: "nodes/poly/app"` would shadow `path: "nodes/poly"` for files under `app/`. Standard file-system routing semantics. Prevents ambiguity if the registry ever gets fine-grained.
+**Ride-along exception** (`RIDE_ALONG`): when domains is exactly `{operator, X}` and the only operator-domain path is `pnpm-lock.yaml`, drop operator → `{ kind: "single", nodeId: X, rideAlongApplied: true }`. Mechanical side-effect of node-level `package.json` bumps; pnpm-lock.yaml only.
+
+### Path matching — flat top-level under `nodes/`
+
+The match key is `path.split("/")[1]` when path starts with `nodes/`. Compare against `entry.path.split("/")[1]` for each non-operator registry entry. No longest-prefix-wins, no nesting — the registry is flat by convention (`nodes/operator`, `nodes/poly`, `nodes/resy`, `nodes/node-template`) and the schema can be tightened to enforce it. Matches `tests/ci-invariants/classify.ts` exactly.
+
+`node-template` is sovereign by this rule (it's under `nodes/`, name is not `operator`). This is the desired behavior: template edits should not ride alongside poly edits.
 
 ### Reuses
 
 - Existing `RepoSpec` type + `nodeRegistryEntrySchema` (`packages/repo-spec/src/schema.ts:259-272`)
 - Existing `extractNodes(spec)` accessor (returns the array we iterate)
-- task.0380's `extractNodePath` is the _return-side_ sibling — both can compose: `extractNodePath(spec, extractOwningNode(spec, paths).nodeId)` would be redundant, but the same registry data backs both functions.
-- Native `Array.prototype.reduce` / `.find` / `.startsWith` — no library
+- task.0380's `extractNodePath` is the _return-side_ sibling — both consume the same registry data; composition only makes sense when narrowed (`if (r.kind === "single") extractNodePath(spec, r.nodeId)`).
+- Native `Array.prototype.find` / `String.prototype.split` — no library, no regex.
 
 ### Rejected
 
 - _Returning `string | null` like `extractNodePath` does_ — collapses three meaningful outcomes (single/conflict/miss/infra) into one. Caller would need a sentinel value or out-of-band signal for conflict. Discriminated union is the honest type.
 - _Throwing on conflict_ — exceptions for control flow are wrong here; "conflict" is a _result_, not an error condition. Reviewer wants to dispatch on it, not catch it.
-- _Special-casing the operator's registry entry to mean "infra"_ — instead, "infra" is "no registered node owns this path", which is a property of the path set, not of any specific registry entry. This stays consistent if the operator's registry entry changes shape (e.g., to `path: "."`).
+- _Operator-is-infra-exemption (Reading B)_ — earlier draft of this task treated `nodes/operator/**` and `packages/**` as infra that "rides along" any sovereign node PR. Rejected after design review with task.0381: operator paths are intent, not mechanical side-effect, and intent doesn't ride along. Cross-domain mixing returns `conflict` so contributors split the operator change into its own PR. Preserves operator's sovereignty over its territory and surfaces substrate-request friction as productive signal. The lockfile carve-out is the _only_ exception, bounded to `pnpm-lock.yaml` because it is mechanical side-effect of `package.json` intent.
+- _Longest-prefix-wins for nested registry paths_ — premature; current registry is flat by convention. Add LPW the day a nested entry appears, not before.
 - _Putting it in `nodes/operator/app/src/features/review/`_ — couples to one consumer. Future scope router, scheduler routing, attribution may all want this.
 - _Bundling it with task.0381's CI gate_ — wrong altitude. Bash + turbo at CI time vs. TS + RepoSpec inside operator runtime. Both implement the same policy from different layers; both belong but separately.
 - _Bundling it with the reviewer factory parameterization_ — defeats the gate-ladder. Function locked alone first, consumer rides on top.
@@ -103,11 +105,14 @@ Required because registry paths can nest: a hypothetical `path: "nodes/poly/app"
 <!-- CODE REVIEW CRITERIA -->
 
 - [ ] **PURE_RESOLVER**: `extractOwningNode` performs no I/O, no env reads, no logging. `(RepoSpec, readonly string[]) → OwningNode` and nothing else.
-- [ ] **DISCRIMINATED_UNION**: Return type is the four-case discriminated union. No sentinel strings, no null-as-conflict. Locked by type-level test.
-- [ ] **LONGEST_PREFIX_WINS**: When registry has nested paths, the longest matching prefix owns the file. Locked by a scenario fixture.
-- [ ] **INFRA_RIDE_ALONG**: A mix of infra paths + a single sovereign node returns `{ kind: "single", nodeId }` — infra rides along, does not trigger conflict. Matches task.0381 exemption logic.
-- [ ] **EMPTY_INPUT**: `extractOwningNode(spec, [])` returns `{ kind: "operator-infra" }` (vacuous truth: no paths, no node violations). Edge case, locked by test.
+- [ ] **DISCRIMINATED_UNION**: Return type is the three-case union (`single | conflict | miss`). No sentinel strings, no null-as-conflict.
+- [ ] **OPERATOR_IS_A_DOMAIN**: Operator is a sovereign domain — `nodes/operator/**` ∪ `packages/**` ∪ `.github/**` ∪ `docs/**` ∪ root configs all classify as `operator`. Mixing with another sovereign returns `conflict`. (Was `OPERATOR_IS_INFRA`/exemption — flipped per spec § Single-Domain Scope.)
+- [ ] **RIDE_ALONG**: When domains is `{operator, X}` and the only operator path is `pnpm-lock.yaml`, drop operator → `single { X, rideAlongApplied: true }`. The only carve-out from `OPERATOR_IS_A_DOMAIN`.
+- [ ] **EMPTY_INPUT**: `extractOwningNode(spec, [])` returns `{ kind: "miss" }`. CI passes; the reviewer surfaces a no-op neutral check.
+- [ ] **CONFLICT_ORDERING**: `conflict.nodes` is sorted by `nodeId.localeCompare` — deterministic so reviewer diagnostic comments don't flap.
 - [ ] **NO_CROSS_VALIDATION**: This function does not validate path safety (no `..`, no absolute paths). Caller responsibility, same as `extractNodePath`. Documented in TSDoc.
+- [ ] **POLICY_PARITY_WITH_0381**: This function and `tests/ci-invariants/classify.ts` produce equivalent verdicts on every shared fixture. Locked by `tests/ci-invariants/single-node-scope-parity.spec.ts` running both implementations against the same 8 fixtures.
+- [ ] **REGISTRY_MIRRORS_FILESYSTEM**: Per spec, `spec.nodes` mirrors the `nodes/*` filesystem listing (meta-test enforces both directions). The resolver requires the operator entry to be present; throws with a clear message otherwise.
 
 ### Files
 
@@ -119,15 +124,19 @@ Required because registry paths can nest: a hypothetical `path: "nodes/poly/app"
 ### Test scenarios
 
 1. **Single sovereign node** — paths all under `nodes/poly/...` → `{ kind: "single", nodeId: poly, path: "nodes/poly" }`.
-2. **All infra** — paths all under `packages/`, `infra/`, `docs/` → `{ kind: "operator-infra" }`.
-3. **Mixed sovereign node + infra** — `nodes/poly/foo.ts` + `packages/repo-spec/bar.ts` → `{ kind: "single", nodeId: poly }`.
-4. **Conflict — two sovereign nodes** — `nodes/poly/foo.ts` + `nodes/resy/bar.ts` → `{ kind: "conflict", nodes: [poly, resy] }`.
-5. **Conflict — three sovereign nodes** → all three named in the conflict result.
-6. **Miss** — path under `nodes/unregistered-node/foo.ts` (no registry entry) → `{ kind: "miss" }`.
-7. **Empty input** — `[]` → `{ kind: "operator-infra" }`.
-8. **Longest-prefix wins** — registry has both `nodes/poly` and `nodes/poly/app`; path under `nodes/poly/app/...` resolves to the more-specific entry.
-9. **Operator-as-registry-entry** — registry has operator at `path: "nodes/operator"`; paths under it return `{ kind: "single", nodeId: operator, path: "nodes/operator" }` (NOT auto-classified as infra). Caller (the reviewer) decides whether to treat operator-as-node identically to operator-as-infra.
-10. **Trailing-slash and edge paths** — `nodes/poly` (no trailing slash) and `nodes/poly/` both resolve correctly.
+2. **Operator-only (non-`nodes/` paths)** — `packages/`, `infra/`, `docs/`, `.github/` → `{ kind: "single", nodeId: operator, path: "nodes/operator" }`.
+3. **Operator-only (`nodes/operator/**`)** — paths all under `nodes/operator/...`→`{ kind: "single", nodeId: operator, path: "nodes/operator" }`.
+4. **Sovereign + non-`nodes/` path → conflict** — `nodes/poly/foo.ts` + `packages/repo-spec/bar.ts` → `{ kind: "conflict", nodes: [operator, poly] }`.
+5. **Sovereign + `nodes/operator/**`→ conflict** —`nodes/poly/foo.ts`+`nodes/operator/app/bar.ts`→`{ kind: "conflict", nodes: [operator, poly] }`. (Operator is a domain, not exemption.)
+6. **Conflict — two sovereign nodes** — `nodes/poly/foo.ts` + `nodes/resy/bar.ts` → `{ kind: "conflict", nodes: [poly, resy] }` (sorted by nodeId).
+7. **Conflict — three sovereign nodes** → all three named in the conflict result, sorted by nodeId.
+8. **Unregistered `nodes/<x>/` falls through to operator** — meta-test catches the registry/filesystem drift; resolver classifies as operator (matches bash gate's filesystem-driven default).
+9. **Empty input** — `[]` → `{ kind: "miss" }`.
+10. **node-template is sovereign** — paths under `nodes/node-template/...` resolve as sovereign when registered.
+11. **`RIDE_ALONG`** — `nodes/poly/app/package.json + pnpm-lock.yaml` → `{ kind: "single", nodeId: poly, rideAlongApplied: true }`.
+12. **`RIDE_ALONG` bounded** — `nodes/poly + pnpm-lock.yaml + .github/foo.yml` → `{ kind: "conflict", nodes: [operator, poly] }` (any extra operator-domain path defeats the carve-out).
+13. **Throws when operator missing from registry on operator-only PR** — `REGISTRY_MIRRORS_FILESYSTEM` invariant enforcement.
+14. **Parity with task.0381** — all 8 fixtures in `tests/ci-invariants/fixtures/single-node-scope/` produce identical verdicts when run through `extractOwningNode` (via the `OwningNode → ClassifyResult` translator) and `tests/ci-invariants/classify.ts`. Locked by `tests/ci-invariants/single-node-scope-parity.spec.ts`.
 
 ### Pairing with task.0381
 
@@ -137,6 +146,10 @@ These two tasks implement the **same policy at two layers**:
 - **task.0382** (reviewer / runtime): TS + RepoSpec inside operator. Soft fail with diagnostic comment. Runs where the AI reviewer lives.
 
 Both must agree. If they disagree, that's a real bug — captured by a contract test that exercises a fixed PR diff against both implementations. **Defer the contract test to a follow-on**; ship 0381 + 0382 first, then the parity test once both exist.
+
+## Links
+
+- Handoff: [handoff](../handoffs/task.0382.handoff.md)
 
 ## Validation
 
