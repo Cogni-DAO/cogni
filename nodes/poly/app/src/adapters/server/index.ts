@@ -104,6 +104,7 @@ export { ViemTreasuryAdapter } from "./onchain/viem-treasury.adapter";
 export { UserDrizzlePaymentAttemptRepository } from "./payments/drizzle-payment-attempt.adapter";
 export { EvmRpcOnChainVerifierAdapter } from "./payments/evm-rpc-onchain-verifier.adapter";
 export { PonderOnChainVerifierAdapter } from "./payments/ponder-onchain-verifier.adapter";
+export { DrizzleRedeemJobsAdapter } from "./redeem";
 export {
   GitLsFilesAdapter,
   type GitLsFilesAdapterConfig,

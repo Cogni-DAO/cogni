@@ -17,6 +17,7 @@ export const tsupConfig = defineConfig({
   entry: [
     "src/index.ts",
     "src/copy-trade.ts",
+    "src/poly-redeem-jobs.ts",
     "src/wallet-connections.ts",
     "src/wallet-grants.ts",
   ],

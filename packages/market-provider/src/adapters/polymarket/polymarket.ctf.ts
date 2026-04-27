@@ -37,6 +37,26 @@ export const polymarketCtfRedeemAbi = parseAbi([
   "function balanceOf(address account, uint256 id) view returns (uint256)",
 ]);
 
+/**
+ * Event ABI for the CTF subscriptions used by the event-driven redeem
+ * pipeline (task.0388):
+ *
+ *  - `ConditionResolution(conditionId, oracle, questionId, outcomeSlotCount, payoutNumerators)`
+ *    fires once per resolved condition; subscriber enumerates funder's positions for
+ *    that condition and enqueues redeem jobs via Capability A.
+ *  - `PayoutRedemption(redeemer, collateralToken, parentCollectionId, conditionId, indexSets, payout)`
+ *    fires on every successful CTF `redeemPositions` call; subscriber matches
+ *    `redeemer == funder` + existing job row to flip status to `confirmed` at N=5.
+ *
+ * The shape differs from `NegRiskAdapter.PayoutRedemption` (different topic hash);
+ * subscriber must subscribe both independently.
+ */
+export const polymarketCtfEventsAbi = parseAbi([
+  "event ConditionResolution(bytes32 indexed conditionId, address indexed oracle, bytes32 indexed questionId, uint256 outcomeSlotCount, uint256[] payoutNumerators)",
+  "event PayoutRedemption(address indexed redeemer, address indexed collateralToken, bytes32 indexed parentCollectionId, bytes32 conditionId, uint256[] indexSets, uint256 payout)",
+  "event TransferSingle(address indexed operator, address indexed from, address indexed to, uint256 id, uint256 value)",
+]);
+
 /** Normalize API / DB condition ids to a 32-byte hex string. */
 export function normalizePolygonConditionId(raw: string): `0x${string}` {
   const trimmed = raw.trim();

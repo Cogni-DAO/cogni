@@ -43,6 +43,7 @@ export {
   PARENT_COLLECTION_ID_ZERO,
   POLYGON_CONDITIONAL_TOKENS,
   POLYGON_USDC_E,
+  polymarketCtfEventsAbi,
   polymarketCtfRedeemAbi,
 } from "./polymarket.ctf.js";
 export {
@@ -90,6 +91,10 @@ export {
   UserValueEntrySchema,
   UserValueResponseSchema,
 } from "./polymarket.data-api.types.js";
+export {
+  POLYGON_NEG_RISK_ADAPTER,
+  polymarketNegRiskAdapterAbi,
+} from "./polymarket.neg-risk-adapter.js";
 export {
   normalizePolymarketDataApiFill,
   type PolymarketNormalizeResult,

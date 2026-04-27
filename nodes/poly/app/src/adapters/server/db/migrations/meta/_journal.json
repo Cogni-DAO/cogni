@@ -232,6 +232,13 @@
       "when": 1777478400000,
       "tag": "0032_poly_wallet_trading_approvals",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1777908600000,
+      "tag": "0033_poly_redeem_jobs",
+      "breakpoints": true
     }
   ]
 }

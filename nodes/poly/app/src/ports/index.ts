@@ -159,6 +159,13 @@ export type {
   ProviderFundingOutcome,
   ProviderFundingPort,
 } from "./provider-funding.port";
+export {
+  type EnqueueRedeemJobInput,
+  type EnqueueRedeemJobResult,
+  RedeemJobNotFoundPortError,
+  type RedeemJobsPort,
+  type RedeemSubscriptionId,
+} from "./redeem-jobs.port";
 export type {
   ProxyBillingEntry,
   SandboxErrorCode,
