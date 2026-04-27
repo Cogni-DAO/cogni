@@ -36,7 +36,6 @@
 | 0 | 1 | 1 | needs_design | task.0382 | `extractOwningNode(spec, paths)` — TS resolver for files-changed → owning nodeId in operator runtime | VCS Integration | proj.vcs-integration |
 | 0 | 1 | 1 | needs_merge | bug.0384 | poly CTF redeem sweep — read-then-write race burns gas on duplicate redeems | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
 | 0 | 1 | 3 | needs_closeout | task.0387 | Capability A — pure redeem policy + fixture audit (stops the bleed) | Cogni Poly | proj.poly-copy-trading |
-| 0 | 1 | 2 | needs_merge | task.0402 | Restore SSR — adopt wagmi's canonical Next.js App Router SSR pattern |  |  |
 | 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
 | 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -341,6 +340,7 @@
 | 0 | task.0361 | Poly — first-user onboarding flow v0 (sign-on → provision → fund → select targets) | Cogni Poly | proj.poly-copy-trading |
 | 0 | task.0381 | Single-node-scope CI gate — reject PRs that touch >1 node domain (operator owns repo infra) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | bug.0383 | poly CTF redeem sweep loops on losing-outcome ERC1155 — bug.0376 fix-of-fix | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
+| 0 | task.0402 | Restore SSR — adopt wagmi's canonical Next.js App Router SSR pattern |  |  |
 | 1 | task.0006 | Collapse GraphProvider into GraphExecutorPort — single execution interface + namespace routing | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0007 | Billing enforcement decorator at GraphExecutorPort level | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0010 | OpenClaw gateway model selection — session-level override or agent-per-specialty | OpenClaw Capabilities Integration | proj.openclaw-capabilities |

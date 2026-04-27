@@ -2,7 +2,7 @@
 id: task.0402
 type: task
 title: "Restore SSR — adopt wagmi's canonical Next.js App Router SSR pattern"
-status: needs_merge
+status: done
 priority: 0
 rank: 1
 estimate: 2
