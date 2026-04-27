@@ -129,15 +129,16 @@ export class GitHubVcsAdapter implements VcsCapability {
       ]
     );
 
+    const rawCheckRuns = checksResponse.data.check_runs as Array<{
+      name: string;
+      status: string;
+      conclusion: string | null;
+      app: { slug: string } | null;
+    }>;
+
     const checks: CheckInfo[] = [
-      // Modern check runs
-      ...(
-        checksResponse.data.check_runs as Array<{
-          name: string;
-          status: string;
-          conclusion: string | null;
-        }>
-      ).map((cr) => ({
+      // Modern check runs (all — for observability)
+      ...rawCheckRuns.map((cr) => ({
         name: cr.name,
         status: cr.status,
         conclusion: cr.conclusion,
@@ -160,13 +161,33 @@ export class GitHubVcsAdapter implements VcsCapability {
       })),
     ];
 
-    const pending = checks.some(
+    // Gate on GitHub Actions check runs only — third-party app checks (SonarCloud, etc.)
+    // are informational and do not block merge via branch protection.
+    const ciChecks = [
+      ...rawCheckRuns
+        .filter((cr) => cr.app?.slug === "github-actions")
+        .map((cr) => ({ status: cr.status, conclusion: cr.conclusion })),
+      // Legacy commit statuses are always included (they are GitHub-native)
+      ...(statusResponse.data.statuses as Array<{ state: string }>).map(
+        (s) => ({
+          status: "completed",
+          conclusion:
+            s.state === "success"
+              ? "success"
+              : s.state === "pending"
+                ? null
+                : "failure",
+        })
+      ),
+    ];
+
+    const pending = ciChecks.some(
       (c) => c.status !== "completed" || c.conclusion === null
     );
     const allGreen =
-      checks.length > 0 &&
+      ciChecks.length > 0 &&
       !pending &&
-      checks.every(
+      ciChecks.every(
         (c) => c.conclusion === "success" || c.conclusion === "skipped"
       );
 
