@@ -95,6 +95,7 @@ stateDiagram-v2
     open --> closing: user/mirror SELL submitted
     closing --> open: partial fill, balance > 0
     closing --> closed: fill drains balance to 0
+    closing --> resolving: market resolves mid-SELL (CLOB closes book; in-flight order is cancelled by exchange — no app-side action)
     closed --> [*]
 
     open --> resolving: market enters resolution
@@ -104,10 +105,11 @@ stateDiagram-v2
     dust --> [*]: ignore forever
 
     winner --> redeem_pending: redeemPositions tx submitted
-    redeem_pending --> redeemed: PayoutRedemption event observed
-    redeem_pending --> redeem_failed: tx reverted OR no burn observed
-    redeem_failed --> winner: retry with corrected index set
-    redeem_failed --> abandoned: attempt_count >= 3
+    redeem_pending --> redeemed: PayoutRedemption event observed at finality
+    redeem_pending --> redeem_failed: receipt failure OR success-without-burn
+    redeem_failed --> winner: transient retry (RPC/gas/reorg)
+    redeem_failed --> abandoned: malformed (no burn observed)
+    redeem_failed --> abandoned: attempt_count >= 3 (transient exhausted)
     redeemed --> [*]
     abandoned --> [*]: page on-call
 ```
@@ -150,9 +152,9 @@ The redesign is two capabilities and one event subscription. No code in this doc
 
 These are not optional; the design relies on them.
 
-- [ ] **Loki audit of historical redeem txs + coverage matrix.** Pull every `poly.ctf.redeem.ok` event from Loki for the last 30 days. For each `tx_hash`, call `eth_getTransactionReceipt` and check for `TransferSingle(from=funder, value>0)` (binary CTF) OR the neg-risk adapter's burn event. Any tx with success status and **no burn from our funder** is a malformed-decision fixture. **Coverage requirement:** Capability A's fixture corpus must include at least one example of _each_ of `{binary-winner, binary-loser, binary-already-redeemed, neg-risk-parent, neg-risk-adapter, multi-outcome-winner, multi-outcome-loser}`. Any class the Loki audit doesn't cover **must** be backfilled synthetically from contract source (CTF + neg-risk adapter ABIs + a deterministic state generator) before Capability A ships. A predicate validated against 30 days of pure binary-winner traffic is a predicate that ships with the same blind spot bug.0384 had.
+- [ ] **Loki audit of historical redeem txs + coverage matrix.** Pull every `poly.ctf.redeem.ok` event from Loki for the last 30 days. For each `tx_hash`, call `eth_getTransactionReceipt` and check for `TransferSingle(from=funder, value>0)` (binary CTF) OR the neg-risk adapter's burn event. Any tx with success status and **no burn from our funder** is a malformed-decision fixture. **Coverage requirement:** Capability A's fixture corpus must include at least one example of _each_ of `{binary-winner, binary-loser, binary-already-redeemed, neg-risk-parent, neg-risk-adapter, multi-outcome-winner, multi-outcome-loser}`. Any class the Loki audit doesn't cover **must** be backfilled synthetically from contract source (CTF + neg-risk adapter ABIs + a deterministic state generator) before Capability A ships. **Synthetic-fixture review criterion:** every synthetic fixture must be paired with a corresponding _real_ redemption trace from Polygon Mumbai testnet (or mainnet, if a known sample exists) — same `(market_kind, outcome_index, payoutNumerators)` shape — and the synthetic predicate output must match the real receipt's burn/no-burn classification. A synthetic fixture without a testnet cross-check is rejected; we are not validating Capability A against our own assumptions.
 - [ ] **Confirm neg-risk adapter contract address + event ABI** on Polygon mainnet. Identify the `PayoutRedemption`-equivalent event name and topic hash. Capability B's subscription set is wrong without this.
-- [ ] **Pick finality depth N.** v0 default: **N=10 on Polygon (~25 s)**. This is a _choice with no published Polygon-team finality guidance to cite as of 2026-04-26_ — Polygon docs talk about ~256-block heimdall checkpoints but observed reorg depth on mainnet is overwhelmingly ≤3. N=10 is a 3× margin against the empirical tail. **Revisit after the first 30 days of `PayoutRedemption` observation:** if zero confirmed→submitted reverts occur, ratchet down to N=5 to halve confirmation latency. If even one occurs, hold at N=10 and log the reorg. Value lives next to RPC config, not hardcoded in two places.
+- [ ] **Pick finality depth N. TBD — confirm against Polygon explorer reorg telemetry (Alchemy / polygonscan / QuickNode dashboards) before /implement; if no published data is available, default conservatively to N=20 and document the conservatism.** Working v0 default: **N=10 on Polygon (~25 s)**, as a 3× margin against the commonly-cited "≤3 mainnet reorg depth" claim — _which itself needs a citation before this default ships_. **Revisit after the first 30 days of `PayoutRedemption` observation:** if zero confirmed→submitted reverts occur, ratchet down to N=5 to halve confirmation latency. If even one occurs, hold at N (or higher) and log the reorg. Value lives next to RPC config, not hardcoded in two places.
 
 ### Capability A — Pure redeem policy
 
@@ -160,7 +162,7 @@ A pure function (or small module) with no I/O:
 
 - Inputs: chain reads (balance, payoutNumerator, payoutDenominator), `negativeRisk` flag, our `outcomeIndex`, market's outcome cardinality.
 - Output: a discriminated decision: `redeem(indexSet, expectedShares, expectedPayoutUsdc) | skip(reason) | malformed(reason)`.
-- Tested against a fixture matrix derived from **real failing tx hashes** (audit step: pull all `poly.ctf.redeem.ok` events from Loki for last 30 days, cross-reference each `tx_hash` against `eth_getTransactionReceipt` for `TransferSingle(from=funder, value>0)`; any tx with no burn is a fixture we are missing).
+- Tested against the fixture corpus from **Before /implement — load-bearing prerequisites** above. Do not duplicate the audit recipe here.
 - Lives in `packages/market-provider/policy/` so it can be imported by the executor, the worker, and tests without dragging viem.
 
 This capability is the answer to bug.0383 done right — it does not call the chain, it judges chain reads.
@@ -213,7 +215,7 @@ From `nodes/poly/app/src/bootstrap/capabilities/poly-trade-executor.ts`:
 - The mirror-pipeline tick that calls them
 - `BINARY_REDEEM_INDEX_SETS` as a hardcoded constant (replaced by Capability A's index-set output)
 
-All `SINGLE_POD_ASSUMPTION` doc-strings go with them. Replicas can scale.
+**SINGLE_POD_ASSUMPTION docstring removal — phased.** v0.1 makes the _redeem path_ multi-pod-safe via `FOR UPDATE SKIP LOCKED`, but the sweep enumeration still runs in v0.1 (as the temporary enqueue source) and that path remains single-pod-only. So in v0.1: rip the docstrings on the redeem-job-queue surface only; **leave** the `SINGLE_POD_ASSUMPTION` docstrings on the sweep call sites. v0.2 (when the sweep dies) rips the rest. Be consistent: do not delete a docstring whose underlying assumption still holds.
 
 ## Neg-risk markets — the wrinkle Capability A must handle
 
@@ -237,17 +239,30 @@ Capability A must take `negativeRisk` from the position and emit the _correct_ `
 
 ## Abandoned-position runbook
 
-`abandoned` is not "the system gives up" — it is "the system has detected a Capability A blind spot it cannot fix on its own." Without a runbook, abandoned rows accumulate forever and the page becomes theater. The on-call procedure:
+`abandoned` has **two distinct alert classes** that share the `poly.ctf.redeem.abandoned` Loki channel but require different runbook branches. The Loki payload carries a `class` field; do not collapse them.
 
-1. **Page fires** on `poly.ctf.redeem.abandoned` Loki event. Payload: `condition_id`, `funder`, `negativeRisk`, `outcomeIndex`, last `tx_hash`, observed receipt, observed event topics.
+### Class A — `malformed` (Capability A blind spot)
+
+The decision was structurally wrong (wrong index set, wrong parent collection, binary path on a neg-risk position). Chain state did not change between the decision and now; an automated retry would reproduce the same failure. This is a code defect, not an infrastructure problem.
+
+1. **Page fires** with `class: "malformed"`. Payload: `condition_id`, `funder`, `negativeRisk`, `outcomeIndex`, last `tx_hash`, observed receipt, observed event topics.
 2. **Inspect the failed tx** on Polygonscan (decoded receipt + event log). Confirm: tx succeeded, no `TransferSingle` from funder, no `PayoutRedemption` from funder.
-3. **Diagnose Capability A's blind spot.** The decision was structurally wrong — wrong index set, wrong parent collection, wrong contract (binary path used on a neg-risk position, etc.). The chain state did not change between the decision and now; another automated retry will reproduce the same failure.
-4. **Add the failing case as a fixture.** New row in Capability A's test corpus with the input chain reads + the _correct_ expected output. Tests must fail against current Capability A.
+3. **Diagnose Capability A's blind spot.**
+4. **Add the failing case as a fixture.** New row in Capability A's test corpus with input chain reads + the _correct_ expected output. Tests must fail against current Capability A.
 5. **Fix Capability A** until the new fixture passes plus all existing fixtures still pass.
 6. **Ship + deploy** through the normal lifecycle (PR → candidate-a → flight → deploy_verified).
-7. **Re-enqueue the abandoned position** by inserting a fresh job row (manual SQL or admin endpoint) with `attempt_count = 0`. The new Capability A then evaluates correctly and the worker drains it.
+7. **Re-enqueue the abandoned position.** UPSERT existing row: `UPDATE poly_redeem_jobs SET status='pending', attempt_count=0, tx_hashes = tx_hashes || ARRAY[last_tx_hash], last_error=NULL, updated_at=now() WHERE (funder_address, condition_id) = (...)`. The audit trail of prior tx hashes is preserved; the unique key is preserved. The fixed Capability A then evaluates correctly and the worker drains it.
 
-Without steps 4–6, every position resolved with the same shape will hit the same wall and abandon. The runbook is the loop that converts a one-off page into a permanent fix.
+### Class B — `transient_exhausted` (infrastructure problem)
+
+Three transient retries (RPC timeout, gas underpriced, reorg-during-submit) failed in a row. This is _not_ a Capability A bug — the predicate's decision is fine. The infrastructure (RPC provider, gas oracle, network) is the root cause.
+
+1. **Page fires** with `class: "transient_exhausted"`. Payload: same fields as malformed, plus `attempt_history: [{tx_hash, error_class, block_at_attempt}]` so the on-call can spot patterns (all RPC timeouts? all gas underpriced? did mainnet reorg during all three?).
+2. **Inspect each prior attempt** for the failure mode. Decide whether it's a provider-wide outage (page DevOps), a gas-config drift (bump our gas-pricing strategy), or a transient bad-luck cluster (rare; treat as flake).
+3. **Fix the infrastructure issue** (rotate RPC provider, raise gas-pricing floor, etc.). No code change to Capability A.
+4. **Re-enqueue the abandoned position** via the same UPSERT as Class A step 7.
+
+Both classes funnel through the same UPSERT to retire abandoned rows. Without Class A steps 4–6 the same shape recurs; without Class B step 3 the infra problem recurs. Logs and runbook live next to each other so the on-call doesn't reach for the wrong recipe.
 
 ## What this doc is not
 
@@ -260,7 +275,7 @@ Without steps 4–6, every position resolved with the same shape will hit the sa
 1. **Cooldown Map + sweep mutex come out wholesale.** Belt-and-suspenders means two truths, which is the bug.
 2. **Single Capability A function with discriminated output** `kind: 'binary' | 'neg-risk-parent' | 'neg-risk-adapter'`. Don't fork the policy; fork the output shape.
 3. **Worker is in-process, v0.** Scale to a separate container only if multi-pod load forces it.
-4. **Manual redeem button — v0 holds HTTP, v1 returns 202.** Re-litigated on review2: for a single-user dashboard with sub-30 s confirmation latency (worker drains the row immediately, finality is N=10 ≈ 25 s), holding the HTTP connection with a 45 s timeout is simpler than building a polling client around `job_id`. The job row still exists (worker writes it; that's the dedup mechanism), the route just `await`s the worker outcome instead of returning 202. Promote to 202 + poll **the moment** any of: (a) we onboard a second tenant with concurrent redeems, (b) average confirm latency drifts above 30 s, (c) we add background-job UI (notifications). v0 single-user does not pay for plumbing it doesn't use.
+4. **Manual redeem button — v0 holds HTTP, v1 returns 202.** Re-litigated on review2: for a single-user dashboard with sub-30 s confirmation latency (worker drains the row immediately, finality is N=10 ≈ 25 s), holding the HTTP connection with a **30 s timeout** is simpler than building a polling client around `job_id`. **30 s is the ceiling** because k8s ingress / AWS ALB defaults sit there; going higher requires explicit proxy-config work we are not doing in v0. If the worker has not confirmed within 30 s, the route falls back to `202 + job_id` and the UI polls — so the 202 plumbing exists, but as the slow-path, not the default. The job row still exists (worker writes it; that's the dedup mechanism), the route just `await`s the worker outcome up to the timeout. Promote 202 + poll to the _default_ the moment any of: (a) we onboard a second tenant with concurrent redeems, (b) average confirm latency drifts above 25 s, (c) we add background-job UI (notifications).
 
 ## Still open (deferred, not blocking /implement)
 
