@@ -54,9 +54,11 @@ As of 2026-04-27 ~05:00Z, 5 neg-risk conditions on funder `0x95e407fE03996602Ed1
 
 **This task IS the fix.** The NegRiskAdapter contract address + ABI + `[yes, no]` 2-arg `redeemPositions` shape pinned in the frontmatter `summary` are the load-bearing pieces. CP1's worker MUST route any neg-risk position through the NegRiskAdapter (`0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296`), not standard CTF. Without that routing change, this task ships another rate-limited bleed instead of a fix.
 
-**Defense in depth — three asks, increasing cost.**
+**Defense in depth — sequenced against the CP1 → CP2 → CP3 plan.**
 
-1. **Interim Loki alert (no code; ship before task.0388).** The active v0.1 bleed produces only level-30 (info) events; `level≥warn` alerts see nothing. File this as a Grafana recording rule + alert against the existing log stream so future regressions of this exact shape are visible the moment they recur:
+The active v0.1 bleed produces only level-30 (info) events; `level≥warn` alerts see nothing. CP3 deletes the legacy sweep AND the legacy `poly.ctf.redeem.ok` event. So bleed-class observability has to migrate from "alert on the legacy event" to "structural gate in the new worker" — and the migration must complete **no later than CP2**, before CP3 rips the legacy path. If CP3 ships first, we lose all bleed visibility.
+
+1. **Interim Loki alert — ship NOW, before task.0388 work begins.** Temporary belt-and-suspenders against the v0.1 bleed already in prod. Auto-retires when CP3 deletes the legacy event (no signal → no alerts → dies quietly).
 
    ```logql
    sum by (condition_id) (
@@ -64,13 +66,13 @@ As of 2026-04-27 ~05:00Z, 5 neg-risk conditions on funder `0x95e407fE03996602Ed1
    ) > 1
    ```
 
-   Any `condition_id` firing ≥2 `.ok` events in 10 min is the bleed signature — same condition redeemed twice means the first redeem didn't actually burn shares. Route to whatever pages on-call.
+   `condition_id` firing ≥2 `.ok` events in 10 min = bleed signature (first redeem didn't burn). Page on-call.
 
-2. **Post-tx burn-verification gate (small lift in this task; the real fix).** After `writeContract` returns + receipt confirms, decode logs and require **at least one** `TransferSingle(from=funder, value>0)` (CTF path) OR `NegRiskAdapter.PayoutRedemption(redeemer=funder)` (adapter path). If absent: emit `poly.ctf.redeem.bleed_detected` at **level=50** AND transition the job to `abandoned/class: "malformed"` immediately. That single check catches this entire bug class on the first bad tx — any future routing mistake reveals itself before $N of bleed accumulates, AND it lights up at error-level so generic monitoring sees it without a bespoke recording rule.
+2. **Post-tx burn-verification gate — MUST land in CP2 (gate condition for CP3).** When CP2 wires the worker to fire txs against CTF + NegRiskAdapter, the worker decodes its own receipt and asserts: **at least one** `TransferSingle(from=funder, value>0)` (CTF path) OR `NegRiskAdapter.PayoutRedemption(redeemer=funder)` (adapter path). If absent: emit `poly.ctf.redeem.bleed_detected` at **level=50** AND transition the job to `abandoned/class: "malformed"`. This is the **structural successor** to #1 — once it's live, a generic `level≥warn` alert covers the bleed class regardless of which contract is wrong, and CP3 can safely rip the legacy event because new coverage is already in place. **CP3 must not merge until #2 is observed firing correctly on candidate-a (or proven inert against a synthetic `success-with-no-burn` test fixture in CP2's test suite).**
 
-3. **NegRiskAdapter routing** (the structural fix described above) closes the specific v0.1 hole.
+3. **NegRiskAdapter routing — lands in CP1 (workers's first writeContract path) or CP2 (subscription wiring).** The structural fix from the root-cause section above. Closes v0.1's specific hole. #2 catches the next routing mistake; #3 fixes the known one.
 
-In that order: #1 is the safety net that catches the bleed class regardless of which contract is wrong; #2 makes the safety net structural so it doesn't depend on someone remembering to add an alert; #3 fixes the immediate v0.1 defect. Skip none of them.
+Skip none. Order matters: #1 lights up the radar today, #2 transfers coverage onto the new architecture before CP3 demolishes the old one, #3 fixes the immediate defect that necessitated this task in the first place.
 
 ## Why
 
