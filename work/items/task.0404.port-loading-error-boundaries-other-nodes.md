@@ -2,7 +2,7 @@
 id: task.0404
 type: task
 title: "Port `loading.tsx` + `error.tsx` boundaries to poly + resy + node-template"
-status: needs_implement
+status: needs_merge
 priority: 0
 rank: 1
 estimate: 1
@@ -170,4 +170,7 @@ observability:
 
 ## PR / Links
 
-- PR(s): TBD (one per node)
+- PR(s):
+  - poly: https://github.com/Cogni-DAO/node-template/pull/1089
+  - resy: https://github.com/Cogni-DAO/node-template/pull/1090
+  - node-template: https://github.com/Cogni-DAO/node-template/pull/1091
