@@ -114,6 +114,25 @@ describe("single-node-scope workflow gate · structural pins", () => {
     ).toEqual(expected);
   });
 
+  it("`dorny/paths-filter` uses `predicate-quantifier: every` so operator negations subtract", () => {
+    const job = loadJob();
+    const filterStep = findStep<{
+      with: { "predicate-quantifier"?: string };
+    }>(
+      job,
+      (s) =>
+        typeof s.uses === "string" && s.uses.startsWith("dorny/paths-filter@")
+    );
+    expect(
+      filterStep.with["predicate-quantifier"],
+      "operator filter relies on `**` + `!nodes/<X>/**` to mean " +
+        "\"everywhere outside another node's dir\". With dorny's default " +
+        "`some` quantifier the rules are OR'd and the negations are dead, " +
+        "so a poly-only PR misclassifies as poly + operator. " +
+        "Set `predicate-quantifier: every` on the dorny step."
+    ).toBe("every");
+  });
+
   it("`dorny/paths-filter` is pinned by full 40-char SHA, not by tag", () => {
     const job = loadJob();
     const step = findStep<{ uses: string }>(

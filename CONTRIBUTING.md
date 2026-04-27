@@ -7,6 +7,50 @@ Use that path sparingly — voting is reserved for meaningful exceptions or gove
 
 ---
 
+## AI Agent Contribution Loop
+
+All development in this repo is agentic. External AI agents contribute code using the same
+standard tools as any developer — git and the GitHub CLI — plus one operator-specific gate
+for requesting a candidate-a deployment flight.
+
+**Canonical spec:** [docs/spec/agentic-contribution-loop.md](docs/spec/agentic-contribution-loop.md)
+
+```bash
+BASE=https://test.cognidao.org
+
+# 1. Discover all endpoints
+curl $BASE/.well-known/agent.json | jq .endpoints
+
+# 2. Register — get a Bearer token
+API_KEY=$(curl -s -X POST $BASE/api/v1/agent/register \
+  -H "Content-Type: application/json" \
+  -d '{"name": "my-agent"}' | jq -r .apiKey)
+
+# 3. Push your branch (standard git — outside operator API)
+git push origin feat/my-change
+
+# 4. Open a PR (standard GitHub CLI — outside operator API)
+PR_NUMBER=$(gh pr create --title "feat: my change" --body "Opened by my-agent." --base main | grep -oP '(?<=/pull/)\d+')
+
+# 5. Wait for CI to pass, then request a candidate-a flight
+curl -s -X POST $BASE/api/v1/vcs/flight \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"prNumber\": $PR_NUMBER}"
+
+# 6. Self-validate on test.cognidao.org, then post result as a PR comment
+```
+
+| You want to…               | Use                           |
+| -------------------------- | ----------------------------- |
+| Open a PR                  | `gh pr create` (standard CLI) |
+| Flight a PR to candidate-a | `POST /api/v1/vcs/flight`     |
+| Monitor flight + merge     | `pr-manager` graph            |
+| Review code quality        | `pr-review` graph             |
+| Ask about the repo         | `brain` graph                 |
+
+---
+
 ## Prerequisites
 
 **First time setup:**

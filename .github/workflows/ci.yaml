@@ -92,6 +92,12 @@ jobs:
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         with:
           list-files: json # exposes <filter>_files so we can inspect which paths matched
+          # Required so the operator filter's `**` + `!nodes/<X>/**` negations
+          # actually subtract. Default `some` quantifier OR's the rules, so
+          # `**` matches everything and the negations are dead — a poly-only PR
+          # would (incorrectly) classify as poly + operator. Per-node filters
+          # have a single rule each, so the quantifier is a no-op for them.
+          predicate-quantifier: "every"
           filters: |
             poly:
               - 'nodes/poly/**'

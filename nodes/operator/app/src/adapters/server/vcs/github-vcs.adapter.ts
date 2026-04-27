@@ -21,7 +21,6 @@ import type {
   CheckInfo,
   CiStatusResult,
   CreateBranchResult,
-  CreatePrResult,
   DispatchCandidateFlightResult,
   MergeResult,
   PrSummary,
@@ -130,15 +129,16 @@ export class GitHubVcsAdapter implements VcsCapability {
       ]
     );
 
+    const rawCheckRuns = checksResponse.data.check_runs as Array<{
+      name: string;
+      status: string;
+      conclusion: string | null;
+      app: { slug: string } | null;
+    }>;
+
     const checks: CheckInfo[] = [
-      // Modern check runs
-      ...(
-        checksResponse.data.check_runs as Array<{
-          name: string;
-          status: string;
-          conclusion: string | null;
-        }>
-      ).map((cr) => ({
+      // Modern check runs (all — for observability)
+      ...rawCheckRuns.map((cr) => ({
         name: cr.name,
         status: cr.status,
         conclusion: cr.conclusion,
@@ -161,13 +161,35 @@ export class GitHubVcsAdapter implements VcsCapability {
       })),
     ];
 
-    const pending = checks.some(
+    // Gate on GitHub Actions check runs only — third-party app checks (SonarCloud, etc.)
+    // are informational and do not block merge via branch protection.
+    const ciChecks = [
+      ...rawCheckRuns
+        .filter((cr) => cr.app?.slug === "github-actions")
+        .map((cr) => ({ status: cr.status, conclusion: cr.conclusion })),
+      // Legacy commit statuses are always included (they are GitHub-native)
+      ...(statusResponse.data.statuses as Array<{ state: string }>).map(
+        (s) => ({
+          status: "completed",
+          conclusion:
+            s.state === "success"
+              ? "success"
+              : s.state === "pending"
+                ? null
+                : "failure",
+        })
+      ),
+    ];
+
+    const pending = ciChecks.some(
       (c) => c.status !== "completed" || c.conclusion === null
     );
     const allGreen =
-      checks.length > 0 &&
+      ciChecks.length > 0 &&
       !pending &&
-      checks.every((c) => c.conclusion === "success");
+      ciChecks.every(
+        (c) => c.conclusion === "success" || c.conclusion === "skipped"
+      );
 
     // Compute review decision from individual reviews.
     // Take the latest review per reviewer; if any APPROVED and none CHANGES_REQUESTED → approved.
@@ -288,7 +310,6 @@ export class GitHubVcsAdapter implements VcsCapability {
   }): Promise<CreateBranchResult> {
     const octokit = await this.getOctokit(params.owner, params.repo);
 
-    // Resolve fromRef to a SHA
     let sha: string;
     if (/^[0-9a-f]{40}$/i.test(params.fromRef)) {
       sha = params.fromRef;
@@ -304,7 +325,6 @@ export class GitHubVcsAdapter implements VcsCapability {
       sha = data.object.sha;
     }
 
-    // Create the branch
     const { data: refData } = await octokit.request(
       "POST /repos/{owner}/{repo}/git/refs",
       {
@@ -319,26 +339,6 @@ export class GitHubVcsAdapter implements VcsCapability {
       ref: refData.ref,
       sha: refData.object.sha,
     };
-  }
-
-  async createPr(params: {
-    owner: string;
-    repo: string;
-    branch: string;
-    title: string;
-    body: string;
-    base?: string;
-  }): Promise<CreatePrResult> {
-    const octokit = await this.getOctokit(params.owner, params.repo);
-    const { data } = await octokit.request("POST /repos/{owner}/{repo}/pulls", {
-      owner: params.owner,
-      repo: params.repo,
-      title: params.title,
-      body: params.body,
-      head: params.branch,
-      base: params.base ?? "main",
-    });
-    return { prNumber: data.number, url: data.html_url, status: "open" };
   }
 
   // ---------------------------------------------------------------------------
