@@ -3,36 +3,41 @@
 
 /**
  * Module: `@app/api/v1/poly/wallet/positions/redeem`
- * Purpose: HTTP POST — on-chain `redeemPositions` for a resolved market so USDC.e is returned to the tenant wallet (post-resolution exit; not a CLOB order).
- * Scope: Validates with `polyWalletRedeemPositionOperation`, resolves session billing account, calls `PolyTradeExecutor.redeemResolvedPosition`. Does not place CLOB orders.
+ * Purpose: HTTP POST — enqueue a redeem job through the event-driven pipeline (task.0388) for a resolved Polymarket condition. The user-facing entry point holds the connection up to 30s waiting for the worker to confirm; falls back to `202 + job_id` past that ceiling so an in-cluster ALB / ingress timeout cannot orphan the request.
+ * Scope: Validates input with `polyWalletRedeemPositionOperation`, asserts the session wallet matches the pipeline's bound funder (v0.2 single-funder), enqueues via `RedeemJobsPort`, polls `findByKey` until terminal or timeout. Does not place CLOB orders, does not sign transactions.
  * Invariants:
- *   - TENANT_SCOPED — condition id selects the caller's Data API redeemable row; no cross-wallet redeem.
- *   - REDEEM_GATE — executor refuses when Data API does not mark the position redeemable for that wallet.
- * Side-effects: Polygon RPC writes (signed redeem tx), HTTPS to Data API for position preflight.
- * Links: packages/market-provider/src/adapters/polymarket/polymarket.ctf.ts,
- *        nodes/poly/app/src/bootstrap/capabilities/poly-trade-executor.ts
+ *   - TENANT_SCOPED — the session wallet must equal the pipeline's bound funder; multi-tenant fan-out is task.0318 Phase C.
+ *   - REDEEM_DEDUP_IS_PERSISTED — the port UPSERTs on `(funder, condition_id)`; double-clicks return the same `jobId`.
+ * Side-effects: One DB write (job enqueue) + repeated polls; no chain writes from the route. Worker handles tx submission.
+ * Links: nodes/poly/app/src/bootstrap/redeem-pipeline.ts, nodes/poly/app/src/features/redeem/resolve-redeem-decision.ts
  * @public
  */
 
 import { toUserId } from "@cogni/ids";
-import { noopMetrics } from "@cogni/market-provider";
+import {
+  normalizePolygonConditionId,
+  PolymarketDataApiClient,
+} from "@cogni/market-provider/adapters/polymarket";
 import { polyWalletRedeemPositionOperation } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
+import { createPublicClient, http } from "viem";
+import { polygon } from "viem/chains";
+
 import { getSessionUser } from "@/app/_lib/auth/session";
-import {
-  createPolyTradeExecutorFactory,
-  PolyTradeExecutorError,
-} from "@/bootstrap/capabilities/poly-trade-executor";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
   getPolyTraderWalletAdapter,
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
+import { resolveRedeemCandidatesForCondition } from "@/features/redeem";
 import { invalidateWalletAnalysisCaches } from "@/features/wallet-analysis/server/wallet-analysis-service";
 import { serverEnv } from "@/shared/env/server-env";
 
 export const dynamic = "force-dynamic";
+
+const POLL_INTERVAL_MS = 500;
+const POLL_BUDGET_MS = 30_000;
 
 export const POST = wrapRouteHandlerWithLogging(
   {
@@ -57,14 +62,32 @@ export const POST = wrapRouteHandlerWithLogging(
       );
     }
 
+    let conditionId: `0x${string}`;
+    try {
+      conditionId = normalizePolygonConditionId(parsed.data.condition_id);
+    } catch {
+      return NextResponse.json(
+        { error: "invalid_condition_id" },
+        { status: 400 }
+      );
+    }
+
     const container = getContainer();
     const account = await container
       .accountsForUser(toUserId(sessionUser.id))
       .getOrCreateBillingAccountForUser({ userId: sessionUser.id });
 
-    let adapter: ReturnType<typeof getPolyTraderWalletAdapter>;
+    const pipeline = container.redeemPipeline;
+    if (!pipeline) {
+      return NextResponse.json(
+        { error: "redeem_pipeline_unavailable" },
+        { status: 503 }
+      );
+    }
+
+    let walletAdapter: ReturnType<typeof getPolyTraderWalletAdapter>;
     try {
-      adapter = getPolyTraderWalletAdapter(ctx.log);
+      walletAdapter = getPolyTraderWalletAdapter(ctx.log);
     } catch (err) {
       if (err instanceof WalletAdapterUnconfiguredError) {
         return NextResponse.json(
@@ -75,82 +98,133 @@ export const POST = wrapRouteHandlerWithLogging(
       throw err;
     }
 
+    const tenantAddress = await walletAdapter.getAddress(account.id);
+    if (!tenantAddress) {
+      return NextResponse.json({ error: "no_active_wallet" }, { status: 409 });
+    }
+    if (tenantAddress.toLowerCase() !== pipeline.funderAddress.toLowerCase()) {
+      ctx.log.warn(
+        {
+          billing_account_id: account.id,
+          tenant_address: tenantAddress,
+          pipeline_funder: pipeline.funderAddress,
+        },
+        "poly.wallet.positions.redeem.tenant_funder_mismatch"
+      );
+      return NextResponse.json(
+        { error: "multi_tenant_redeem_not_supported" },
+        { status: 503 }
+      );
+    }
+
     const env = serverEnv();
-    const executorFactory = createPolyTradeExecutorFactory({
-      walletPort: adapter,
-      logger: ctx.log,
-      metrics: noopMetrics,
-      host: env.POLY_CLOB_HOST,
-      polygonRpcUrl: env.POLYGON_RPC_URL,
+    const publicClient = createPublicClient({
+      chain: polygon,
+      transport: http(env.POLYGON_RPC_URL),
+    });
+    const dataApiClient = new PolymarketDataApiClient();
+
+    const candidates = await resolveRedeemCandidatesForCondition({
+      funderAddress: pipeline.funderAddress,
+      conditionId,
+      publicClient,
+      dataApiClient,
+    });
+    const candidate = candidates.find((c) => c.decision.kind === "redeem");
+    if (!candidate || candidate.decision.kind !== "redeem") {
+      const skip = candidates[0];
+      const reason =
+        skip && skip.decision.kind !== "redeem"
+          ? skip.decision.reason
+          : "no_redeemable_position";
+      return NextResponse.json(
+        { error: "not_redeemable", reason },
+        { status: 409 }
+      );
+    }
+
+    const decision = candidate.decision;
+    const enqueued = await pipeline.redeemJobs.enqueue({
+      funderAddress: pipeline.funderAddress,
+      conditionId: candidate.conditionId,
+      positionId: candidate.positionId.toString(),
+      outcomeIndex: candidate.outcomeIndex,
+      flavor: decision.flavor,
+      indexSet: decision.indexSet.map((b) => b.toString()),
+      expectedShares: decision.expectedShares.toString(),
+      expectedPayoutUsdc: decision.expectedPayoutUsdc.toString(),
+      lifecycleState: "winner",
     });
 
-    try {
-      const executor = await executorFactory.getPolyTradeExecutorFor(
-        account.id
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < POLL_BUDGET_MS) {
+      await sleep(POLL_INTERVAL_MS);
+      const job = await pipeline.redeemJobs.findByKey(
+        pipeline.funderAddress,
+        candidate.conditionId
       );
-      const result = await executor.redeemResolvedPosition({
-        condition_id: parsed.data.condition_id,
-      });
-
-      const payload = polyWalletRedeemPositionOperation.output.parse({
-        tx_hash: result.tx_hash,
-      });
-
-      try {
-        const address = await adapter.getAddress(account.id);
-        if (address) invalidateWalletAnalysisCaches(address);
-      } catch (err) {
+      if (!job) continue;
+      if (job.status === "confirmed") {
+        const txHash = (job.txHashes[job.txHashes.length - 1] ?? null) as
+          | `0x${string}`
+          | null;
+        if (!txHash) continue;
+        try {
+          invalidateWalletAnalysisCaches(pipeline.funderAddress);
+        } catch {
+          /* cache invalidation is best-effort */
+        }
+        ctx.log.info(
+          {
+            billing_account_id: account.id,
+            condition_id: candidate.conditionId,
+            tx_hash: txHash,
+            job_id: job.id,
+          },
+          "poly.wallet.positions.redeem.confirmed"
+        );
+        const payload = polyWalletRedeemPositionOperation.output.parse({
+          tx_hash: txHash,
+        });
+        return NextResponse.json(payload);
+      }
+      if (job.status === "abandoned") {
         ctx.log.warn(
           {
             billing_account_id: account.id,
-            err: err instanceof Error ? err.message : String(err),
+            condition_id: candidate.conditionId,
+            job_id: job.id,
+            error_class: job.errorClass,
+            last_error: job.lastError,
           },
-          "poly.wallet.positions.redeem.cache_invalidate_failed"
+          "poly.wallet.positions.redeem.abandoned"
+        );
+        return NextResponse.json(
+          {
+            error: "redeem_failed",
+            reason: job.errorClass ?? "unknown",
+            message: job.lastError ?? null,
+          },
+          { status: 502 }
         );
       }
-
-      ctx.log.info(
-        {
-          billing_account_id: account.id,
-          condition_id: parsed.data.condition_id,
-          tx_hash: result.tx_hash,
-        },
-        "poly.wallet.positions.redeem.ok"
-      );
-
-      return NextResponse.json(payload);
-    } catch (err) {
-      if (err instanceof PolyTradeExecutorError) {
-        if (err.code === "not_authorized") {
-          return NextResponse.json(
-            { error: err.code, reason: err.reason ?? null },
-            { status: 403 }
-          );
-        }
-        if (err.code === "not_redeemable") {
-          return NextResponse.json({ error: err.code }, { status: 409 });
-        }
-        if (err.code === "redeem_failed") {
-          return NextResponse.json(
-            { error: err.code, message: err.message },
-            { status: 502 }
-          );
-        }
-      }
-      ctx.log.error(
-        {
-          billing_account_id: account.id,
-          err: err instanceof Error ? err.message : String(err),
-        },
-        "poly.wallet.positions.redeem.error"
-      );
-      return NextResponse.json(
-        {
-          error: "redeem_failed",
-          message: err instanceof Error ? err.message : String(err),
-        },
-        { status: 502 }
-      );
     }
+
+    ctx.log.info(
+      {
+        billing_account_id: account.id,
+        condition_id: candidate.conditionId,
+        job_id: enqueued.jobId,
+      },
+      "poly.wallet.positions.redeem.pending"
+    );
+    return NextResponse.json(
+      { status: "pending", job_id: enqueued.jobId },
+      { status: 202 }
+    );
   }
 );
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

@@ -38,7 +38,6 @@ export {
   PolymarketClobPublicClient,
 } from "./polymarket.clob-public.client.js";
 export {
-  BINARY_REDEEM_INDEX_SETS,
   normalizePolygonConditionId,
   PARENT_COLLECTION_ID_ZERO,
   POLYGON_CONDITIONAL_TOKENS,

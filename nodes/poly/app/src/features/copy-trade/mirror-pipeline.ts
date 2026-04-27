@@ -111,11 +111,6 @@ export interface MirrorPipelineDeps {
    * `skip/sell_without_position`.
    */
   getOperatorPositions?: () => Promise<OperatorPosition[]>;
-  /**
-   * After fills, redeem resolved positions on the copy wallet so USDC.e returns
-   * from the CTF (Polymarket Data API `redeemable` — not the same as CLOB SELL).
-   */
-  redeemSweep?: () => Promise<void>;
 }
 
 /**
@@ -158,20 +153,6 @@ export async function runMirrorTick(deps: MirrorPipelineDeps): Promise<void> {
 
   for (const fill of result.fills) {
     await processFill(fill, deps, clock, log);
-  }
-
-  if (deps.redeemSweep) {
-    try {
-      await deps.redeemSweep();
-    } catch (err: unknown) {
-      log.warn(
-        {
-          event: EVENT_NAMES.POLY_MIRROR_REDEEM_SWEEP_ERROR,
-          err: err instanceof Error ? err.message : String(err),
-        },
-        "mirror pipeline: redeemSweep threw"
-      );
-    }
   }
 }
 

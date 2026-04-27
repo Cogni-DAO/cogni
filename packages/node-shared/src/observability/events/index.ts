@@ -160,7 +160,6 @@ export const EVENT_NAMES = {
   POLY_MIRROR_RECONCILE_TICK_ERROR: "poly.mirror.reconcile.tick_error",
   POLY_MIRROR_SOURCE_ERROR: "poly.mirror.source_error",
   POLY_MIRROR_DECISION: "poly.mirror.decision",
-  POLY_MIRROR_REDEEM_SWEEP_ERROR: "poly.mirror.redeem_sweep_error",
   POLY_WALLET_WATCH_FETCH: "poly.wallet_watch.fetch",
   POLY_WALLET_WATCH_NORMALIZE_ERROR: "poly.wallet_watch.normalize_error",
   POLY_WALLET_BALANCE_POLYGON_READ_FAILED:

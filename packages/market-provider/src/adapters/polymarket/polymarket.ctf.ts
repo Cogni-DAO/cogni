@@ -3,11 +3,10 @@
 
 /**
  * Module: `@cogni/market-provider/adapters/polymarket/ctf`
- * Purpose: Polygon Conditional Tokens read+write surface used by the poly node — `redeemPositions` calldata for resolved markets plus the ERC1155 `balanceOf` view used by the redeem sweep to confirm the funder still holds redeemable shares before submitting a tx.
- * Scope: Exports pinned mainnet addresses, the minimal ABI, and a condition-id normalizer for viem callers. Does not submit transactions, hold signers, or implement grant checks.
+ * Purpose: Polygon Conditional Tokens read+write surface used by the poly node — `redeemPositions` ABI fragment + `ConditionResolution` / `PayoutRedemption` event ABIs consumed by the event-driven redeem pipeline (task.0388).
+ * Scope: Exports pinned mainnet addresses, ABI fragments, and a condition-id normalizer for viem callers. Does not submit transactions, hold signers, or implement grant checks.
  * Invariants:
  *   - POLYGON_MAINNET_ONLY — addresses match `approve-polymarket-allowances.ts` / Polymarket docs for chain id 137.
- *   - BINARY_INDEX_SETS_WRITE_ONLY — `[1, 2]` applies only to the `redeemPositions` write path (indexSets argument). The `balanceOf` read path takes an arbitrary ERC1155 token id (e.g. `Position.asset` from the Data-API) and is outcome-cardinality agnostic.
  * Side-effects: none (pure constants + parseAbi)
  * Links: Polymarket agent-skills ctf-operations.md; scripts/experiments/approve-polymarket-allowances.ts
  * @public
@@ -25,12 +24,6 @@ export const POLYGON_USDC_E =
 
 export const PARENT_COLLECTION_ID_ZERO =
   "0x0000000000000000000000000000000000000000000000000000000000000000" as const;
-
-/**
- * Binary markets: index sets 1 (Yes) and 2 (No). Only the resolved winning
- * side pays USDC when redeeming after resolution.
- */
-export const BINARY_REDEEM_INDEX_SETS: readonly [bigint, bigint] = [1n, 2n];
 
 export const polymarketCtfRedeemAbi = parseAbi([
   "function redeemPositions(address collateralToken, bytes32 parentCollectionId, bytes32 conditionId, uint256[] indexSets) external",

@@ -294,6 +294,15 @@ export interface Container {
    * SYNC_HEALTH_IS_PUBLIC invariant (task.0328 CP4).
    */
   reconcilerLastTickAt: () => Date | null;
+  /**
+   * Event-driven CTF redeem pipeline (task.0388). `null` when no active
+   * `poly_wallet_connections` row was found at boot. Routes that enqueue
+   * manual redeem jobs use `redeemPipeline.redeemJobs` + `funderAddress`.
+   */
+  redeemPipeline: {
+    redeemJobs: import("@/ports").RedeemJobsPort;
+    funderAddress: `0x${string}`;
+  } | null;
 }
 
 // Feature-specific dependency types
@@ -838,10 +847,6 @@ function createContainer(): Container {
                   size: p.size,
                 }));
               },
-              redeemSweep: async () => {
-                const executor = await getExecutor();
-                await executor.redeemAllRedeemableResolvedPositions();
-              },
               logger: mirrorLogger,
               metrics: noopMetrics,
             });
@@ -867,6 +872,43 @@ function createContainer(): Container {
       },
       "mirror poll + order reconciler not started (PRIVY_USER_WALLETS_* or POLY_WALLET_AEAD_* missing)"
     );
+  }
+
+  // task.0388 — event-driven redeem pipeline. Replaces the deleted
+  // `runRedeemSweep` polling loop. Bound to the single active
+  // `poly_wallet_connections` row at boot (v0.2 single-funder); skipped
+  // when the trader-wallet adapter is unconfigured. Fire-and-forget like
+  // the mirror loop above; `redeemPipelineHandles` is read via a getter
+  // on the container so routes pick up the value once start completes.
+  let redeemPipelineHandles:
+    | import("./redeem-pipeline").RedeemPipelineHandles
+    | null = null;
+  if (env.POLYGON_RPC_URL) {
+    const polygonRpcUrl = env.POLYGON_RPC_URL;
+    void (async () => {
+      try {
+        const walletPort = getPolyTraderWalletAdapter(log);
+        const { startRedeemPipeline } = await import("./redeem-pipeline");
+        redeemPipelineHandles = await startRedeemPipeline({
+          serviceDb,
+          walletPort,
+          polygonRpcUrl,
+          log,
+        });
+      } catch (err) {
+        if (err instanceof WalletAdapterUnconfiguredError) {
+          log.info(
+            { missing: err.message },
+            "redeem pipeline not started (PRIVY_USER_WALLETS_* or POLY_WALLET_AEAD_* missing)"
+          );
+        } else {
+          log.error(
+            { err: err instanceof Error ? err.message : String(err) },
+            "redeem pipeline boot failed — continuing without autonomous redeems"
+          );
+        }
+      }
+    })();
   }
 
   // KnowledgeCapability for AI tools (optional — requires DOLTGRES_URL_POLY)
@@ -1126,6 +1168,14 @@ function createContainer(): Container {
     serviceDb,
     reconcilerLastTickAt() {
       return _reconcilerHandle?.getLastTickAt() ?? null;
+    },
+    get redeemPipeline() {
+      return redeemPipelineHandles
+        ? {
+            redeemJobs: redeemPipelineHandles.redeemJobs,
+            funderAddress: redeemPipelineHandles.funderAddress,
+          }
+        : null;
     },
   };
 }
