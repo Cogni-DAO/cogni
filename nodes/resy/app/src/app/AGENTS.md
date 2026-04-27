@@ -5,7 +5,7 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2026-03-05
+- **Last reviewed:** 2026-04-27
 - **Status:** draft
 
 ## Purpose
@@ -51,7 +51,12 @@ Next.js App Router delivery layer. UI pages and API routes that expose features 
   - Infra: `/health`, `/openapi.json`, `/meta/route-manifest` (via `(infra)/*`)
   - API: `/api/auth/*`, `/api/v1/chat/completions`
   - Internal ops: `/api/internal/ops/governance/schedules/sync` [POST] (deploy-only trigger)
-- **Files considered API:** layout.tsx, page.tsx, api/\*\*/route.ts, (infra)/\*\*/route.ts
+- **Files considered API:** layout.tsx, page.tsx, loading.tsx, error.tsx, api/\*\*/route.ts, (infra)/\*\*/route.ts
+- **Suspense / error boundaries:** each route group exposes a `loading.tsx`
+  - `error.tsx`. `(app)/loading.tsx` renders inside the sidebar shell;
+    `(public)/loading.tsx` renders inside the public chrome. Do not add
+    a top-level `loading.tsx` next to root `layout.tsx` — it would render
+    outside both group layouts and flash the chrome.
 
 ## Responsibilities
 
