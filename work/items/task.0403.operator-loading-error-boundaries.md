@@ -13,7 +13,7 @@ spec_refs:
 assignees: derekg1729
 credit:
 project:
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/1087
 reviewer:
 revision: 0
 blocked_by: []
@@ -198,4 +198,4 @@ observability:
 
 ## PR / Links
 
-- PR: TBD on closeout
+- PR: https://github.com/Cogni-DAO/node-template/pull/1087
