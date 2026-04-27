@@ -93,6 +93,32 @@ Even with Capability A's predicate correct (task.0387), the polling sweep is the
 - Deletes from `nodes/poly/app/src/bootstrap/capabilities/poly-trade-executor.ts`: `sweepInFlight`, `redeemCooldownByConditionId`, `REDEEM_COOLDOWN_MS`, `pendingRedeemMsRemaining`, `markRedeemPending`, `_resetRedeemCooldownForTests`, `_resetSweepMutexForTests`, `redeemAllRedeemableResolvedPositions`, `runRedeemSweep`, `BINARY_REDEEM_INDEX_SETS` import + usages, all `SINGLE_POD_ASSUMPTION` doc-strings.
 - Removes the `replicas: 1` constraint from the poly Deployment manifest with a comment pointing at this task.
 
+## Plan — checkpoints
+
+Three checkpoints, each PR-sized. **CP2 fuses event subscriptions + catch-up replay + sweep retirement** into one PR — there is no transitional "subscriptions + sweep both alive" state. The job table's unique key already dedups across enqueue sources, so a brief overlap during deploy is harmless; the value of the transitional CP is zero (subscriptions add capacity, sweep adds duplicate work that the unique key throws away). Catch-up replay is the structural fallback that makes "remove sweep" safe — no backwards-compat shim ever exists in the codebase.
+
+- [ ] **CP1 — Bleed-stop (job table + dispatch split + burn-verify gate)**
+  - Job table `poly_redeem_jobs` + worker drains via `FOR UPDATE SKIP LOCKED`.
+  - **Dispatch split**: `decision.flavor` selects CTF (binary / multi-outcome) vs NegRiskAdapter (neg-risk-parent / neg-risk-adapter) — fixes the active prod bleed.
+  - **Post-tx burn-verification gate**: after every receipt, decode logs and require ≥1 burn event from funder; absence → `level=50` Loki + `abandoned/malformed`. Catches future routing mistakes structurally.
+  - **Interim Loki alert** (no code; ship before this PR or alongside): recording rule on `count_over_time(poly.ctf.redeem.ok by condition_id) > 1 in 10m`.
+  - Sweep stays as enqueue source temporarily; mutex + cooldown Map deleted (the table's unique key replaces them).
+  - Manual route writes job row + awaits worker outcome with 30 s timeout.
+  - **This is the bleed-stop.** Validate on candidate-a + prod by watching the same 5 condition_ids (`0x86c171b7…`, `0x18ec34d0…`, `0x6178933348…`, `0xeb7627b6…`, `0x941012e7…`) stop firing `.ok` events.
+
+- [ ] **CP2 — Event-driven subscriptions + catch-up replay + sweep retirement (combined — no split-brain)**
+  - Three viem `watchContractEvent` subscriptions (CTF `ConditionResolution`, CTF `PayoutRedemption`, NegRiskAdapter `PayoutRedemption`) writing to job table.
+  - Startup + daily-cron catch-up replay over `[last_processed_block, head]` — the only legitimate sweep, bounded by chain history.
+  - **Rip in the same PR**: `runRedeemSweep`, `redeemAllRedeemableResolvedPositions`, mirror-pipeline sweep tick, all `SINGLE_POD_ASSUMPTION` docstrings, `replicas: 1` Deployment constraint.
+  - Why merge with CP3: the transitional state where both subscriptions and sweep enqueue is pure overhead — unique key dedups, sweep adds duplicate RPC for nothing. Catch-up replay is the safety net that covers any subscription gap (reorg edges, viem reconnect bugs); it ships with this CP, so no fallback is lost.
+
+- [ ] **CP3 — Dashboard projection (dust-state UI)**
+  - `lifecycle_state` enum column on `poly_redeem_jobs`, written by worker per `decideRedeem` evaluation.
+  - `GET /api/v1/poly/wallet/execution` gains `lifecycle_state` per row.
+  - Dashboard splits Open vs History on `lifecycle_state ∈ terminal-set`.
+  - Redeem button removed from rows where the policy classifies as `skip` or `malformed`.
+  - One-shot backfill on first deploy; idempotent on re-run.
+
 ## Approach
 
 **Solution.** New capability package `packages/poly-redeem` containing the port (`RedeemJobsPort`), domain types (`RedeemJob`, `RedeemJobStatus`), pure transition logic, and a Postgres adapter. App-side wiring (subscriptions, worker, bootstrap) lives in `nodes/poly/app/src/bootstrap/capabilities/`. Capability A (task.0387) is the imported decision function — this task adds zero new policy.
@@ -162,7 +188,7 @@ Two issues confirmed in production after task.0387 deployed (commit `20a42237f`)
 
 2. **Dust losers misclassified in dashboard UI.** Resolved-loser positions (lifecycle state: `dust`) currently render in the **Open** tab with a no-op `Redeem` button, and the **Position History** tab is empty. The user's wallet shows ~14 such rows on candidate-a (all `-$1` to `-$4` cost basis, $0 current value, all `-99.99% / -100%`). The lifecycle design already names this state and its terminal edge; the dashboard does not yet honour it. Fix is a projection, not a chain-read change — see `docs/design/poly-positions.md` § Dust-state UI semantics.
 
-### Adds to this task's scope (v0.2 CP4 — dashboard projection)
+### Adds to this task's scope (v0.2 CP3 — dashboard projection; see § Plan above)
 
 - New column on `poly_redeem_jobs`: `lifecycle_state` enum mirroring the design-doc state set (`unresolved | open | closing | closed | resolving | winner | redeem_pending | redeemed | loser | dust | abandoned`). Defaults to `unresolved` until the worker classifies.
 - Worker writes `lifecycle_state` on every `decideRedeem` evaluation:
@@ -174,7 +200,7 @@ Two issues confirmed in production after task.0387 deployed (commit `20a42237f`)
 - `GET /api/v1/poly/wallet/execution` contract gains `lifecycle_state` per row; dashboard splits Open vs History on `lifecycle_state ∈ terminal-set`. The Redeem button on rows that resolve to a non-`redeem` decision class is removed entirely (no more "Redeem this losing position" UX trap).
 - Backfill: on first deploy, run a one-shot reconciliation that classifies every existing live position via `decideRedeem` and writes `lifecycle_state` rows. Idempotent on re-run.
 
-This adds CP4 to this task's plan (after CP3 rips the legacy sweep). Could split into a sibling task if scope creeps; for now folded here because the lifecycle state machine + UI presentation are two views of the same data and shouldn't drift.
+This is CP3 in the plan above. Folded here (vs. a sibling task) because the lifecycle state machine + UI presentation are two views of the same data and shouldn't drift; splitting would risk a release where the worker writes `lifecycle_state` but the API endpoint doesn't surface it (or vice versa).
 
 ## Pre-implement investigations (already complete — values pinned 2026-04-27)
 
