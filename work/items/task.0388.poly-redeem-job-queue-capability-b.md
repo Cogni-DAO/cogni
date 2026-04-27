@@ -20,7 +20,18 @@ blocked_by: [task.0387]
 deploy_verified: false
 created: 2026-04-26
 updated: 2026-04-26
-labels: [poly, ctf, redeem, job-queue, postgres, viem, event-driven, bug-0384, single-pod-removal]
+labels:
+  [
+    poly,
+    ctf,
+    redeem,
+    job-queue,
+    postgres,
+    viem,
+    event-driven,
+    bug-0384,
+    single-pod-removal,
+  ]
 external_refs:
 ---
 
@@ -47,6 +58,7 @@ Even with Capability A's predicate correct (task.0387), the polling sweep is the
 **Solution.** New capability package `packages/poly-redeem` containing the port (`RedeemJobsPort`), domain types (`RedeemJob`, `RedeemJobStatus`), pure transition logic, and a Postgres adapter. App-side wiring (subscriptions, worker, bootstrap) lives in `nodes/poly/app/src/bootstrap/capabilities/`. Capability A (task.0387) is the imported decision function — this task adds zero new policy.
 
 **Reuses.**
+
 - Capability A from task.0387 — `decideRedeem` is the single decision point.
 - viem (already in use) — `watchContractEvent`, `getBlockNumber`, `getLogs` for catch-up.
 - poly's existing Postgres connection + drizzle setup (per `database-expert` skill rules — operational data, not Doltgres).
@@ -54,10 +66,11 @@ Even with Capability A's predicate correct (task.0387), the polling sweep is the
 - Pino structured logging + existing Loki ingest pipeline.
 
 **Rejected.**
-- *Keep the sweep as belt-and-suspenders.* Two truths is the bug. Resolved in design § Resolved during review #1.
-- *Separate worker container.* In-process worker is fine for v0 single-pod; scaling out is straightforward later. Design § #3.
-- *Manual button returns 202 + job_id.* Re-litigated in review2; v0 holds HTTP for sub-30s confirms. Design § #4.
-- *Bespoke Postgres cooldown table keyed by `condition_id`.* That is a job queue with one column missing — go straight to the job model. Review2 + review1 agreed.
+
+- _Keep the sweep as belt-and-suspenders._ Two truths is the bug. Resolved in design § Resolved during review #1.
+- _Separate worker container._ In-process worker is fine for v0 single-pod; scaling out is straightforward later. Design § #3.
+- _Manual button returns 202 + job_id._ Re-litigated in review2; v0 holds HTTP for sub-30s confirms. Design § #4.
+- _Bespoke Postgres cooldown table keyed by `condition_id`._ That is a job queue with one column missing — go straight to the job model. Review2 + review1 agreed.
 
 ## Files
 

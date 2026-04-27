@@ -29,14 +29,14 @@ One sentence: **A position is a non-fungible holding of one outcome share of one
 
 Four equivalent identities, all of which our code has used at various points to "look up the same thing":
 
-| Identity                           | Where it lives                       | When it's stable                |
-| ---------------------------------- | ------------------------------------ | ------------------------------- |
-| `(wallet, conditionId, outcomeIndex)` | Domain key — what the user thinks of | Forever                         |
-| `tokenId` (ERC-1155 id, decimal)   | Polymarket Data API `position.asset` | Forever                         |
-| `positionId` (ERC-1155 id, BigInt) | CTF contract balance lookup          | Forever (same number, base 10)  |
-| `(funderAddress, positionId)` slot | Polygon CTF `balanceOf(addr, id)`    | The actual on-chain truth       |
+| Identity                              | Where it lives                       | When it's stable               |
+| ------------------------------------- | ------------------------------------ | ------------------------------ |
+| `(wallet, conditionId, outcomeIndex)` | Domain key — what the user thinks of | Forever                        |
+| `tokenId` (ERC-1155 id, decimal)      | Polymarket Data API `position.asset` | Forever                        |
+| `positionId` (ERC-1155 id, BigInt)    | CTF contract balance lookup          | Forever (same number, base 10) |
+| `(funderAddress, positionId)` slot    | Polygon CTF `balanceOf(addr, id)`    | The actual on-chain truth      |
 
-These are the **same position**. The bug.0384 code path treats `position.redeemable` (Data API field on identity #2) as authority for "should we redeem", then fires a tx against identity #4 — and the two disagree for a window that lasts *longer than our 30 s sweep tick*.
+These are the **same position**. The bug.0384 code path treats `position.redeemable` (Data API field on identity #2) as authority for "should we redeem", then fires a tx against identity #4 — and the two disagree for a window that lasts _longer than our 30 s sweep tick_.
 
 ### Position object — the fields that matter
 
@@ -56,12 +56,12 @@ Everything else is presentation (`title`, `icon`, `slug`, P&L numbers).
 
 Surveyed before drafting (per Derek's "don't reinvent the wheel" prompt). All Python; we port patterns, not code.
 
-| Project                                         | License | What we take                                                                                | What we don't                                              |
-| ----------------------------------------------- | ------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| **GiordanoSouza/polymarket-copy-trading-bot**   | MIT     | API → DB → loop → sizing → `py-clob-client`. Closest 1:1 architectural match. Mirror flow.  | Their position model is one flat table with mutable `status`; we split by authority (live/closed/pending). |
-| **Polymarket/agents** (official)                | MIT     | Canonical Data API field shapes; first-party `redeemable` semantics; neg-risk handling hints. | Runtime mismatch — Python; we re-derive in TS.            |
-| **warproxxx/poly-maker**                        | MIT     | Adapter quirks, `/balance-allowance` cache drift behavior, rate-limit envelope.              | Maker-side strategy; not relevant to copy/exit.            |
-| **leolopez007/polymarket-trade-tracker**        | (read-only) | Tier-1 wallet-ranking heuristics; `/trades` polling cadence trade-offs.                  | No redeem path at all — they only watch fills.            |
+| Project                                       | License     | What we take                                                                                  | What we don't                                                                                              |
+| --------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **GiordanoSouza/polymarket-copy-trading-bot** | MIT         | API → DB → loop → sizing → `py-clob-client`. Closest 1:1 architectural match. Mirror flow.    | Their position model is one flat table with mutable `status`; we split by authority (live/closed/pending). |
+| **Polymarket/agents** (official)              | MIT         | Canonical Data API field shapes; first-party `redeemable` semantics; neg-risk handling hints. | Runtime mismatch — Python; we re-derive in TS.                                                             |
+| **warproxxx/poly-maker**                      | MIT         | Adapter quirks, `/balance-allowance` cache drift behavior, rate-limit envelope.               | Maker-side strategy; not relevant to copy/exit.                                                            |
+| **leolopez007/polymarket-trade-tracker**      | (read-only) | Tier-1 wallet-ranking heuristics; `/trades` polling cadence trade-offs.                       | No redeem path at all — they only watch fills.                                                             |
 
 **Where we deviate from all of them:** none survey treats redemption as a first-class job-queue state machine with chain-event observation as the completion signal. They all treat `redeemPositions` as fire-and-forget against a Data-API hint — the same shape that produced bug.0384 here. The 7-state lifecycle + Capability B below is **net-new**, and we should expect to find quirks they haven't documented.
 
@@ -71,16 +71,16 @@ Surveyed before drafting (per Derek's "don't reinvent the wheel" prompt). All Py
 
 A position transition is decided by exactly one of these. Mixing them is the root class of all three bugs.
 
-| #   | Authority                              | Latency       | Decides                                                              |
-| --- | -------------------------------------- | ------------- | -------------------------------------------------------------------- |
-| 1   | **Polygon chain** (CTF + ERC-1155 + ERC-20) | seconds (finality) | Truth for balance, payout numerators, redemption, allowance         |
-| 2   | **Polymarket CLOB write path**         | seconds       | Truth for order acceptance, fills                                    |
-| 3   | **Polymarket Data API** (`/positions`, `/balance-allowance`) | 5–60 s lag | Discovery + UI hints. **Never** authority for a write decision      |
-| 4   | **Local DB** (`poly_*` tables)         | as-of-last-write | App-owned write intent + cached read. Never authority for chain truth |
+| #   | Authority                                                    | Latency            | Decides                                                               |
+| --- | ------------------------------------------------------------ | ------------------ | --------------------------------------------------------------------- |
+| 1   | **Polygon chain** (CTF + ERC-1155 + ERC-20)                  | seconds (finality) | Truth for balance, payout numerators, redemption, allowance           |
+| 2   | **Polymarket CLOB write path**                               | seconds            | Truth for order acceptance, fills                                     |
+| 3   | **Polymarket Data API** (`/positions`, `/balance-allowance`) | 5–60 s lag         | Discovery + UI hints. **Never** authority for a write decision        |
+| 4   | **Local DB** (`poly_*` tables)                               | as-of-last-write   | App-owned write intent + cached read. Never authority for chain truth |
 
 Hard rule (carry-over from `poly-position-exit.md`): **a write decision must consult either #1 or #2. #3 is a hint, #4 is a cache.**
 
-Bug.0384's predicate read #3 (`position.redeemable` for enumeration), then read #1 (multicall `balanceOf` + `payoutNumerators`), then *also* read #1 to decide. That part is correct in isolation. The bleed comes from a fifth implicit authority the code never names: **the in-process cooldown Map**, which is supposed to stand in for "is there a pending tx I just sent?" — a question only #1 can answer, and only after finality. The Map is a *wrong* answer that survives 60 s and dies on pod restart.
+Bug.0384's predicate read #3 (`position.redeemable` for enumeration), then read #1 (multicall `balanceOf` + `payoutNumerators`), then _also_ read #1 to decide. That part is correct in isolation. The bleed comes from a fifth implicit authority the code never names: **the in-process cooldown Map**, which is supposed to stand in for "is there a pending tx I just sent?" — a question only #1 can answer, and only after finality. The Map is a _wrong_ answer that survives 60 s and dies on pod restart.
 
 ## The lifecycle — visual
 
@@ -114,21 +114,21 @@ stateDiagram-v2
 
 ### State definitions and authority per transition
 
-| State            | Means                                                | Authority for *entry*                                             |
-| ---------------- | ---------------------------------------------------- | ----------------------------------------------------------------- |
-| `intent`         | We submitted a CLOB order; no fill yet               | #2 CLOB write ack                                                 |
-| `open`           | Wallet has > 0 ERC-1155 balance for the position     | #1 chain `balanceOf` (Data API #3 used for *enumeration only*)    |
-| `closing`        | A SELL is in flight against an open position         | #2 CLOB write ack                                                 |
-| `closed`         | Open → Closing → balance reaches 0 via SELL          | #1 chain `balanceOf == 0` after fill                              |
-| `rejected`       | CLOB refused the order                               | #2 CLOB error response                                            |
-| `resolving`      | Market entered resolution (UMA window or admin)      | #1 CTF `ConditionResolution` event OR #3 hint with #1 confirmation |
-| `winner`         | Resolved AND `payoutNumerator(condId, ourIdx) > 0`   | #1 CTF `payoutNumerators` view                                    |
-| `loser`          | Resolved AND `payoutNumerator(condId, ourIdx) == 0`  | #1 CTF `payoutNumerators` view                                    |
-| `dust`           | Loser with non-zero ERC-1155 balance                 | #1 chain (terminal — never write against this)                    |
-| `redeem_pending` | `redeemPositions` tx submitted, awaiting receipt     | #2 chain submit ack (tx hash) + local job row                     |
-| `redeemed`       | `PayoutRedemption(redeemer=funder, ...)` observed    | #1 chain event (the only authority that closes the loop)          |
-| `redeem_failed`  | Tx receipt status=success but no `PayoutRedemption` from our funder, OR receipt status=failure | #1 chain event absence + receipt status |
-| `abandoned`      | Three failed redeem attempts                         | Local DB attempt counter — page a human                           |
+| State            | Means                                                                                          | Authority for _entry_                                              |
+| ---------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `intent`         | We submitted a CLOB order; no fill yet                                                         | #2 CLOB write ack                                                  |
+| `open`           | Wallet has > 0 ERC-1155 balance for the position                                               | #1 chain `balanceOf` (Data API #3 used for _enumeration only_)     |
+| `closing`        | A SELL is in flight against an open position                                                   | #2 CLOB write ack                                                  |
+| `closed`         | Open → Closing → balance reaches 0 via SELL                                                    | #1 chain `balanceOf == 0` after fill                               |
+| `rejected`       | CLOB refused the order                                                                         | #2 CLOB error response                                             |
+| `resolving`      | Market entered resolution (UMA window or admin)                                                | #1 CTF `ConditionResolution` event OR #3 hint with #1 confirmation |
+| `winner`         | Resolved AND `payoutNumerator(condId, ourIdx) > 0`                                             | #1 CTF `payoutNumerators` view                                     |
+| `loser`          | Resolved AND `payoutNumerator(condId, ourIdx) == 0`                                            | #1 CTF `payoutNumerators` view                                     |
+| `dust`           | Loser with non-zero ERC-1155 balance                                                           | #1 chain (terminal — never write against this)                     |
+| `redeem_pending` | `redeemPositions` tx submitted, awaiting receipt                                               | #2 chain submit ack (tx hash) + local job row                      |
+| `redeemed`       | `PayoutRedemption(redeemer=funder, ...)` observed                                              | #1 chain event (the only authority that closes the loop)           |
+| `redeem_failed`  | Tx receipt status=success but no `PayoutRedemption` from our funder, OR receipt status=failure | #1 chain event absence + receipt status                            |
+| `abandoned`      | Three failed redeem attempts                                                                   | Local DB attempt counter — page a human                            |
 
 ### What bug.0384 actually did
 
@@ -138,9 +138,9 @@ Walk the diagram with the buggy code:
 2. Multicall reads `balanceOf` + `payoutNumerators` (#1). All three pass `decideRedeem`.
 3. For each: submit `redeemPositions` (#2 chain). Set in-process cooldown (Map).
 4. **The tx "succeeds" but produces no `TransferSingle` from funder** — the position is in a state our predicate doesn't model: probably already-redeemed in a prior tx, or a neg-risk market where `BINARY_REDEEM_INDEX_SETS = [1, 2]` is the wrong index set, or both.
-5. Cooldown expires after 60 s. Tick fires again. Predicate still says ok (because chain `balanceOf` *is* still > 0 — the burn never happened). Same three txs go out. POL drains. Forever.
+5. Cooldown expires after 60 s. Tick fires again. Predicate still says ok (because chain `balanceOf` _is_ still > 0 — the burn never happened). Same three txs go out. POL drains. Forever.
 
-The diagram makes it obvious: there is no edge from `redeem_pending` back to `winner` *unless* we observe `PayoutRedemption`. The current code has no concept of `PayoutRedemption`. It only knows `tx submitted → wait 60 s → check predicate again`. The predicate, by design, can't see "we already tried."
+The diagram makes it obvious: there is no edge from `redeem_pending` back to `winner` _unless_ we observe `PayoutRedemption`. The current code has no concept of `PayoutRedemption`. It only knows `tx submitted → wait 60 s → check predicate again`. The predicate, by design, can't see "we already tried."
 
 ## What we need to build (capabilities, not files)
 
@@ -150,9 +150,9 @@ The redesign is two capabilities and one event subscription. No code in this doc
 
 These are not optional; the design relies on them.
 
-- [ ] **Loki audit of historical redeem txs + coverage matrix.** Pull every `poly.ctf.redeem.ok` event from Loki for the last 30 days. For each `tx_hash`, call `eth_getTransactionReceipt` and check for `TransferSingle(from=funder, value>0)` (binary CTF) OR the neg-risk adapter's burn event. Any tx with success status and **no burn from our funder** is a malformed-decision fixture. **Coverage requirement:** Capability A's fixture corpus must include at least one example of *each* of `{binary-winner, binary-loser, binary-already-redeemed, neg-risk-parent, neg-risk-adapter, multi-outcome-winner, multi-outcome-loser}`. Any class the Loki audit doesn't cover **must** be backfilled synthetically from contract source (CTF + neg-risk adapter ABIs + a deterministic state generator) before Capability A ships. A predicate validated against 30 days of pure binary-winner traffic is a predicate that ships with the same blind spot bug.0384 had.
+- [ ] **Loki audit of historical redeem txs + coverage matrix.** Pull every `poly.ctf.redeem.ok` event from Loki for the last 30 days. For each `tx_hash`, call `eth_getTransactionReceipt` and check for `TransferSingle(from=funder, value>0)` (binary CTF) OR the neg-risk adapter's burn event. Any tx with success status and **no burn from our funder** is a malformed-decision fixture. **Coverage requirement:** Capability A's fixture corpus must include at least one example of _each_ of `{binary-winner, binary-loser, binary-already-redeemed, neg-risk-parent, neg-risk-adapter, multi-outcome-winner, multi-outcome-loser}`. Any class the Loki audit doesn't cover **must** be backfilled synthetically from contract source (CTF + neg-risk adapter ABIs + a deterministic state generator) before Capability A ships. A predicate validated against 30 days of pure binary-winner traffic is a predicate that ships with the same blind spot bug.0384 had.
 - [ ] **Confirm neg-risk adapter contract address + event ABI** on Polygon mainnet. Identify the `PayoutRedemption`-equivalent event name and topic hash. Capability B's subscription set is wrong without this.
-- [ ] **Pick finality depth N.** v0 default: **N=10 on Polygon (~25 s)**. This is a *choice with no published Polygon-team finality guidance to cite as of 2026-04-26* — Polygon docs talk about ~256-block heimdall checkpoints but observed reorg depth on mainnet is overwhelmingly ≤3. N=10 is a 3× margin against the empirical tail. **Revisit after the first 30 days of `PayoutRedemption` observation:** if zero confirmed→submitted reverts occur, ratchet down to N=5 to halve confirmation latency. If even one occurs, hold at N=10 and log the reorg. Value lives next to RPC config, not hardcoded in two places.
+- [ ] **Pick finality depth N.** v0 default: **N=10 on Polygon (~25 s)**. This is a _choice with no published Polygon-team finality guidance to cite as of 2026-04-26_ — Polygon docs talk about ~256-block heimdall checkpoints but observed reorg depth on mainnet is overwhelmingly ≤3. N=10 is a 3× margin against the empirical tail. **Revisit after the first 30 days of `PayoutRedemption` observation:** if zero confirmed→submitted reverts occur, ratchet down to N=5 to halve confirmation latency. If even one occurs, hold at N=10 and log the reorg. Value lives next to RPC config, not hardcoded in two places.
 
 ### Capability A — Pure redeem policy
 
@@ -176,7 +176,7 @@ A persistent, idempotent state machine for the `winner → redeem_pending → re
   - `pending → submitted` on tx hash returned, store hash + nonce + attempt count.
   - `submitted → confirmed` on observed `PayoutRedemption(funder, conditionId, ...)` event with matching tx_hash, **at N-block finality**.
   - `submitted → failed` on receipt status=failure (transient class — RPC timeout, gas underpriced, reorg-during-submit) OR receipt status=success-but-no-PayoutRedemption-from-funder within N blocks (**malformed class — escalate, do not retry the same decision**).
-  - `failed(transient) → pending` if attempt_count < 3 (exponential backoff). Retries are for *transient* classes only — Capability A is pure, so retrying a malformed decision against the same chain state produces the same failure and burns POL.
+  - `failed(transient) → pending` if attempt*count < 3 (exponential backoff). Retries are for \_transient* classes only — Capability A is pure, so retrying a malformed decision against the same chain state produces the same failure and burns POL.
   - `failed(malformed) → abandoned` immediately (alert via Loki `poly.ctf.redeem.abandoned` — same channel as bug.0376 paging).
   - `failed → abandoned` if attempt_count >= 3 (alert).
 - Cooldown is a SQL `WHERE` clause, not a Map. Dead on restart? It's in Postgres. Multi-pod safe? `FOR UPDATE SKIP LOCKED`. The whole `sweepInFlight` mutex and `redeemCooldownByConditionId` Map disappear.
@@ -199,7 +199,7 @@ Polling sweep over Data API dies. Capability A is consulted once per resolution 
 ### What stays
 
 - The `closing` half of the lifecycle (CLOB SELL flow) is already correctly modeled by `poly-position-exit.md`'s "trust write ack, treat reads as lagging" rule. No change.
-- `decideRedeem` *as a name* is fine; the implementation moves and grows.
+- `decideRedeem` _as a name_ is fine; the implementation moves and grows.
 - The user-facing manual redeem button still works, but it inserts a job row instead of firing a tx directly. UI polls job status. One write path = one failure mode.
 
 ### What gets ripped (v0, no users to migrate)
@@ -217,12 +217,12 @@ All `SINGLE_POD_ASSUMPTION` doc-strings go with them. Replicas can scale.
 
 ## Neg-risk markets — the wrinkle Capability A must handle
 
-Polymarket's neg-risk markets are not standard CTF binary markets. The buggy `BINARY_REDEEM_INDEX_SETS = [1, 2]` is wrong for them. A neg-risk position lives under a *parent* condition, and redemption either:
+Polymarket's neg-risk markets are not standard CTF binary markets. The buggy `BINARY_REDEEM_INDEX_SETS = [1, 2]` is wrong for them. A neg-risk position lives under a _parent_ condition, and redemption either:
 
 - Calls `redeemPositions` against the parent collection (not `PARENT_COLLECTION_ID_ZERO`), with a single-element index set for the winning child, OR
 - Goes through the neg-risk adapter contract, which has its own redeem entrypoint.
 
-Capability A must take `negativeRisk` from the position and emit the *correct* `(parentCollectionId, indexSet)` tuple. Treating all redeems as binary is the secondary cause of bug.0384 — the predicate's index set was wrong even when the rest was right.
+Capability A must take `negativeRisk` from the position and emit the _correct_ `(parentCollectionId, indexSet)` tuple. Treating all redeems as binary is the secondary cause of bug.0384 — the predicate's index set was wrong even when the rest was right.
 
 ## Invariants
 
@@ -242,7 +242,7 @@ Capability A must take `negativeRisk` from the position and emit the *correct* `
 1. **Page fires** on `poly.ctf.redeem.abandoned` Loki event. Payload: `condition_id`, `funder`, `negativeRisk`, `outcomeIndex`, last `tx_hash`, observed receipt, observed event topics.
 2. **Inspect the failed tx** on Polygonscan (decoded receipt + event log). Confirm: tx succeeded, no `TransferSingle` from funder, no `PayoutRedemption` from funder.
 3. **Diagnose Capability A's blind spot.** The decision was structurally wrong — wrong index set, wrong parent collection, wrong contract (binary path used on a neg-risk position, etc.). The chain state did not change between the decision and now; another automated retry will reproduce the same failure.
-4. **Add the failing case as a fixture.** New row in Capability A's test corpus with the input chain reads + the *correct* expected output. Tests must fail against current Capability A.
+4. **Add the failing case as a fixture.** New row in Capability A's test corpus with the input chain reads + the _correct_ expected output. Tests must fail against current Capability A.
 5. **Fix Capability A** until the new fixture passes plus all existing fixtures still pass.
 6. **Ship + deploy** through the normal lifecycle (PR → candidate-a → flight → deploy_verified).
 7. **Re-enqueue the abandoned position** by inserting a fresh job row (manual SQL or admin endpoint) with `attempt_count = 0`. The new Capability A then evaluates correctly and the worker drains it.

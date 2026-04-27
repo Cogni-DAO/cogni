@@ -46,13 +46,15 @@ A pure module `packages/market-provider/policy/redeem` exporting `decideRedeem(i
 **Solution.** Build the pure policy module + fixture corpus, swap the in-line `decideRedeem` in `poly-trade-executor.ts` for it. Sweep architecture (mutex, cooldown Map, polling loop) stays in this PR — Capability A is correctness for the existing loop. task.0388 rips the loop next.
 
 **Reuses.**
+
 - `PolymarketUserPosition` shape from `packages/market-provider/src/adapters/polymarket/polymarket.data-api.types.ts` (read-only — for input mapping at the call site, not inside the pure policy).
 - CTF + neg-risk adapter ABIs already present in `packages/market-provider/src/adapters/polymarket/polymarket.ctf.ts` (for fixture generation — synthesizing `eth_getTransactionReceipt`-shaped events).
 - Existing test infra: `vitest` unit tests in `packages/market-provider/tests/`.
 
 **Rejected.**
-- *Touch the sweep loop in this PR.* Out of scope. Big-bang rewrite is task.0388. This task is the bleed-stopper.
-- *Loki audit alone.* Without synthetic backfill for any uncovered class, we ship a predicate validated only against the slice of history Loki happens to contain. Review2 explicitly blocked on this.
+
+- _Touch the sweep loop in this PR._ Out of scope. Big-bang rewrite is task.0388. This task is the bleed-stopper.
+- _Loki audit alone._ Without synthetic backfill for any uncovered class, we ship a predicate validated only against the slice of history Loki happens to contain. Review2 explicitly blocked on this.
 
 ## Files
 
