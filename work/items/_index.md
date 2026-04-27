@@ -418,6 +418,7 @@
 | 1 | task.0358 | Poly dashboard — open vs closed positions, position history replaces order history | Cogni Poly | proj.poly-copy-trading |
 | 1 | bug.0360 | Poly research Day tab hangs indefinitely — no timeout, no error state | Cogni Poly | proj.poly-prediction-bot |
 | 1 | bug.0381 | wait-for-in-cluster-services.sh ignores PROMOTED_APPS — every matrix cell waits for every Deployment | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | spike.0401 | Next.js frontend perf — operator + poly SSR / transitions / bundle audit |  |  |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 2 | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |
