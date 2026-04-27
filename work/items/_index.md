@@ -187,7 +187,7 @@
 | 1 | 25 | 2 | needs_closeout | task.0165 | Live money e2e test — full OpenRouter top-up chain on Base mainnet | AI Operator Wallet | proj.ai-operator-wallet |
 | 1 | 30 | 1 | needs_review | bug.0336 | candidate-flight false-fails on rolling-update endpoint cutover race | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 40 | 3 | needs_triage | bug.0322 | Runs made on poly are visible via operator's /api/v1/agent/runs (cross-node data pollution) | CI/CD Pipeline | proj.cicd-services-gitops |
-| 1 | 50 | 5 | needs_implement | bug.0319 | Move node-only ai-tools into nodes/<X>/packages/ai-tools to satisfy SINGLE_DOMAIN_HARD_FAIL; kill the global TOOL_CATALOG closed-world iteration | Tool Use Evolution | proj.tool-use-evolution |
+| 1 | 50 | 5 | needs_review | bug.0319 | Move node-only ai-tools into nodes/<X>/packages/ai-tools to satisfy SINGLE_DOMAIN_HARD_FAIL; kill the global TOOL_CATALOG closed-world iteration | Tool Use Evolution | proj.tool-use-evolution |
 | 1 | 50 | 2 | needs_triage | bug.0329 | Polymarket CLOB adapter SELL on neg_risk markets returns empty error — positions unclosable | Cogni Poly | proj.poly-copy-trading |
 | 1 | 99 | 3 | needs_triage | story.0089 | Discord Bot Conversation Evals |  |  |
 | 1 | 99 | 5 | needs_triage | story.0091 | Clawdbot as High-Level Manager Agent |  |  |
