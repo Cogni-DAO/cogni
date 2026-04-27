@@ -88,8 +88,8 @@ nodes/poly/packages/ai-tools/               poly-only tools:
                                               core__poly_place_trade, core__poly_list_orders,
                                               core__poly_cancel_order, core__poly_close_position,
                                               core__poly_data_* (7 Data-API tools),
-                                              core__wallet_top_traders, core__market_list (?)
-                                              — see "Open question" below
+                                              core__wallet_top_traders, core__market_list
+                                              (decision: move with poly — see "Decision" below)
 
 nodes/poly/packages/{db-schema, …}          (already exists — same shape)
 nodes/poly/graphs/                          (already exists)
@@ -130,57 +130,61 @@ export function createBoundToolSource(
 
 ## File-level migration plan
 
-### Phase 1 — open-world plumbing (operator domain, single PR)
+### Phase 1 — open-world plumbing (admin-merged substrate PR; touches all 4 nodes)
 
 Lift the closed-world iteration. After this phase, nodes can declare smaller catalogs without reorganizing the package tree.
 
-| File                                                  | Change                                                                                                                                                                                                            |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/ai-tools/src/catalog.ts`                    | Drop the singleton `TOOL_CATALOG`. Keep `createToolCatalog([...])` helper. Export per-tool `BoundTool` values for composition.                                                                                    |
-| `packages/ai-tools/src/index.ts`                      | Re-export per-tool barrels in groups (core / poly) so consumers pick scoped imports.                                                                                                                              |
-| `nodes/*/app/src/bootstrap/ai/tool-source.factory.ts` | `createBoundToolSource(contracts, bindings)` — iterate caller-supplied `contracts`, not the global catalog.                                                                                                       |
-| `nodes/*/app/src/bootstrap/container.ts`              | Pass node's contract list explicitly.                                                                                                                                                                             |
-| `tests/arch/`                                         | Add `tool-catalog-no-global-iteration.test.ts` — grep that no production code imports a global `TOOL_CATALOG` for iteration after the migration. Add `single-domain-tool-imports.test.ts` (asserts post-Phase 2). |
+| File                                                  | Change                                                                                                                                   |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/ai-tools/src/catalog.ts`                    | Drop the singleton `TOOL_CATALOG`. Keep `createToolCatalog([...])` helper. Export per-tool `BoundTool` values for composition.           |
+| `packages/ai-tools/src/index.ts`                      | Re-export per-tool barrels in groups (core / poly) so consumers pick scoped imports.                                                     |
+| `nodes/*/app/src/bootstrap/ai/tool-source.factory.ts` | `createBoundToolSource(contracts, bindings)` — iterate caller-supplied `contracts`, not the global catalog. Identical change ×4.         |
+| `nodes/*/app/src/bootstrap/container.ts`              | Pass node's contract list explicitly. Identical change ×4.                                                                               |
+| `tests/arch/tool-catalog-no-global-iteration.test.ts` | New — grep that no production code iterates a global `TOOL_CATALOG` after the migration. (Imports of individual `BoundTool`s remain ok.) |
 
-This is operator-domain only, single PR.
+⚠️ **Domain note:** Phase 1 touches `nodes/{poly,operator,resy,node-template}/app/src/bootstrap/**` — 4 distinct node domains. The `single-node-scope` job will reject this PR. **Admin-override required at merge time** (acknowledged in PR body as a one-time substrate change). This is the same justification as Phase 2 and is intrinsic to migrating shared bootstrap code; the alternative would be 4 sequential per-node PRs with a backwards-compat shim in `packages/ai-tools/`, which trades atomicity for review noise.
 
-### Phase 2 — extract `nodes/poly/packages/ai-tools/` (substrate-migration PR; operator domain)
+**Latent dedup signal (out of scope, future cleanup):** `tool-source.factory.ts` is byte-identical across all 4 nodes today. A follow-up could lift it into `@cogni/ai-core`, after which Phase-1-style changes become a single operator-domain PR. Not in scope for this bug — flagged so a future contributor can pick it up.
 
-⚠️ **Domain note:** the `git mv` of `packages/ai-tools/src/tools/poly-*.ts` → `nodes/poly/packages/ai-tools/src/tools/` touches both `packages/` (operator) and `nodes/poly/` (poly). This is a **substrate migration** — by definition operator-domain. The PR body must declare it as such. After this PR lands, all _future_ poly-tool changes live entirely in poly domain.
+### Phase 2 — extract `nodes/poly/packages/ai-tools/` (admin-merged substrate PR)
 
-| File                                                                   | Change                                                                                                                      |
-| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `nodes/poly/packages/ai-tools/package.json`                            | New package `@cogni/poly-ai-tools`. Mirror shape of `nodes/poly/packages/knowledge/package.json`.                           |
-| `nodes/poly/packages/ai-tools/tsconfig.json` + `tsup.config.ts`        | Mirror existing per-node-package config.                                                                                    |
-| `nodes/poly/packages/ai-tools/src/tools/poly-*.ts` (13 files)          | `git mv` from `packages/ai-tools/src/tools/poly-*.ts`.                                                                      |
-| `nodes/poly/packages/ai-tools/src/tools/wallet-top-traders.ts`         | `git mv` (see open question — recommend yes).                                                                               |
-| `nodes/poly/packages/ai-tools/src/tools/market-list.ts`                | `git mv` (see open question — recommend yes).                                                                               |
-| `nodes/poly/packages/ai-tools/src/capabilities/poly-data.ts`           | `git mv` PolyDataCapability + types.                                                                                        |
-| `nodes/poly/packages/ai-tools/src/capabilities/wallet.ts`, `market.ts` | `git mv` WalletCapability, MarketCapability if the tools above move.                                                        |
-| `nodes/poly/packages/ai-tools/src/index.ts`                            | Barrel: contracts, impl factories, capability types, `createPolyToolBindings(deps)`.                                        |
-| `packages/ai-tools/src/catalog.ts`                                     | Remove poly imports / catalog entries.                                                                                      |
-| `packages/ai-tools/src/index.ts`                                       | Remove poly re-exports.                                                                                                     |
-| `packages/ai-tools/package.json`                                       | (Possibly) drop poly-specific deps (`@polymarket/clob-client`, etc.) — confirm by build.                                    |
-| `packages/ai-tools/AGENTS.md`                                          | Update Public Surface listing — drop poly-\* exports.                                                                       |
-| `nodes/poly/app/src/bootstrap/ai/tool-bindings.ts`                     | Drop poly-tool imports from `@cogni/ai-tools`; import from `@cogni/poly-ai-tools`. Compose bindings.                        |
-| `nodes/operator/app/src/bootstrap/ai/tool-bindings.ts`                 | Delete every poly-_ import + every poly-_ stub binding entry.                                                               |
-| `nodes/resy/app/src/bootstrap/ai/tool-bindings.ts`                     | Same.                                                                                                                       |
-| `nodes/node-template/app/src/bootstrap/ai/tool-bindings.ts`            | Same.                                                                                                                       |
-| `nodes/poly/graphs/src/graphs/poly-research/tools.ts`                  | Import poly tool name constants from `@cogni/poly-ai-tools`.                                                                |
-| `nodes/poly/graphs/src/graphs/poly-brain/tools.ts`                     | Same.                                                                                                                       |
-| `nodes/poly/graphs/package.json`                                       | Add `@cogni/poly-ai-tools: workspace:*`.                                                                                    |
-| `nodes/poly/app/package.json`                                          | Add `@cogni/poly-ai-tools: workspace:*`.                                                                                    |
-| `pnpm-workspace.yaml`                                                  | No change — `nodes/*/packages/*` glob already covers it.                                                                    |
-| `pnpm-lock.yaml`                                                       | Mechanical (ride-along whitelisted).                                                                                        |
-| `tsconfig*.json` path aliases (per-node)                               | Wire `@cogni/poly-ai-tools` resolution if any node uses path aliases over package exports.                                  |
-| `.dependency-cruiser.cjs` (per-node)                                   | Allow `nodes/poly/app` → `@cogni/poly-ai-tools`. Forbid `nodes/{operator,resy,node-template}/app` → `@cogni/poly-ai-tools`. |
-| `nodes/poly/packages/ai-tools/AGENTS.md`                               | New — short orientation, mirrors `nodes/poly/packages/knowledge/AGENTS.md`.                                                 |
+⚠️ **Domain note:** the `git mv` of `packages/ai-tools/src/tools/poly-*.ts` → `nodes/poly/packages/ai-tools/src/tools/` plus the operator/resy/node-template stub-binding deletions touches `packages/`, `nodes/poly/`, `nodes/operator/`, `nodes/resy/`, and `nodes/node-template/` — 4+ domains. The `single-node-scope` job will reject this PR. **Admin-override required at merge time**, declared in the PR body as a one-time substrate migration. After this PR lands, all _future_ poly-tool changes are single-domain (`poly`).
+
+| File                                                                   | Change                                                                                                                                                                                                                                |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nodes/poly/packages/ai-tools/package.json`                            | New package `@cogni/poly-ai-tools`. Mirror shape of `nodes/poly/packages/knowledge/package.json`.                                                                                                                                     |
+| `nodes/poly/packages/ai-tools/tsconfig.json` + `tsup.config.ts`        | Mirror existing per-node-package config.                                                                                                                                                                                              |
+| `nodes/poly/packages/ai-tools/src/tools/poly-*.ts` (13 files)          | `git mv` from `packages/ai-tools/src/tools/poly-*.ts`.                                                                                                                                                                                |
+| `nodes/poly/packages/ai-tools/src/tools/wallet-top-traders.ts`         | `git mv` (see open question — recommend yes).                                                                                                                                                                                         |
+| `nodes/poly/packages/ai-tools/src/tools/market-list.ts`                | `git mv` (see open question — recommend yes).                                                                                                                                                                                         |
+| `nodes/poly/packages/ai-tools/src/capabilities/poly-data.ts`           | `git mv` PolyDataCapability + types.                                                                                                                                                                                                  |
+| `nodes/poly/packages/ai-tools/src/capabilities/wallet.ts`, `market.ts` | `git mv` WalletCapability, MarketCapability if the tools above move.                                                                                                                                                                  |
+| `nodes/poly/packages/ai-tools/src/index.ts`                            | Barrel: contracts, impl factories, capability types, `createPolyToolBindings(deps)`.                                                                                                                                                  |
+| `packages/ai-tools/src/catalog.ts`                                     | Remove poly imports / catalog entries.                                                                                                                                                                                                |
+| `packages/ai-tools/src/index.ts`                                       | Remove poly re-exports.                                                                                                                                                                                                               |
+| `packages/ai-tools/package.json`                                       | (Possibly) drop poly-specific deps (`@polymarket/clob-client`, etc.) — confirm by build.                                                                                                                                              |
+| `packages/ai-tools/AGENTS.md`                                          | Update Public Surface listing — drop poly-\* exports.                                                                                                                                                                                 |
+| `nodes/poly/app/src/bootstrap/ai/tool-bindings.ts`                     | Drop poly-tool imports from `@cogni/ai-tools`; import from `@cogni/poly-ai-tools`. Compose bindings.                                                                                                                                  |
+| `nodes/operator/app/src/bootstrap/ai/tool-bindings.ts`                 | Delete every poly-_ import + every poly-_ stub binding entry.                                                                                                                                                                         |
+| `nodes/resy/app/src/bootstrap/ai/tool-bindings.ts`                     | Same.                                                                                                                                                                                                                                 |
+| `nodes/node-template/app/src/bootstrap/ai/tool-bindings.ts`            | Same.                                                                                                                                                                                                                                 |
+| `nodes/poly/graphs/src/graphs/poly-research/tools.ts`                  | Import poly tool name constants from `@cogni/poly-ai-tools`.                                                                                                                                                                          |
+| `nodes/poly/graphs/src/graphs/poly-brain/tools.ts`                     | Same.                                                                                                                                                                                                                                 |
+| `nodes/poly/graphs/package.json`                                       | Add `@cogni/poly-ai-tools: workspace:*`.                                                                                                                                                                                              |
+| `nodes/poly/app/package.json`                                          | Add `@cogni/poly-ai-tools: workspace:*`.                                                                                                                                                                                              |
+| `pnpm-workspace.yaml`                                                  | No change — `nodes/*/packages/*` glob already covers it.                                                                                                                                                                              |
+| `pnpm-lock.yaml`                                                       | Mechanical (ride-along whitelisted).                                                                                                                                                                                                  |
+| `tsconfig*.json` path aliases (per-node)                               | Wire `@cogni/poly-ai-tools` resolution if any node uses path aliases over package exports.                                                                                                                                            |
+| `.dependency-cruiser.cjs` (per-node)                                   | Allow `nodes/poly/app` → `@cogni/poly-ai-tools`. Forbid `nodes/{operator,resy,node-template}/app` → `@cogni/poly-ai-tools`. **This is the canonical enforcement of cross-node tool-import isolation — no separate arch test needed.** |
+| `nodes/poly/packages/ai-tools/AGENTS.md`                               | New — short orientation, mirrors `nodes/poly/packages/knowledge/AGENTS.md`.                                                                                                                                                           |
 
 **Will NOT touch any future poly-tool PR (proves the split worked):** `nodes/operator/**`, `nodes/resy/**`, `nodes/node-template/**`, `packages/ai-tools/**`.
 
 ### Phase 3 — fail-loud poly bootstrap (poly domain, separate PR)
 
-Once poly-_ stubs are gone from operator/resy/node-template, poly's own conditional stub for `polyTradeCapability` becomes a degenerate state. Container bootstrap for poly should throw if `OPERATOR_WALLET_ADDRESS` / `POLY*CLOB*_`/`PRIVY\_\*` are not all set, instead of registering a runtime-throwing stub. See task.0315 CP4.25 — the stub pattern silently booted a non-functional pod on candidate-a until someone tried to trade.
+Once poly-\* stubs are gone from operator/resy/node-template, poly's own conditional stub for `polyTradeCapability` becomes a degenerate state. Container bootstrap for poly should throw if `OPERATOR_WALLET_ADDRESS` / `POLY_CLOB_*` / `PRIVY_*` are not all set, instead of registering a runtime-throwing stub. See task.0315 CP4.25 — the stub pattern silently booted a non-functional pod on candidate-a until someone tried to trade.
+
+**Pre-flight check (must pass before this PR merges):** `grep -rE "POLY_CLOB_|PRIVY_|OPERATOR_WALLET_ADDRESS" deploy/poly/ infra/` returns hits for every required var, AND a candidate-a poly pod boots cleanly with the current deploy config. Without this check, Phase 3 hard-breaks the candidate-a deploy on first reconcile.
 
 | File                                                              | Change                                                                                                                           |
 | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -190,14 +194,9 @@ Once poly-_ stubs are gone from operator/resy/node-template, poly's own conditio
 
 This PR is poly-domain only.
 
-## Open question — where do `core__market_list` and `core__wallet_top_traders` belong?
+## Decision — `core__market_list` and `core__wallet_top_traders` move with poly
 
-Both are currently consumed only by `nodes/poly/graphs/poly-research`. They are conceptually Polymarket-specific (Gamma + Data API). Two reads:
-
-- **Poly-only**: move into `nodes/poly/packages/ai-tools/`. Cleanest domain split today. If a future node wants market data, it builds its own.
-- **Cross-cutting**: leave in `packages/ai-tools/` as "market data tools". Premature — only poly uses them. YAGNI says move.
-
-**Recommendation: move into `nodes/poly/packages/ai-tools/`.** If a second node ever needs them, hoist back up at that point — that's exactly when the substrate-request signal fires (per spec.node-ci-cd-contract Reading A).
+Both tools are consumed only by `nodes/poly/graphs/poly-research` today and are inherently Polymarket-specific (Gamma + Data API). YAGNI: **they move into `nodes/poly/packages/ai-tools/` in Phase 2.** If a second node ever needs market data, hoist them back into `packages/ai-tools/` at that point — that is exactly the substrate-request signal Reading A in spec.node-ci-cd-contract is designed to surface. Locked in to remove an implement-time fight; revisitable if a real second consumer appears.
 
 ## Validation
 
@@ -208,10 +207,12 @@ Both are currently consumed only by `nodes/poly/graphs/poly-research`. They are 
 3. `grep -r "POLY_PLACE_TRADE_NAME\|POLY_DATA_.*_NAME\|WALLET_TOP_TRADERS_NAME\|polyPlaceTradeStub\|polyListOrdersStub" nodes/operator/ nodes/resy/ nodes/node-template/` returns zero hits.
 4. `grep -rn "TOOL_CATALOG" packages/ nodes/ --include="*.ts" | grep -v test | grep -v node_modules` returns no production iteration sites — all consumers use scoped contract lists.
 5. Booting poly with intentionally missing `POLY_CLOB_*` env throws at startup (Phase 3), not at first invocation.
+6. Pre-Phase-3 deploy-config check: every required poly env var is wired in `deploy/poly/` and a candidate-a poly pod boots cleanly under current config.
 
-**Architectural test (new):**
+**Enforcement strategy:**
 
-`tests/arch/single-domain-tool-imports.test.ts` — for each non-operator node `X`, assert `nodes/X/app/src/bootstrap/ai/tool-bindings.ts` imports zero symbols from any other node's `ai-tools` package, and zero stub-implementation symbols.
+- Cross-node import isolation → **dependency-cruiser per-node rules** (canonical, per POLICY_STAYS_LOCAL). One arch test would duplicate what depcruise already does.
+- "No global TOOL_CATALOG iteration" → **`tests/arch/tool-catalog-no-global-iteration.test.ts`** (a depcruise rule can't easily express "iterates" vs "imports a single entry").
 
 ## Sequencing & risk
 
@@ -246,7 +247,9 @@ A poly-only ai-tool PR (e.g. "add `core__poly_data_market_outcomes`") touches fi
 - **`packages/<node>-ai-tools/` (the original bug.0319 proposal)** — `packages/**` is operator domain per spec.node-ci-cd-contract. Adding a poly tool would still mean a `packages/poly-ai-tools/` + `nodes/poly/` PR — two domains, rejected by `single-node-scope`. Solves bundle hygiene but not the structural problem.
 - **"Just make iteration tolerant of missing bindings"** — band-aid. Removes the throw but leaves the global catalog visible to every node, keeps bundle bloat, and still makes adding a poly tool a `packages/ai-tools/catalog.ts` edit (operator domain) plus `nodes/poly/` (poly domain). Still two domains.
 - **Plugin/registry pattern (each tool self-registers via side-effect import)** — adds a runtime registry, fights tree-shaking, breaks ESM purity, and obscures the explicit composition that `tool-bindings.ts` provides today. More moving parts, less clarity.
-- **Phase 2a/2b copy-then-delete split** — proposed earlier in the plan as an alternative to the substrate-migration PR. Adds a duplicated-source window (poly tools exist in both places) and two PRs instead of one. Single substrate-migration PR is cleaner; the cross-domain nature is intrinsic to the migration itself and acceptable as a one-time operator-domain change.
+- **Phase 2a/2b copy-then-delete split** — adds a duplicated-source window (poly tools exist in both places) and two PRs instead of one. Single substrate-migration PR is cleaner; the cross-domain nature is intrinsic to the migration itself and acceptable as a one-time admin-merged change.
+- **4 sequential per-node Phase 1 PRs (each single-domain) with backwards-compat shim** — preserves the gate but adds a temporary `legacyToolCatalog` export to `packages/ai-tools/`, four review cycles, and a window where nodes are out of sync. Atomic admin-merged PR is simpler given admin authority is available.
+- **Atomic `core__` → `poly__` rename in Phase 2** — touches every name constant, every poly-research/poly-brain `toolIds` array, golden fixtures, and saved `ToolInvocationRecord` payloads in production transcripts. Strictly larger blast radius than the file move alone. Defer until a real name collision appears.
 
 ### Invariants
 
@@ -256,7 +259,7 @@ A poly-only ai-tool PR (e.g. "add `core__poly_data_market_outcomes`") touches fi
 - [ ] **POLICY_STAYS_LOCAL**: depcruise rules per-node — no shared depcruise config (spec: spec.node-ci-cd-contract §Core Invariants 2)
 - [ ] **TOOL_BINDING_REQUIRED → TOOL_BINDING_LOCAL**: bindings still validated, but against the _node's_ contract list, not a global catalog (spec: spec.tool-use)
 - [ ] **TOOL_ID_STABILITY**: `core__` prefix unchanged; tool IDs do not change during the move (spec: spec.tool-use)
-- [ ] **TOOL_ID_NAMESPACED**: poly-owned tools keep the `core__` prefix for v0; revisit `poly__` namespace as a follow-up if collision pressure appears
+- [ ] **TOOL_ID_NAMESPACED**: poly-owned tools keep the `core__` prefix for v0. Renaming to `poly__` would change every `*_NAME` constant, every poly-research/poly-brain `toolIds` array, every contract-test fixture, and every saved `ToolInvocationRecord` in production transcripts — strictly larger blast radius than the file move. Defer to a follow-up bug only if a name collision actually appears with a future node tool.
 - [ ] **NO_SRC_IMPORTS / NO_SERVICE_IMPORTS**: `nodes/poly/packages/ai-tools/` follows package isolation rules (spec: packages-architecture)
 - [ ] **PURE_LIBRARY**: no env loading, no process lifecycle in the new package; capability instances are constructor-injected at the app layer (spec: packages-architecture §7)
 - [ ] **NO_STUB_AT_RUNTIME (Phase 3)**: poly env validated at boot; no conditional stub registration (spec: spec.tool-use)
@@ -268,36 +271,37 @@ A poly-only ai-tool PR (e.g. "add `core__poly_data_market_outcomes`") touches fi
 
 <!-- High-level scope — full per-phase enumeration in the migration plan above -->
 
-**Phase 1 (operator domain, single PR):**
+**Phase 1 (admin-merged substrate PR — 4 node domains):**
 
 - Modify: `packages/ai-tools/src/catalog.ts` — drop singleton `TOOL_CATALOG`, keep `createToolCatalog()` helper
 - Modify: `packages/ai-tools/src/index.ts` — group exports (core / poly), keep individual `BoundTool` exports
-- Modify: `nodes/{poly,operator,resy,node-template}/app/src/bootstrap/ai/tool-source.factory.ts` — iterate caller-supplied contracts
-- Modify: `nodes/{poly,operator,resy,node-template}/app/src/bootstrap/container.ts` — pass node's contract list
+- Modify: `nodes/{poly,operator,resy,node-template}/app/src/bootstrap/ai/tool-source.factory.ts` — iterate caller-supplied contracts (identical change ×4)
+- Modify: `nodes/{poly,operator,resy,node-template}/app/src/bootstrap/container.ts` — pass node's contract list (identical change ×4)
 - Create: `tests/arch/tool-catalog-no-global-iteration.test.ts` — grep production code for `TOOL_CATALOG` iteration
 
-**Phase 2 (operator-domain substrate-migration PR):**
+**Phase 2 (admin-merged substrate PR — operator + 4 node domains):**
 
 - Create: `nodes/poly/packages/ai-tools/{package.json, tsconfig.json, tsup.config.ts, AGENTS.md, src/index.ts}` — new package shell
-- Move (`git mv`): all poly-\* tool files + wallet/market tool files + poly capability interfaces from `packages/ai-tools/src/` → `nodes/poly/packages/ai-tools/src/`
+- Move (`git mv`): all poly-\* tool files + `wallet-top-traders.ts` + `market-list.ts` + poly/wallet/market capability interfaces from `packages/ai-tools/src/` → `nodes/poly/packages/ai-tools/src/`
 - Modify: `packages/ai-tools/src/{catalog.ts,index.ts}` — remove poly imports/exports
+- Modify: `packages/ai-tools/AGENTS.md` — drop poly-\* exports from Public Surface listing
 - Modify: `nodes/poly/app/src/bootstrap/ai/tool-bindings.ts` — import from `@cogni/poly-ai-tools`
 - Modify: `nodes/{operator,resy,node-template}/app/src/bootstrap/ai/tool-bindings.ts` — delete poly-\* stub bindings + imports
 - Modify: `nodes/poly/{app,graphs}/package.json` — add `@cogni/poly-ai-tools` dep
 - Modify: `nodes/poly/graphs/src/graphs/{poly-research,poly-brain}/tools.ts` — re-source name constants
-- Modify: per-node `.dependency-cruiser.cjs` — allow poly→@cogni/poly-ai-tools, forbid others
-- Create: `tests/arch/single-domain-tool-imports.test.ts` — assert non-poly nodes never import `@cogni/poly-ai-tools`
+- Modify: per-node `.dependency-cruiser.cjs` — allow `nodes/poly/app` → `@cogni/poly-ai-tools`; forbid for other nodes (canonical isolation enforcement)
 
 **Phase 3 (poly domain, separate PR):**
 
+- **Pre-flight (gate):** verify deploy config has every required poly env var; verify a current candidate-a poly pod boots cleanly under it
 - Modify: `nodes/poly/app/src/bootstrap/container.ts` — fail-loud env validation
 - Modify: `nodes/poly/app/src/bootstrap/ai/tool-bindings.ts` — drop `polyTradeCapability?` optional path
 - Modify: `nodes/poly/packages/ai-tools/src/tools/poly-{place-trade,list-orders,cancel-order}.ts` — optionally delete `*StubImplementation` exports
 
-**Tests (added across phases):**
+**Tests:**
 
-- `tests/arch/tool-catalog-no-global-iteration.test.ts` (Phase 1)
-- `tests/arch/single-domain-tool-imports.test.ts` (Phase 2)
+- `tests/arch/tool-catalog-no-global-iteration.test.ts` (Phase 1) — only arch test added
+- Per-node depcruise rules (Phase 2) — canonical cross-node isolation
 - Unit tests for moved tools relocate alongside the tool files; poly graphs vitest config already covers `nodes/poly/**`
 
 ## Related
