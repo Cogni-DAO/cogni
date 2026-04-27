@@ -132,12 +132,12 @@ The mirror-coordinator is the **only** file that imports from both `wallet-watch
 
 ### Agent tool surface (package — stable)
 
-| File                                               | Purpose                                                                                    |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `packages/ai-tools/src/tools/poly-place-trade.ts`  | `core__poly_place_trade` tool definition                                                   |
-| `packages/ai-tools/src/tools/poly-list-orders.ts`  | `core__poly_list_orders` tool definition                                                   |
-| `packages/ai-tools/src/tools/poly-cancel-order.ts` | `core__poly_cancel_order` tool definition                                                  |
-| `packages/ai-tools/src/index.ts`                   | `PolyTradeCapability` interface — agent-request shapes only; does NOT expose `OrderIntent` |
+| File                                                          | Purpose                                                                                                                                       |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nodes/poly/packages/ai-tools/src/tools/poly-place-trade.ts`  | `core__poly_place_trade` tool definition (moved from `packages/ai-tools/` in bug.0319 ckpt 2; not currently in `POLY_TOOL_BUNDLE` per ckpt 3) |
+| `nodes/poly/packages/ai-tools/src/tools/poly-list-orders.ts`  | `core__poly_list_orders` tool definition (moved; same bundle status)                                                                          |
+| `nodes/poly/packages/ai-tools/src/tools/poly-cancel-order.ts` | `core__poly_cancel_order` tool definition (moved; same bundle status)                                                                         |
+| `nodes/poly/packages/ai-tools/src/index.ts`                   | `PolyTradeCapability` interface — agent-request shapes only; does NOT expose `OrderIntent`                                                    |
 
 ### Poly app — `features/trading/` (generic placement + ledger)
 
