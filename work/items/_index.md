@@ -230,6 +230,7 @@
 | 2 | 10 | 1 | needs_triage | bug.0385 | core__market_list drops Polymarket conditionId → /holders + /trades unreachable to the agent | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 11 | 3 | needs_triage | task.0048 | Sub-agent billing attribution — track which OpenClaw sub-agent made each LLM call | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 2 | 12 | 3 | needs_triage | task.0040 | Gateway memory curation worker — scan ephemeral state, persist valuable context, reset container | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
+| 2 | 12 | 3 | needs_triage | bug.0386 | @cogni/node-contracts package leaks node-specific contracts (poly.*, resy.*) into the shared cross-node surface | Cogni Poly | proj.poly-copy-trading |
 | 2 | 14 | 1 | needs_design | task.0079 | Create bot-generated Discord invite link for website |  |  |
 | 2 | 15 | 3 | needs_implement | task.0192 | Walk: Per-tenant BYO-AI — Profile page OAuth + DrizzleConnectionBroker | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 2 | 16 | 3 | needs_design | task.0003 | Sweep stale doc references across the codebase | Maximize OSS Tools | proj.maximize-oss-tools |
