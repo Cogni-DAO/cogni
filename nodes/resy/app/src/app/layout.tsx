@@ -39,6 +39,10 @@ export const metadata: Metadata = {
     "Stop losing reservations to scalper bots. We claim your table in seconds using official channels.",
 };
 
+// See operator/app/src/app/layout.tsx for rationale — `headers()` in the
+// root layout requires dynamic rendering so Next can't prerender `/_not-found`.
+export const dynamic = "force-dynamic";
+
 export default async function RootLayout({
   children,
 }: Readonly<{

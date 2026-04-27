@@ -39,6 +39,13 @@ export const metadata: Metadata = {
   description: "Web3 Gov + Web2 AI",
 };
 
+// Reading `headers()` in the root layout makes every route dynamic; this
+// export makes that explicit so Next's build pipeline doesn't try to
+// statically prerender the framework's `/_not-found` page (which would fail
+// the "DynamicServerError: headers" check). See:
+// https://nextjs.org/docs/app/api-reference/file-conventions/route-segment-config#dynamic
+export const dynamic = "force-dynamic";
+
 export default async function RootLayout({
   children,
 }: Readonly<{
