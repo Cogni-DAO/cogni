@@ -7,7 +7,8 @@
  * Scope: Compute + I/O only. Does not authenticate, does not parse HTTP. Returns Zod-validated slice values per the wallet-analysis v1 and execution v1 contracts.
  * Invariants:
  *   - REUSE_PACKAGE_CLIENTS: all upstream HTTP goes through `@cogni/market-provider` clients — no fetch in this file.
- *   - DETERMINISTIC_METRICS: snapshot math is identical to `computeWalletMetrics` (spike.0323 v3).
+ *   - DETERMINISTIC_METRICS: snapshot math is identical to `computeWalletMetrics` (spike.0323 v3) for the trade-derived fields it surfaces (winrate, duration, activity counts). PnL-class outputs (`realizedPnlUsdc` etc.) of `computeWalletMetrics` are deliberately not surfaced; PnL is sourced from the `pnl` slice (task.0389).
+ *   - PNL_NOT_IN_SNAPSHOT: `getSnapshotSlice` does not return any PnL field. Headline PnL on the wallet research surface is derived from `getPnlSlice` (Polymarket `user-pnl-api`) — single source, reconciles with the chart by construction.
  *   - PARTIAL_FAILURE_NEVER_THROWS: each slice returns a `{ value | warning }` result; the route surfaces warnings without 5xx-ing.
  *   - CLOB_HISTORY_OPEN_ONLY: `getPriceHistory` is fetched only for open/redeemable positions; closed positions use trade-derived timelines only.
  *   - LIFECYCLE_OVERRIDES_TRADE_DERIVED_STATUS: `getExecutionSlice` accepts an optional `lifecycleByConditionId` map sourced from `poly_redeem_jobs` (task.0388). Positions whose lifecycle resolves to a terminal state (`closed | redeemed | loser | dust | abandoned`) move to `closed_positions` even when the trade-derived status would have kept them in `live_positions`. Absent map ⇒ legacy split unchanged.
@@ -186,11 +187,6 @@ export async function getSnapshotSlice(
         wins: m.wins,
         losses: m.losses,
         trueWinRatePct: m.trueWinRatePct,
-        realizedPnlUsdc: m.realizedPnlUsdc,
-        realizedRoiPct: m.realizedRoiPct,
-        maxDrawdownUsdc: m.maxDrawdownUsdc,
-        maxDrawdownPctOfPeak: m.maxDrawdownPctOfPeak,
-        peakEquityUsdc: m.peakEquityUsdc,
         medianDurationHours: m.medianDurationHours,
         openPositions: m.openPositions,
         openNetCostUsdc: m.openNetCostUsdc,

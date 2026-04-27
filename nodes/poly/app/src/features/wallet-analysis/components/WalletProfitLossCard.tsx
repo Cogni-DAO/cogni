@@ -8,8 +8,14 @@
  * Scope: Presentational only. Accepts props + callback; does not fetch.
  * Invariants:
  *   - PNL_NOT_NAV: plots Polymarket P/L, not wallet balance.
- *   - ZERO_BASELINE_WHEN_EMPTY: funded or watched wallets with no realized P/L
- *     render a flat zero-state panel instead of a null chart hole.
+ *   - ZERO_BASELINE_WHEN_EMPTY: funded or watched wallets with no P/L history
+ *     render a flat zero-state chart panel instead of a null chart hole. The
+ *     headline rule is separate — see `HEADLINE_IS_WINDOWED_DELTA` below.
+ *   - HEADLINE_IS_WINDOWED_DELTA: the big PnL number is `last.pnl − first.pnl`
+ *     of the current interval's series — the chart's start-to-end change. The
+ *     upstream `series[last].p` is lifetime cumulative regardless of `interval`,
+ *     so reading `last` alone would mislabel "Past week" with lifetime PnL
+ *     (task.0389). Empty/missing history renders "—", not "$0.00".
  * Side-effects: none
  * Links: docs/design/wallet-analysis-components.md
  * @public
@@ -77,13 +83,15 @@ export function WalletProfitLossCard({
     );
   }
 
-  const latestPnl = history?.at(-1)?.pnl ?? 0;
+  const windowedPnl = computeWindowedPnl(history);
   const accentClass =
-    latestPnl > 0
-      ? "text-success"
-      : latestPnl < 0
-        ? "text-destructive"
-        : "text-muted-foreground";
+    windowedPnl === null
+      ? "text-muted-foreground"
+      : windowedPnl > 0
+        ? "text-success"
+        : windowedPnl < 0
+          ? "text-destructive"
+          : "text-muted-foreground";
 
   return (
     <div className="space-y-4 rounded-xl border border-border/60 bg-muted/10 p-4">
@@ -113,7 +121,7 @@ export function WalletProfitLossCard({
         <div className={`font-medium text-sm ${accentClass}`}>Profit/Loss</div>
         <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
           <div className="font-semibold text-4xl tabular-nums tracking-tight">
-            {formatUsd(latestPnl)}
+            {windowedPnl === null ? "—" : formatUsd(windowedPnl)}
           </div>
           <div className="pb-1 text-muted-foreground text-sm">
             {rangeLabel(interval)}
@@ -184,12 +192,30 @@ export function WalletProfitLossCard({
           <div className="absolute inset-x-6 bottom-14 h-10 rounded-md bg-primary/15 blur-xl" />
           <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-primary/10 to-transparent" />
           <div className="absolute right-4 bottom-4 text-muted-foreground text-xs">
-            No realized P/L yet.
+            No P/L history yet.
           </div>
         </div>
       )}
     </div>
   );
+}
+
+/**
+ * Windowed PnL = `last.pnl − first.pnl` of the upstream series for the current
+ * interval. Returns `null` when the history is empty or has fewer than two
+ * points (single-point series can't express a delta). Caller renders "—".
+ *
+ * Invariant `HEADLINE_IS_WINDOWED_DELTA` (task.0389) — `series[last].p` alone
+ * is lifetime cumulative regardless of `interval`, so this delta is the only
+ * reading that matches the interval label ("Past week", "Past month", etc).
+ */
+export function computeWindowedPnl(
+  history: readonly WalletPnlHistoryPoint[] | undefined
+): number | null {
+  if (!history || history.length < 2) return null;
+  const first = history[0]?.pnl ?? 0;
+  const last = history[history.length - 1]?.pnl ?? 0;
+  return last - first;
 }
 
 function formatUsd(value: number): string {

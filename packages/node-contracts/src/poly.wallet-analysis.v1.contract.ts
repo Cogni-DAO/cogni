@@ -5,6 +5,10 @@
  * Module: `@contracts/poly.wallet-analysis.v1.contract`
  * Purpose: Contract for the wallet-analysis HTTP route — single route, slice-scoped via `include`, covers any 0x Polymarket wallet.
  * Scope: GET /api/v1/poly/wallets/:addr?include=snapshot|trades|balance|pnl. Read-only; does not place orders, does not mutate state. Each request returns the subset of slices named in `include`. Never throws on partial-failure of one slice — surfaces it via `warnings`.
+ * NOTE: This file's location violates the `@cogni/node-contracts` boundary —
+ *   per-node contracts do not belong in the cross-node shared package. Tracked
+ *   as bug.0386 (`@cogni/node-contracts` leaks node-specific contracts). Do not
+ *   add new node-specific contracts here; relocate when bug.0386 ships.
  * Invariants:
  *   - Any 0x address accepted; `addr` lowercased before handler logic.
  *   - Snapshot metric fields are `null` until the resolved-position count meets the minimum (research doc threshold, default 5).
@@ -38,17 +42,20 @@ export const WalletAnalysisSliceSchema = z.enum([
 ]);
 export type WalletAnalysisSlice = z.infer<typeof WalletAnalysisSliceSchema>;
 
-/** Deterministic metrics (realized WR/ROI/DD/duration + live activity). Nullable numerics when sample is insufficient. */
+/**
+ * Deterministic trade-derived metrics (winrate, duration, activity counts).
+ * Nullable numerics when sample is insufficient.
+ *
+ * PnL is **not** in this slice. PnL of any flavour (realized, ROI, drawdown,
+ * peak equity) is sourced exclusively from the `pnl` slice — Polymarket's
+ * `user-pnl-api`. See task.0389: rendering both a bespoke realized-PnL number
+ * and Polymarket's series side-by-side guaranteed they would disagree.
+ */
 export const WalletAnalysisSnapshotSchema = z.object({
   resolvedPositions: z.number().int().nonnegative(),
   wins: z.number().int().nonnegative(),
   losses: z.number().int().nonnegative(),
   trueWinRatePct: z.number().nullable(),
-  realizedPnlUsdc: z.number().nullable(),
-  realizedRoiPct: z.number().nullable(),
-  maxDrawdownUsdc: z.number().nullable(),
-  maxDrawdownPctOfPeak: z.number().nullable(),
-  peakEquityUsdc: z.number().nullable(),
   medianDurationHours: z.number().nullable(),
   openPositions: z.number().int().nonnegative(),
   openNetCostUsdc: z.number(),

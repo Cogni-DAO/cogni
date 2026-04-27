@@ -100,18 +100,17 @@ export type WalletPosition = {
 };
 
 /**
- * Realized-outcome metrics are nullable when the resolved-position sample is
- * too small to be meaningful (< `minResolvedForMetrics` in
+ * Trade-derived metrics. Nullable when the resolved-position sample is too
+ * small to be meaningful (< `minResolvedForMetrics` in
  * `packages/market-provider/src/analysis/wallet-metrics.ts`, default 5).
  * The UI must distinguish "0%" (real) from "not enough data" (null) —
  * molecules render an em-dash for null rather than a fake zero.
+ *
+ * PnL lives on `WalletPnl`, not here. See task.0389.
  */
 export type WalletSnapshot = {
   n: number;
   wr: number | null;
-  roi: number | null;
-  pnl: string;
-  dd: number | null;
   medianDur: string;
   avgPerDay: number | null;
   hypothesisMd?: string;

@@ -163,9 +163,6 @@ function mapSnapshot(
   return {
     n: s.resolvedPositions,
     wr: s.trueWinRatePct,
-    roi: s.realizedRoiPct,
-    pnl: s.realizedPnlUsdc !== null ? formatUsd(s.realizedPnlUsdc) : "—",
-    dd: s.maxDrawdownPctOfPeak,
     medianDur:
       s.medianDurationHours !== null
         ? formatDuration(s.medianDurationHours)
@@ -232,13 +229,6 @@ function inferCategoryFromMarkets(
   return undefined;
 }
 
-function formatUsd(n: number): string {
-  const a = Math.abs(n);
-  const sign = n < 0 ? "-" : "";
-  if (a >= 1_000_000) return `${sign}$${(a / 1_000_000).toFixed(1)}M`;
-  if (a >= 1_000) return `${sign}$${(a / 1_000).toFixed(1)}k`;
-  return `${sign}$${Math.round(a)}`;
-}
 function formatDuration(hours: number): string {
   if (hours < 1) return `${Math.round(hours * 60)} min`;
   if (hours < 24) return `${hours.toFixed(1)}h`;

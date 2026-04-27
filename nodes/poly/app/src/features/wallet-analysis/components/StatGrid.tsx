@@ -3,9 +3,12 @@
 
 /**
  * Module: `@features/wallet-analysis/components/StatGrid`
- * Purpose: 6-cell stat grid for snapshot metrics — WR, ROI, PnL, DD, median hold, avg trades/day.
+ * Purpose: 3-cell stat grid for snapshot metrics — WR, median hold, avg trades/day.
  * Scope: Presentational only. Renders skeleton cells when snapshot is undefined.
- * Invariants: Always renders 6 cells; empty cells show "—" (no value).
+ * Invariants:
+ *   - Always renders 3 cells; empty cells show "—" (no value).
+ *   - PnL/ROI/drawdown intentionally absent — Polymarket's user-pnl series
+ *     owns those numbers via `WalletProfitLossCard` (task.0389).
  * Side-effects: none
  * @public
  */
@@ -25,8 +28,8 @@ export type StatGridProps = {
 export function StatGrid({ snapshot, isLoading }: StatGridProps): ReactElement {
   if (isLoading || !snapshot) {
     return (
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border md:grid-cols-6">
-        {Array.from({ length: 6 }).map((_, i) => (
+      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
           <div
             // biome-ignore lint/suspicious/noArrayIndexKey: skeleton cells
             key={i}
@@ -41,7 +44,7 @@ export function StatGrid({ snapshot, isLoading }: StatGridProps): ReactElement {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border md:grid-cols-6">
+    <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3">
       <Cell
         label="True WR"
         value={snapshot.wr === null ? "—" : `${snapshot.wr.toFixed(1)}%`}
@@ -53,24 +56,6 @@ export function StatGrid({ snapshot, isLoading }: StatGridProps): ReactElement {
               : `n=${snapshot.n} — need ≥5 for stats`
             : `over n=${snapshot.n}`
         }
-      />
-      <Cell
-        label="Realized ROI"
-        value={snapshot.roi === null ? "—" : `+${snapshot.roi.toFixed(1)}%`}
-        tone={snapshot.roi === null ? "muted" : "success"}
-      />
-      <Cell label="Realized PnL" value={snapshot.pnl} />
-      <Cell
-        label="Max DD"
-        value={snapshot.dd === null ? "—" : `${snapshot.dd.toFixed(1)}%`}
-        tone={
-          snapshot.dd === null
-            ? "muted"
-            : snapshot.dd <= 10
-              ? "success"
-              : "warn"
-        }
-        hint="of peak equity"
       />
       <Cell label="Median hold" value={snapshot.medianDur} />
       <Cell

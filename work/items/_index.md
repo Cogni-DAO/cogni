@@ -230,6 +230,7 @@
 | 2 | 10 | 1 | needs_triage | bug.0385 | core__market_list drops Polymarket conditionId → /holders + /trades unreachable to the agent | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 11 | 3 | needs_triage | task.0048 | Sub-agent billing attribution — track which OpenClaw sub-agent made each LLM call | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 2 | 12 | 3 | needs_triage | task.0040 | Gateway memory curation worker — scan ephemeral state, persist valuable context, reset container | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
+| 2 | 12 | 3 | needs_triage | bug.0386 | @cogni/node-contracts package leaks node-specific contracts (poly.*, resy.*) into the shared cross-node surface | Cogni Poly | proj.poly-copy-trading |
 | 2 | 14 | 1 | needs_design | task.0079 | Create bot-generated Discord invite link for website |  |  |
 | 2 | 15 | 3 | needs_implement | task.0192 | Walk: Per-tenant BYO-AI — Profile page OAuth + DrizzleConnectionBroker | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 2 | 16 | 3 | needs_design | task.0003 | Sweep stale doc references across the codebase | Maximize OSS Tools | proj.maximize-oss-tools |
@@ -419,6 +420,7 @@
 | 1 | bug.0360 | Poly research Day tab hangs indefinitely — no timeout, no error state | Cogni Poly | proj.poly-prediction-bot |
 | 1 | bug.0381 | wait-for-in-cluster-services.sh ignores PROMOTED_APPS — every matrix cell waits for every Deployment | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | task.0384 | POST /api/v1/vcs/flight — CI-gated candidate-a flight endpoint + vcs/pr cleanup | Agentic Interoperability | proj.agentic-interop |
+| 1 | task.0389 | Poly wallet research — single-source PnL via Polymarket user-pnl-api | Cogni Poly | proj.poly-copy-trading |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 2 | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |
