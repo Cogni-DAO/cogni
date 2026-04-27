@@ -209,7 +209,7 @@ See [Database RLS Spec](database-rls.md) for the dual-client architecture and st
 
 **The gate:** `pnpm db:check` runs `drizzle-kit check` against every node config (operator + resy + poly Postgres + poly Doltgres). It catches missing snapshots, broken `prevId` chains, and self-referential snapshots. It is invoked automatically by `pnpm check` and `pnpm check:fast`.
 
-**Hard rule — do not paper over chain breaks:** never edit a _previously committed_ snapshot's `prevId` to "fix" a chain that `drizzle-kit check` rejects. That's a known footgun (see PR #930 / bug.0389) — the symptom you'd be hiding is real and gets worse the longer it's unaddressed. If `db:check` goes red, file a chain-restoration bug and fix the chain, not the script.
+**Hard rule — do not paper over chain breaks:** never edit a _previously committed_ snapshot's `prevId` to silence a `drizzle-kit check` failure. The symptom you'd be hiding is real and gets worse the longer it's unaddressed. If `db:check` goes red, fix the chain — don't rewrite history.
 
 ### 2.1 Local Development
 

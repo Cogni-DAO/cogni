@@ -80,8 +80,14 @@ The returned `repoSpecYaml` should be saved to `.cogni/repo-spec.yaml` in your r
 
 After on-chain formation, the new node needs infrastructure to run. These steps are **not automated yet** — each is a manual TODO:
 
-- [ ] **Scaffold node code from `nodes/node-template/`**: copy to `nodes/{node}/`, update package names + ports + drizzle config. Inherit the migration baseline as-is for now (until task.0390 flattens it).
-- [ ] **Wire drizzle scripts for the new node** (`package.json`): add `db:generate:{node}`, `db:migrate:{node}`, `db:check:{node}` mirroring an existing node's shape. **Extend the `db:check` umbrella** so pre-push and pre-commit gate the new chain (bug.0389 contract). Without this, hand-authored RLS migrations on the new node will silently rot its snapshot chain — exactly the failure poly hit. See [databases.md §2.6 Hand-Authored Migrations & Snapshot Chain Integrity](../spec/databases.md).
+- [ ] **Scaffold node code from `nodes/node-template/`**: copy to `nodes/{node}/`, update package names + ports + drizzle config.
+- [ ] **Set up the node's DB schema layer.** Cogni nodes share the **core schema** (`@cogni/db-schema` — auth, billing, ledger, identity) and extend it with a **node-local schema** (`@cogni/{node}-db-schema`) for tables only that node owns. The new node has its own database, drizzle config, and migration history — independent of other nodes.
+  1. Create `nodes/{node}/packages/db-schema/` for node-local tables; point `nodes/{node}/drizzle.config.ts` at it.
+  2. Add `db:generate:{node}`, `db:migrate:{node}`, `db:check:{node}` in `package.json`, mirroring an existing node.
+  3. Extend the `pnpm db:check` umbrella so the new chain is gated by pre-commit + pre-push.
+
+  Why the gate matters: drizzle-kit can't model RLS policies, triggers, or other Postgres-specific DDL, so those migrations get hand-authored. The matching snapshot has to be hand-authored too, or `db:generate:{node}` silently rots for the next contributor. `pnpm db:check` catches this. See [databases.md §2.6](../spec/databases.md).
+
 - [ ] **Add node overlay on the app branch**: Create `infra/k8s/overlays/{env}/{node}/kustomization.yaml` on `main` (via PR). `promote-and-deploy.yml` rsyncs `infra/k8s/` from main to each `deploy/*` branch except `env-state.yaml`, so overlays propagate automatically. Copy an existing node's overlay and update `namePrefix`, `NodePort`, secret refs, and the kustomize `replacements:` block. Do NOT hand-edit overlays on deploy branches — invariant `INFRA_K8S_MAIN_DERIVED` (bug.0334) requires they track main. Seed `env-state.yaml` via `provision-test-vm.sh`.
 - [ ] **Add catalog entry**: Create `infra/catalog/{node}.yaml` on the app branch. Argo ApplicationSets discover nodes via catalog files — without this, Argo won't create an Application for the new node.
 - [ ] **Create k8s secrets**: `{node}-node-app-secrets` in each target namespace. `deploy-infra.sh` creates these from GitHub environment secrets, but a new node needs its own DB and credentials.
