@@ -943,14 +943,11 @@ function createContainer(): Container {
   }
 
   // ToolSource with real implementations (per CAPABILITY_INJECTION).
-  // `polyTradeCapability` is intentionally omitted post-cutover: the
-  // single-operator `PolyTradeCapability` (place/list/cancel/close) is a
-  // v0 regression on the agent tool surface. Tool bindings substitute a
-  // "not configured" stub for `core__poly_{place_trade,list_orders,cancel_order}`.
-  // Re-enabling the surface means dispatching through the per-tenant
-  // `PolyTradeExecutor` with the invoking user's `billing_account_id` — a
-  // follow-up once the agent runtime surfaces actor identity at tool
-  // invocation time.
+  // The agent-facing trade tools (core__poly_{place_trade,list_orders,
+  // cancel_order}) are intentionally NOT in POLY_TOOL_BUNDLE — their contracts
+  // live in @cogni/poly-ai-tools for the future per-tenant re-wire (dispatch
+  // through PolyTradeExecutor with actor identity at tool invocation time).
+  // See bug.0319 ckpt 3.
   const toolBindings = createToolBindings({
     knowledgeCapability,
     marketCapability,

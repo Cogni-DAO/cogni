@@ -2,7 +2,7 @@
 id: bug.0319
 type: bug
 title: "Move node-only ai-tools into nodes/<X>/packages/ai-tools to satisfy SINGLE_DOMAIN_HARD_FAIL; kill the global TOOL_CATALOG closed-world iteration"
-status: needs_implement
+status: needs_review
 branch: fix/per-node-ai-tools-design
 priority: 1
 rank: 50
@@ -308,7 +308,10 @@ A poly-only ai-tool PR (e.g. "add `core__poly_data_market_outcomes`") touches fi
 
 Single PR, multiple checkpoints. Candidate-a flighting happens on this PR after Checkpoint 1.
 
-- [x] **Checkpoint 1 — Phase 1: Open-world tool source factory (back-compat preserved)** ✅ landed
+- [x] **Checkpoint 1 — Phase 1: Open-world tool source factory (back-compat preserved)** ✅ landed (commit `3a225cc03`, validated on candidate-a → 🟢 PASS)
+- [x] **Checkpoint 2 — Phase 2: Extract `@cogni/poly-ai-tools`** ✅ landed (commit `05fef38f3` + DRY cleanup `b8d3dd7d9`)
+- [x] **Checkpoint 3 — Drop dead poly trade tools from agent surface (Path A)** ✅ landed
+  - **Pivot from original Phase 3 design:** discovered during pre-flight that poly's `polyTradeCapability` is intentionally always-undefined post-cutover (single-operator surface was a v0 regression awaiting per-tenant `PolyTradeExecutor` re-wire). Original "fail-loud on missing env" plan didn't apply — env IS set; the surface was deliberately disconnected. Path A removes the dead surface area honestly: drop `polyPlaceTrade`/`polyListOrders`/`polyCancelOrder` from POLY_TOOL_BUNDLE + bindings; drop optional `polyTradeCapability?` from `ToolBindingDeps`. Contracts stay exported from `@cogni/poly-ai-tools` for the future re-wire.
   - Milestone: each node's `container.ts` explicitly passes its full contract list to `createBoundToolSource(contracts, bindings)`. Runtime behavior is byte-identical to today (each node still composes the full set), but the iteration site moves from inside the shared factory to the node's container. Enables Checkpoint 2 to scope per-node bundles without touching the factory again.
   - Invariants: `TOOL_BINDING_REQUIRED → TOOL_BINDING_LOCAL`, `SIMPLE_SOLUTION`, `ARCHITECTURE_ALIGNMENT`
   - Todos:

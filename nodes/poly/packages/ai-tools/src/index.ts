@@ -213,10 +213,6 @@ export {
 
 import type { CatalogBoundTool } from "@cogni/ai-tools";
 import { marketListBoundTool } from "./tools/market-list";
-import { polyCancelOrderBoundTool } from "./tools/poly-cancel-order";
-// Note: polyClosePositionBoundTool is intentionally excluded from the bundle.
-// It is used internally by the copy-trade reconciler, not exposed as a
-// directly-bindable agent tool in the composition array.
 import { polyDataActivityBoundTool } from "./tools/poly-data-activity";
 import { polyDataHelpBoundTool } from "./tools/poly-data-help";
 import { polyDataHoldersBoundTool } from "./tools/poly-data-holders";
@@ -224,8 +220,6 @@ import { polyDataPositionsBoundTool } from "./tools/poly-data-positions";
 import { polyDataResolveUsernameBoundTool } from "./tools/poly-data-resolve-username";
 import { polyDataTradesMarketBoundTool } from "./tools/poly-data-trades-market";
 import { polyDataValueBoundTool } from "./tools/poly-data-value";
-import { polyListOrdersBoundTool } from "./tools/poly-list-orders";
-import { polyPlaceTradeBoundTool } from "./tools/poly-place-trade";
 import { walletTopTradersBoundTool } from "./tools/wallet-top-traders";
 
 /**
@@ -235,13 +229,16 @@ import { walletTopTradersBoundTool } from "./tools/wallet-top-traders";
  * from @cogni/ai-tools. This bundle is the second half of poly's composition:
  *   createBoundToolSource([...CORE_TOOL_BUNDLE, ...POLY_TOOL_BUNDLE], toolBindings)
  *
- * Note: polyClosePositionBoundTool is exported but NOT in this bundle — the
- * close-position tool is an internal reconciler pathway, not a direct agent
- * surface (Phase 3 may revisit once per-user trade routing is complete).
+ * Tools NOT in the bundle but still exported by the package (contracts kept
+ * for future re-wire — agent surface is closed today):
+ *   - polyPlaceTradeBoundTool / polyListOrdersBoundTool / polyCancelOrderBoundTool —
+ *     pending per-tenant routing through PolyTradeExecutor with actor identity at
+ *     tool-invocation time (see bug.0319 ckpt 3).
+ *   - polyClosePositionBoundTool — used internally by the copy-trade reconciler,
+ *     not exposed as a directly-bindable agent tool.
  */
 export const POLY_TOOL_BUNDLE: readonly CatalogBoundTool[] = [
   marketListBoundTool as CatalogBoundTool,
-  polyCancelOrderBoundTool as CatalogBoundTool,
   polyDataActivityBoundTool as CatalogBoundTool,
   polyDataHelpBoundTool as CatalogBoundTool,
   polyDataHoldersBoundTool as CatalogBoundTool,
@@ -249,7 +246,5 @@ export const POLY_TOOL_BUNDLE: readonly CatalogBoundTool[] = [
   polyDataResolveUsernameBoundTool as CatalogBoundTool,
   polyDataTradesMarketBoundTool as CatalogBoundTool,
   polyDataValueBoundTool as CatalogBoundTool,
-  polyListOrdersBoundTool as CatalogBoundTool,
-  polyPlaceTradeBoundTool as CatalogBoundTool,
   walletTopTradersBoundTool as CatalogBoundTool,
 ];

@@ -65,23 +65,18 @@ import {
 import type {
   MarketCapability,
   PolyDataCapability,
-  PolyTradeCapability,
   WalletCapability,
 } from "@cogni/poly-ai-tools";
 import {
   createMarketListImplementation,
-  createPolyCancelOrderImplementation,
   createPolyDataActivityImplementation,
   createPolyDataHoldersImplementation,
   createPolyDataPositionsImplementation,
   createPolyDataResolveUsernameImplementation,
   createPolyDataTradesMarketImplementation,
   createPolyDataValueImplementation,
-  createPolyListOrdersImplementation,
-  createPolyPlaceTradeImplementation,
   createWalletTopTradersImplementation,
   MARKET_LIST_NAME,
-  POLY_CANCEL_ORDER_NAME,
   POLY_DATA_ACTIVITY_NAME,
   POLY_DATA_HELP_NAME,
   POLY_DATA_HOLDERS_NAME,
@@ -89,12 +84,7 @@ import {
   POLY_DATA_RESOLVE_USERNAME_NAME,
   POLY_DATA_TRADES_MARKET_NAME,
   POLY_DATA_VALUE_NAME,
-  POLY_LIST_ORDERS_NAME,
-  POLY_PLACE_TRADE_NAME,
-  polyCancelOrderStubImplementation,
   polyDataHelpImplementation,
-  polyListOrdersStubImplementation,
-  polyPlaceTradeStubImplementation,
   WALLET_TOP_TRADERS_NAME,
 } from "@cogni/poly-ai-tools";
 
@@ -106,12 +96,6 @@ export interface ToolBindingDeps {
   readonly knowledgeCapability: KnowledgeCapability;
   readonly marketCapability: MarketCapability;
   readonly metricsCapability: MetricsCapability;
-  /**
-   * Optional — when undefined the `core__poly_place_trade` tool is registered
-   * with a stub that throws a clear error on invocation. Happens when
-   * OPERATOR_WALLET_ADDRESS / POLY_CLOB_* / PRIVY_* env is incomplete.
-   */
-  readonly polyTradeCapability?: PolyTradeCapability | undefined;
   /**
    * PolyDataCapability — backs the 7 `core__poly_data_*` research tools (task.0386).
    * Always required on poly (Data API is public).
@@ -178,26 +162,11 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
       metricsCapability: deps.metricsCapability,
     }) as AnyToolImplementation,
 
-    // core__poly_place_trade: real impl when env is complete; stub otherwise
-    // (stub throws a clear error message on invocation). Matches the knowledge-
-    // store pattern of "install a no-op when the backing port is absent".
-    [POLY_PLACE_TRADE_NAME]: (deps.polyTradeCapability
-      ? createPolyPlaceTradeImplementation({
-          polyTradeCapability: deps.polyTradeCapability,
-        })
-      : polyPlaceTradeStubImplementation) as AnyToolImplementation,
-
-    [POLY_LIST_ORDERS_NAME]: (deps.polyTradeCapability
-      ? createPolyListOrdersImplementation({
-          polyTradeCapability: deps.polyTradeCapability,
-        })
-      : polyListOrdersStubImplementation) as AnyToolImplementation,
-
-    [POLY_CANCEL_ORDER_NAME]: (deps.polyTradeCapability
-      ? createPolyCancelOrderImplementation({
-          polyTradeCapability: deps.polyTradeCapability,
-        })
-      : polyCancelOrderStubImplementation) as AnyToolImplementation,
+    // core__poly_{place_trade,list_orders,cancel_order} are intentionally NOT
+    // bound here. Their contracts live in @cogni/poly-ai-tools for the future
+    // per-tenant re-wire (PolyTradeExecutor + actor identity at tool invocation
+    // time), but they are absent from POLY_TOOL_BUNDLE and so are not exposed
+    // to agents today. See bug.0319 ckpt 3.
 
     // Poly Data-API research tools (task.0386) — poly brains can call these
     // to research arbitrary proxy-wallets. Backed by public Data API (no auth).
