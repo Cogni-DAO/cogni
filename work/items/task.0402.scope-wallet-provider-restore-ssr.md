@@ -119,22 +119,28 @@ operator pays.
 
 ## Validation
 
-exercise: |
-Phase 1 — on candidate-a operator: 1. `curl -s https://<candidate-a-operator>/dashboard | head -c 4000`
-must return a non-empty HTML body containing the sidebar/topbar
-chrome and the dashboard headline (proving SSR is back). 2. Open the same URL in a real browser with JS disabled — the
-chrome and skeletons should still render. 3. Re-enable JS, click "Connect Wallet" → RainbowKit modal opens,
-connect succeeds, balance loads on /credits. (Wallet path still works.) 4. Bundle analyzer report: non-wallet route group's first-load JS
-should drop noticeably (target: -100 kB+ gzip vs current).
-Phase 2 — repeat #1 and #3 on candidate-a poly + resy + node-template.
+```
+exercise:
+  Phase 1 — on candidate-a operator:
+    1. `curl -s https://<candidate-a-operator>/dashboard | head -c 4000`
+       must return a non-empty HTML body containing the sidebar/topbar
+       chrome and the dashboard headline (proving SSR is back).
+    2. Open the same URL in a real browser with JS disabled — the
+       chrome and skeletons should still render.
+    3. Re-enable JS, click "Connect Wallet" → RainbowKit modal opens,
+       connect succeeds, balance loads on /credits. (Wallet path still works.)
+    4. Bundle analyzer report: non-wallet route group's first-load JS
+       should drop noticeably (target: -100 kB+ gzip vs current).
+  Phase 2 — repeat #1 and #3 on candidate-a poly + resy + node-template.
 
-observability: |
-Loki query at the deployed SHA, scoped to the agent's own session:
-{app="operator", env="candidate-a"} |= "/dashboard"
-| json | http_status_code = "200"
-| line_format "{{.method}} {{.path}} {{.duration_ms}}"
-Confirm a 200 with a non-trivial response size for the SSR HTML
-request (not just the JS chunk request).
+observability:
+  Loki query at the deployed SHA, scoped to the agent's own session:
+    {app="operator", env="candidate-a"} |= "/dashboard"
+       | json | http_status_code = "200"
+       | line_format "{{.method}} {{.path}} {{.duration_ms}}"
+  Confirm a 200 with a non-trivial response size for the SSR HTML
+  request (not just the JS chunk request).
+```
 
 ## Out of Scope
 
