@@ -2,7 +2,7 @@
 id: task.0402
 type: task
 title: "Restore SSR — adopt wagmi's canonical Next.js App Router SSR pattern"
-status: done
+status: needs_implement
 priority: 0
 rank: 1
 estimate: 2
@@ -15,7 +15,7 @@ credit:
 project:
 pr: https://github.com/Cogni-DAO/node-template/pull/1081
 reviewer:
-revision: 0
+revision: 1
 blocked_by: []
 deploy_verified: false
 created: 2026-04-27
@@ -446,3 +446,9 @@ observability:
   alias also turns out to be removable, do it as a follow-up under
   bug.0157 directly.
 - Implements spike.0401 Phase 2a (the SSR-restore step).
+
+## PR / Links
+
+- PR: https://github.com/Cogni-DAO/node-template/pull/1081 (red,
+  candidate-flight blocked on PR Build failure — see handoff)
+- Handoff: [handoff](../handoffs/task.0402.handoff.md)
