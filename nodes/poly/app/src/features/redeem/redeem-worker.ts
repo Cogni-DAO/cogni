@@ -6,10 +6,14 @@
  * Purpose: In-process worker for the event-driven CTF redeem pipeline (task.0388).
  *   Two responsibilities, one tick interval:
  *     1. Drain `pending` rows: dispatch CTF or NegRiskAdapter per `decision.flavor`,
- *        decode the receipt for funder-burn presence, transition to `submitted`.
- *     2. Reap stale `submitted` rows: rows that passed N=5 finality without an
- *        observed `PayoutRedemption` from funder. Branch on `receiptBurnObserved`
- *        per `core/redeem/transitions`.
+ *        decode the receipt for funder-burn presence (persisted as observational
+ *        only), transition to `submitted`.
+ *     2. Reap stale `submitted` rows past N=5 finality. Batch-fetches
+ *        `PayoutRedemption(redeemer=funder)` logs per flavor (CTF vs
+ *        NegRiskAdapter) and falls back to `balanceOf` per condition that
+ *        didn't match. Dispatches `reaper_chain_evidence` to
+ *        `core/redeem/transitions`. RPC failure on `getLogs` defers all
+ *        candidates of that flavor to the next tick.
  *   Replaces the old `runRedeemSweep` polling loop in `poly-trade-executor.ts`.
  * Scope: One instance per pod. Uses `FOR UPDATE SKIP LOCKED` for concurrency.
  *   No periodic Data-API enumerate-and-fire; all enqueues come from the
@@ -28,7 +32,8 @@
  *     escalate via `transitions` to `abandoned/transient_exhausted`.
  *   - FINALITY_IS_FIXED_N — reaper uses `REDEEM_FINALITY_BLOCKS` from env.
  * Side-effects: IO (Polygon RPC writes + reads, DB).
- * Links: docs/design/poly-positions.md § Worker, work/items/task.0388
+ * Links: docs/design/poly-positions.md § Worker, work/items/task.0388,
+ *   work/items/bug.0403
  * @public
  */
 

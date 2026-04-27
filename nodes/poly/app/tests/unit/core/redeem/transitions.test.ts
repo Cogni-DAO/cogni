@@ -6,7 +6,8 @@
  * Purpose: Exhaustive coverage of the redeem job state machine. Every
  *   invariant in `core/redeem/transitions.ts` has at least one fixture here.
  * Scope: Pure logic only. No DB, no chain, no time.
- * Links: src/core/redeem/transitions.ts, work/items/task.0388
+ * Links: src/core/redeem/transitions.ts, work/items/task.0388,
+ *   work/items/bug.0403
  */
 
 import { describe, expect, it } from "vitest";
