@@ -8,7 +8,7 @@
  * Invariants:
  *   - Always renders 3 cells; empty cells show "—" (no value).
  *   - PnL/ROI/drawdown intentionally absent — Polymarket's user-pnl series
- *     owns those numbers via `WalletProfitLossCard` (task.0387).
+ *     owns those numbers via `WalletProfitLossCard` (task.0389).
  * Side-effects: none
  * @public
  */

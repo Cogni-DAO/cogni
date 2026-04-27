@@ -15,7 +15,7 @@
  *     of the current interval's series — the chart's start-to-end change. The
  *     upstream `series[last].p` is lifetime cumulative regardless of `interval`,
  *     so reading `last` alone would mislabel "Past week" with lifetime PnL
- *     (task.0387). Empty/missing history renders "—", not "$0.00".
+ *     (task.0389). Empty/missing history renders "—", not "$0.00".
  * Side-effects: none
  * Links: docs/design/wallet-analysis-components.md
  * @public
@@ -205,7 +205,7 @@ export function WalletProfitLossCard({
  * interval. Returns `null` when the history is empty or has fewer than two
  * points (single-point series can't express a delta). Caller renders "—".
  *
- * Invariant `HEADLINE_IS_WINDOWED_DELTA` (task.0387) — `series[last].p` alone
+ * Invariant `HEADLINE_IS_WINDOWED_DELTA` (task.0389) — `series[last].p` alone
  * is lifetime cumulative regardless of `interval`, so this delta is the only
  * reading that matches the interval label ("Past week", "Past month", etc).
  */

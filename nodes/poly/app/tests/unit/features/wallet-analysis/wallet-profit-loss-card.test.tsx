@@ -13,7 +13,7 @@
  *     not a fake "$0.00" baseline.
  *   - WINDOWED_DELTA: populated histories show `last.pnl − first.pnl`, not the
  *     raw `last.pnl` (which is lifetime cumulative regardless of interval —
- *     task.0387).
+ *     task.0389).
  * Side-effects: none
  * Links: docs/design/wallet-analysis-components.md
  * @internal

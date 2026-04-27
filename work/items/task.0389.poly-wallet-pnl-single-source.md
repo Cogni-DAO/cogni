@@ -1,5 +1,5 @@
 ---
-id: task.0387
+id: task.0389
 type: task
 title: "Poly wallet research — single-source PnL via Polymarket user-pnl-api"
 status: needs_merge
@@ -27,7 +27,7 @@ external_refs:
   - packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts
 ---
 
-# task.0387 — Single-source PnL via Polymarket user-pnl-api
+# task.0389 — Single-source PnL via Polymarket user-pnl-api
 
 > Filed 2026-04-26 after critical analysis of "wallet research stats for time windows are consistently wrong." Root cause is not an upstream bug — it is that we render two PnL numbers with two different definitions side-by-side and they disagree.
 

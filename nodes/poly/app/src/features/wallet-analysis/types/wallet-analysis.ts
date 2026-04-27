@@ -92,7 +92,7 @@ export type WalletPosition = {
  * The UI must distinguish "0%" (real) from "not enough data" (null) —
  * molecules render an em-dash for null rather than a fake zero.
  *
- * PnL lives on `WalletPnl`, not here. See task.0387.
+ * PnL lives on `WalletPnl`, not here. See task.0389.
  */
 export type WalletSnapshot = {
   n: number;

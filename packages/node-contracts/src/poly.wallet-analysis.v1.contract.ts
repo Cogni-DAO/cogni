@@ -44,7 +44,7 @@ export type WalletAnalysisSlice = z.infer<typeof WalletAnalysisSliceSchema>;
  *
  * PnL is **not** in this slice. PnL of any flavour (realized, ROI, drawdown,
  * peak equity) is sourced exclusively from the `pnl` slice — Polymarket's
- * `user-pnl-api`. See task.0387: rendering both a bespoke realized-PnL number
+ * `user-pnl-api`. See task.0389: rendering both a bespoke realized-PnL number
  * and Polymarket's series side-by-side guaranteed they would disagree.
  */
 export const WalletAnalysisSnapshotSchema = z.object({
