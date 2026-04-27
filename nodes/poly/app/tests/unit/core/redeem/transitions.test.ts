@@ -242,6 +242,16 @@ describe("transition: reaper_chain_evidence (REAPER_QUERIES_CHAIN_TRUTH)", () =>
     });
     expect(result.ok).toBe(false);
   });
+
+  it("rejects reaper from confirmed (idempotent re-tick)", () => {
+    const result = transition(
+      { ...baseJob, status: "confirmed", receiptBurnObserved: true },
+      { kind: "reaper_chain_evidence", payoutObserved: true, balance: 0n }
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.rejection).toBe("wrong_status_for_event");
+  });
 });
 
 describe("transition: terminal `abandoned` rows accept nothing", () => {

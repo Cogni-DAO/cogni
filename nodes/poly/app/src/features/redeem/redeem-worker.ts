@@ -339,6 +339,10 @@ export class RedeemWorker {
     // Batch one PayoutRedemption getLogs per flavor group across all
     // candidates: filter by funder topic + the contract appropriate to the
     // flavor, fromBlock = min(submittedAtBlock) - 1, toBlock = head.
+    // `null` return = RPC failure → defer all candidates of that flavor to
+    // next tick. Falling through to balanceOf on a getLogs RPC flake would
+    // pollute the `balance_zero_no_payout` audit channel with false-positive
+    // off-pipeline-settlement signals.
     const ctfJobs = candidates.filter((j) => !isNegRiskFlavor(j.flavor));
     const negJobs = candidates.filter((j) => isNegRiskFlavor(j.flavor));
     const ctfPayouts = await this.fetchPayoutMap(ctfJobs, headBlock, "ctf");
@@ -346,6 +350,7 @@ export class RedeemWorker {
 
     for (const job of candidates) {
       const payouts = isNegRiskFlavor(job.flavor) ? negPayouts : ctfPayouts;
+      if (payouts === null) continue; // RPC-deferred for this flavor
       const payoutTx = payouts.get(job.conditionId.toLowerCase());
 
       let balance = 0n;
@@ -451,12 +456,17 @@ export class RedeemWorker {
    * smallest range covering all candidate submissions. Returns a Map keyed by
    * lowercase conditionId → tx hash of the matching log. Restricted to
    * `redeemer == funder` via the indexed-topic filter (no per-log scan).
+   *
+   * Returns `null` to signal RPC failure — caller defers all candidates of
+   * this flavor to the next tick rather than falling through to `balanceOf`,
+   * which would mark genuine-redeemed positions as `balance_zero_no_payout`
+   * and pollute the off-pipeline-settlement audit signal.
    */
   private async fetchPayoutMap(
     jobs: ReadonlyArray<RedeemJob>,
     headBlock: bigint,
     kind: "ctf" | "negrisk"
-  ): Promise<Map<string, `0x${string}`>> {
+  ): Promise<Map<string, `0x${string}`> | null> {
     const map = new Map<string, `0x${string}`>();
     if (jobs.length === 0) return map;
     const minBlock = jobs.reduce<bigint>(
@@ -510,8 +520,6 @@ export class RedeemWorker {
         }
       }
     } catch (err) {
-      // Best-effort: on getLogs failure, return empty map. Callers fall back
-      // to balanceOf and may defer if that also fails. Next tick retries.
       this.deps.logger.warn(
         {
           event: "poly.ctf.redeem.reaper_getlogs_failed",
@@ -520,8 +528,9 @@ export class RedeemWorker {
           to: headBlock.toString(),
           err: err instanceof Error ? err.message : String(err),
         },
-        "redeem-worker: reaper getLogs failed; will retry next tick"
+        "redeem-worker: reaper getLogs failed; deferring flavor to next tick"
       );
+      return null;
     }
     return map;
   }
