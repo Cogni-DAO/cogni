@@ -37,6 +37,25 @@ external_refs:
 
 # Capability B — Event-Driven Redeem Job Queue
 
+## 🔴 v0.1 bleed is LIVE in prod (read this first)
+
+As of 2026-04-27 ~05:00Z, 5 neg-risk conditions on funder `0x95e407fE03996602Ed1BF4289ecb3B5AF88b5134` are firing `poly.ctf.redeem.ok` every ~90 s with fresh tx hashes — the bleed Capability A v0.1 was supposed to stop. Slow burn (~$0.03/cycle, ~$0.40/hr); Derek chose to leave it running rather than scale to 0. **Don't be confused by `.ok` events** — they mean tx-receipt-success, not burn-success.
+
+**Root cause.** `decideRedeem` in v0.1 routes ALL `negativeRisk:true` markets through `flavor: "neg-risk-parent"` against the standard CTF contract (`POLYGON_CONDITIONAL_TOKENS`) with `parentCollectionId: PARENT_COLLECTION_ID_ZERO`. For the conditions above, that call signature is a no-op against CTF — the tx mines successfully but no `TransferSingle` from funder is emitted; `balanceOf` stays > 0; next sweep tick fires again after the 60 s in-process cooldown expires. `decideRedeem`'s docstring (line 113-122) explicitly notes `neg-risk-adapter` is **reserved**; v0.1 ships without it and folds everything into the parent path. For these markets, that fold is wrong.
+
+**Loki proof** (cross-reference before doubting):
+
+```logql
+{env="production",service="app"} | json | event="poly.ctf.redeem.ok"
+  | condition_id="0x86c171b757d290aebed1d5a22e63da3c06900e6e9f42e84ac27baf89fcf09e4b"
+```
+
+5 distinct tx hashes for that condition_id in a 6-min window 04:46:44–04:52:44Z. Same pattern for `0x18ec34d0...`, `0x6178933348...`, `0xeb7627b6...`, `0x941012e7...`.
+
+**This task IS the fix.** The NegRiskAdapter contract address + ABI + `[yes, no]` 2-arg `redeemPositions` shape pinned in the frontmatter `summary` are the load-bearing pieces. CP1's worker MUST route any neg-risk position through the NegRiskAdapter (`0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296`), not standard CTF. Without that routing change, this task ships another rate-limited bleed instead of a fix.
+
+**Defense-in-depth ask** (small lift, big payoff): even after the routing fix lands, add an on-chain post-tx burn-verification gate. After `writeContract` returns + receipt confirms, decode logs and require **at least one** `TransferSingle(from=funder, value>0)` (CTF) OR the NegRiskAdapter `PayoutRedemption` from funder. If absent, transition the job to `abandoned` with `class: "malformed"` immediately. That single check catches this entire bug class — any future routing mistake reveals itself on the first tx, not after $N of bleed.
+
 ## Why
 
 Even with Capability A's predicate correct (task.0387), the polling sweep is the wrong architecture. Periodic enumerate-and-fire over a Data-API hint produces constant RPC load, races itself across ticks, requires in-process guards that die on restart, and forces `replicas: 1` in perpetuity. The design doc (`docs/design/poly-positions.md` § Capability B + Subscription) specifies a job table + `watchContractEvent` subscriptions + one worker. That is what this task ships.
