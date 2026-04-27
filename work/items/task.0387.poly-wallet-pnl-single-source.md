@@ -2,7 +2,7 @@
 id: task.0387
 type: task
 title: "Poly wallet research — single-source PnL via Polymarket user-pnl-api"
-status: needs_implement
+status: needs_merge
 revision: 1
 priority: 1
 rank: 5

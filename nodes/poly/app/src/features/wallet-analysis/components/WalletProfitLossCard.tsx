@@ -8,8 +8,9 @@
  * Scope: Presentational only. Accepts props + callback; does not fetch.
  * Invariants:
  *   - PNL_NOT_NAV: plots Polymarket P/L, not wallet balance.
- *   - ZERO_BASELINE_WHEN_EMPTY: funded or watched wallets with no realized P/L
- *     render a flat zero-state panel instead of a null chart hole.
+ *   - ZERO_BASELINE_WHEN_EMPTY: funded or watched wallets with no P/L history
+ *     render a flat zero-state chart panel instead of a null chart hole. The
+ *     headline rule is separate — see `HEADLINE_IS_WINDOWED_DELTA` below.
  *   - HEADLINE_IS_WINDOWED_DELTA: the big PnL number is `last.pnl − first.pnl`
  *     of the current interval's series — the chart's start-to-end change. The
  *     upstream `series[last].p` is lifetime cumulative regardless of `interval`,
@@ -191,7 +192,7 @@ export function WalletProfitLossCard({
           <div className="absolute inset-x-6 bottom-14 h-10 rounded-md bg-primary/15 blur-xl" />
           <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-primary/10 to-transparent" />
           <div className="absolute right-4 bottom-4 text-muted-foreground text-xs">
-            No realized P/L yet.
+            No P/L history yet.
           </div>
         </div>
       )}
@@ -211,8 +212,7 @@ export function WalletProfitLossCard({
 export function computeWindowedPnl(
   history: readonly WalletPnlHistoryPoint[] | undefined
 ): number | null {
-  if (!history || history.length === 0) return null;
-  if (history.length === 1) return 0;
+  if (!history || history.length < 2) return null;
   const first = history[0]?.pnl ?? 0;
   const last = history[history.length - 1]?.pnl ?? 0;
   return last - first;

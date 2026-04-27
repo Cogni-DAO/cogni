@@ -141,7 +141,7 @@
 | 1 | 5 | 3 | needs_triage | bug.0327 | No client-side crash telemetry — node apps can serve broken UX to users and we don't know | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 5 | 1 | needs_merge | bug.0333 | Base audit — move envs-identical ConfigMap values out of overlay patches into base | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 5 | 1 | needs_implement | bug.0379 | core__poly_data_holders schema is wrong — real /holders response is grouped per outcome token | Cogni Poly | proj.poly-prediction-bot |
-| 1 | 5 | 2 | needs_implement | task.0387 | Poly wallet research — single-source PnL via Polymarket user-pnl-api | Cogni Poly | proj.poly-copy-trading |
+| 1 | 5 | 2 | needs_merge | task.0387 | Poly wallet research — single-source PnL via Polymarket user-pnl-api | Cogni Poly | proj.poly-copy-trading |
 | 1 | 6 | 1 | needs_triage | bug.0036 | Chat route enqueues to closed assistant-stream controller — unhandled TypeError |  |  |
 | 1 | 6 | 1 | needs_triage | bug.0070 | OpenClaw CLI binary not executable as `openclaw` — agent CLI commands fail | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 6 | 2 | needs_design | task.0183 | Run list API: GET /api/v1/ai/runs — query graph_runs with filtering | Live Operations Dashboard | proj.live-dashboard |

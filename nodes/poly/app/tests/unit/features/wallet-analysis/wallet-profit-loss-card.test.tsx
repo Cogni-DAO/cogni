@@ -36,14 +36,15 @@ describe("WalletProfitLossCard", () => {
 
     expect(screen.getAllByText("Profit/Loss")).toHaveLength(2);
     expect(screen.getByText("—")).toBeInTheDocument();
-    expect(screen.getByText(/no realized p\/l yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/no p\/l history yet/i)).toBeInTheDocument();
   });
 
   it("shows windowed delta (last − first) and forwards interval changes", () => {
     const onIntervalChange = vi.fn();
 
-    // Lifetime cumulative at start = 100, at end = 103.5 → window delta = +3.5.
-    // Reading `last` alone would be +$103.50 (lifetime). The card must show +$3.50.
+    // Cumulative-as-of-window-start = 100, cumulative-as-of-window-end = 103.5
+    // → windowed delta = +3.5. Reading `last` alone would render +$103.50
+    // (the same lifetime-cumulative number for any interval). Card must show +$3.50.
     render(
       <WalletProfitLossCard
         history={[
@@ -69,10 +70,10 @@ describe("computeWindowedPnl", () => {
     expect(computeWindowedPnl([])).toBeNull();
   });
 
-  it("returns 0 for a single point (no delta expressible)", () => {
+  it("returns null for a single point — delta not expressible", () => {
     expect(
       computeWindowedPnl([{ ts: "2026-04-20T00:00:00.000Z", pnl: 42 }])
-    ).toBe(0);
+    ).toBeNull();
   });
 
   it("returns last − first for multi-point histories", () => {
