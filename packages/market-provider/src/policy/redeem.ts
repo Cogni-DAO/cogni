@@ -55,9 +55,19 @@ export type RedeemMalformedReason =
   | "outcome_index_out_of_range"
   | "missing_outcome_slot_count";
 
-/** Which on-chain redeem path the caller should route through. */
+/** Which on-chain redeem path the caller should route through.
+ *
+ * `binary` and `multi-outcome` both call `redeemPositions` against
+ * `PARENT_COLLECTION_ID_ZERO` on the standard CTF, so the executor's dispatch
+ * is identical for both today. The flavor distinction is **observability +
+ * future-proofing**: Loki / Grafana can split metrics by market topology, and
+ * a future neg-risk-adapter or multi-outcome-specific dispatch path can
+ * switch-exhaustive without ambiguity. Lumping multi-outcome into "binary" was
+ * the kind of name-vs-content confusion that produced bug.0384 — the type
+ * now matches the documented categorization in `decideRedeem`'s docstring. */
 export type RedeemFlavor =
   | "binary"
+  | "multi-outcome"
   | "neg-risk-parent"
   /** Reserved for follow-up — neg-risk markets that require the adapter
    * contract instead of CTF. The audit script (task.0387 CP2) will surface
@@ -189,15 +199,22 @@ export function decideRedeem(input: RedeemPolicyInput): RedeemDecision {
     };
   }
 
-  const indexSet =
-    input.outcomeSlotCount === 2
-      ? [1n, 2n]
-      : [1n << BigInt(input.outcomeIndex)];
+  if (input.outcomeSlotCount === 2) {
+    return {
+      kind: "redeem",
+      flavor: "binary",
+      parentCollectionId: REDEEM_PARENT_COLLECTION_ID_ZERO,
+      indexSet: [1n, 2n],
+      expectedShares,
+      expectedPayoutUsdc,
+    };
+  }
+
   return {
     kind: "redeem",
-    flavor: "binary",
+    flavor: "multi-outcome",
     parentCollectionId: REDEEM_PARENT_COLLECTION_ID_ZERO,
-    indexSet,
+    indexSet: [1n << BigInt(input.outcomeIndex)],
     expectedShares,
     expectedPayoutUsdc,
   };

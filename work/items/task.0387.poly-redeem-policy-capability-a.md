@@ -15,7 +15,7 @@ project: proj.poly-copy-trading
 branch: design/poly-positions
 pr:
 reviewer:
-revision: 1
+revision: 2
 blocked_by: []
 deploy_verified: false
 created: 2026-04-26
@@ -67,9 +67,11 @@ A pure module `packages/market-provider/policy/redeem` exporting `decideRedeem(i
 
 ## Validation
 
-`exercise:` Run `scripts/experiments/audit-redeem-fixtures.ts` against production Loki (last 30 days) + Polygon RPC. Output report must show ≥1 fixture covering each of: `binary-winner`, `binary-loser`, `binary-already-redeemed`, `neg-risk-parent`, `neg-risk-adapter`, `multi-outcome-winner`, `multi-outcome-loser`. Any class missing from real history is backfilled in `redeem.fixtures.ts` from contract source. After deploy to candidate-a, exercise: trigger a manual redeem on a known-resolved position via `POST /api/v1/poly/wallet/positions/redeem`; tx must produce `TransferSingle(from=funder)` on the receipt.
+**v0.1 scope (this PR — CP1 + CP3 only).** CP2 (Loki audit script + 30-day real-tx backfill) is deferred to v0.2 on this same task; the bleed-stop wire does not require it. v0.1 ships against synthetic + the existing `2026-04-25` snapshot fixture — `FIXTURE_COVERAGE_COMPLETE` is **partially** satisfied (5/7 classes have synthetic coverage; `neg-risk-adapter` is reserved/not emitted by v0.1; `multi-outcome` synthetic only). v0.2 promotes synthetic fixtures to real-tx-backed by running the audit script.
 
-`observability:` Loki query `{env="candidate-a"} |= "poly.ctf.redeem" | json` for the deploy SHA must show the `decideRedeem` call's structured log `policy_decision={kind, flavor, reason}`. The malformed-class events from the prior 24 hours (per the bleed incident) must stop appearing within one sweep tick post-deploy. Production Grafana panel "POL spent vs USDC redeemed slope" must show the slopes converging.
+`exercise:` After candidate-a flight, query Loki for `{env="candidate-a"} |= "policy_decision"` at deploy SHA — confirm structured `policy_decision={kind, flavor, reason}` field appears on every redeem-path call (sweep + manual). Trigger a manual redeem on a known-resolved condition via `POST /api/v1/poly/wallet/positions/redeem`; the receipt must show `TransferSingle(from=funder, value>0)` for a winner, OR a `policy_decision.kind="skip"` log with no tx fired for a non-winner.
+
+`observability:` Production `poly.ctf.redeem.ok` events followed by zero-burn must drop to zero within one sweep tick (~30 s) post-deploy. Grafana "POL spent vs USDC redeemed slope" panel shows the slopes converging instead of diverging. New `poly.ctf.redeem.malformed` Loki event fires zero times in steady state; if it does fire, follow the Class-A runbook in `docs/design/poly-positions.md` § Abandoned-position runbook.
 
 ## Invariants
 
@@ -98,7 +100,7 @@ A pure module `packages/market-provider/policy/redeem` exporting `decideRedeem(i
     - Test levels:
       - [ ] unit: `pnpm -F @cogni/market-provider test -- redeem-policy`
 
-- [ ] **Checkpoint 2 — Loki audit script + real-tx fixture backfill** — DEFERRED to follow-up PR. CP1 + CP3 stop the bleed on synthetic + existing real-Polygon-mainnet fixture (snapshot 2026-04-25, 16 rows, 2 neg-risk winners). CP2 builds the 30-day Loki audit script + cross-checks against testnet traces to PROVE `FIXTURE_COVERAGE_COMPLETE` from real data. Not ship-blocker for the bleed-stop; observability of the new `policy_decision` log on candidate-a substitutes pending the audit script. Tracked as task.0387-followup.
+- [ ] **Checkpoint 2 — Loki audit script + real-tx fixture backfill — DEFERRED to v0.2 on this same task.** CP1 + CP3 stop the bleed on synthetic + the existing real-Polygon-mainnet fixture (snapshot `2026-04-25`, 16 rows, 2 neg-risk winners). CP2 builds the 30-day Loki audit script + cross-checks against mainnet historical traces (per design doc § Before /implement) to PROVE `FIXTURE_COVERAGE_COMPLETE` from real data. Not a ship-blocker for the bleed-stop — observability of the new `policy_decision` log on candidate-a substitutes pending the audit. v0.2 lands as a follow-up commit on this same task.0387 (status loops back to `needs_implement` after v0.1 merges). No separate work item filed; CP2 is a checkpoint of this task, not a sibling task.
   - Milestone: `scripts/experiments/audit-redeem-fixtures.ts` runs against production Loki (last 30d of `poly.ctf.redeem.ok`) + Polygon RPC, classifies each `tx_hash` by burn-observed, emits coverage report. Any fixtures derived from real tx hashes added to corpus alongside synthetic ones. **FIXTURE_COVERAGE_COMPLETE** is now provable from real data.
   - Invariants: `FIXTURE_COVERAGE_COMPLETE`, `WRITE_AUTHORITY_IS_CHAIN_OR_CLOB` (script reads from chain, not Data API)
   - Todos:
@@ -127,13 +129,21 @@ A pure module `packages/market-provider/policy/redeem` exporting `decideRedeem(i
       - [ ] component: existing executor component tests still green
       - [ ] stack: defer to CI — local stack-test is gated by infra
 
-## Validation block (commit on PR before /closeout)
-
-`exercise:` After candidate-a flight, query Loki for `{env="candidate-a"} |= "policy_decision"` at deploy SHA. Trigger a manual redeem on a known-resolved condition via `POST /api/v1/poly/wallet/positions/redeem`. Receipt must show `TransferSingle(from=funder, value>0)` for binary winners; `malformed` log for already-redeemed cases (no tx fires).
-
-`observability:` Loki query `{app="poly", env="candidate-a"} |= "poly.ctf.redeem"` at deploy SHA shows `policy_decision={kind:"redeem"|"skip"|"malformed", flavor, reason}` per call. Production `poly.ctf.redeem.ok` followed by zero-burn must drop to zero within one sweep tick (~30s) post-deploy. Grafana "POL spent vs USDC redeemed slope" panel shows convergence.
-
 ## Review Feedback
+
+**v0.1 implementation review (revision 2, 2026-04-27).**
+
+Resolved in this revision (applied directly to the branch):
+
+- `RedeemFlavor` mislabeled multi-outcome markets as `flavor: "binary"`. Added explicit `"multi-outcome"` to the discriminated union and split the dispatch in `decideRedeem`. Loki / Grafana can now split metrics by topology; future consumers can switch-exhaustive without ambiguity. `(packages/market-provider/src/policy/redeem.ts, tests/redeem-policy.test.ts)`
+- `PURE_POLICY_NO_IO` invariant was declared in the module docstring + task body but not enforced. Added `no-io-in-policy` rule to `.dependency-cruiser.cjs` blocking `viem`, `@polymarket/clob-client`, `nodes/`, and `services/` imports from `packages/market-provider/src/policy/**`. `pnpm arch:check` passes; rule will fire on any future regression.
+- Two `## Validation` sections in the task body collapsed to one canonical block scoped to v0.1 reality (CP1 + CP3 only — no audit script in this PR). The `exercise:` is now achievable on candidate-a today.
+- CP2 deferral language polished — no orphan "task.0387-followup" placeholder; v0.2 lands as a follow-up commit on the same task with status looping back to `needs_implement` after v0.1 merges.
+
+CI status (informational, non-blocking):
+
+- `single-node-scope`: FAIL — diagnostic-only gate (per workflow comment "Lands non-required initially"; verified not in branch protection's required_status_checks). PR spans `poly` + `operator` domains by classification (the `packages/market-provider/policy/` files count as `operator`). Splitting the PR would require Capability A package + executor wire to land in two separate merges with a chicken-and-egg between them. Acceptable for v0.1; long-term fix is to expand the ride-along whitelist in `task.0381` to include `packages/market-provider/**` (shared infra is not really `operator`-domain).
+- `SonarCloud Code Analysis`: FAIL — quality-gate metric (also non-required). Likely the new policy module's coverage delta or duplications. Worth investigating in v0.2 but not a merge blocker.
 
 **Phase 0.1 docs review (revision 1, 2026-04-27).**
 

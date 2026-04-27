@@ -166,7 +166,7 @@ describe("decideRedeem — coverage matrix (task.0387 § ## Validation)", () => 
   // 6. multi-outcome-winner — slotCount > 2, our slot won. Index-set is
   // a single-element bitmask, NOT [1n, 2n].
   // ------------------------------------------------------------------
-  it("multi-outcome winner (slotCount=4, idx=2) → indexSet=[4n]", () => {
+  it("multi-outcome winner (slotCount=4, idx=2) → flavor=multi-outcome, indexSet=[4n]", () => {
     const d = decideRedeem({
       balance: 1_000_000n,
       payoutNumerator: 1n,
@@ -176,8 +176,8 @@ describe("decideRedeem — coverage matrix (task.0387 § ## Validation)", () => 
       negativeRisk: false,
     });
     if (d.kind !== "redeem") throw new Error("expected redeem");
-    expect(d.flavor).toBe("binary"); // standard-CTF flavor name
-    expect(d.indexSet).toEqual([4n]); // 1n << 2n
+    expect(d.flavor).toBe("multi-outcome");
+    expect(d.indexSet).toEqual([4n]); // 1n << 2n — single-slot bitmask, NOT [1n,2n]
   });
 
   // ------------------------------------------------------------------
