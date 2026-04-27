@@ -200,8 +200,10 @@ jobs:
       (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-latest
     env:
-      # Required by scripts/ci/merge-build-fragments.sh.
+      # Required by merge-build-fragments.sh + write-build-manifest.sh.
       IMAGE_TAG: ${{ needs.resolve.outputs.image_tag }}
+      PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
+      HEAD_SHA: ${{ needs.resolve.outputs.original_head_sha }}
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
