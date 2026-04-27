@@ -8,7 +8,7 @@ rank: 1
 estimate: 1
 branch: bug/0389-drizzle-chain-lint
 summary: "On `main` today, `pnpm db:generate:poly` fails with `meta/0027_snapshot.json` self-referential `prevId` colliding with `0028_snapshot.json`. Root cause: PR #930 hand-stitched 0027 with `id == prevId` after the chain had already lost intermediate snapshots. Hand-authored RLS/trigger migrations across all three nodes have been committing `.sql` without matching snapshots. `drizzle-kit check` (upstream) detects this exact failure mode but is not wired into CI — so PR #930 merged without complaint."
-outcome: "After this bug closes: (1) the poly Postgres collision is fixed in place — `meta/0027_snapshot.json` gets a fresh `id`, `meta/0028_snapshot.json.prevId` rechains to it, and `pnpm db:check:poly` passes; (2) `pnpm db:check` runs `drizzle-kit check` against every node's drizzle config (operator + resy + poly Postgres + poly Doltgres) and is wired into both `check-fast` (pre-push) and `check-all` (pre-commit); (3) `docs/spec/databases.md` documents the hand-authored-migration recipe so the next RLS/trigger migration doesn't widen the gap. **Still rotten after this PR:** `pnpm db:generate:poly` produces a malformed diff because snapshots 0029–0032 are missing — chain head (0028) doesn't reflect current schema.ts. Restoring those snapshots so `generate` works is the separate followup."
+outcome: "After this bug closes: (1) the poly Postgres collision is fixed in place — `meta/0027_snapshot.json` gets a fresh `id`, `meta/0028_snapshot.json.prevId` rechains to it; (2) the chain HEAD is restored — a new `meta/0032_snapshot.json` whose `tables` block reflects current schema.ts is added with `prevId → 0028.id`, unblocking `pnpm db:generate:poly` (now reports `No schema changes, nothing to migrate` against unchanged schema.ts; emits a clean 0033 against any real edit); (3) `pnpm db:check` runs `drizzle-kit check` against every node's drizzle config (operator + resy + poly Postgres + poly Doltgres) and is wired into both `check-fast` (pre-push) and `check-all` (pre-commit); (4) `docs/spec/databases.md §2.6` documents the hand-authored-migration recipe so the next RLS/trigger migration doesn't widen the gap. Intermediate snapshots 0011, 0015, 0024–0026, 0029–0031 remain absent — `drizzle-kit check` tolerates this, and only the chain head matters for `generate`."
 spec_refs:
   - databases-spec
 assignees: []
@@ -95,9 +95,9 @@ Goal: make the right thing the easy thing for the next RLS/trigger migration.
 
 ## Out of scope (separate followup)
 
-`pnpm db:generate:poly` still produces a malformed diff after this PR because snapshots **0029–0032 are missing** — the chain head (0028) doesn't reflect current schema.ts, so a fresh generate would emit a single SQL combining all four hand-authored migrations' deltas, conflicting with the existing `0029-0032_*.sql` files.
-
-Restoring those four snapshots requires either stepwise introspection from a clean DB or hand-derivation from each migration's DDL. Track as a separate `task — restore poly drizzle snapshot 0029-0032` (est 3) under `proj.database-ops` once the in-flight cluster (task.0387/0388) lands. The 0011, 0015, 0024–0026 gaps are tolerated by `drizzle-kit check`; address them only if a future generate diff misbehaves.
+- **operator + resy chain hygiene.** Both nodes have the same intermediate-snapshot-gap pattern (0011, 0015 et al.) but pass `drizzle-kit check` and `db:generate` cleanly because their chain heads are aligned with their schema.ts. No urgency.
+- **`nodes/node-template/` baseline flattening.** Carries 27 journal entries from the pre-task.0324 lineage; future forks (canary `ai-only`) inherit all of it. Squashing to a fresh 0000 baseline is defensible _for a fork-template_, but needs a deploy-impact check first (CI uses `cogni_template_test`). File separately under `proj.database-ops`.
+- **`databases.md` ai-only bringup checklist.** When the canary node lands, its setup should wire `db:check:ai-only` and `db:generate:ai-only` _before_ the first hand-authored RLS migration. Capture in a node-bringup guide rather than this bug.
 
 ## Validation
 
@@ -106,16 +106,13 @@ exercise: |
   cd <fresh worktree off this branch>
   pnpm install --frozen-lockfile
   pnpm db:check                    # all four chains pass (was: poly Postgres collision on main)
-  # negative test:
-  jq '.id = "00000000-0000-0000-0000-000000000000"' \
-    nodes/poly/app/src/adapters/server/db/migrations/meta/0028_snapshot.json \
-    | sponge nodes/poly/app/src/adapters/server/db/migrations/meta/0028_snapshot.json
-  pnpm db:check                    # exits non-zero, names the broken chain
+  pnpm db:generate:poly            # "No schema changes, nothing to migrate" on unchanged schema.ts
+                                   # (was: malformed combined-deltas diff against stale 0028 head)
 observability: none — pure CI/static check, no runtime emission
 ```
 
 ## Notes for the next agent
 
-- After merge, `pnpm db:check` is GREEN across all four chains. The pre-push hook gates new chain rot before it can land.
-- `pnpm db:generate:poly` is still broken (different failure mode — missing 0029-0032 snapshots, not a collision). That's the explicit follow-up scope.
-- The 0027 fix only renumbers the snapshot's `id` and rewires 0028's `prevId`; the `tables` block is unchanged, so the snapshot still represents whatever state PR #930 captured. If the chain-restoration follow-up rebuilds 0029-0032 from a clean introspect, it should validate that 0028's `tables` matches the schema after `0028_small_doomsday.sql` applies — or rebuild 0027/0028 too.
+- After merge, `pnpm db:check` is GREEN across all four chains and `pnpm db:generate:poly` reports clean. The pre-push hook gates new chain rot before it can land.
+- The new `meta/0032_snapshot.json` was produced by trimming the journal to idx≤28, running `drizzle-kit generate` through its rename prompts via `expect` (auto-selecting "create column" for every prompt — irrelevant since the SQL was discarded; only the snapshot's `tables` block is kept), restoring the journal, then renaming `meta/0029_snapshot.json` → `meta/0032_snapshot.json`. The snapshot reflects schema.ts state at the commit's HEAD; if a future schema.ts edit ships in the same PR, regenerate.
+- The 0027 fix is a renumber + rewire only — the `tables` block is whatever PR #930 captured. Not validated against deployed-DB ground truth, but unused by `generate` (only the head matters) and tolerated by `check`.
