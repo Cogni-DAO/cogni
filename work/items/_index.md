@@ -36,7 +36,7 @@
 | 0 | 1 | 1 | needs_design | task.0382 | `extractOwningNode(spec, paths)` — TS resolver for files-changed → owning nodeId in operator runtime | VCS Integration | proj.vcs-integration |
 | 0 | 1 | 1 | needs_merge | bug.0384 | poly CTF redeem sweep — read-then-write race burns gas on duplicate redeems | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
 | 0 | 1 | 3 | needs_closeout | task.0387 | Capability A — pure redeem policy + fixture audit (stops the bleed) | Cogni Poly | proj.poly-copy-trading |
-| 0 | 1 | 3 | needs_design | task.0402 | Scope wallet provider boundary — restore SSR for all non-wallet routes |  |  |
+| 0 | 1 | 1 | needs_implement | task.0402 | Restore SSR — drop the whole-app `next/dynamic({ ssr: false })` wrapper |  |  |
 | 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
 | 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD Pipeline | proj.cicd-services-gitops |
