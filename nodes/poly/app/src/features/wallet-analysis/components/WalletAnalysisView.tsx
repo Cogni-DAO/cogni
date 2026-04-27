@@ -16,7 +16,7 @@
 "use client";
 
 import type { PolyWalletOverviewInterval } from "@cogni/node-contracts";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 import { Card, CardContent, CardHeader } from "@/components";
 import type {
@@ -51,6 +51,8 @@ export type WalletAnalysisViewProps = {
   onPnlIntervalChange?:
     | ((interval: PolyWalletOverviewInterval) => void)
     | undefined;
+  /** Inline actions rendered next to the wallet's Polymarket / Polygonscan links. */
+  headerActions?: ReactNode | undefined;
 };
 
 export function WalletAnalysisView({
@@ -62,6 +64,7 @@ export function WalletAnalysisView({
   rankBadge,
   pnlInterval,
   onPnlIntervalChange,
+  headerActions,
 }: WalletAnalysisViewProps): ReactElement {
   // variant fallback while drawer/compact land in later checkpoints
   if (variant !== "page") {
@@ -73,6 +76,7 @@ export function WalletAnalysisView({
         capturedAt={capturedAt}
         pnlInterval={pnlInterval}
         onPnlIntervalChange={onPnlIntervalChange}
+        headerActions={headerActions}
       />
     );
   }
@@ -85,6 +89,7 @@ export function WalletAnalysisView({
       rankBadge={rankBadge}
       pnlInterval={pnlInterval}
       onPnlIntervalChange={onPnlIntervalChange}
+      headerActions={headerActions}
     />
   );
 }
@@ -97,6 +102,7 @@ function PageVariant({
   rankBadge,
   pnlInterval,
   onPnlIntervalChange,
+  headerActions,
 }: {
   data: WalletAnalysisData;
   size: WalletAnalysisSize;
@@ -107,6 +113,7 @@ function PageVariant({
   onPnlIntervalChange?:
     | ((interval: PolyWalletOverviewInterval) => void)
     | undefined;
+  headerActions?: ReactNode | undefined;
 }): ReactElement {
   const isHero = size === "hero";
   return (
@@ -132,6 +139,7 @@ function PageVariant({
           identity={data.identity}
           size={size}
           resolvedCount={data.snapshot?.n}
+          actions={headerActions}
         />
       </CardHeader>
 

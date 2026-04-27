@@ -35,9 +35,11 @@
 | 0 | 1 | 5 | needs_triage | task.0379 | Poly redemption sweep — top-0.1% production-grade hardening (gates + spec + anvil-fork validation) | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
 | 0 | 1 | 1 | needs_design | task.0382 | `extractOwningNode(spec, paths)` — TS resolver for files-changed → owning nodeId in operator runtime | VCS Integration | proj.vcs-integration |
 | 0 | 1 | 1 | needs_merge | bug.0384 | poly CTF redeem sweep — read-then-write race burns gas on duplicate redeems | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
+| 0 | 1 | 3 | needs_closeout | task.0387 | Capability A — pure redeem policy + fixture audit (stops the bleed) | Cogni Poly | proj.poly-copy-trading |
 | 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
 | 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | 2 | 5 | needs_implement | task.0388 | Capability B — event-driven redeem job queue (rips the sweep) | Cogni Poly | proj.poly-copy-trading |
 | 0 | 3 | 2 | needs_design | bug.0062 | OpenClaw gateway: single webchat message can trigger multi-call GOVERN loop (call storm) | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 0 | 3 | 3 | needs_merge | bug.0232 | LlmService port silently drops tools — Codex adapter ignores params.tools, MCP tools invisible to Codex agents | Agentic Interoperability | proj.agentic-interop |
 | 0 | 3 | 2 | needs_merge | task.0294 | Policy-gated release: kill auto-release PR conveyor belt | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -417,6 +419,7 @@
 | 1 | task.0358 | Poly dashboard — open vs closed positions, position history replaces order history | Cogni Poly | proj.poly-copy-trading |
 | 1 | bug.0360 | Poly research Day tab hangs indefinitely — no timeout, no error state | Cogni Poly | proj.poly-prediction-bot |
 | 1 | bug.0381 | wait-for-in-cluster-services.sh ignores PROMOTED_APPS — every matrix cell waits for every Deployment | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | task.0384 | POST /api/v1/vcs/flight — CI-gated candidate-a flight endpoint + vcs/pr cleanup | Agentic Interoperability | proj.agentic-interop |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 2 | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |

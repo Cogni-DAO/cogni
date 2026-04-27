@@ -3,11 +3,12 @@
 
 /**
  * Module: `@shared/config/repoSpec.server`
- * Purpose: Server-only thin wrapper — file I/O, caching, and CHAIN_ID validation for repo-spec accessors including DAO governance config.
+ * Purpose: Server-only thin wrapper — file I/O, caching, and accessor functions for repo-spec config including DAO governance and VCS identity.
  * Scope: Reads and caches repo-spec on first access; does not define schemas, validation logic, or perform network I/O.
  * Invariants: Chain ID must match CHAIN_ID; ledger config requires scope_id + scope_key; DaoConfig requires all five cogni_dao fields.
- * Side-effects: IO (reads repo-spec from disk) on first call only.
- * Links: packages/repo-spec/src/index.ts, .cogni/repo-spec.yaml
+ *   getGithubRepo() is a v0 single-tenant hardcode (OPERATOR_GITHUB_REPO const) — task.0122 wires it to NodeRegistryPort for multi-tenant.
+ * Side-effects: IO (reads repo-spec from disk) on first call only. getGithubRepo() has no IO.
+ * Links: packages/repo-spec/src/index.ts, .cogni/repo-spec.yaml, docs/spec/vcs-integration.md
  * @public
  */
 
@@ -186,30 +187,20 @@ export function getDaoTreasuryAddress(): string | undefined {
   return cachedDaoTreasuryAddress;
 }
 
-let cachedGithubRepo: { owner: string; repo: string } | null = null;
+// v0: operator manages exactly one repo — its own.
+// task.0122 (operator node registration lifecycle) wires this to the NodeRegistryPort
+// so the operator can dispatch flights for any registered node repo without cross-pollination
+// between app credentials and repo identity. Until then, single-tenant hardcode here only.
+const OPERATOR_GITHUB_REPO = {
+  owner: "Cogni-DAO",
+  repo: "node-template",
+} as const;
 
 /**
- * GitHub repo identity from repo-spec (activity_ledger.activity_sources.github.source_refs[0]).
- * Returns the operator's own GitHub repo as { owner, repo }.
- * Throws if not configured — required for VCS operations.
+ * GitHub repo identity for VCS operations.
+ * v0: single-tenant hardcode — operator manages its own repo only.
+ * vNext: resolved from NodeRegistryPort per request context (task.0122).
  */
 export function getGithubRepo(): { owner: string; repo: string } {
-  if (cachedGithubRepo) return cachedGithubRepo;
-
-  const spec = loadRepoSpec();
-  const slug =
-    spec.activity_ledger?.activity_sources?.["github"]?.source_refs?.[0];
-  if (!slug) {
-    throw new Error(
-      "repo-spec missing activity_ledger.activity_sources.github.source_refs — required for VCS operations"
-    );
-  }
-  const [owner, repo] = slug.split("/");
-  if (!owner || !repo) {
-    throw new Error(
-      `repo-spec github source_ref has unexpected format: "${slug}" (expected "owner/repo")`
-    );
-  }
-  cachedGithubRepo = { owner, repo };
-  return cachedGithubRepo;
+  return OPERATOR_GITHUB_REPO;
 }

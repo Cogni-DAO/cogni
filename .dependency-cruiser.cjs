@@ -717,5 +717,34 @@ module.exports = {
       comment:
         "Worker allocation must go through plugin registry dispatch, not direct ledger allocation imports",
     },
+
+    // =========================================================================
+    // Pure-policy boundary rules (PURE_POLICY_NO_IO)
+    // packages/market-provider/src/policy/** is the pure decision layer for
+    // redeem / close / exit policies. It must not import any I/O (viem,
+    // @polymarket/clob-client) or any app/bootstrap code. Bug.0384's predicate
+    // defect was made possible because the prior in-line decideRedeem was
+    // entangled with viem-using code; the policy package exists so that class
+    // of bug is structurally impossible.
+    // =========================================================================
+    {
+      name: "no-io-in-policy",
+      severity: "error",
+      from: {
+        path: "^packages/market-provider/src/policy/",
+      },
+      to: {
+        path: [
+          "^node_modules/viem",
+          "^node_modules/@polymarket/clob-client",
+          "^nodes/",
+          "^services/",
+        ],
+      },
+      comment:
+        "PURE_POLICY_NO_IO — policy modules must not import viem, " +
+        "@polymarket/clob-client, app/bootstrap, or any node/service code. " +
+        "See docs/design/poly-positions.md § Capability A.",
+    },
   ],
 };

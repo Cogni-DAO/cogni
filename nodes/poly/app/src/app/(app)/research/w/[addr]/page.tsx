@@ -45,10 +45,12 @@ export default async function WalletAnalysisPage({
 
   return (
     <main className="px-4 py-6 md:px-8 md:py-10">
-      <div className="mb-3 flex justify-end">
-        <CopyWalletButton addr={addr} />
-      </div>
-      <WalletAnalysisSurface addr={addr} variant="page" size="default" />
+      <WalletAnalysisSurface
+        addr={addr}
+        variant="page"
+        size="default"
+        headerActions={<CopyWalletButton addr={addr} />}
+      />
     </main>
   );
 }

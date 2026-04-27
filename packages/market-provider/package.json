@@ -24,6 +24,11 @@
       "types": "./dist/analysis/index.d.ts",
       "import": "./dist/analysis/index.js",
       "default": "./dist/analysis/index.js"
+    },
+    "./policy": {
+      "types": "./dist/policy/index.d.ts",
+      "import": "./dist/policy/index.js",
+      "default": "./dist/policy/index.js"
     }
   },
   "types": "./dist/index.d.ts",

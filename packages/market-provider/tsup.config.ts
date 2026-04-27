@@ -19,6 +19,7 @@ export const tsupConfig = defineConfig({
     "src/adapters/polymarket/index.ts",
     "src/adapters/kalshi/index.ts",
     "src/analysis/index.ts",
+    "src/policy/index.ts",
   ],
   format: ["esm"],
   dts: false, // tsc -b emits per-file declarations; tsup handles JS only

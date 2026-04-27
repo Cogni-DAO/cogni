@@ -72,6 +72,12 @@ import type {
   OrderReceipt,
 } from "@cogni/market-provider";
 import type { PolymarketUserPosition } from "@cogni/market-provider/adapters/polymarket";
+import {
+  decideRedeem,
+  type RedeemSkipReason as PolicyRedeemSkipReason,
+  type RedeemDecision,
+  type RedeemMalformedReason,
+} from "@cogni/market-provider/policy";
 import type {
   OrderIntentSummary,
   PolyTraderWalletPort,
@@ -178,31 +184,22 @@ export interface RedeemResolvedParams {
   condition_id: string;
 }
 
-/** Pure redeem precheck — see bug.0383 fixtures for the canonical decision matrix. */
+/**
+ * Refusal codes attached to `PolyTradeExecutorError.reason`. Combines:
+ *   - policy skip reasons (recoverable; from `@cogni/market-provider/policy`)
+ *   - policy malformed reasons (design defect; same source)
+ *   - executor-local cooldown signal (`pending_redeem`)
+ *   - input-shape errors not covered by the policy (`missing_outcome_index`
+ *     when the Data-API position lacks an `outcomeIndex`)
+ *
+ * Kept as a single union so existing callers / tests can continue to pattern-
+ * match on `error.reason` without learning a second type.
+ */
 export type RedeemSkipReason =
-  | "zero_balance"
-  | "losing_outcome"
-  | "missing_outcome_index"
-  | "read_failed"
-  | "pending_redeem";
-
-export function decideRedeem(input: {
-  balance: bigint | null;
-  payoutNumerator: bigint | null;
-  outcomeIndex: number | null | undefined;
-}): { ok: true } | { ok: false; reason: RedeemSkipReason } {
-  if (input.outcomeIndex == null || !Number.isFinite(input.outcomeIndex)) {
-    return { ok: false, reason: "missing_outcome_index" };
-  }
-  if (input.balance === null || input.payoutNumerator === null) {
-    return { ok: false, reason: "read_failed" };
-  }
-  if (input.balance === 0n) return { ok: false, reason: "zero_balance" };
-  if (input.payoutNumerator === 0n) {
-    return { ok: false, reason: "losing_outcome" };
-  }
-  return { ok: true };
-}
+  | PolicyRedeemSkipReason
+  | RedeemMalformedReason
+  | "pending_redeem"
+  | "missing_outcome_index";
 
 /**
  * bug.0384 — per-condition in-process cooldown.
@@ -425,9 +422,12 @@ async function buildExecutor(
   }
 
   const {
-    BINARY_REDEEM_INDEX_SETS,
+    // BINARY_REDEEM_INDEX_SETS / PARENT_COLLECTION_ID_ZERO are no longer
+    // imported here — `decideRedeem` (Capability A) emits the correct
+    // `indexSet` and `parentCollectionId` per market topology. The constants
+    // stay in `@cogni/market-provider/adapters/polymarket` for now; task.0388
+    // removes them when the legacy sweep dies.
     normalizePolygonConditionId,
-    PARENT_COLLECTION_ID_ZERO,
     POLYGON_CONDITIONAL_TOKENS,
     POLYGON_USDC_E,
     PolymarketClobAdapter,
@@ -438,12 +438,19 @@ async function buildExecutor(
     await import("viem");
   const { polygon } = await import("viem/chains");
 
-  // bug.0383 precheck reads. Local fragment to keep this fix scoped to the
-  // poly node (single-domain CI gate). Promote to packages/market-provider
-  // when the next non-hotfix touches that package.
+  // Capability A precheck reads (task.0387). Four reads per candidate:
+  //   - balanceOf — funder still holds shares?
+  //   - payoutNumerators — did our slot win?
+  //   - payoutDenominator — is the market actually resolved on-chain?
+  //     (zero ⇒ Polymarket Data-API may say `redeemable:true` while CTF has
+  //      not yet recorded a resolution; do not fire — bug.0383/bug.0384 class.)
+  //   - getOutcomeSlotCount — needed by `decideRedeem` to validate
+  //     `outcomeIndex` and pick the multi-outcome index-set when slotCount > 2.
   const ctfPrecheckAbi = parseAbi([
     "function balanceOf(address account, uint256 id) view returns (uint256)",
     "function payoutNumerators(bytes32 conditionId, uint256 outcomeIndex) view returns (uint256)",
+    "function payoutDenominator(bytes32 conditionId) view returns (uint256)",
+    "function getOutcomeSlotCount(bytes32 conditionId) view returns (uint256)",
   ]);
 
   // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
@@ -765,6 +772,13 @@ async function buildExecutor(
         `poly-trade-executor: invalid asset positionId for conditionId=${params.condition_id}`
       );
     }
+    if (match.outcomeIndex == null) {
+      throw new PolyTradeExecutorError(
+        "not_redeemable",
+        `poly-trade-executor: Data-API position missing outcomeIndex for conditionId=${params.condition_id}`,
+        "missing_outcome_index"
+      );
+    }
     const reads = await publicClient.multicall({
       contracts: [
         {
@@ -777,23 +791,71 @@ async function buildExecutor(
           address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
           abi: ctfPrecheckAbi,
           functionName: "payoutNumerators" as const,
-          args: [normalized, BigInt(match.outcomeIndex ?? 0)] as const,
+          args: [normalized, BigInt(match.outcomeIndex)] as const,
+        },
+        {
+          address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
+          abi: ctfPrecheckAbi,
+          functionName: "payoutDenominator" as const,
+          args: [normalized] as const,
+        },
+        {
+          address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
+          abi: ctfPrecheckAbi,
+          functionName: "getOutcomeSlotCount" as const,
+          args: [normalized] as const,
         },
       ],
       allowFailure: true,
     });
-    const verdict = decideRedeem({
+    const decision: RedeemDecision = decideRedeem({
       balance:
         reads[0]?.status === "success" ? (reads[0].result as bigint) : null,
       payoutNumerator:
         reads[1]?.status === "success" ? (reads[1].result as bigint) : null,
+      payoutDenominator:
+        reads[2]?.status === "success" ? (reads[2].result as bigint) : null,
       outcomeIndex: match.outcomeIndex,
+      outcomeSlotCount:
+        reads[3]?.status === "success"
+          ? Number(reads[3].result as bigint)
+          : null,
+      negativeRisk: match.negativeRisk ?? false,
     });
-    if (!verdict.ok) {
+    deps.logger.info(
+      {
+        event: "poly.ctf.redeem.policy_decision",
+        billing_account_id: billingAccountId,
+        condition_id: params.condition_id,
+        funder: funderAddress,
+        outcome_index: match.outcomeIndex,
+        negative_risk: match.negativeRisk ?? false,
+        policy_decision:
+          decision.kind === "redeem"
+            ? { kind: "redeem", flavor: decision.flavor }
+            : { kind: decision.kind, reason: decision.reason },
+      },
+      "poly-trade-executor: redeem policy decision"
+    );
+    if (decision.kind === "skip") {
       throw new PolyTradeExecutorError(
         "not_redeemable",
-        `poly-trade-executor: precheck refused redeem conditionId=${params.condition_id}`,
-        verdict.reason
+        `poly-trade-executor: precheck refused redeem conditionId=${params.condition_id} reason=${decision.reason}`,
+        decision.reason
+      );
+    }
+    if (decision.kind === "malformed") {
+      // bug.0384 class — design defect, not a recoverable skip. Caller must
+      // investigate the fixture corpus + code, not retry. See
+      // docs/design/poly-positions.md § Abandoned-position runbook (Class A).
+      deps.metrics.incr("poly_ctf_redeem_total", {
+        result: "malformed",
+        reason: decision.reason,
+      });
+      throw new PolyTradeExecutorError(
+        "not_redeemable",
+        `poly-trade-executor: malformed redeem inputs conditionId=${params.condition_id} reason=${decision.reason}`,
+        decision.reason
       );
     }
 
@@ -809,9 +871,9 @@ async function buildExecutor(
         functionName: "redeemPositions",
         args: [
           POLYGON_USDC_E,
-          PARENT_COLLECTION_ID_ZERO,
+          decision.parentCollectionId,
           normalized,
-          [...BINARY_REDEEM_INDEX_SETS],
+          [...decision.indexSet],
         ],
         chain: polygon,
         account: accountAny,
@@ -908,6 +970,7 @@ async function buildExecutor(
       conditionIdHex: `0x${string}`;
       asset: bigint;
       outcomeIndex: number | null;
+      negativeRisk: boolean;
     }> = [];
     const seen = new Set<string>();
     for (const p of positions) {
@@ -932,12 +995,14 @@ async function buildExecutor(
         conditionIdHex,
         asset,
         outcomeIndex: p.outcomeIndex ?? null,
+        negativeRisk: p.negativeRisk ?? false,
       });
     }
     if (candidates.length === 0) return [];
 
-    // 2N batched read: balanceOf + payoutNumerators per candidate. One RPC
-    // round-trip via multicall.
+    // 4N batched read per candidate (task.0387 Capability A inputs):
+    //   balanceOf + payoutNumerators + payoutDenominator + getOutcomeSlotCount
+    // One RPC round-trip via multicall.
     const reads = await publicClient.multicall({
       contracts: candidates.flatMap((c) => [
         {
@@ -950,9 +1015,21 @@ async function buildExecutor(
           address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
           abi: ctfPrecheckAbi,
           functionName: "payoutNumerators" as const,
-          // outcomeIndex `null` becomes 0 here; decideRedeem still routes to
-          // missing_outcome_index, so the multicall layout stays a clean 2N.
+          // outcomeIndex `null` becomes 0 here; decideRedeem still classifies
+          // null `outcomeIndex` as malformed via its own gate.
           args: [c.conditionIdHex, BigInt(c.outcomeIndex ?? 0)] as const,
+        },
+        {
+          address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
+          abi: ctfPrecheckAbi,
+          functionName: "payoutDenominator" as const,
+          args: [c.conditionIdHex] as const,
+        },
+        {
+          address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
+          abi: ctfPrecheckAbi,
+          functionName: "getOutcomeSlotCount" as const,
+          args: [c.conditionIdHex] as const,
         },
       ]),
       allowFailure: true,
@@ -962,10 +1039,12 @@ async function buildExecutor(
     for (let i = 0; i < candidates.length; i++) {
       const c = candidates[i];
       if (!c) continue;
-      const balRes = reads[i * 2];
-      const numRes = reads[i * 2 + 1];
+      const balRes = reads[i * 4];
+      const numRes = reads[i * 4 + 1];
+      const denRes = reads[i * 4 + 2];
+      const slotsRes = reads[i * 4 + 3];
 
-      const verdict = decideRedeem({
+      const decision: RedeemDecision = decideRedeem({
         balance:
           balRes && balRes.status === "success"
             ? (balRes.result as bigint)
@@ -974,18 +1053,43 @@ async function buildExecutor(
           numRes && numRes.status === "success"
             ? (numRes.result as bigint)
             : null,
+        payoutDenominator:
+          denRes && denRes.status === "success"
+            ? (denRes.result as bigint)
+            : null,
         outcomeIndex: c.outcomeIndex,
+        outcomeSlotCount:
+          slotsRes && slotsRes.status === "success"
+            ? Number(slotsRes.result as bigint)
+            : null,
+        negativeRisk: c.negativeRisk,
       });
 
-      if (!verdict.ok) {
-        const base = {
-          billing_account_id: billingAccountId,
-          condition_id: c.condition_id,
-          asset: c.asset.toString(),
-          funder: funderAddress,
-          outcome_index: c.outcomeIndex,
-        };
-        switch (verdict.reason) {
+      const base = {
+        billing_account_id: billingAccountId,
+        condition_id: c.condition_id,
+        asset: c.asset.toString(),
+        funder: funderAddress,
+        outcome_index: c.outcomeIndex,
+        negative_risk: c.negativeRisk,
+      };
+      // Single structured log for every decision — Loki query
+      // `{app="poly"} |= "policy_decision"` reflects exactly what the policy
+      // emitted, in the shape consumed by the validation block.
+      deps.logger.info(
+        {
+          event: "poly.ctf.redeem.policy_decision",
+          ...base,
+          policy_decision:
+            decision.kind === "redeem"
+              ? { kind: "redeem", flavor: decision.flavor }
+              : { kind: decision.kind, reason: decision.reason },
+        },
+        "poly-trade-executor: redeem sweep policy decision"
+      );
+
+      if (decision.kind === "skip") {
+        switch (decision.reason) {
           case "zero_balance":
             deps.logger.info(
               { event: "poly.ctf.redeem.skip_zero_balance", ...base },
@@ -998,10 +1102,10 @@ async function buildExecutor(
               "poly-trade-executor: redeem sweep skipped — losing outcome (payoutNumerator=0)"
             );
             break;
-          case "missing_outcome_index":
-            deps.logger.warn(
-              { event: "poly.ctf.redeem.skip_missing_outcome_index", ...base },
-              "poly-trade-executor: redeem sweep skipped — Data-API position missing outcomeIndex"
+          case "market_not_resolved":
+            deps.logger.info(
+              { event: "poly.ctf.redeem.skip_market_not_resolved", ...base },
+              "poly-trade-executor: redeem sweep skipped — payoutDenominator=0; CTF has not recorded resolution despite Data-API redeemable hint"
             );
             break;
           case "read_failed":
@@ -1011,11 +1115,34 @@ async function buildExecutor(
                 ...base,
                 bal_err: errMsg(balRes),
                 num_err: errMsg(numRes),
+                den_err: errMsg(denRes),
+                slots_err: errMsg(slotsRes),
               },
               "poly-trade-executor: precheck read failed; skipping condition"
             );
             break;
         }
+        continue;
+      }
+
+      if (decision.kind === "malformed") {
+        // bug.0384 class — design defect. Do NOT call back into
+        // `redeemResolvedPosition` (which would re-fetch + re-decide and
+        // hit the same wall, or — worse — fire a tx with a wrong index-set
+        // that produces zero burn). Skip this candidate; emit a high-signal
+        // log so the on-call sees abandoned-class events in Loki.
+        deps.logger.error(
+          {
+            event: "poly.ctf.redeem.malformed",
+            ...base,
+            policy_reason: decision.reason,
+          },
+          "poly-trade-executor: redeem sweep refused — malformed policy input"
+        );
+        deps.metrics.incr("poly_ctf_redeem_total", {
+          result: "malformed",
+          reason: decision.reason,
+        });
         continue;
       }
 

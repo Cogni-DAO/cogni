@@ -4,8 +4,8 @@
 /**
  * Module: `@app/.well-known/agent.json`
  * Purpose: Discovery document for machine agents — publishes the register,
- *   runs, runStream, and completions URLs plus the auth scheme so external
- *   clients can bootstrap without hard-coding paths or reading docs.
+ *   runs, runStream, completions, and flight URLs plus the auth scheme so
+ *   external clients can bootstrap without hard-coding paths or reading docs.
  * Scope: Single GET handler. Honors `x-forwarded-host`/`x-forwarded-proto`
  *   from Caddy / k8s ingress so the published URLs are externally reachable
  *   (falling back to the raw Host header then request.url for local dev).
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
       graphs: `${origin}/api/v1/ai/agents`,
       runs: `${origin}/api/v1/agent/runs`,
       runStream: `${origin}/api/v1/agent/runs/{runId}/stream`,
-      contribute: `${origin}/api/v1/vcs/pr`,
+      flight: `${origin}/api/v1/vcs/flight`,
     },
     defaults: {
       model: "gpt-4o-mini",

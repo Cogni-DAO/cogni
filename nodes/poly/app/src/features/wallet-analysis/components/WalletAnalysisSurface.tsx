@@ -18,7 +18,7 @@
 "use client";
 
 import type { PolyWalletOverviewInterval } from "@cogni/node-contracts";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { useState } from "react";
 import { useWalletAnalysis } from "../client/use-wallet-analysis";
 import type {
@@ -32,6 +32,8 @@ export type WalletAnalysisSurfaceProps = {
   enabled?: boolean | undefined;
   variant?: WalletAnalysisVariant | undefined;
   size?: WalletAnalysisSize | undefined;
+  /** Inline actions rendered next to the wallet's Polymarket / Polygonscan links. */
+  headerActions?: ReactNode | undefined;
 };
 
 export function WalletAnalysisSurface({
@@ -39,6 +41,7 @@ export function WalletAnalysisSurface({
   enabled = true,
   variant = "page",
   size = "default",
+  headerActions,
 }: WalletAnalysisSurfaceProps): ReactElement {
   const [interval, setInterval] = useState<PolyWalletOverviewInterval>("ALL");
   const { data, isLoading } = useWalletAnalysis(addr, enabled, interval);
@@ -52,6 +55,7 @@ export function WalletAnalysisSurface({
       capturedAt={new Date().toISOString().slice(0, 16).replace("T", " ")}
       pnlInterval={interval}
       onPnlIntervalChange={setInterval}
+      headerActions={headerActions}
     />
   );
 }

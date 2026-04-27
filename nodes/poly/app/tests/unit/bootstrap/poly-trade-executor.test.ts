@@ -314,10 +314,13 @@ describe("createPolyTradeExecutorFactory", () => {
         redeemable: true,
       },
     ]);
-    // bug.0383 precheck: balance>0 AND payoutNumerator>0 → ok to redeem
+    // task.0387: 4N precheck → balanceOf, payoutNumerators, payoutDenominator,
+    // getOutcomeSlotCount. Resolved binary winner.
     multicall.mockResolvedValue([
-      { status: "success", result: 100n },
-      { status: "success", result: 1n },
+      { status: "success", result: 100n }, // balanceOf
+      { status: "success", result: 1n }, // payoutNumerators
+      { status: "success", result: 1n }, // payoutDenominator (resolved)
+      { status: "success", result: 2n }, // outcomeSlotCount (binary)
     ]);
     writeContract.mockResolvedValue("0xtxhash");
     const walletPort = makeWalletPort();
@@ -347,9 +350,11 @@ describe("createPolyTradeExecutorFactory", () => {
 
   // bug.0376: redeem sweep predicate is on-chain ERC1155 balance, not the
   // Data-API `redeemable` flag. bug.0383 adds a paired `payoutNumerators`
-  // read and gates submission on it (skips losing-outcome no-ops). Each
-  // candidate produces 2 multicall entries: [balanceOf, payoutNumerators].
-  describe("redeemAllRedeemableResolvedPositions (bug.0376 + bug.0383 predicate)", () => {
+  // read and gates submission on it (skips losing-outcome no-ops). task.0387
+  // extends to 4N: balanceOf + payoutNumerators + payoutDenominator +
+  // getOutcomeSlotCount per candidate, so the policy can classify
+  // market-not-resolved + neg-risk-flavor + multi-outcome correctly.
+  describe("redeemAllRedeemableResolvedPositions (bug.0376 + bug.0383 + task.0387 predicate)", () => {
     const CONDITION_A =
       "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
     const CONDITION_B =
@@ -389,6 +394,8 @@ describe("createPolyTradeExecutorFactory", () => {
       multicall.mockResolvedValue([
         { status: "success", result: 0n }, // balanceOf
         { status: "success", result: 1n }, // payoutNumerators (would-win)
+        { status: "success", result: 1n }, // payoutDenominator (resolved)
+        { status: "success", result: 2n }, // outcomeSlotCount (binary)
       ]);
 
       const { factory } = makeFactory();
@@ -416,6 +423,8 @@ describe("createPolyTradeExecutorFactory", () => {
       multicall.mockResolvedValue([
         { status: "success", result: 50n }, // balanceOf > 0
         { status: "success", result: 0n }, // payoutNumerators[heldIdx] = 0 (losing)
+        { status: "success", result: 1n }, // payoutDenominator (resolved)
+        { status: "success", result: 2n }, // outcomeSlotCount (binary)
       ]);
 
       const { factory } = makeFactory();
@@ -444,6 +453,8 @@ describe("createPolyTradeExecutorFactory", () => {
       multicall.mockResolvedValue([
         { status: "success", result: 100n },
         { status: "success", result: 1n },
+        { status: "success", result: 1n },
+        { status: "success", result: 2n },
       ]);
 
       const { factory } = makeFactory();
@@ -476,13 +487,26 @@ describe("createPolyTradeExecutorFactory", () => {
           redeemable: true,
         },
       ]);
-      // 2N layout: [bal_A, num_A, bal_B, num_B]
-      multicall.mockResolvedValue([
-        { status: "success", result: 100n }, // A: balance > 0
-        { status: "success", result: 1n }, // A: winner
-        { status: "success", result: 50n }, // B: balance > 0
-        { status: "success", result: 0n }, // B: loser → skip
-      ]);
+      // 4N sweep layout: [bal_A, num_A, den_A, slots_A, bal_B, num_B, den_B, slots_B]
+      multicall
+        .mockResolvedValueOnce([
+          { status: "success", result: 100n }, // A: balance > 0
+          { status: "success", result: 1n }, // A: winner
+          { status: "success", result: 1n }, // A: resolved
+          { status: "success", result: 2n }, // A: binary
+          { status: "success", result: 50n }, // B: balance > 0
+          { status: "success", result: 0n }, // B: loser → skip
+          { status: "success", result: 1n }, // B: resolved
+          { status: "success", result: 2n }, // B: binary
+        ])
+        // Per-condition precheck inside redeemResolvedPosition — only A wins,
+        // so only A's manual precheck runs.
+        .mockResolvedValueOnce([
+          { status: "success", result: 100n },
+          { status: "success", result: 1n },
+          { status: "success", result: 1n },
+          { status: "success", result: 2n },
+        ]);
       writeContract.mockResolvedValue("0xredeemA");
 
       const { factory } = makeFactory();
@@ -514,6 +538,8 @@ describe("createPolyTradeExecutorFactory", () => {
       multicall.mockResolvedValue([
         { status: "success", result: 0n },
         { status: "success", result: 0n },
+        { status: "success", result: 0n },
+        { status: "success", result: 0n },
       ]);
 
       const { factory } = makeFactory();
@@ -525,10 +551,13 @@ describe("createPolyTradeExecutorFactory", () => {
       const call = multicall.mock.calls[0]?.[0] as
         | { contracts: Array<{ functionName: string }> }
         | undefined;
-      // 2N layout per candidate: balanceOf + payoutNumerators
-      expect(call?.contracts).toHaveLength(2);
+      // 4N layout per candidate (task.0387):
+      //   balanceOf + payoutNumerators + payoutDenominator + getOutcomeSlotCount
+      expect(call?.contracts).toHaveLength(4);
       expect(call?.contracts[0]?.functionName).toBe("balanceOf");
       expect(call?.contracts[1]?.functionName).toBe("payoutNumerators");
+      expect(call?.contracts[2]?.functionName).toBe("payoutDenominator");
+      expect(call?.contracts[3]?.functionName).toBe("getOutcomeSlotCount");
     });
 
     it("makes a single multicall regardless of position count (no per-position fan-out)", async () => {
@@ -557,6 +586,10 @@ describe("createPolyTradeExecutorFactory", () => {
         { status: "success", result: 0n },
         { status: "success", result: 0n },
         { status: "success", result: 0n },
+        { status: "success", result: 0n },
+        { status: "success", result: 0n },
+        { status: "success", result: 0n },
+        { status: "success", result: 0n },
       ]);
 
       const { factory } = makeFactory();
@@ -568,7 +601,7 @@ describe("createPolyTradeExecutorFactory", () => {
       const call = multicall.mock.calls[0]?.[0] as
         | { contracts: Array<unknown> }
         | undefined;
-      expect(call?.contracts).toHaveLength(4); // 2N
+      expect(call?.contracts).toHaveLength(8); // 4N for 2 candidates
     });
 
     it("redeems every position when all balances are non-zero AND all winners (in order)", async () => {
@@ -599,18 +632,28 @@ describe("createPolyTradeExecutorFactory", () => {
       // multicall before writeContract.
       multicall
         .mockResolvedValueOnce([
-          { status: "success", result: 100n },
-          { status: "success", result: 1n },
-          { status: "success", result: 200n },
-          { status: "success", result: 1n },
+          // 4N sweep: A then B
+          { status: "success", result: 100n }, // A bal
+          { status: "success", result: 1n }, // A num
+          { status: "success", result: 1n }, // A den
+          { status: "success", result: 2n }, // A slots
+          { status: "success", result: 200n }, // B bal
+          { status: "success", result: 1n }, // B num
+          { status: "success", result: 1n }, // B den
+          { status: "success", result: 2n }, // B slots
         ])
+        // Per-redeem precheck (manual route) for A then B
         .mockResolvedValueOnce([
           { status: "success", result: 100n },
           { status: "success", result: 1n },
+          { status: "success", result: 1n },
+          { status: "success", result: 2n },
         ])
         .mockResolvedValueOnce([
           { status: "success", result: 200n },
           { status: "success", result: 1n },
+          { status: "success", result: 1n },
+          { status: "success", result: 2n },
         ]);
       writeContract
         .mockResolvedValueOnce("0xredeemA")
@@ -652,15 +695,22 @@ describe("createPolyTradeExecutorFactory", () => {
       listUserPositions.mockResolvedValue(positionList);
       multicall
         .mockResolvedValueOnce([
+          // 4N: A then B; A's balance read fails (read_failed skip)
           { status: "failure", error: new Error("rpc down") }, // bal_A failed
-          { status: "success", result: 1n },
+          { status: "success", result: 1n }, // num_A
+          { status: "success", result: 1n }, // den_A
+          { status: "success", result: 2n }, // slots_A
           { status: "success", result: 100n }, // bal_B ok
-          { status: "success", result: 1n },
+          { status: "success", result: 1n }, // num_B winner
+          { status: "success", result: 1n }, // den_B resolved
+          { status: "success", result: 2n }, // slots_B binary
         ])
         // precheck inside redeemResolvedPosition for B
         .mockResolvedValueOnce([
           { status: "success", result: 100n },
           { status: "success", result: 1n },
+          { status: "success", result: 1n },
+          { status: "success", result: 2n },
         ]);
       writeContract.mockResolvedValue("0xredeemB");
 
@@ -715,6 +765,8 @@ describe("createPolyTradeExecutorFactory", () => {
       multicall.mockResolvedValue([
         { status: "success", result: 0n },
         { status: "success", result: 0n },
+        { status: "success", result: 0n },
+        { status: "success", result: 0n },
       ]);
 
       const { factory } = makeFactory();
@@ -726,7 +778,7 @@ describe("createPolyTradeExecutorFactory", () => {
       const call = multicall.mock.calls[0]?.[0] as
         | { contracts: Array<unknown> }
         | undefined;
-      expect(call?.contracts).toHaveLength(2); // one candidate × 2N
+      expect(call?.contracts).toHaveLength(4); // one candidate × 4N (task.0387)
     });
   });
 
@@ -766,10 +818,13 @@ describe("createPolyTradeExecutorFactory", () => {
     }
 
     function winnerMulticall() {
-      // 2N: balanceOf=100 (winner held), payoutNumerators=1 (winner)
+      // 4N (task.0387): balanceOf=100 (winner held), payoutNumerators=1
+      // (winner), payoutDenominator=1 (resolved), outcomeSlotCount=2 (binary)
       return [
         { status: "success", result: 100n },
         { status: "success", result: 1n },
+        { status: "success", result: 1n },
+        { status: "success", result: 2n },
       ];
     }
 
