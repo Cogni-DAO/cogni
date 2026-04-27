@@ -52,6 +52,21 @@ The `PolymarketUserPosition` shape from the Data API carries ~20 fields. Only se
 
 Everything else is presentation (`title`, `icon`, `slug`, P&L numbers).
 
+## Prior art
+
+Surveyed before drafting (per Derek's "don't reinvent the wheel" prompt). All Python; we port patterns, not code.
+
+| Project                                         | License | What we take                                                                                | What we don't                                              |
+| ----------------------------------------------- | ------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| **GiordanoSouza/polymarket-copy-trading-bot**   | MIT     | API → DB → loop → sizing → `py-clob-client`. Closest 1:1 architectural match. Mirror flow.  | Their position model is one flat table with mutable `status`; we split by authority (live/closed/pending). |
+| **Polymarket/agents** (official)                | MIT     | Canonical Data API field shapes; first-party `redeemable` semantics; neg-risk handling hints. | Runtime mismatch — Python; we re-derive in TS.            |
+| **warproxxx/poly-maker**                        | MIT     | Adapter quirks, `/balance-allowance` cache drift behavior, rate-limit envelope.              | Maker-side strategy; not relevant to copy/exit.            |
+| **leolopez007/polymarket-trade-tracker**        | (read-only) | Tier-1 wallet-ranking heuristics; `/trades` polling cadence trade-offs.                  | No redeem path at all — they only watch fills.            |
+
+**Where we deviate from all of them:** none survey treats redemption as a first-class job-queue state machine with chain-event observation as the completion signal. They all treat `redeemPositions` as fire-and-forget against a Data-API hint — the same shape that produced bug.0384 here. The 7-state lifecycle + Capability B below is **net-new**, and we should expect to find quirks they haven't documented.
+
+**Postgres-as-queue prior art (non-Polymarket):** river-queue, graphile-worker, oban (Elixir). Pick one in `/implement`; do not reinvent dedup-by-`(funder, conditionId)`.
+
 ## The four authorities
 
 A position transition is decided by exactly one of these. Mixing them is the root class of all three bugs.
@@ -131,6 +146,14 @@ The diagram makes it obvious: there is no edge from `redeem_pending` back to `wi
 
 The redesign is two capabilities and one event subscription. No code in this doc — file paths and signatures come at `/implement` time.
 
+### Before /implement — load-bearing prerequisites
+
+These are not optional; the design relies on them.
+
+- [ ] **Loki audit of historical redeem txs.** Pull every `poly.ctf.redeem.ok` event from Loki for the last 30 days. For each `tx_hash`, call `eth_getTransactionReceipt` and check for `TransferSingle(from=funder, value>0)` (binary CTF) OR the neg-risk adapter's burn event. Any tx with success status and **no burn from our funder** is a fixture for Capability A's malformed-decision corpus. Without this corpus, Capability A is rebuilt against the same blind spots that produced bug.0384.
+- [ ] **Confirm neg-risk adapter contract address + event ABI** on Polygon mainnet. Identify the `PayoutRedemption`-equivalent event name and topic hash. Capability B's subscription set is wrong without this.
+- [ ] **Pick finality depth N.** Default proposal: N=10 on Polygon (~25s). Document the chosen value next to RPC config; do not hardcode in two places.
+
 ### Capability A — Pure redeem policy
 
 A pure function (or small module) with no I/O:
@@ -151,21 +174,27 @@ A persistent, idempotent state machine for the `winner → redeem_pending → re
 - Consumer: one worker per process draining `WHERE status = 'pending' FOR UPDATE SKIP LOCKED`.
 - Transitions:
   - `pending → submitted` on tx hash returned, store hash + nonce + attempt count.
-  - `submitted → confirmed` on observed `PayoutRedemption(funder, conditionId, ...)` event with matching tx_hash.
-  - `submitted → failed` on receipt status=failure OR receipt status=success-but-no-PayoutRedemption-from-funder within N blocks.
-  - `failed → pending` if attempt_count < 3 (with backoff).
+  - `submitted → confirmed` on observed `PayoutRedemption(funder, conditionId, ...)` event with matching tx_hash, **at N-block finality**.
+  - `submitted → failed` on receipt status=failure (transient class — RPC timeout, gas underpriced, reorg-during-submit) OR receipt status=success-but-no-PayoutRedemption-from-funder within N blocks (**malformed class — escalate, do not retry the same decision**).
+  - `failed(transient) → pending` if attempt_count < 3 (exponential backoff). Retries are for *transient* classes only — Capability A is pure, so retrying a malformed decision against the same chain state produces the same failure and burns POL.
+  - `failed(malformed) → abandoned` immediately (alert via Loki `poly.ctf.redeem.abandoned` — same channel as bug.0376 paging).
   - `failed → abandoned` if attempt_count >= 3 (alert).
 - Cooldown is a SQL `WHERE` clause, not a Map. Dead on restart? It's in Postgres. Multi-pod safe? `FOR UPDATE SKIP LOCKED`. The whole `sweepInFlight` mutex and `redeemCooldownByConditionId` Map disappear.
 - Postgres-as-queue is a known pattern (river-queue, graphile-worker, oban). Pick one or write the ~30 lines yourself — but don't reinvent dedup keyed by condition id.
 
 ### Subscription — chain events drive everything
 
-Two viem `watchContractEvent` subscriptions on the CTF contract, one pod:
+Subscribe to **both** the CTF contract and the neg-risk adapter contract. Filtering only the CTF address would silently drop neg-risk redemption confirmations and the worker would retry forever — bug.0384 in a new dress.
 
-- `ConditionResolution(conditionId, oracle, questionId, outcomeSlotCount, payoutNumerators[])` → for each of our funder's positions in that condition, evaluate Capability A. If `redeem`, INSERT into the job table.
-- `PayoutRedemption(redeemer, collateralToken, parentCollectionId, conditionId, indexSets[], payout)` → if `redeemer == funder`, UPDATE matching job row to `confirmed`.
+- CTF `ConditionResolution(conditionId, oracle, questionId, outcomeSlotCount, payoutNumerators[])` → for each of our funder's positions in that condition, evaluate Capability A. If `redeem`, INSERT into the job table.
+- CTF `PayoutRedemption(redeemer, collateralToken, parentCollectionId, conditionId, indexSets[], payout)` → if `redeemer == funder` AND a job exists for `(funder, conditionId)`, mark `confirmed` after **N-block finality** (Polygon: N=10 default; tunable, lives next to RPC config).
+- Neg-risk adapter equivalent redemption event → same matching rule, marks neg-risk jobs `confirmed`.
 
-Polling sweep dies. Capability A is consulted exactly once per resolution event per position, plus once per retry. Steady-state RPC load is ~zero between resolutions.
+A reorg observed within N blocks reverts `confirmed → submitted`; the worker re-checks at next finality. This is what `REDEEM_COMPLETION_IS_EVENT_OBSERVED` means in practice.
+
+**Catch-up backstop.** If the pod is down when an event fires, the position never enters `winner` and the wallet sits on an unredeemed payout forever. On startup (and once per cron tick — daily is plenty), scan historical events from `last_processed_block` to `head` and replay through Capability A. This is the **only** legitimate sweep in the system; it is bounded by chain history, not by a periodic predicate.
+
+Polling sweep over Data API dies. Capability A is consulted once per resolution event per position, plus once per retry, plus once per startup-catch-up replay. Steady-state RPC load is ~zero between resolutions.
 
 ### What stays
 
@@ -199,11 +228,12 @@ Capability A must take `negativeRisk` from the position and emit the *correct* `
 
 - `POSITION_IDENTITY_IS_CHAIN_KEYED` — the canonical key is `(funder, positionId)`. Data API rows are projections, never identity.
 - `WRITE_AUTHORITY_IS_CHAIN_OR_CLOB` — no write decision (place, close, redeem) consults Data API or local DB as primary authority.
-- `REDEEM_COMPLETION_IS_EVENT_OBSERVED` — a redeem is "done" only when `PayoutRedemption` from our funder is observed on chain. Tx receipt success is necessary, not sufficient.
+- `REDEEM_COMPLETION_IS_EVENT_OBSERVED` — a redeem is "done" only when `PayoutRedemption` (CTF) or the neg-risk adapter equivalent, emitted by our funder, is observed on chain at N-block finality. Tx receipt success is necessary, not sufficient. A reorg within N reverts confirmation.
 - `REDEEM_DEDUP_IS_PERSISTED` — duplicate-redeem prevention lives in a durable store keyed by `(funder, conditionId)`. No in-process Maps, no module-scope mutexes.
 - `REDEEM_HAS_CIRCUIT_BREAKER` — a position that fails redemption 3× transitions to `abandoned` and pages a human. The system must not re-fire a known-failing tx forever.
 - `NEG_RISK_REDEEM_IS_DISTINCT` — neg-risk positions use the neg-risk redeem path (parent collection or adapter), not binary CTF redeem. Capability A is the single decider.
-- `SWEEP_IS_NOT_AN_ARCHITECTURE` — periodic enumerate-and-fire is forbidden as the primary loop. Resolution events drive enqueue; the worker drives drain.
+- `SWEEP_IS_NOT_AN_ARCHITECTURE` — periodic enumerate-and-fire over a Data-API predicate is forbidden as the **steady-state** loop. Resolution events drive enqueue; the worker drives drain. The one carve-out: a startup + daily-cron catch-up replay over historical chain events from `last_processed_block` to `head`, bounded by chain history rather than by a recurring predicate, is allowed and required.
+- `REDEEM_RETRY_IS_TRANSIENT_ONLY` — retries are gated on transient failure class (RPC timeout, gas underpriced, reorg). A malformed decision (tx success, no burn) escalates to `abandoned` immediately; `attempt_count` exists to bound transient retries, not to mask predicate bugs.
 
 ## What this doc is not
 
@@ -211,10 +241,13 @@ Capability A must take `negativeRisk` from the position and emit the *correct* `
 - It is not a replacement for `poly-position-exit.md` — that spec owns the close half and the four-authority contract. This doc extends it with the resolved/redeem half and adds the visual.
 - It does not specify the Postgres schema, the worker's exact backoff curve, or the viem subscription's reorg handling. Those land at `/implement` time, constrained by the invariants above.
 
-## Open questions for review
+## Resolved during review
 
-1. Do we agree the cooldown Map and sweep mutex come out wholesale, or do we keep them as belt-and-suspenders for one cycle while the job table proves itself?
-2. Does the neg-risk redeem path need its own Capability A variant, or does one decision function cover both with a `kind: 'binary' | 'neg-risk-parent' | 'neg-risk-adapter'` discriminator?
-3. Is the worker a separate process (new container) or in-process inside the poly app? Single-pod today says in-process is fine; multi-pod future says separate. v0 instinct: in-process, scale later.
-4. Should the manual redeem button block on the worker (HTTP holds open until job confirmed) or return 202 + job_id with UI polling? The latter is correct architecturally; the former is what users expect today.
-5. Where does `closing → closed` actually land? Today it's inferred from a Data API reread, which is the same authority confusion in miniature. Out of scope for this doc, in scope for the next one.
+1. **Cooldown Map + sweep mutex come out wholesale.** Belt-and-suspenders means two truths, which is the bug.
+2. **Single Capability A function with discriminated output** `kind: 'binary' | 'neg-risk-parent' | 'neg-risk-adapter'`. Don't fork the policy; fork the output shape.
+3. **Worker is in-process, v0.** Scale to a separate container only if multi-pod load forces it.
+4. **Manual redeem button returns 202 + job_id; UI polls.** Holding HTTP open is a regression dressed as UX; execution endpoint already polls.
+
+## Still open (deferred, not blocking /implement)
+
+5. Where does `closing → closed` actually land? Today it's inferred from a Data API reread — the same authority confusion in miniature. Out of scope for this doc; tracked as a follow-on note in `poly-position-exit.md`.
