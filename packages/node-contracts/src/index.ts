@@ -99,7 +99,7 @@ export * from "./treasury.snapshot.v1.contract";
 export * from "./users.ownership.v1.contract";
 export * from "./users.profile.v1.contract";
 // ── VCS ─────────────────────────────────────────────────────────────────────
-export * from "./vcs.create-pr.v1.contract";
+export * from "./vcs.flight.v1.contract";
 // ── Work items ──────────────────────────────────────────────────────────────
 export * from "./work.items.get.v1.contract";
 export * from "./work.items.list.v1.contract";

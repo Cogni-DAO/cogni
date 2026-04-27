@@ -21,7 +21,6 @@ import type {
   CheckInfo,
   CiStatusResult,
   CreateBranchResult,
-  CreatePrResult,
   DispatchCandidateFlightResult,
   MergeResult,
   PrSummary,
@@ -167,7 +166,9 @@ export class GitHubVcsAdapter implements VcsCapability {
     const allGreen =
       checks.length > 0 &&
       !pending &&
-      checks.every((c) => c.conclusion === "success");
+      checks.every(
+        (c) => c.conclusion === "success" || c.conclusion === "skipped"
+      );
 
     // Compute review decision from individual reviews.
     // Take the latest review per reviewer; if any APPROVED and none CHANGES_REQUESTED → approved.
@@ -288,7 +289,6 @@ export class GitHubVcsAdapter implements VcsCapability {
   }): Promise<CreateBranchResult> {
     const octokit = await this.getOctokit(params.owner, params.repo);
 
-    // Resolve fromRef to a SHA
     let sha: string;
     if (/^[0-9a-f]{40}$/i.test(params.fromRef)) {
       sha = params.fromRef;
@@ -304,7 +304,6 @@ export class GitHubVcsAdapter implements VcsCapability {
       sha = data.object.sha;
     }
 
-    // Create the branch
     const { data: refData } = await octokit.request(
       "POST /repos/{owner}/{repo}/git/refs",
       {
@@ -319,26 +318,6 @@ export class GitHubVcsAdapter implements VcsCapability {
       ref: refData.ref,
       sha: refData.object.sha,
     };
-  }
-
-  async createPr(params: {
-    owner: string;
-    repo: string;
-    branch: string;
-    title: string;
-    body: string;
-    base?: string;
-  }): Promise<CreatePrResult> {
-    const octokit = await this.getOctokit(params.owner, params.repo);
-    const { data } = await octokit.request("POST /repos/{owner}/{repo}/pulls", {
-      owner: params.owner,
-      repo: params.repo,
-      title: params.title,
-      body: params.body,
-      head: params.branch,
-      base: params.base ?? "main",
-    });
-    return { prNumber: data.number, url: data.html_url, status: "open" };
   }
 
   // ---------------------------------------------------------------------------
