@@ -77,10 +77,12 @@ export {
 // Tool catalog
 export {
   type CatalogBoundTool,
+  CORE_TOOL_BUNDLE,
   createToolCatalog,
   getToolById,
   getToolIds,
   hasToolId,
+  POLY_TOOL_BUNDLE,
   TOOL_CATALOG,
   type ToolCatalog,
 } from "./catalog";

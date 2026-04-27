@@ -149,6 +149,61 @@ export const TOOL_CATALOG: ToolCatalog = createToolCatalog([
 ]);
 
 /**
+ * Cross-node core tool bundle. Every node imports this.
+ *
+ * Contains all non-Polymarket tools that every node exposes.
+ * Phase 2 (per-node-tools): each non-poly node passes only this list to
+ * createBoundToolSource; poly passes [...CORE_TOOL_BUNDLE, ...POLY_TOOL_BUNDLE].
+ *
+ * Invariant: CORE_TOOL_BUNDLE ∪ POLY_TOOL_BUNDLE === TOOL_CATALOG (verified by catalog.test.ts).
+ * Each entry is cast to CatalogBoundTool (same pattern as TOOL_CATALOG entries above).
+ */
+export const CORE_TOOL_BUNDLE: readonly CatalogBoundTool[] = [
+  getCurrentTimeBoundTool as CatalogBoundTool,
+  knowledgeReadBoundTool as CatalogBoundTool,
+  knowledgeSearchBoundTool as CatalogBoundTool,
+  knowledgeWriteBoundTool as CatalogBoundTool,
+  metricsQueryBoundTool as CatalogBoundTool,
+  repoListBoundTool as CatalogBoundTool,
+  repoOpenBoundTool as CatalogBoundTool,
+  repoSearchBoundTool as CatalogBoundTool,
+  scheduleListBoundTool as CatalogBoundTool,
+  scheduleManageBoundTool as CatalogBoundTool,
+  vcsCreateBranchBoundTool as CatalogBoundTool,
+  vcsFlightCandidateBoundTool as CatalogBoundTool,
+  vcsGetCiStatusBoundTool as CatalogBoundTool,
+  vcsListPrsBoundTool as CatalogBoundTool,
+  vcsMergePrBoundTool as CatalogBoundTool,
+  webSearchBoundTool as CatalogBoundTool,
+  workItemQueryBoundTool as CatalogBoundTool,
+  workItemTransitionBoundTool as CatalogBoundTool,
+];
+
+/**
+ * Poly-only tool bundle. Only nodes/poly imports this (after Phase 2).
+ *
+ * Contains all Polymarket-specific tools. Non-poly nodes do not need to
+ * register stubs for these; they simply omit this bundle.
+ *
+ * Invariant: CORE_TOOL_BUNDLE ∪ POLY_TOOL_BUNDLE === TOOL_CATALOG (verified by catalog.test.ts).
+ * Each entry is cast to CatalogBoundTool (same pattern as TOOL_CATALOG entries above).
+ */
+export const POLY_TOOL_BUNDLE: readonly CatalogBoundTool[] = [
+  marketListBoundTool as CatalogBoundTool,
+  polyCancelOrderBoundTool as CatalogBoundTool,
+  polyDataActivityBoundTool as CatalogBoundTool,
+  polyDataHelpBoundTool as CatalogBoundTool,
+  polyDataHoldersBoundTool as CatalogBoundTool,
+  polyDataPositionsBoundTool as CatalogBoundTool,
+  polyDataResolveUsernameBoundTool as CatalogBoundTool,
+  polyDataTradesMarketBoundTool as CatalogBoundTool,
+  polyDataValueBoundTool as CatalogBoundTool,
+  polyListOrdersBoundTool as CatalogBoundTool,
+  polyPlaceTradeBoundTool as CatalogBoundTool,
+  walletTopTradersBoundTool as CatalogBoundTool,
+];
+
+/**
  * Get all tool IDs in the catalog.
  */
 export function getToolIds(): readonly string[] {

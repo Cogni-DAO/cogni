@@ -304,6 +304,64 @@ A poly-only ai-tool PR (e.g. "add `core__poly_data_market_outcomes`") touches fi
 - Per-node depcruise rules (Phase 2) — canonical cross-node isolation
 - Unit tests for moved tools relocate alongside the tool files; poly graphs vitest config already covers `nodes/poly/**`
 
+## Plan (Implementation Checkpoints)
+
+Single PR, multiple checkpoints. Candidate-a flighting happens on this PR after Checkpoint 1.
+
+- [x] **Checkpoint 1 — Phase 1: Open-world tool source factory (back-compat preserved)** ✅ landed
+  - Milestone: each node's `container.ts` explicitly passes its full contract list to `createBoundToolSource(contracts, bindings)`. Runtime behavior is byte-identical to today (each node still composes the full set), but the iteration site moves from inside the shared factory to the node's container. Enables Checkpoint 2 to scope per-node bundles without touching the factory again.
+  - Invariants: `TOOL_BINDING_REQUIRED → TOOL_BINDING_LOCAL`, `SIMPLE_SOLUTION`, `ARCHITECTURE_ALIGNMENT`
+  - Todos:
+    - [ ] Add `CORE_TOOL_BUNDLE` and `POLY_TOOL_BUNDLE` (`readonly CatalogBoundTool[]`) to `packages/ai-tools/src/catalog.ts` — composition signal for Phase 2; TOOL_CATALOG itself unchanged (still exported for back-compat with `@cogni/langgraph-graphs` runtime helpers and existing test).
+    - [ ] Re-export the bundles from `packages/ai-tools/src/index.ts`.
+    - [ ] Modify `nodes/{poly,operator,resy,node-template}/app/src/bootstrap/ai/tool-source.factory.ts` — `createBoundToolSource(contracts: readonly CatalogBoundTool[], bindings: ToolBindings)`; iterate caller-supplied `contracts`.
+    - [ ] Modify `nodes/{poly,operator,resy,node-template}/app/src/bootstrap/container.ts` — pass `[...CORE_TOOL_BUNDLE, ...POLY_TOOL_BUNDLE]` (preserves current behavior).
+    - [ ] Create `tests/arch/tool-catalog-no-global-iteration.test.ts` — assert no file under `nodes/*/app/src/bootstrap/` iterates `TOOL_CATALOG` (Object.entries / Object.values / Object.keys). `packages/langgraph-graphs/src/runtime/` is explicitly out of scope until a future cleanup; documented in the test file.
+    - [ ] Update `packages/ai-tools/AGENTS.md` Public Surface listing — add the two bundle exports.
+  - Validation/Testing:
+    - [ ] What can now function e2e? Identical to today — each node boots, exposes the same tool set, all existing graphs work. Plus: the new arch test fires if anyone tries to re-iterate TOOL_CATALOG inside a node's bootstrap.
+    - Test levels:
+      - [ ] unit: `pnpm --filter @cogni/ai-tools test` (catalog test still passes since TOOL_CATALOG unchanged)
+      - [ ] arch: `pnpm vitest run tests/arch/tool-catalog-no-global-iteration.test.ts`
+      - [ ] check:fast at end of checkpoint (typecheck + lint + unit)
+
+- [ ] **Checkpoint 2 — Phase 2: Extract `@cogni/poly-ai-tools` into `nodes/poly/packages/ai-tools/`**
+  - Milestone: all 13 poly-only tool files + `wallet-top-traders` + `market-list` + their capability interfaces live under `nodes/poly/packages/ai-tools/`. `operator/resy/node-template` have zero poly-\* imports or stub bindings. Each node's container passes only the bundles it owns. `single-node-scope` would now pass for any future poly-tool PR.
+  - Invariants: `SINGLE_DOMAIN_HARD_FAIL`, `POLICY_STAYS_LOCAL`, `NO_SRC_IMPORTS`, `NO_SERVICE_IMPORTS`, `PURE_LIBRARY`, `TOOL_ID_STABILITY` (no rename), `TOOL_ID_NAMESPACED` (defer `core__` → `poly__`)
+  - Todos:
+    - [ ] Scaffold `nodes/poly/packages/ai-tools/{package.json, tsconfig.json, tsup.config.ts, AGENTS.md, src/index.ts}` mirroring `nodes/poly/packages/knowledge/`.
+    - [ ] `git mv` poly tool files + capability interfaces from `packages/ai-tools/src/` → `nodes/poly/packages/ai-tools/src/`.
+    - [ ] Update barrels: remove poly exports from `packages/ai-tools/src/{catalog.ts,index.ts}`; export from new package.
+    - [ ] Update `packages/ai-tools/AGENTS.md` Public Surface — drop poly entries.
+    - [ ] Update `nodes/poly/app/src/bootstrap/ai/tool-bindings.ts` — import from `@cogni/poly-ai-tools`.
+    - [ ] Delete poly stub bindings + imports from `nodes/{operator,resy,node-template}/app/src/bootstrap/ai/tool-bindings.ts`.
+    - [ ] Update `nodes/poly/{app,graphs}/package.json` — add `@cogni/poly-ai-tools: workspace:*`.
+    - [ ] Update `nodes/poly/graphs/src/graphs/{poly-research,poly-brain}/tools.ts` — re-source name constants.
+    - [ ] Update per-node `.dependency-cruiser.cjs` — allow `nodes/poly/app` → `@cogni/poly-ai-tools`; forbid for others.
+  - Validation/Testing:
+    - [ ] What can now function e2e? Poly node boots and exposes the same tools (now from `@cogni/poly-ai-tools`). Operator/resy/node-template boot with strictly smaller tool sets (poly tools removed entirely). poly-research and poly-brain graphs run with re-sourced constants.
+    - Test levels:
+      - [ ] unit: `pnpm --filter @cogni/poly-ai-tools test` (relocated tool tests)
+      - [ ] unit: `pnpm --filter @cogni/ai-tools test` (catalog test updated for slimmer set)
+      - [ ] arch: depcruise per-node — `pnpm --filter <node>-app arch:check`
+      - [ ] check:fast at end of checkpoint
+
+- [ ] **Checkpoint 3 — Phase 3: Fail-loud poly bootstrap**
+  - Milestone: poly's container throws at startup with named missing vars when `OPERATOR_WALLET_ADDRESS` / `POLY_CLOB_*` / `PRIVY_*` are incomplete. `polyTradeCapability?` optional path is removed. No more `polyPlaceTradeStubImplementation` invocation site.
+  - Invariants: `NO_STUB_AT_RUNTIME`
+  - Pre-flight gate:
+    - [ ] `grep -rE "POLY_CLOB_|PRIVY_|OPERATOR_WALLET_ADDRESS" deploy/poly/ infra/` shows every required var is wired
+    - [ ] Current candidate-a poly pod is healthy under existing config (i.e., the env is real, not just declared)
+  - Todos:
+    - [ ] `nodes/poly/app/src/bootstrap/container.ts` — env validation block; throw with named missing vars; remove conditional construction.
+    - [ ] `nodes/poly/app/src/bootstrap/ai/tool-bindings.ts` — drop optional `polyTradeCapability?`; remove stub fallback branches for poly_place_trade / poly_list_orders / poly_cancel_order.
+    - [ ] Optionally delete `*StubImplementation` exports from the moved poly tool files in `nodes/poly/packages/ai-tools/`.
+  - Validation/Testing:
+    - [ ] What can now function e2e? Boot with intentionally missing `POLY_CLOB_*` throws at startup with a clear error. Boot with full env succeeds and trade tools work.
+    - Test levels:
+      - [ ] unit: `pnpm --filter @cogni/poly-app test` (env validation test)
+      - [ ] check:fast at end of checkpoint
+
 ## Related
 
 - [spec.node-ci-cd-contract](../../docs/spec/node-ci-cd-contract.md) — SINGLE_DOMAIN_HARD_FAIL invariant; this bug exists because the current ai-tools layout violates it

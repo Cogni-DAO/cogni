@@ -6,8 +6,11 @@
  * Purpose: Create StaticToolSource with real implementations from bindings.
  * Scope: Factory for tool source port. Does NOT execute tools.
  * Invariants:
- *   - TOOL_BINDING_REQUIRED: All catalog tools must have bindings
- *   - CONTRACTS_FROM_CATALOG: Uses contracts from TOOL_CATALOG
+ *   - TOOL_BINDING_REQUIRED: Every contract in the supplied list must have a binding
+ *   - OPEN_WORLD_CONTRACTS: Caller supplies the contract list; factory is not
+ *     coupled to TOOL_CATALOG. Each node passes its own bundle
+ *     (e.g. [...CORE_TOOL_BUNDLE, ...POLY_TOOL_BUNDLE]) so non-poly nodes never
+ *     need stubs for tools they don't own.
  *   - IMPLEMENTATIONS_FROM_BINDINGS: Uses implementations from tool-bindings
  * Side-effects: none
  * Links: TOOL_USE_SPEC.md, container.ts
@@ -15,30 +18,33 @@
  */
 
 import { createStaticToolSource, type StaticToolSource } from "@cogni/ai-core";
-import { contractToRuntime, TOOL_CATALOG } from "@cogni/ai-tools";
+import { type CatalogBoundTool, contractToRuntime } from "@cogni/ai-tools";
 
 import type { ToolBindings } from "./tool-bindings";
 
 /**
  * Create a StaticToolSource with real implementations from bindings.
  *
- * Per TOOL_BINDING_REQUIRED: Every tool in TOOL_CATALOG must have a
+ * Per OPEN_WORLD_CONTRACTS: the caller supplies `contracts` — an explicit list
+ * of CatalogBoundTool entries. The factory does not consult TOOL_CATALOG; each
+ * node determines its own tool surface at the composition root (container.ts).
+ *
+ * Per TOOL_BINDING_REQUIRED: Every tool in `contracts` must have a
  * corresponding binding. Missing bindings throw at startup to fail fast.
  *
- * Per CONTRACTS_FROM_CATALOG + IMPLEMENTATIONS_FROM_BINDINGS:
- * - Contracts come from TOOL_CATALOG (schema, validation, redaction)
- * - Implementations come from bindings (real I/O with capabilities)
- *
+ * @param contracts - Ordered list of bound tools this node exposes
  * @param bindings - Tool bindings map from createToolBindings()
- * @returns StaticToolSource with all catalog tools wired to real implementations
- * @throws Error if any catalog tool is missing a binding
+ * @returns StaticToolSource with the supplied tools wired to real implementations
+ * @throws Error if any contract tool is missing a binding
  */
 export function createBoundToolSource(
+  contracts: readonly CatalogBoundTool[],
   bindings: ToolBindings
 ): StaticToolSource {
   const runtimes = [];
 
-  for (const [toolId, boundTool] of Object.entries(TOOL_CATALOG)) {
+  for (const boundTool of contracts) {
+    const toolId = boundTool.contract.name;
     const impl = bindings[toolId];
     if (!impl) {
       throw new Error(

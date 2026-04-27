@@ -19,6 +19,7 @@ import type {
   RepoCapability,
   WebSearchCapability,
 } from "@cogni/ai-tools";
+import { CORE_TOOL_BUNDLE, POLY_TOOL_BUNDLE } from "@cogni/ai-tools";
 import type { AttributionStore } from "@cogni/attribution-ledger";
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import type { FinancialLedgerPort } from "@cogni/financial-ledger";
@@ -961,7 +962,10 @@ function createContainer(): Container {
     walletCapability,
     workItemCapability,
   });
-  const toolSource = createBoundToolSource(toolBindings);
+  const toolSource = createBoundToolSource(
+    [...CORE_TOOL_BUNDLE, ...POLY_TOOL_BUNDLE],
+    toolBindings
+  );
 
   // Config: rethrow in dev/test for diagnosis, respond_500 in production for safety
   const config: ContainerConfig = {
