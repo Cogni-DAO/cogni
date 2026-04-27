@@ -36,7 +36,7 @@ Define the tool execution invariants, semantic types, wire format adapters, poli
 
 1. **TOOLS_VIA_TOOLRUNNER**: All tool execution flows through `toolRunner.exec()` for ALL executors (InProc, langgraph dev, server). LangChain tool wrappers (`@cogni/langgraph-graphs`) must delegate to `toolRunner.exec()` to preserve validation/redaction pipeline. No direct tool implementation calls. No executor-specific bypass paths. **Documented deviation:** Codex SDK (`CodexLlmAdapter`) calls MCP tools directly via its own agent loop (config.toml). Mitigated by: server-level scoping, $0 billing (user-funded), output stays in agent loop. See `INVARIANT_DEVIATION: TOOLS_VIA_TOOLRUNNER` in `codex-llm.adapter.ts`.
 
-2. **TOOLS_IN_PACKAGES**: Tool contracts + implementations in `@cogni/ai-tools`. Semantic types (`ToolSpec`, `ToolInvocationRecord`) in `@cogni/ai-core/tooling/`. Wire adapters (OpenAI/Anthropic encoders/decoders) in adapters layer. LangChain wrappers in `@cogni/langgraph-graphs/runtime`. Binding in composition roots only. No tool definitions in `src/**`.
+2. **TOOLS_IN_PACKAGES**: Cross-node `core__` tool contracts + implementations live in `@cogni/ai-tools` (operator domain — shared by all nodes). Node-scoped tool contracts + implementations live in that node's `@cogni/<node>-ai-tools` package at `nodes/<node>/packages/ai-tools/` (poly today via `@cogni/poly-ai-tools`; resy/node-template create their own when the first node-only tool ships). Semantic types (`ToolSpec`, `ToolInvocationRecord`) in `@cogni/ai-core/tooling/`. Wire adapters (OpenAI/Anthropic encoders/decoders) in adapters layer. LangChain wrappers in `@cogni/langgraph-graphs/runtime`. Binding in composition roots only. No tool definitions in `src/**`.
 
 3. **TOOLS_IO_VIA_CAPABILITIES**: Tools receive IO capabilities as injected interfaces (defined in packages). No direct adapter/env imports in tool code. Capabilities are bound to adapters in composition roots.
 
@@ -90,7 +90,11 @@ Define the tool execution invariants, semantic types, wire format adapters, poli
 
 23. **TOOL_CONFIG_PROPAGATION**: LangChain tool wrappers receive `RunnableConfig` as 3rd parameter. Wrappers MUST accept and use config for per-run authorization via `configurable.toolIds`. Same policy/redaction path for all executors (InProc, langgraph dev, server).
 
-24. **TOOL_CONTRACTS_ARE_CANONICAL**: `TOOL_CONTRACTS` in `@cogni/ai-tools` is the single source of truth for tool definitions (name, schema, effect, redaction). `@cogni/ai-tools` does NOT export a default executable catalog. Each runtime builds its own `ToolSourcePort` by binding capabilities in its composition root. `langgraph-graphs` wraps tools from the runtime-bound source; it does not define tool contracts.
+24. **TOOL_CONTRACTS_ARE_CANONICAL**: Tool contracts (name, schema, effect, redaction) live in tool-source packages. `@cogni/ai-tools` exports `CORE_TOOL_BUNDLE` (cross-node `core__` tools; single hand-maintained list). Each node may also expose `@cogni/<node>-ai-tools` exporting its own `<NODE>_TOOL_BUNDLE` (e.g. `POLY_TOOL_BUNDLE`). The full canonical surface for a node is the union of `CORE_TOOL_BUNDLE` and any node-scoped bundles it imports. None of these packages export a default executable catalog (per **NO_DEFAULT_EXECUTABLE_CATALOG** and **NODE_OWNED_TOOL_PACKAGES**); each runtime builds its own `ToolSourcePort` by composing the bundles its node owns and binding capabilities in its composition root. `langgraph-graphs` wraps tools from the runtime-bound source; it does not define tool contracts.
+
+24a. **NODE_OWNED_TOOL_PACKAGES**: Tools that only one node consumes live inside that node's domain at `nodes/<node>/packages/ai-tools/` (e.g. `@cogni/poly-ai-tools`), never in the shared `packages/ai-tools/`. This satisfies `SINGLE_DOMAIN_HARD_FAIL` (see [node-ci-cd-contract.md](./node-ci-cd-contract.md#single-domain-scope)) — adding a poly-only tool then touches only `nodes/poly/**`. Each node-scoped package exports its own `<NODE>_TOOL_BUNDLE` for composition; the per-node bootstrap concatenates `CORE_TOOL_BUNDLE` + the node's bundles before passing them to `createBoundToolSource`. A non-poly node MUST NOT import `@cogni/poly-ai-tools` (enforced by `.dependency-cruiser.cjs`). Promoting a node-scoped tool to cross-node is a deliberate substrate-migration PR: hoist its file to `packages/ai-tools/` and append it to `CORE_TOOL_BUNDLE`.
+
+24b. **TOOL_CATALOG_DERIVES_FROM_BUNDLE**: The id-keyed `TOOL_CATALOG` view in `@cogni/ai-tools/catalog.ts` is derived from `CORE_TOOL_BUNDLE` via `createToolCatalog(CORE_TOOL_BUNDLE)`, never maintained as a parallel hand-written list. This prevents drift between the bundle (consumed by `createBoundToolSource` for open-world per-node composition) and the id-keyed view (consumed by `@cogni/langgraph-graphs/runtime/{core/make-server-graph,cogni/make-cogni-graph}` for `FAIL_FAST_ON_MISSING_TOOLS` lookup). Per-node tool packages follow the same pattern with their own `<NODE>_TOOL_BUNDLE`.
 
 25. **TOOL_SAME_PATH_ALL_EXECUTORS**: Same policy/redaction/audit path for dev, server, and InProc. No executor-specific bypass paths (e.g., no dev.ts that skips policy). `toLangChainTool` wrapper enforces `configurable.toolIds` allowlist for all executors.
 
@@ -134,22 +138,25 @@ F3. **CAPABILITY_OWNS_SECRETS** _(P1)_: Capabilities are injectable interfaces. 
 
 #### 1. Tool Architecture
 
-| Layer            | Location                                        | Owns                                                                        |
-| ---------------- | ----------------------------------------------- | --------------------------------------------------------------------------- |
-| Semantic types   | `@cogni/ai-core/tooling/types.ts`               | `ToolSpec`, `ToolEffect`, `ToolExecResult`, `ToolInvocationRecord` — no Zod |
-| Contract         | `@cogni/ai-tools/tools/*.ts`                    | Zod schema, allowlist, name, description, effect, redaction                 |
-| Implementation   | `@cogni/ai-tools/tools/*.ts`                    | `execute(ctx, args)` — IO via injected capabilities                         |
-| Schema compiler  | `@cogni/ai-tools/schema.ts`                     | `toToolSpec(contract)` — compiles Zod → ToolSpec with JSONSchema7           |
-| Wire encoder     | `src/adapters/server/ai/*-encoder.ts`           | `ToolSpec` → provider wire format (OpenAI, Anthropic)                       |
-| Wire decoder     | `src/adapters/server/ai/*-decoder.ts`           | Provider response → `ToolInvocationRecord` + AiEvents                       |
-| Policy           | `@cogni/ai-core/tooling/runtime/tool-policy.ts` | `ToolPolicy` — allowlist, effect requirements, budgets                      |
-| Catalog          | `src/shared/ai/tool-catalog.ts`                 | `ToolCatalog` — explicit tool visibility for LLM                            |
-| Runner           | `@cogni/ai-core/tooling/tool-runner.ts`         | `createToolRunner` — canonical execution pipeline                           |
-| Capability iface | `@cogni/ai-tools/capabilities/*.ts`             | Minimal interfaces tools depend on (e.g., Clock)                            |
-| LangChain wrap   | `@cogni/langgraph-graphs/runtime/`              | `toLangChainTool()` converter (delegates to toolRunner)                     |
-| Binding (Next)   | `src/bootstrap/**`                              | Wire capabilities → adapters for Next.js runtime                            |
-| Binding (Server) | `packages/langgraph-server/bootstrap/`          | Wire capabilities → adapters for LangGraph Server                           |
-| IO Adapter       | `src/adapters/server/**`                        | Capability implementation                                                   |
+| Layer            | Location                                        | Owns                                                                                    |
+| ---------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Semantic types   | `@cogni/ai-core/tooling/types.ts`               | `ToolSpec`, `ToolEffect`, `ToolExecResult`, `ToolInvocationRecord` — no Zod             |
+| Core contracts   | `@cogni/ai-tools/tools/*.ts`                    | Zod schema, allowlist, name, description, effect, redaction (cross-node `core__` tools) |
+| Node contracts   | `nodes/<node>/packages/ai-tools/src/tools/*.ts` | Same shape, scoped to one node (e.g. `@cogni/poly-ai-tools`)                            |
+| Core bundle      | `@cogni/ai-tools/catalog.ts`                    | `CORE_TOOL_BUNDLE` (source of truth) + derived `TOOL_CATALOG` view                      |
+| Node bundles     | `nodes/<node>/packages/ai-tools/src/index.ts`   | `<NODE>_TOOL_BUNDLE` (e.g. `POLY_TOOL_BUNDLE`)                                          |
+| Implementation   | adjacent to its contract file                   | `execute(ctx, args)` — IO via injected capabilities                                     |
+| Schema compiler  | `@cogni/ai-tools/schema.ts`                     | `toToolSpec(contract)` — compiles Zod → ToolSpec with JSONSchema7                       |
+| Wire encoder     | `src/adapters/server/ai/*-encoder.ts`           | `ToolSpec` → provider wire format (OpenAI, Anthropic)                                   |
+| Wire decoder     | `src/adapters/server/ai/*-decoder.ts`           | Provider response → `ToolInvocationRecord` + AiEvents                                   |
+| Policy           | `@cogni/ai-core/tooling/runtime/tool-policy.ts` | `ToolPolicy` — allowlist, effect requirements, budgets                                  |
+| Catalog          | `src/shared/ai/tool-catalog.ts`                 | `ToolCatalog` — explicit tool visibility for LLM                                        |
+| Runner           | `@cogni/ai-core/tooling/tool-runner.ts`         | `createToolRunner` — canonical execution pipeline                                       |
+| Capability iface | `@cogni/ai-tools/capabilities/*.ts`             | Minimal interfaces tools depend on (e.g., Clock)                                        |
+| LangChain wrap   | `@cogni/langgraph-graphs/runtime/`              | `toLangChainTool()` converter (delegates to toolRunner)                                 |
+| Binding (Next)   | `src/bootstrap/**`                              | Wire capabilities → adapters for Next.js runtime                                        |
+| Binding (Server) | `packages/langgraph-server/bootstrap/`          | Wire capabilities → adapters for LangGraph Server                                       |
+| IO Adapter       | `src/adapters/server/**`                        | Capability implementation                                                               |
 
 **Rules:**
 
@@ -474,20 +481,23 @@ When `toolCall.function.arguments` is invalid JSON:
 
 ### File Pointers
 
-| File                                                 | Purpose                                                   |
-| ---------------------------------------------------- | --------------------------------------------------------- |
-| `@cogni/ai-core/tooling/types.ts`                    | Canonical semantic types (ToolSpec, ToolInvocationRecord) |
-| `@cogni/ai-core/tooling/tool-runner.ts`              | Canonical execution pipeline                              |
-| `@cogni/ai-core/tooling/runtime/tool-policy.ts`      | ToolPolicy, createToolAllowlistPolicy                     |
-| `@cogni/ai-core/tooling/ports/tool-source.port.ts`   | ToolSourcePort interface                                  |
-| `@cogni/ai-core/tooling/sources/static.source.ts`    | StaticToolSource implementation                           |
-| `@cogni/ai-tools/tools/*.ts`                         | Tool contracts + implementations                          |
-| `@cogni/ai-tools/schema.ts`                          | toToolSpec() — Zod → ToolSpec compiler                    |
-| `@cogni/ai-tools/capabilities/*.ts`                  | Capability interfaces (Clock, Auth)                       |
-| `@cogni/langgraph-graphs/runtime/langchain-tools.ts` | toLangChainTool() wrapper                                 |
-| `src/bootstrap/ai/tools.bindings.ts`                 | Capability → adapter binding for Next.js                  |
-| `src/shared/ai/tool-catalog.ts`                      | ToolCatalog interface                                     |
-| `src/app/api/v1/ai/chat/route.ts`                    | Route tool handling (addToolCallPart)                     |
+| File                                                 | Purpose                                                                    |
+| ---------------------------------------------------- | -------------------------------------------------------------------------- |
+| `@cogni/ai-core/tooling/types.ts`                    | Canonical semantic types (ToolSpec, ToolInvocationRecord)                  |
+| `@cogni/ai-core/tooling/tool-runner.ts`              | Canonical execution pipeline                                               |
+| `@cogni/ai-core/tooling/runtime/tool-policy.ts`      | ToolPolicy, createToolAllowlistPolicy                                      |
+| `@cogni/ai-core/tooling/ports/tool-source.port.ts`   | ToolSourcePort interface                                                   |
+| `@cogni/ai-core/tooling/sources/static.source.ts`    | StaticToolSource implementation                                            |
+| `@cogni/ai-tools/tools/*.ts`                         | Cross-node `core__` tool contracts + implementations                       |
+| `@cogni/ai-tools/catalog.ts`                         | `CORE_TOOL_BUNDLE` (source of truth) + derived `TOOL_CATALOG`              |
+| `nodes/<node>/packages/ai-tools/src/tools/*.ts`      | Node-scoped tool contracts + implementations (e.g. `@cogni/poly-ai-tools`) |
+| `nodes/<node>/packages/ai-tools/src/index.ts`        | `<NODE>_TOOL_BUNDLE` for per-node composition                              |
+| `@cogni/ai-tools/schema.ts`                          | toToolSpec() — Zod → ToolSpec compiler                                     |
+| `@cogni/ai-tools/capabilities/*.ts`                  | Capability interfaces (Clock, Auth)                                        |
+| `@cogni/langgraph-graphs/runtime/langchain-tools.ts` | toLangChainTool() wrapper                                                  |
+| `src/bootstrap/ai/tools.bindings.ts`                 | Capability → adapter binding for Next.js                                   |
+| `src/shared/ai/tool-catalog.ts`                      | ToolCatalog interface                                                      |
+| `src/app/api/v1/ai/chat/route.ts`                    | Route tool handling (addToolCallPart)                                      |
 
 ## Acceptance Checks
 
