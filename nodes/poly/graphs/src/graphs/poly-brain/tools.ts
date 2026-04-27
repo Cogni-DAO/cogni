@@ -14,9 +14,6 @@
 import { WEB_SEARCH_NAME } from "@cogni/ai-tools";
 import {
   MARKET_LIST_NAME,
-  POLY_CANCEL_ORDER_NAME,
-  POLY_LIST_ORDERS_NAME,
-  POLY_PLACE_TRADE_NAME,
   WALLET_TOP_TRADERS_NAME,
 } from "@cogni/poly-ai-tools";
 
@@ -24,19 +21,16 @@ import {
  * Tool IDs for poly-brain graph.
  * market_list: browse/search live prediction markets
  * wallet_top_traders: scoreboard of top Polymarket wallets by PnL (day/week/month/all)
- * poly_place_trade: place ONE BUY on Polymarket via the Cogni operator wallet
- *   (external_side_effect — real money; LLM should invoke only on explicit user request)
- * poly_list_orders: list currently-open Polymarket CLOB orders on the operator wallet
- *   (read_only — used to confirm state after placement)
- * poly_cancel_order: cancel ONE open Polymarket CLOB order by id
- *   (state_change — required before replacing a resting order, since Polymarket has no update op)
  * web_search: research events that affect market prices
+ *
+ * NOTE: poly_place_trade / poly_list_orders / poly_cancel_order were removed
+ * post-Ckpt-3 (bug.0319) — their contracts still live in @cogni/poly-ai-tools
+ * but they are absent from POLY_TOOL_BUNDLE pending per-tenant routing through
+ * PolyTradeExecutor with actor identity at tool-invocation time. Re-add to
+ * POLY_BRAIN_TOOL_IDS only after the trade tools are bound again.
  */
 export const POLY_BRAIN_TOOL_IDS = [
   MARKET_LIST_NAME,
-  POLY_CANCEL_ORDER_NAME,
-  POLY_LIST_ORDERS_NAME,
-  POLY_PLACE_TRADE_NAME,
   WALLET_TOP_TRADERS_NAME,
   WEB_SEARCH_NAME,
 ] as const;
