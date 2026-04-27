@@ -2,7 +2,7 @@
 id: task.0387
 type: task
 title: "Poly wallet research — single-source PnL via Polymarket user-pnl-api"
-status: needs_implement
+status: needs_closeout
 priority: 1
 rank: 5
 estimate: 2
@@ -15,7 +15,7 @@ assignees: []
 project: proj.poly-copy-trading
 pr:
 created: 2026-04-26
-updated: 2026-04-26
+updated: 2026-04-27
 labels: [poly, polymarket, wallet-research, pnl, simplification, performance]
 external_refs:
   - nodes/poly/app/src/features/wallet-analysis/server/wallet-analysis-service.ts
@@ -137,8 +137,10 @@ The interval driving the headline is `WalletAnalysisQuery.interval` — already 
 - Modify: `packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts` — drop the five fields from `WalletAnalysisSnapshotSchema` (lines 47–51); update the schema's JSDoc to call out that PnL is sourced from the `pnl` slice, not here.
 - Modify: `nodes/poly/app/src/features/wallet-analysis/server/wallet-analysis-service.ts` — remove the five fields from `getSnapshotSlice` return value (lines 186–190). Leave the `computeWalletMetrics` call intact; only its outputs change.
 - Modify: `nodes/poly/app/src/features/wallet-analysis/client/use-wallet-analysis.ts` — `mapSnapshot` drops `roi`, `pnl`, `dd` (lines 166–168). Add `pnlHeadline(pnl)` helper. `mapToView` composes `pnl: pnlHeadline(pnl)` onto the returned card object alongside `snapshot`.
-- Modify: `nodes/poly/app/src/features/wallet-analysis` view layer — drop `roi` / `dd` columns from any card component reading them. Compile errors will pinpoint every site once the contract change lands.
-- Modify: `nodes/poly/app/src/app/(app)/_components/wallets-table/buildWalletRows.ts` and `nodes/poly/app/src/app/(app)/dashboard/_components/wallet-format.ts` — same: drop `roi` / `dd`, read PnL from the new card-level field.
+- Modify: `nodes/poly/app/src/features/wallet-analysis/types/wallet-analysis.ts` — drop `roi`, `pnl`, `dd` from the `WalletSnapshot` shape (lines 98–100).
+- Modify: `nodes/poly/app/src/features/wallet-analysis/components/StatGrid.tsx` — drop the three cells (`Realized ROI`, `Realized PnL`, `Max DD`); change `md:grid-cols-6` to `md:grid-cols-3`; trim skeleton from 6 cells to 3.
+- Modify: `nodes/poly/app/src/features/wallet-analysis/components/WalletProfitLossCard.tsx` — fix the headline (line 80) from `history.at(-1)?.pnl ?? 0` to a windowed delta `last.pnl − first.pnl`; render `"—"` when history is empty/missing instead of `$0.00`. Same root bug as the snapshot side, same upstream, one-line fix.
+- No changes to `app/(app)/_components/wallets-table/*` or `app/(app)/dashboard/_components/wallet-format.ts` — that surface uses Polymarket's leaderboard endpoint (`listTopTraders`) directly and does not depend on the removed contract fields.
 - Test: `packages/node-contracts/tests/` — assert the new `WalletAnalysisSnapshotSchema.shape` keys do not include the five removed fields (use `Object.keys(WalletAnalysisSnapshotSchema.shape)`, not parse-rejection — the schema is non-strict by default and would silently strip extras).
 - Test: `nodes/poly/app/tests/unit/features/wallet-analysis/wallet-analysis-service.test.ts` — adjust snapshot fixture expectations.
 - Test: `nodes/poly/app/tests/unit/features/wallet-analysis/use-wallet-analysis.test.ts` (or equivalent) — assert `pnlHeadline` returns `last − first`, returns `"—"` on empty/undefined, and reconciles with the same `WalletAnalysisPnl.history` the chart consumes.

@@ -38,17 +38,20 @@ export const WalletAnalysisSliceSchema = z.enum([
 ]);
 export type WalletAnalysisSlice = z.infer<typeof WalletAnalysisSliceSchema>;
 
-/** Deterministic metrics (realized WR/ROI/DD/duration + live activity). Nullable numerics when sample is insufficient. */
+/**
+ * Deterministic trade-derived metrics (winrate, duration, activity counts).
+ * Nullable numerics when sample is insufficient.
+ *
+ * PnL is **not** in this slice. PnL of any flavour (realized, ROI, drawdown,
+ * peak equity) is sourced exclusively from the `pnl` slice — Polymarket's
+ * `user-pnl-api`. See task.0387: rendering both a bespoke realized-PnL number
+ * and Polymarket's series side-by-side guaranteed they would disagree.
+ */
 export const WalletAnalysisSnapshotSchema = z.object({
   resolvedPositions: z.number().int().nonnegative(),
   wins: z.number().int().nonnegative(),
   losses: z.number().int().nonnegative(),
   trueWinRatePct: z.number().nullable(),
-  realizedPnlUsdc: z.number().nullable(),
-  realizedRoiPct: z.number().nullable(),
-  maxDrawdownUsdc: z.number().nullable(),
-  maxDrawdownPctOfPeak: z.number().nullable(),
-  peakEquityUsdc: z.number().nullable(),
   medianDurationHours: z.number().nullable(),
   openPositions: z.number().int().nonnegative(),
   openNetCostUsdc: z.number(),
