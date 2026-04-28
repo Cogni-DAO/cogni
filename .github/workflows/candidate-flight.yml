@@ -87,8 +87,11 @@ jobs:
           OUT: ${{ runner.temp }}/pr-changed-paths.txt
         run: |
           set -euo pipefail
+          # Emit both filename and previous_filename so cross-directory
+          # renames trigger rebuilds for the source side too (otherwise
+          # renaming nodes/A/x.ts → nodes/B/x.ts only rebuilds B).
           gh api --paginate "repos/${{ github.repository }}/pulls/${PR_NUMBER}/files" \
-            --jq '.[].filename' > "$OUT"
+            --jq '.[] | (.filename, .previous_filename) | select(. != null)' > "$OUT"
           COUNT=$(wc -l < "$OUT" | tr -d ' ')
           echo "ℹ️  PR #${PR_NUMBER} changed ${COUNT} path(s) (per GitHub API)"
           echo "changed_paths_file=$OUT" >> "$GITHUB_OUTPUT"
