@@ -80,7 +80,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout (for image-tags lib)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ steps.env.outputs.head_sha }}
           fetch-depth: 1
@@ -120,7 +120,7 @@ jobs:
       # Checkout the workflow dispatch ref (not source_sha) — the AppSet
       # YAML is part of the CI control plane, not the artifact under
       # promotion. Mirrors candidate-flight.yml's reconcile-appset.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup SSH
         id: ssh-setup
@@ -167,7 +167,7 @@ jobs:
     environment: ${{ needs.decide.outputs.environment }}
     steps:
       - name: Checkout app source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.decide.outputs.head_sha }}
           fetch-depth: 1
@@ -186,7 +186,7 @@ jobs:
 
       - name: Checkout per-node preview branch (preview-forward mode)
         if: needs.decide.outputs.preview_forward == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: deploy/preview-${{ matrix.node }}
           fetch-depth: 1
@@ -247,7 +247,7 @@ jobs:
 
       - name: Checkout per-node deploy branch
         if: steps.digest.outputs.promoted == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: deploy/${{ needs.decide.outputs.environment }}-${{ matrix.node }}
           fetch-depth: 1
@@ -417,7 +417,7 @@ jobs:
       TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
       COGNI_NODE_DBS: ${{ secrets.COGNI_NODE_DBS }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ needs.decide.outputs.head_sha }}
 
@@ -475,18 +475,18 @@ jobs:
       DEPLOY_ENVIRONMENT: ${{ needs.decide.outputs.environment }}
     steps:
       - name: Checkout (workspace root for composite actions)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.decide.outputs.head_sha }}
 
       - name: Checkout app source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.decide.outputs.head_sha }}
           path: app-src
 
       - name: Checkout per-node deploy branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: deploy/${{ needs.decide.outputs.environment }}-${{ matrix.node }}
           path: deploy-branch
@@ -570,7 +570,7 @@ jobs:
       DOMAIN: ${{ vars.DOMAIN }}
       K8S_NAMESPACE: cogni-${{ needs.decide.outputs.environment }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ needs.decide.outputs.head_sha }}
 
@@ -633,7 +633,7 @@ jobs:
 
       - name: Checkout
         if: steps.gate.outputs.skip != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.decide.outputs.head_sha }}
 
@@ -694,7 +694,7 @@ jobs:
       group: aggregate-preview
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1
@@ -770,7 +770,7 @@ jobs:
       # workflow_dispatch from any other ref cannot inject scripts that
       # write to deploy/production. Branch protection on main is the
       # gate; the dispatched workflow YAML can call only what main ships.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: main
           fetch-depth: 1
