@@ -933,9 +933,14 @@ describe("PrivyPolyTraderWalletAdapter.authorizeIntent + provisionWithGrant (com
     expect(result.reason).toBe("trading_not_ready");
   });
 
-  it("ensureTradingApprovals repairs a legacy 5-step wallet by adding the neg-risk adapter CTF approval", async () => {
+  it("ensureTradingApprovals resumes correctly when only the neg-risk adapter CTF approval is missing (V2)", async () => {
+    // V2 ceremony (bug.0419): 7 of 8 steps already satisfied — USDC.e fully
+    // wrapped (balance=0, Onramp allowance maxed), all pUSD spenders + 2 of
+    // 3 CTF operators approved. Only `CTF → Neg-Risk Adapter` remains.
+    const V2_EXCHANGE = "0xe111180000d2663c0091e4f400237545b87b996b";
+    const V2_NEG_RISK_EXCHANGE = "0xe2222d279d744050d28e00520010520000310f59";
+    const NEG_RISK_ADAPTER = "0xd91e80cf2e7be2e162c6513ced06f1dd0da35296";
     const approvalState = {
-      usdc: [maxUint256, maxUint256, maxUint256] as const,
       ctf: [true, true, false] as [boolean, boolean, boolean],
     };
 
@@ -945,7 +950,7 @@ describe("PrivyPolyTraderWalletAdapter.authorizeIntent + provisionWithGrant (com
           throw new Error(`unexpected function ${input.functionName}`);
         }
         const operator = String(input.args[0]).toLowerCase();
-        if (operator !== "0xd91e80cf2e7be2e162c6513ced06f1dd0da35296") {
+        if (operator !== NEG_RISK_ADAPTER) {
           throw new Error(`unexpected operator ${operator}`);
         }
         approvalState.ctf[2] = true;
@@ -958,28 +963,19 @@ describe("PrivyPolyTraderWalletAdapter.authorizeIntent + provisionWithGrant (com
       readContract: vi.fn(
         async (input: { functionName: string; args: readonly unknown[] }) => {
           if (input.functionName === "allowance") {
-            const spender = String(input.args[1]).toLowerCase();
-            if (spender === "0x4bfb41d5b3570defd03c39a9a4d8de6bd8b8982e") {
-              return approvalState.usdc[0];
-            }
-            if (spender === "0xc5d563a36ae78145c45a50134d48a1215220f80a") {
-              return approvalState.usdc[1];
-            }
-            if (spender === "0xd91e80cf2e7be2e162c6513ced06f1dd0da35296") {
-              return approvalState.usdc[2];
-            }
+            // USDC.e → Onramp + pUSD → (V2 exchange / V2 negRisk / adapter)
+            // all already at maxUint256.
+            return maxUint256;
+          }
+          if (input.functionName === "balanceOf") {
+            // Wallet has no residual USDC.e (already wrapped to pUSD).
+            return 0n;
           }
           if (input.functionName === "isApprovedForAll") {
             const operator = String(input.args[1]).toLowerCase();
-            if (operator === "0x4bfb41d5b3570defd03c39a9a4d8de6bd8b8982e") {
-              return approvalState.ctf[0];
-            }
-            if (operator === "0xc5d563a36ae78145c45a50134d48a1215220f80a") {
-              return approvalState.ctf[1];
-            }
-            if (operator === "0xd91e80cf2e7be2e162c6513ced06f1dd0da35296") {
-              return approvalState.ctf[2];
-            }
+            if (operator === V2_EXCHANGE) return approvalState.ctf[0];
+            if (operator === V2_NEG_RISK_EXCHANGE) return approvalState.ctf[1];
+            if (operator === NEG_RISK_ADAPTER) return approvalState.ctf[2];
           }
           throw new Error(`unexpected read ${input.functionName}`);
         }
