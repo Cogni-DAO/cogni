@@ -48,7 +48,8 @@ Consolidate all VCS integration into this repo: a shared auth package (`packages
 | Review handler — PR review via graphExecutor                                          | In Review   | 3   | task.0153            |
 | Reviewer adapter-boundary contract test — lock ReviewHandlerDeps                      | Done        | 1   | task.0368            |
 | `extractNodePath` accessor + `@cogni/repo-spec/testing` fixtures                      | In Review   | 1   | task.0380            |
-| `extractOwningNode` resolver — paths → owning nodeId (P0)                             | In Review   | 1   | task.0382            |
+| `extractOwningNode` resolver — paths → owning nodeId (P0)                             | Done        | 1   | task.0382            |
+| Reviewer per-node routing — wire `extractOwningNode` into `PrReviewWorkflow`          | In Review   | 2   | task.0410            |
 | Admin handler — merge PR, grant/revoke collaborator (on-chain authorized)             | Not Started | 2   | (create at P1 start) |
 | Onchain webhook — Alchemy HMAC verify + CogniAction parse                             | Not Started | 1   | (create at P1 start) |
 | Authorization policy — DAO allowlist enforcement                                      | Not Started | 1   | (create at P1 start) |

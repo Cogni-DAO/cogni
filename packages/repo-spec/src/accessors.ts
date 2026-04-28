@@ -333,6 +333,16 @@ export type OwningNode =
   | {
       kind: "conflict";
       nodes: ReadonlyArray<{ nodeId: string; path: string }>;
+      /**
+       * Operator-territory paths in the changed-file set, populated when the
+       * operator node is one of the conflicting domains. Empty array when
+       * operator is not involved in the conflict. Lets the diagnostic-comment
+       * formatter show contributors which paths triggered the operator domain
+       * match — see docs/spec/node-ci-cd-contract.md § Diagnostic contract.
+       */
+      operatorPaths: readonly string[];
+      /** nodeId of the operator entry when operator is one of the conflicting domains, else undefined. */
+      operatorNodeId?: string;
     }
   | { kind: "miss" };
 
@@ -472,5 +482,34 @@ export function extractOwningNode(
   }
   for (const s of sovereigns.values()) all.push(s);
   all.sort((a, b) => a.nodeId.localeCompare(b.nodeId));
-  return { kind: "conflict", nodes: all };
+  return {
+    kind: "conflict",
+    nodes: all,
+    operatorPaths: operatorTouched ? operatorPaths : [],
+    ...(operatorTouched && operatorEntry
+      ? { operatorNodeId: operatorEntry.node_id }
+      : {}),
+  };
+}
+
+/**
+ * Resolve the rule-file directory for a `single`-kind owning domain.
+ * Pure — no I/O. The single source of truth for "where does this node's
+ * `.cogni/rules/` live"; routing code (e.g. `fetchPrContextActivity`) must
+ * call this rather than build paths inline.
+ *
+ * Returns `<owningNode.path>/.cogni/rules` for every domain — operator and
+ * sovereign nodes alike. There is no special-case branch; per the
+ * node-ci-cd-contract principle, routing code never special-cases a
+ * particular node.
+ *
+ * Throws on `conflict` / `miss` — callers should branch on `kind` first.
+ */
+export function resolveRulePath(owningNode: OwningNode): string {
+  if (owningNode.kind !== "single") {
+    throw new Error(
+      `[repo-spec] resolveRulePath: only valid for kind=single, got ${owningNode.kind}`
+    );
+  }
+  return `${owningNode.path}/.cogni/rules`;
 }

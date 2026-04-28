@@ -39,6 +39,8 @@
 | 0 | 1 | 2 | needs_implement | task.0402 | Restore SSR — adopt wagmi's canonical Next.js App Router SSR pattern |  |  |
 | 0 | 1 | 2 | needs_merge | task.0403 | Operator — add `loading.tsx` + `error.tsx` route-group boundaries |  |  |
 | 0 | 1 | 1 | needs_merge | task.0408 | Port `loading.tsx` + `error.tsx` boundaries to poly + resy + node-template |  |  |
+| 0 | 1 | 5 | needs_design | task.0409 | Multi-tenant git-review routing — operator selects target repo (test vs prod) via per-tenant GitHub App | VCS Integration | proj.vcs-integration |
+| 0 | 1 | 2 | needs_closeout | task.0410 | Reviewer per-node routing — wire `extractOwningNode` into PrReviewWorkflow so PR webhooks load per-node `.cogni/rules/` | VCS Integration | proj.vcs-integration |
 | 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
 | 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -106,6 +108,7 @@
 | 1 | 1 | 1 | needs_merge | bug.0403 | poly redeem reaper trusts stale receipt-burn flag → false bleed_detected on no-op retries | Cogni Poly | proj.poly-copy-trading |
 | 1 | 1 | 3 | needs_implement | task.0405 | Per-node skeleton-accuracy matrix — make each `loading.tsx` actually match its page |  |  |
 | 1 | 1 | 2 | needs_design | task.0407 | Wire per-node/per-rule review.modelRef from repo-spec into PR review pipeline |  |  |
+| 1 | 1 | 5 | needs_design | task.0411 | Split `@cogni/temporal-workflows` per-node — `nodes/<X>/packages/temporal-workflows` for node-owned workflows |  |  |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD Pipeline | proj.cicd-services-gitops |

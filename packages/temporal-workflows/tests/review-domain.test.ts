@@ -18,6 +18,8 @@ import {
   evaluateCriteria,
   findRequirement,
   formatCheckRunSummary,
+  formatCrossDomainRefusal,
+  formatNoScopeNeutral,
   formatPrComment,
   formatThreshold,
   type ReviewResult,
@@ -228,5 +230,71 @@ describe("formatPrComment", () => {
   it("includes staleness marker when headSha provided", () => {
     const comment = formatPrComment(result, { headSha: "abc1234567890" });
     expect(comment).toContain("cogni:summary v1 sha=abc1234");
+  });
+});
+
+describe("formatCrossDomainRefusal", () => {
+  it("names the conflicting domains and operator-territory paths", () => {
+    const body = formatCrossDomainRefusal({
+      kind: "conflict",
+      nodes: [
+        { nodeId: "operator", path: "nodes/operator" },
+        { nodeId: "poly", path: "nodes/poly" },
+      ],
+      operatorPaths: [
+        "packages/repo-spec/src/bar.ts",
+        ".github/workflows/ci.yml",
+      ],
+      operatorNodeId: "operator",
+    });
+    expect(body).toContain("Cross-Domain PR refused");
+    expect(body).toContain("`operator`");
+    expect(body).toContain("`poly`");
+    expect(body).toContain("Operator-territory paths");
+    expect(body).toContain("packages/repo-spec/src/bar.ts");
+    expect(body).toContain(".github/workflows/ci.yml");
+    expect(body).toContain("File an operator PR");
+    expect(body).toContain("single-node-scope");
+  });
+
+  it("for non-operator multi-domain conflict, omits operator section and instructs split", () => {
+    const body = formatCrossDomainRefusal({
+      kind: "conflict",
+      nodes: [
+        { nodeId: "poly", path: "nodes/poly" },
+        { nodeId: "resy", path: "nodes/resy" },
+      ],
+      operatorPaths: [],
+    });
+    expect(body).toContain("`poly`");
+    expect(body).toContain("`resy`");
+    expect(body).not.toContain("Operator-territory paths");
+    expect(body).toContain("Split this PR");
+  });
+
+  it("truncates long operator-path lists", () => {
+    const operatorPaths = Array.from({ length: 25 }, (_, i) => `docs/f${i}.md`);
+    const body = formatCrossDomainRefusal({
+      kind: "conflict",
+      nodes: [
+        { nodeId: "operator", path: "nodes/operator" },
+        { nodeId: "poly", path: "nodes/poly" },
+      ],
+      operatorPaths,
+      operatorNodeId: "operator",
+    });
+    expect(body).toContain("docs/f0.md");
+    expect(body).toContain("docs/f19.md");
+    expect(body).not.toContain("docs/f20.md");
+    expect(body).toContain("and 5 more");
+  });
+});
+
+describe("formatNoScopeNeutral", () => {
+  it("explains why review is being skipped", () => {
+    const body = formatNoScopeNeutral();
+    expect(body).toContain("No recognizable scope");
+    expect(body).toContain("Skipping review");
+    expect(body).toContain("single-node-scope");
   });
 });

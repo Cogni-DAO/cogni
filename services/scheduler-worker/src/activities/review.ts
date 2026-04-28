@@ -3,26 +3,36 @@
 
 /**
  * Module: `@cogni/scheduler-worker-service/activities/review`
- * Purpose: Temporal Activities for PR review — GitHub I/O and review orchestration.
+ * Purpose: Temporal Activities for PR review — GitHub I/O, owning-domain resolution, and review orchestration.
  * Scope: Activities perform I/O (GitHub API). Domain logic delegated to domain/review.ts.
  * Invariants:
  *   - Per ACTIVITY_IDEMPOTENCY: GitHub writes use stable business keys (repo/pr/headSha)
  *   - Per EXECUTION_VIA_SERVICE_API: graph execution goes through GraphRunWorkflow child, not activities
  *   - Activities resolve GitHub App creds from worker env (never from workflow input)
  *   - Domain logic (criteria evaluation, formatting) in domain/review.ts, not here
+ *   - Per PER_NODE_RULE_LOADING: `fetchPrContextActivity` resolves owning domain via
+ *     `extractOwningNode` and fetches rule files from `resolveRulePath(owningNode)`
+ *     (`<owningNode.path>/.cogni/rules/` for every node — operator + sovereign alike,
+ *     no special case). Emits structured `review.routed` log for the deploy_verified loop.
+ *   - `postRoutingDiagnosticActivity` handles `conflict` + `miss` outcomes with a
+ *     pure formatter + neutral check run — no AI tokens, no GraphRunWorkflow child.
  * Side-effects: IO (GitHub API via Octokit)
- * Links: task.0191, docs/spec/temporal-patterns.md
+ * Links: task.0191, task.0410, docs/spec/temporal-patterns.md, docs/spec/node-ci-cd-contract.md#single-domain-scope
  * @internal
  */
 
 import {
   extractDaoConfig,
   extractGatesConfig,
+  extractOwningNode,
   type GateConfig,
   type GatesConfig,
+  type OwningNode,
   parseRepoSpec,
   parseRule,
+  type RepoSpec,
   type Rule,
+  resolveRulePath,
 } from "@cogni/repo-spec";
 import type { GraphRunResult } from "@cogni/temporal-workflows";
 import {
@@ -33,6 +43,8 @@ import {
   evaluateCriteria,
   findRequirement,
   formatCheckRunSummary,
+  formatCrossDomainRefusal,
+  formatNoScopeNeutral,
   formatPrComment,
   type GateResult,
   type GateStatus,
@@ -78,6 +90,21 @@ export interface FetchPrContextOutput {
   modelRef: { providerKey: string; modelId: string; connectionId?: string };
   /** Raw repo-spec YAML for DAO config extraction in postReviewResult */
   repoSpecYaml?: string;
+  /** Filenames from `octokit.pulls.listFiles`. Source for owning-domain resolution. */
+  changedFiles: string[];
+  /** Owning domain for the PR — workflow dispatches on `kind`. */
+  owningNode: OwningNode;
+}
+
+export interface PostRoutingDiagnosticInput {
+  owner: string;
+  repo: string;
+  prNumber: number;
+  headSha: string;
+  installationId: number;
+  checkRunId?: number;
+  owningNode: OwningNode;
+  changedFiles: readonly string[];
 }
 
 export interface PostReviewResultInput {
@@ -247,6 +274,8 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
       totalDiffBytes,
     };
 
+    const changedFiles = files.map((f) => f.filename);
+
     // Fetch repo-spec from target repo (base branch)
     let repoSpecYaml: string;
     try {
@@ -258,7 +287,7 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
         pr.base.ref
       );
     } catch {
-      // No repo-spec — return empty gates
+      // No repo-spec — return empty gates. Routing also no-ops (miss).
       return {
         evidence,
         gatesConfig: { gates: [], failOnError: false },
@@ -266,15 +295,18 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
         graphMessages: [],
         responseFormat: { prompt: "", schemaId: "" },
         modelRef: DEFAULT_REVIEW_MODELREF,
+        changedFiles,
+        owningNode: { kind: "miss" },
       };
     }
 
     // Parse leniently — target repo may not have full node_id/scope_id fields.
     // We only need gates config, so try full parse first, fall back to lenient extraction.
     let gatesConfig: GatesConfig;
+    let parsedSpec: RepoSpec | null = null;
     try {
-      const repoSpec = parseRepoSpec(repoSpecYaml);
-      gatesConfig = extractGatesConfig(repoSpec);
+      parsedSpec = parseRepoSpec(repoSpecYaml);
+      gatesConfig = extractGatesConfig(parsedSpec);
     } catch {
       // Full parse failed (missing node_id, etc.) — extract gates from raw YAML
       const raw = parseYaml(repoSpecYaml) as Record<string, unknown>;
@@ -284,6 +316,39 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
         failOnError: raw.fail_on_error === true,
       };
     }
+
+    // Resolve owning domain from changed paths. When the spec didn't fully
+    // parse (no nodes registry available), routing is unavailable — fall back
+    // to `miss` so the workflow short-circuits to a neutral check rather than
+    // running a review against the wrong rules.
+    const owningNode: OwningNode = parsedSpec
+      ? extractOwningNode(parsedSpec, changedFiles)
+      : { kind: "miss" };
+
+    logger.info(
+      {
+        owningNodeKind: owningNode.kind,
+        owningNodeId:
+          owningNode.kind === "single" ? owningNode.nodeId : undefined,
+        owningNodePath:
+          owningNode.kind === "single" ? owningNode.path : undefined,
+        conflictNodeIds:
+          owningNode.kind === "conflict"
+            ? owningNode.nodes.map((n) => n.nodeId)
+            : undefined,
+        changedFileCount: changedFiles.length,
+        prNumber: input.prNumber,
+        headSha: pr.head.sha,
+      },
+      "review.routed"
+    );
+
+    // Per-node rule path resolved via single source of truth in @cogni/repo-spec.
+    // Conflict / miss never reach the rule fetch — workflow short-circuits first.
+    const ruleBasePath =
+      owningNode.kind === "single"
+        ? resolveRulePath(owningNode)
+        : ".cogni/rules";
 
     // Fetch rule files referenced by ai-rule gates
     const rules: Record<string, Rule> = {};
@@ -296,7 +361,7 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
               octokit,
               input.owner,
               input.repo,
-              `.cogni/rules/${ruleFile}`,
+              `${ruleBasePath}/${ruleFile}`,
               pr.base.ref
             );
             rules[ruleFile] = parseRule(ruleYaml);
@@ -360,6 +425,8 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
       responseFormat,
       modelRef: DEFAULT_REVIEW_MODELREF,
       repoSpecYaml,
+      changedFiles,
+      owningNode,
     };
   }
 
@@ -492,10 +559,72 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
     );
   }
 
+  /**
+   * Post a routing diagnostic for `conflict` (cross-domain) or `miss` (no scope) PRs.
+   * Posts a PR comment via pure formatter + finalizes the check run as `neutral`.
+   * No GraphRunWorkflow child, no LLM call, no gate evaluation.
+   */
+  async function postRoutingDiagnosticActivity(
+    input: PostRoutingDiagnosticInput
+  ): Promise<void> {
+    const octokit = createOctokit(deps, input.installationId);
+
+    let body: string;
+    let title: string;
+    if (input.owningNode.kind === "conflict") {
+      body = formatCrossDomainRefusal(input.owningNode);
+      title = "Cross-domain PR refused";
+    } else {
+      // kind === "miss" — empty diff or no parsable spec.
+      body = formatNoScopeNeutral();
+      title = "No recognizable scope";
+    }
+
+    if (input.checkRunId) {
+      try {
+        await octokit.request(
+          "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}",
+          {
+            owner: input.owner,
+            repo: input.repo,
+            check_run_id: input.checkRunId,
+            status: "completed",
+            conclusion: "neutral",
+            completed_at: new Date().toISOString(),
+            output: { title: `PR Review: ${title}`, summary: body },
+          }
+        );
+      } catch (error) {
+        logger.warn(
+          { checkRunId: input.checkRunId, error: String(error) },
+          "Failed to update check run for routing diagnostic"
+        );
+      }
+    }
+
+    try {
+      await octokit.request(
+        "POST /repos/{owner}/{repo}/issues/{issue_number}/comments",
+        {
+          owner: input.owner,
+          repo: input.repo,
+          issue_number: input.prNumber,
+          body,
+        }
+      );
+    } catch (error) {
+      logger.warn(
+        { prNumber: input.prNumber, error: String(error) },
+        "Failed to post routing diagnostic comment"
+      );
+    }
+  }
+
   return {
     createCheckRunActivity,
     fetchPrContextActivity,
     postReviewResultActivity,
+    postRoutingDiagnosticActivity,
   };
 }
 

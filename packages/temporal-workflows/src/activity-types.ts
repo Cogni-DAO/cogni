@@ -70,6 +70,8 @@ export interface SchedulerActivities {
 // Review Activities (GitHub I/O for PR review workflow)
 // ---------------------------------------------------------------------------
 
+import type { OwningNode } from "@cogni/repo-spec";
+
 export interface ReviewActivities {
   createCheckRunActivity(input: {
     owner: string;
@@ -91,9 +93,33 @@ export interface ReviewActivities {
     responseFormat: { prompt: string; schemaId: string };
     modelRef: { providerKey: string; modelId: string; connectionId?: string };
     repoSpecYaml?: string;
+    /** Filenames from GitHub `pulls.listFiles`. Used for owning-domain resolution. */
+    changedFiles: string[];
+    /**
+     * Owning domain resolved via `extractOwningNode(rootSpec, changedFiles)`.
+     * Workflow dispatches on `kind`: `single` continues review; `conflict` and
+     * `miss` short-circuit through `postRoutingDiagnosticActivity`.
+     */
+    owningNode: OwningNode;
   }>;
 
   postReviewResultActivity(input: Record<string, unknown>): Promise<void>;
+
+  /**
+   * Post a routing-diagnostic outcome to GitHub: PR comment + neutral check run.
+   * Used for `conflict` (cross-domain PR) and `miss` (no recognizable scope).
+   * Spends zero AI tokens — formatter is pure, no GraphRunWorkflow child.
+   */
+  postRoutingDiagnosticActivity(input: {
+    owner: string;
+    repo: string;
+    prNumber: number;
+    headSha: string;
+    installationId: number;
+    checkRunId?: number;
+    owningNode: OwningNode;
+    changedFiles: readonly string[];
+  }): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------

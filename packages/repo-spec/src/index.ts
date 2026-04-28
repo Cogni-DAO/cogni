@@ -34,6 +34,7 @@ export {
   type LedgerConfig,
   type LedgerPoolConfig,
   type OwningNode,
+  resolveRulePath,
 } from "./accessors.js";
 export { parseRepoSpec } from "./parse.js";
 export { parseRule } from "./rules.js";

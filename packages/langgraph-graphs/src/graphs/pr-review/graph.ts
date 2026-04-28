@@ -11,7 +11,7 @@
  *   - No tools — evidence is pre-fetched outside the graph
  *   - TYPE_TRANSPARENT_RETURN: No explicit return type annotation
  * Side-effects: none
- * Links: task.0153, .cogni/rules/*.yaml
+ * Links: task.0153, nodes/<node>/.cogni/rules/*.yaml
  * @public
  */
 

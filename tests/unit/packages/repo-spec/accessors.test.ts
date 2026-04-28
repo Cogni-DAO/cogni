@@ -23,6 +23,7 @@ import {
   extractScopeId,
   parseRepoSpec,
   type RepoSpec,
+  resolveRulePath,
 } from "@cogni/repo-spec";
 import {
   buildTestRepoSpec,
@@ -446,6 +447,20 @@ describe("extractOwningNode", () => {
       { nodeId: TEST_NODE_IDS.operator, path: "nodes/operator" },
       { nodeId: TEST_NODE_IDS.poly, path: "nodes/poly" },
     ]);
+    // Resolver labels operator territory + identity for the diagnostic formatter.
+    expect(result.operatorPaths).toEqual(["nodes/operator/app/bar.ts"]);
+    expect(result.operatorNodeId).toBe(TEST_NODE_IDS.operator);
+  });
+
+  it("scenario 5b: conflict between two sovereign nodes → operatorPaths empty, operatorNodeId undefined", () => {
+    const result = extractOwningNode(standardSpec(), [
+      "nodes/poly/foo.ts",
+      "nodes/resy/bar.ts",
+    ]);
+    expect(result.kind).toBe("conflict");
+    if (result.kind !== "conflict") return;
+    expect(result.operatorPaths).toEqual([]);
+    expect(result.operatorNodeId).toBeUndefined();
   });
 
   it("scenario 6: conflict — two sovereign nodes, sorted by nodeId", () => {
@@ -598,5 +613,40 @@ describe("extractOwningNode", () => {
     expect(() =>
       extractOwningNode(spec, ["packages/x.ts", "docs/y.md"])
     ).toThrow(/operator entry missing/);
+  });
+});
+
+describe("resolveRulePath", () => {
+  it("returns <path>/.cogni/rules for a sovereign single", () => {
+    expect(
+      resolveRulePath({
+        kind: "single",
+        nodeId: TEST_NODE_IDS.poly,
+        path: "nodes/poly",
+      })
+    ).toBe("nodes/poly/.cogni/rules");
+  });
+
+  it("returns the same shape for operator — no special case", () => {
+    expect(
+      resolveRulePath({
+        kind: "single",
+        nodeId: TEST_NODE_IDS.operator,
+        path: "nodes/operator",
+      })
+    ).toBe("nodes/operator/.cogni/rules");
+  });
+
+  it("throws on conflict and miss — caller must branch on kind", () => {
+    expect(() => resolveRulePath({ kind: "miss" })).toThrow(
+      /only valid for kind=single/
+    );
+    expect(() =>
+      resolveRulePath({
+        kind: "conflict",
+        nodes: [],
+        operatorPaths: [],
+      })
+    ).toThrow(/only valid for kind=single/);
   });
 });

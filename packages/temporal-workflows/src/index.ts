@@ -43,6 +43,8 @@ export {
   evaluateCriteria,
   findRequirement,
   formatCheckRunSummary,
+  formatCrossDomainRefusal,
+  formatNoScopeNeutral,
   formatPrComment,
   formatThreshold,
 } from "./domain/review.js";

@@ -7,7 +7,7 @@
  * Scope: Prompt template only. Does not contain graph logic or LLM calls.
  * Invariants: Prompt instructs LLM to score each metric 0-1 with observations.
  * Side-effects: none
- * Links: .cogni/rules/*.yaml
+ * Links: nodes/<node>/.cogni/rules/*.yaml
  * @public
  */
 

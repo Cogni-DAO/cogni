@@ -27,7 +27,8 @@ import { describe, expect, it } from "vitest";
 // Helpers
 // ---------------------------------------------------------------------------
 
-const RULES_DIR = join(process.cwd(), ".cogni", "rules");
+// Per task.0410, rule files moved from root .cogni/rules/ → nodes/operator/.cogni/rules/.
+const RULES_DIR = join(process.cwd(), "nodes", "operator", ".cogni", "rules");
 const REPO_SPEC_PATH = join(process.cwd(), ".cogni", "repo-spec.yaml");
 
 function readRuleFixture(filename: string): string {

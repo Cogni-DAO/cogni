@@ -10,9 +10,13 @@
  *   - Per NORMATIVE_WEBHOOK_PATTERN: webhook starts workflow, exits immediately
  *   - Per ACTIVITY_IDEMPOTENCY: GitHub writes use stable business keys (repo/pr/headSha)
  *   - Per WORKFLOW_TOP_LEVEL_VISIBILITY: parent workflow is primary UI object; graph run is drill-down
+ *   - Per SINGLE_DOMAIN_HARD_FAIL: workflow short-circuits cross-domain (`conflict`) and
+ *     unrecognized-scope (`miss`) PRs through `postRoutingDiagnosticActivity` — no AI
+ *     tokens spent. Owning domain is resolved inside `fetchPrContextActivity` via
+ *     `extractOwningNode`; the workflow only dispatches on `kind`.
  *   - TYPED_TERMINAL_ARTIFACT: GraphRunWorkflow child returns structuredOutput for parent consumption
  * Side-effects: none (deterministic orchestration only)
- * Links: docs/spec/temporal-patterns.md, task.0191
+ * Links: docs/spec/temporal-patterns.md, docs/spec/node-ci-cd-contract.md#single-domain-scope, task.0191, task.0410
  * @public
  */
 
@@ -26,6 +30,7 @@ const {
   createCheckRunActivity,
   fetchPrContextActivity,
   postReviewResultActivity,
+  postRoutingDiagnosticActivity,
 } = proxyActivities<ReviewActivities>(EXTERNAL_API_ACTIVITY_OPTIONS);
 
 /**
@@ -88,13 +93,32 @@ export async function PrReviewWorkflow(
     // Continue without check run — non-fatal
   }
 
-  // 2. Fetch PR context from GitHub API
+  // 2. Fetch PR context from GitHub API. The activity also resolves the
+  //    owning domain (extractOwningNode) so the workflow can dispatch on it
+  //    without doing I/O itself.
   const context = await fetchPrContextActivity({
     owner,
     repo,
     prNumber,
     installationId,
   });
+
+  // 2a. Routing — short-circuit conflict / miss without spending AI tokens.
+  //     Per docs/spec/node-ci-cd-contract.md § Single-Domain Scope, cross-domain
+  //     PRs are refused at review-time mirroring the CI gate's verdict.
+  if (context.owningNode.kind !== "single") {
+    await postRoutingDiagnosticActivity({
+      owner,
+      repo,
+      prNumber,
+      headSha,
+      installationId,
+      checkRunId,
+      owningNode: context.owningNode,
+      changedFiles: context.changedFiles,
+    });
+    return;
+  }
 
   // If no gates configured, mark check run as pass and exit
   if (context.gatesConfig.gates.length === 0) {
