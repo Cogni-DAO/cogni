@@ -7,6 +7,11 @@
 -- v1 (task.0420): a Temporal worker pulls the matching Loki window and
 -- updates loki_window + loki_status. No schema change; same row.
 --
+-- SYSTEM_OWNED: no RLS on this table. The intake route is anonymous-allowed
+-- (so `(public)/error.tsx` can submit), so a per-user RLS policy doesn't
+-- make sense. Reads are admin-only via direct queries. Same precedent as
+-- poly_copy_trade_* tables.
+--
 -- Note on drift: drizzle-kit also proposed DROP TABLE for
 -- poly_copy_trade_{config,decisions,fills} (relocated to poly's node-local
 -- schema in task.0322 but never dropped from operator's DB). That drop is
@@ -32,7 +37,6 @@ CREATE TABLE "error_reports" (
 	"loki_status" text DEFAULT 'pending' NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "error_reports" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE INDEX "error_reports_created_at_idx" ON "error_reports" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "error_reports_digest_idx" ON "error_reports" USING btree ("digest");--> statement-breakpoint
 CREATE INDEX "error_reports_user_id_idx" ON "error_reports" USING btree ("user_id");

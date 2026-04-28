@@ -19,7 +19,9 @@
 
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect } from "react";
+import { SendToCogniButton } from "@/components/SendToCogniButton";
 
 interface PublicErrorProps {
   readonly error: Error & { digest?: string };
@@ -27,6 +29,8 @@ interface PublicErrorProps {
 }
 
 export default function PublicError({ error, reset }: PublicErrorProps) {
+  const pathname = usePathname();
+
   useEffect(() => {
     // biome-ignore lint/suspicious/noConsole: error boundary logging is the documented Next.js pattern
     console.error("(public) route error", {
@@ -54,6 +58,7 @@ export default function PublicError({ error, reset }: PublicErrorProps) {
       >
         Try again
       </button>
+      <SendToCogniButton error={error} route={pathname ?? "/"} />
     </div>
   );
 }

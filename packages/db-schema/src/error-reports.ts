@@ -9,7 +9,7 @@
  * - ID_IS_TRACKING_ID: row id is the trackingId returned to the user; uuid v4.
  * - DIGEST_IS_CORRELATION_KEY: digest column joins reports to the original failing log line in Loki.
  * - LOKI_WINDOW_NULLABLE_V0: v0-of-v0 leaves loki_window null; task.0420's Temporal worker fills it.
- * - RLS_ENABLED: Row-level security enabled.
+ * - SYSTEM_OWNED: No RLS — the intake API is anonymous-allowed (so `(public)/error.tsx` can submit), and reads are admin-only via direct queries. Same precedent as poly_copy_trade_* tables.
  * Side-effects: none (schema definitions only)
  * Links: work/items/task.0419.send-to-cogni-error-intake-v0.md, work/items/task.0420.error-intake-temporal-v1.md
  * @public
@@ -97,4 +97,5 @@ export const errorReports = pgTable(
     /** For dashboards filtered by user. */
     userIdIdx: index("error_reports_user_id_idx").on(table.userId),
   })
-).enableRLS();
+);
+// SYSTEM_OWNED: no .enableRLS() — anonymous intake. Match poly_copy_trade_* precedent.

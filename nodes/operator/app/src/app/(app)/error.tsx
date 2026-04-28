@@ -20,7 +20,9 @@
 
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect } from "react";
+import { SendToCogniButton } from "@/components/SendToCogniButton";
 
 interface AppErrorProps {
   readonly error: Error & { digest?: string };
@@ -28,6 +30,8 @@ interface AppErrorProps {
 }
 
 export default function AppError({ error, reset }: AppErrorProps) {
+  const pathname = usePathname();
+
   useEffect(() => {
     // Forward the digest so it lines up with the server-side Pino log.
     // biome-ignore lint/suspicious/noConsole: error boundary logging is the documented Next.js pattern
@@ -49,13 +53,16 @@ export default function AppError({ error, reset }: AppErrorProps) {
           digest: {error.digest}
         </p>
       ) : null}
-      <button
-        type="button"
-        onClick={reset}
-        className="inline-flex w-fit items-center rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
-      >
-        Try again
-      </button>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={reset}
+          className="inline-flex w-fit items-center rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
+        >
+          Try again
+        </button>
+      </div>
+      <SendToCogniButton error={error} route={pathname ?? "/"} />
     </div>
   );
 }

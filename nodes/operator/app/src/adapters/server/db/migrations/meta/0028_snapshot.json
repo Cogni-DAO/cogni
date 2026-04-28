@@ -1,5 +1,5 @@
 {
-  "id": "29305ed8-e44d-4b6b-9736-a42a29d13523",
+  "id": "0815df1e-342b-413f-8210-e8e42a0d20fd",
   "prevId": "a27bb25b-587f-4dbf-bfb3-f59e8761c282",
   "version": "7",
   "dialect": "postgresql",
@@ -3326,7 +3326,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": true
+      "isRLSEnabled": false
     },
     "public.identity_events": {
       "name": "identity_events",
