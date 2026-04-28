@@ -48,7 +48,7 @@ Define the CI/CD invariants, merge gate, and file ownership boundaries that ensu
 
 7. **SINGLE_RESPONSIBILITY**: Each workflow file owns one concern (build, promote+deploy, E2E+release). No monoliths.
 
-8. **SINGLE_DOMAIN_HARD_FAIL**: PRs may touch exactly one node's domain. Each non-operator node owns `nodes/<X>/`; the operator node owns `nodes/operator/` plus everything else in the repo (infra, packages, .github, docs, work, scripts, root configs) as one domain. Cross-domain PRs are rejected by the `single-node-scope` job in `ci.yaml`. Bounded ride-along whitelist: `pnpm-lock.yaml` (mechanical side-effect of node-level `package.json` changes) and `work/items/**` (per-task work items; ride-along until task tracking moves to Dolt) may ride a single non-operator node PR. See `## Single-Domain Scope` below.
+8. **SINGLE_DOMAIN_HARD_FAIL**: PRs may touch exactly one node's domain. Each non-operator node owns `nodes/<X>/`; the operator node owns `nodes/operator/` plus everything else in the repo (infra, packages, .github, docs, work, scripts, root configs) as one domain. Cross-domain PRs are rejected by the `single-node-scope` job in `ci.yaml`. Bounded ride-along whitelist: `pnpm-lock.yaml` (mechanical side-effect of node-level `package.json` changes), `work/**` (per-task work items, projects, charters; ride-along until task tracking moves to Dolt), and `docs/**` (cross-cutting prose that accompanies a node change) may ride a single non-operator node PR. See `## Single-Domain Scope` below.
 
 ---
 
@@ -98,14 +98,15 @@ If `|S| = 2`, `operator ∈ S`, and **every** path matched by the operator filte
 
 Whitelist (must mirror `RIDE_ALONG_PATTERNS` in `tests/ci-invariants/classify.ts` and the inline `run:` block in `ci.yaml#single-node-scope`):
 
-| Pattern          | Why                                                                                  | Long-term fix                                                             |
-| ---------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| `pnpm-lock.yaml` | Mechanical side-effect of node-level `package.json` intent — not intent itself.      | Per-node lockfiles via pnpm `shared-workspace-lockfile=false`.            |
-| `work/items/**`  | Per-task work items + auto-regenerated `_index.md`; high merge-conflict churn today. | Move task tracking to Dolt; `work/items/` empties out and exits the list. |
+| Pattern          | Why                                                                                         | Long-term fix                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `pnpm-lock.yaml` | Mechanical side-effect of node-level `package.json` intent — not intent itself.             | Per-node lockfiles via pnpm `shared-workspace-lockfile=false`.            |
+| `work/**`        | Per-task work items + projects + charters + auto-regenerated `_index.md`; high churn today. | Move task tracking to Dolt; `work/` empties out and exits the list.       |
+| `docs/**`        | Cross-cutting prose that accompanies a node change (spec touch-ups, guide pointers).        | Migrate node-scoped docs into `nodes/<X>/docs/`; only operator docs left. |
 
 Each entry has an explicit long-term fix that ends the ride-along. The whitelist is a v0 unblock, not a permanent carve-out — adding to it weakens the gate, so do so deliberately and pair the addition with the exit plan that drains the entry.
 
-**Operator paths NOT in the whitelist (specs, .github, packages, infra, scripts, root configs) do not ride along.** They are intent. A `poly` PR that needs an operator-spec change is two PRs, not one — that's the design.
+**Operator paths NOT in the whitelist (`.github`, `packages`, `infra`, `scripts`, root configs) do not ride along.** They are intent. A `poly` PR that needs an operator-spec change is two PRs, not one — that's the design.
 
 ### Why Reading A (operator-is-a-domain) over Reading B (operator-is-an-exemption)
 

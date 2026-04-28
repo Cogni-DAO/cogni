@@ -80,9 +80,11 @@ jobs:
   # the negation of the other-node filters). PRs may touch exactly one domain.
   # Ride-along exception: a bounded whitelist of operator paths may ride a
   # single non-operator node PR — pnpm-lock.yaml (mechanical side-effect of
-  # node-level package.json changes) and work/items/** (per-task work items;
-  # ride-along until task tracking moves to Dolt). Whitelist must mirror
-  # RIDE_ALONG_PATTERNS in tests/ci-invariants/classify.ts.
+  # node-level package.json changes), work/** (per-task work items, projects,
+  # charters; high merge-conflict + index-regen churn until task tracking
+  # moves to Dolt), and docs/** (cross-cutting prose updates linked to a node
+  # change). Whitelist must mirror RIDE_ALONG_PATTERNS in
+  # tests/ci-invariants/classify.ts.
   # Lands non-required initially; promote via gh api after a real cross-node
   # test PR proves the diagnostic (see work/items/task.0381.* §Manual Steps).
   single-node-scope:
@@ -127,11 +129,11 @@ jobs:
           if [ "$count" -le 1 ]; then exit 0; fi
 
           # Ride-along exception: |S|=2, operator ∈ S, and every operator-
-          # matched path is in the whitelist (pnpm-lock.yaml or work/items/**).
-          # Whitelist must mirror RIDE_ALONG_PATTERNS in classify.ts.
+          # matched path is in the whitelist (pnpm-lock.yaml, work/**, or
+          # docs/**). Whitelist must mirror RIDE_ALONG_PATTERNS in classify.ts.
           if [ "$count" -eq 2 ] \
              && jq -e 'index("operator") != null' <<<"$MATCHED" >/dev/null \
-             && jq -e 'all(. == "pnpm-lock.yaml" or startswith("work/items/"))' <<<"$OPERATOR_FILES" >/dev/null; then
+             && jq -e 'all(. == "pnpm-lock.yaml" or startswith("work/") or startswith("docs/"))' <<<"$OPERATOR_FILES" >/dev/null; then
             echo "single-domain scope OK (ride-along applied)"
             exit 0
           fi

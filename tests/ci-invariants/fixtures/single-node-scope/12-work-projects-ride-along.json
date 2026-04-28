@@ -1,0 +1,12 @@
+{
+  "name": "ride-along: poly node files + work/projects/proj.foo.md",
+  "paths": [
+    "nodes/poly/app/src/foo.ts",
+    "work/projects/proj.poly-copy-trading.md"
+  ],
+  "expected": {
+    "domains": ["poly"],
+    "pass": true,
+    "rideAlongApplied": true
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "ride-along: poly node files + docs/spec/foo.md",
+  "paths": ["nodes/poly/app/src/foo.ts", "docs/spec/poly-redeem.md"],
+  "expected": {
+    "domains": ["poly"],
+    "pass": true,
+    "rideAlongApplied": true
+  }
+}

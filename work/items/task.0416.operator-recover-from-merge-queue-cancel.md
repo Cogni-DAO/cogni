@@ -24,7 +24,7 @@ external_refs:
   - work/items/task.0391.enable-merge-queue.md
 ---
 
-# task.0412 — Operator recovery from merge-queue cancellation
+# task.0415 — Operator recovery from merge-queue cancellation
 
 ## Problem
 
