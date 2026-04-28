@@ -44,19 +44,45 @@ You are adding a new tool that AI agents can invoke. Tools are defined in `@cogn
 
 ---
 
+## Decide first: cross-node or node-only?
+
+Per `SINGLE_DOMAIN_HARD_FAIL` (see [`node-ci-cd-contract.md`](../spec/node-ci-cd-contract.md#single-domain-scope)) and `NODE_OWNED_TOOL_PACKAGES` (see [`tool-use.md`](../spec/tool-use.md) #24a), pick the right tool-source package up front. Getting it wrong forces a substrate-migration PR later.
+
+| Question                                                                        | Place in                                    | Append to            |
+| ------------------------------------------------------------------------------- | ------------------------------------------- | -------------------- |
+| Will every node expose this tool? (e.g. `core__work_item_query`, `core__vcs_*`) | `packages/ai-tools/src/tools/`              | `CORE_TOOL_BUNDLE`   |
+| Only one node consumes it? (e.g. `core__poly_data_value` for poly)              | `nodes/<node>/packages/ai-tools/src/tools/` | `<NODE>_TOOL_BUNDLE` |
+
+Default to node-scoped — promoting node→core later is a deliberate hoist (`git mv` to `packages/ai-tools/` + add to `CORE_TOOL_BUNDLE`). Adding to core when only one node uses it forces every other node to register a stub on every change.
+
 ## File Locations
+
+### Cross-node `core__` tool (shared by every node)
 
 ```
 packages/ai-tools/src/
 ├── tools/{name}.ts          # Contract + stub + factory
 ├── capabilities/{name}.ts   # Capability interface (if I/O)
-├── catalog.ts               # TOOL_CATALOG registration
+├── catalog.ts               # Append to CORE_TOOL_BUNDLE (TOOL_CATALOG derives)
 └── index.ts                 # Barrel exports
+```
 
-src/adapters/server/{domain}/
+### Node-only tool (lives inside that node's domain)
+
+```
+nodes/<node>/packages/ai-tools/src/
+├── tools/{name}.ts          # Contract + stub + factory (mirror packages/ai-tools shape)
+├── capabilities/{name}.ts   # Node-scoped capability interface (if I/O)
+└── index.ts                 # Barrel exports + append to <NODE>_TOOL_BUNDLE
+```
+
+### Bootstrap wiring (every tool, in its owning node's app)
+
+```
+nodes/<node>/app/src/adapters/server/{domain}/
 └── {name}.adapter.ts        # Real I/O implementation
 
-src/bootstrap/
+nodes/<node>/app/src/bootstrap/
 ├── capabilities/{name}.ts   # Factory: env → capability
 └── ai/
     ├── tool-bindings.ts     # { toolId → implementation }

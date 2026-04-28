@@ -19,6 +19,7 @@ import type {
   RepoCapability,
   WebSearchCapability,
 } from "@cogni/ai-tools";
+import { CORE_TOOL_BUNDLE } from "@cogni/ai-tools";
 import type { AttributionStore } from "@cogni/attribution-ledger";
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import type { FinancialLedgerPort } from "@cogni/financial-ledger";
@@ -104,7 +105,6 @@ import {
 } from "@/adapters/test";
 import { createToolBindings } from "@/bootstrap/ai/tool-bindings";
 import { createBoundToolSource } from "@/bootstrap/ai/tool-source.factory";
-import { createMarketCapability } from "@/bootstrap/capabilities/market";
 import {
   createMetricsCapability,
   derivePrometheusQueryUrl,
@@ -567,13 +567,6 @@ function createContainer(): Container {
     },
   });
 
-  // MarketCapability for AI tools (live Polymarket + optional Kalshi)
-  // Dynamic import avoided — direct import at top of file
-  const marketCapability = createMarketCapability({
-    KALSHI_API_KEY: env.KALSHI_API_KEY,
-    KALSHI_API_SECRET: env.KALSHI_API_SECRET,
-  });
-
   // KnowledgeCapability for AI tools (optional — requires DOLTGRES_URL)
   // When configured, wraps KnowledgeStorePort with auto-commit on writes.
   // When not configured, tools throw "not configured" at invocation time.
@@ -604,7 +597,6 @@ function createContainer(): Container {
   // ToolSource with real implementations (per CAPABILITY_INJECTION)
   const toolBindings = createToolBindings({
     knowledgeCapability,
-    marketCapability,
     metricsCapability,
     webSearchCapability,
     repoCapability,
@@ -612,7 +604,7 @@ function createContainer(): Container {
     vcsCapability: stubVcsCapability,
     workItemCapability,
   });
-  const toolSource = createBoundToolSource(toolBindings);
+  const toolSource = createBoundToolSource([...CORE_TOOL_BUNDLE], toolBindings);
 
   // Config: rethrow in dev/test for diagnosis, respond_500 in production for safety
   const config: ContainerConfig = {

@@ -19,8 +19,8 @@
  * @internal
  */
 
-import type { WalletTopTraderItem } from "@cogni/ai-tools";
 import type { PolyCopyTradeTarget } from "@cogni/node-contracts";
+import type { WalletTopTraderItem } from "@cogni/poly-ai-tools";
 
 import type { WalletRow } from "./columns";
 

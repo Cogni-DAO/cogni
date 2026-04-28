@@ -25,8 +25,8 @@
 
 "use client";
 
-import type { WalletTimePeriod } from "@cogni/ai-tools";
 import { PolyAddressSchema } from "@cogni/node-contracts";
+import type { WalletTimePeriod } from "@cogni/poly-ai-tools";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnFiltersState, SortingState } from "@tanstack/react-table";
 import { Ban, Plus, Radio, Shield } from "lucide-react";

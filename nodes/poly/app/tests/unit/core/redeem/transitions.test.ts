@@ -6,7 +6,8 @@
  * Purpose: Exhaustive coverage of the redeem job state machine. Every
  *   invariant in `core/redeem/transitions.ts` has at least one fixture here.
  * Scope: Pure logic only. No DB, no chain, no time.
- * Links: src/core/redeem/transitions.ts, work/items/task.0388
+ * Links: src/core/redeem/transitions.ts, work/items/task.0388,
+ *   work/items/bug.0403
  */
 
 import { describe, expect, it } from "vitest";
@@ -188,48 +189,69 @@ describe("transition: transient_failure (REDEEM_HAS_CIRCUIT_BREAKER)", () => {
   });
 });
 
-describe("transition: reaper_finality_elapsed (REDEEM_REQUIRES_BURN_OBSERVATION)", () => {
-  it("burn-not-observed (false) → abandoned/malformed", () => {
+describe("transition: reaper_chain_evidence (REAPER_QUERIES_CHAIN_TRUTH)", () => {
+  it("payout-observed → confirmed (regardless of burn flag)", () => {
     const result = transition(
       { ...baseJob, status: "submitted", receiptBurnObserved: false },
-      { kind: "reaper_finality_elapsed" }
+      {
+        kind: "reaper_chain_evidence",
+        payoutObserved: true,
+        balance: 0n,
+      }
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.transition.nextStatus).toBe("abandoned");
-    expect(result.transition.errorClass).toBe("malformed");
-    expect(result.transition.lastError).toMatch(
-      /REDEEM_REQUIRES_BURN_OBSERVATION/
-    );
+    expect(result.transition.nextStatus).toBe("confirmed");
   });
 
-  it("burn-observed (true) but no PayoutRedemption at N=5 → failed_transient (reorged out)", () => {
+  it("no-payout + balance>0 → abandoned/malformed (real bleed)", () => {
     const result = transition(
       { ...baseJob, status: "submitted", receiptBurnObserved: true },
-      { kind: "reaper_finality_elapsed" }
-    );
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.transition.nextStatus).toBe("failed_transient");
-    expect(result.transition.lastError).toBe("burn_reorged_out");
-  });
-
-  it("null receiptBurnObserved is treated as burn-not-observed (defensive)", () => {
-    const result = transition(
-      { ...baseJob, status: "submitted", receiptBurnObserved: null },
-      { kind: "reaper_finality_elapsed" }
+      {
+        kind: "reaper_chain_evidence",
+        payoutObserved: false,
+        balance: 1_000_000n,
+      }
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.transition.nextStatus).toBe("abandoned");
     expect(result.transition.errorClass).toBe("malformed");
+    expect(result.transition.lastError).toMatch(/balance>0/);
+  });
+
+  it("no-payout + balance=0 → confirmed defensively (settled off-pipeline)", () => {
+    const result = transition(
+      { ...baseJob, status: "submitted", receiptBurnObserved: false },
+      {
+        kind: "reaper_chain_evidence",
+        payoutObserved: false,
+        balance: 0n,
+      }
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.transition.nextStatus).toBe("confirmed");
+    expect(result.transition.lastError).toBe("balance_zero_no_payout");
   });
 
   it("rejects reaper from non-submitted", () => {
     const result = transition(pendingJob, {
-      kind: "reaper_finality_elapsed",
+      kind: "reaper_chain_evidence",
+      payoutObserved: false,
+      balance: 0n,
     });
     expect(result.ok).toBe(false);
+  });
+
+  it("rejects reaper from confirmed (idempotent re-tick)", () => {
+    const result = transition(
+      { ...baseJob, status: "confirmed", receiptBurnObserved: true },
+      { kind: "reaper_chain_evidence", payoutObserved: true, balance: 0n }
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.rejection).toBe("wrong_status_for_event");
   });
 });
 
@@ -248,7 +270,11 @@ describe("transition: terminal `abandoned` rows accept nothing", () => {
       { kind: "payout_redemption_observed" as const, txHash: TX_A },
       { kind: "payout_redemption_reorged" as const, removedTxHash: TX_A },
       { kind: "transient_failure" as const, error: "x" },
-      { kind: "reaper_finality_elapsed" as const },
+      {
+        kind: "reaper_chain_evidence" as const,
+        payoutObserved: false,
+        balance: 0n,
+      },
     ];
     for (const event of events) {
       const result = transition(job, event);

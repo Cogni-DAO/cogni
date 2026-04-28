@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ai-tools/tools/poly-list-orders`
+ * Module: `@cogni/poly-ai-tools/tools/poly-list-orders`
  * Purpose: AI tool that lists currently-open Polymarket CLOB orders on the operator wallet via PolyTradeCapability.listOpenOrders. Companion to core__poly_place_trade — lets an agent confirm the state of orders it just placed without waiting for fills.
  * Scope: Tool contract + factory + stub. Pure package. Does not read env, does not import `@polymarket/clob-client`, does not access any adapter directly.
  * Invariants: TOOL_ID_NAMESPACED, EFFECT_READ, REDACTION_REQUIRED, NO_LANGCHAIN, CAPABILITY_NOT_ADAPTER.
@@ -13,7 +13,7 @@
 
 import { z } from "zod";
 
-import type { BoundTool, ToolContract, ToolImplementation } from "../types";
+import type { BoundTool, ToolContract, ToolImplementation } from "@cogni/ai-tools";
 import type {
   PolyListOpenOrdersRequest,
   PolyOpenOrder,

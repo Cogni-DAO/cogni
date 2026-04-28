@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ai-tools/tools/poly-data-activity`
+ * Module: `@cogni/poly-ai-tools/tools/poly-data-activity`
  * Purpose: AI tool — list wallet lifecycle events (TRADE/SPLIT/MERGE/REDEEM/...) via `GET /activity`.
  * Scope: Read-only Data-API wrapper via PolyDataCapability. Distinct from `/trades`. Does not place trades, does not load env.
  * Invariants: TOOL_ID_NAMESPACED, EFFECT_READ_ONLY, USER_PARAM_IS_PROXY_WALLET, PAGINATION_CONSISTENT, NO_LANGCHAIN_IMPORT.
@@ -14,7 +14,7 @@
 import { z } from "zod";
 
 import type { PolyDataCapability } from "../capabilities/poly-data";
-import type { BoundTool, ToolContract, ToolImplementation } from "../types";
+import type { BoundTool, ToolContract, ToolImplementation } from "@cogni/ai-tools";
 
 const PolyAddressSchema = z
   .string()

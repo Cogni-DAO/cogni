@@ -746,5 +746,22 @@ module.exports = {
         "@polymarket/clob-client, app/bootstrap, or any node/service code. " +
         "See docs/design/poly-positions.md § Capability A.",
     },
+
+    // SINGLE_DOMAIN_HARD_FAIL: @cogni/poly-ai-tools is poly-domain only.
+    // operator, resy, and node-template must NOT import poly-owned tools.
+    // Canonical cross-node tool-import isolation (POLICY_STAYS_LOCAL — depcruise
+    // rule, not a separate arch test).
+    {
+      name: "no-poly-ai-tools-in-non-poly-nodes",
+      severity: "error",
+      from: {
+        path: "^nodes/(operator|resy|node-template)/",
+      },
+      to: {
+        path: "(@cogni/poly-ai-tools|^nodes/poly/packages/ai-tools/)",
+      },
+      comment:
+        "Poly-only tools live in @cogni/poly-ai-tools. Non-poly nodes must not import them. Add new poly tools under nodes/poly/packages/ai-tools/ only.",
+    },
   ],
 };

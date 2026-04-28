@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ai-tools/tools/poly-data-help`
+ * Module: `@cogni/poly-ai-tools/tools/poly-data-help`
  * Purpose: AI tool — static meta-tool describing the `core__poly_data_*` family.
  * Scope: Pure static meta-tool. Returns endpoint catalog + discovery strategy + gotchas. Does not perform IO, does not load env.
  * Invariants: TOOL_ID_NAMESPACED, EFFECT_READ_ONLY, NO_IO, NO_LANGCHAIN_IMPORT.
@@ -13,7 +13,7 @@
 
 import { z } from "zod";
 
-import type { BoundTool, ToolContract, ToolImplementation } from "../types";
+import type { BoundTool, ToolContract, ToolImplementation } from "@cogni/ai-tools";
 
 const PolyDataHelpTopicSchema = z.enum(["endpoints", "strategy", "gotchas"]);
 

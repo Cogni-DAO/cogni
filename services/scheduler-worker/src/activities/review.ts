@@ -75,7 +75,7 @@ export interface FetchPrContextOutput {
   rules: Record<string, Rule>;
   graphMessages: Array<{ role: string; content: string }>;
   responseFormat: { prompt: string; schemaId: string };
-  model: string;
+  modelRef: { providerKey: string; modelId: string; connectionId?: string };
   /** Raw repo-spec YAML for DAO config extraction in postReviewResult */
   repoSpecYaml?: string;
 }
@@ -105,7 +105,12 @@ export interface PostReviewResultInput {
 // ---------------------------------------------------------------------------
 
 const CHECK_RUN_NAME = "Cogni Git PR Review";
-const DEFAULT_REVIEW_MODEL = "gpt-4o-mini";
+// vNext (task.0395): per-node/per-rule modelRef from repo-spec. For now, system actor
+// uses the platform provider (LiteLLM-backed, no per-user connection required).
+const DEFAULT_REVIEW_MODELREF = {
+  providerKey: "platform",
+  modelId: "gpt-4o-mini",
+} as const;
 const MAX_PATCH_BYTES_PER_FILE = 100_000;
 const MAX_TOTAL_PATCH_BYTES = 500_000;
 const MAX_FILES_WITH_PATCHES = 30;
@@ -260,7 +265,7 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
         rules: {},
         graphMessages: [],
         responseFormat: { prompt: "", schemaId: "" },
-        model: DEFAULT_REVIEW_MODEL,
+        modelRef: DEFAULT_REVIEW_MODELREF,
       };
     }
 
@@ -353,7 +358,7 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
         ? [{ role: "user", content: userMessage }]
         : [],
       responseFormat,
-      model: DEFAULT_REVIEW_MODEL,
+      modelRef: DEFAULT_REVIEW_MODELREF,
       repoSpecYaml,
     };
   }

@@ -9,7 +9,7 @@
  *   - NO_LANGCHAIN_IN_SRC: No @langchain imports; delegates to package runner
  *   - GRAPH_ID_NAMESPACED: graphId format is "langgraph:${graphName}"
  *   - CATALOG_SINGLE_SOURCE_OF_TRUTH: Uses catalog from @cogni/langgraph-graphs
- *   - TOOL_CATALOG_IS_CANONICAL: Resolves BoundTool from TOOL_CATALOG using entry.toolIds
+ *   - NODE_BUNDLE_IS_CANONICAL: Resolves BoundTool from injected node bundle (CORE_TOOL_BUNDLE [+ POLY_TOOL_BUNDLE for poly]); never iterates the global TOOL_CATALOG (which is per-package and can drift behind per-node bundles).
  *   - DENY_BY_DEFAULT: Tool policy explicitly provided per graph
  *   - MCP_VIA_ASYNC_SOURCE: MCP tools resolved via async getMcpToolSource() function (shared cache with reconnect-on-error)
  * Side-effects: IO (executes graphs via package runner, MCP tool resolution via HTTP)
@@ -24,7 +24,7 @@ import {
   createToolAllowlistPolicy,
   createToolRunner,
 } from "@cogni/ai-core";
-import { TOOL_CATALOG } from "@cogni/ai-tools";
+import type { CatalogBoundTool } from "@cogni/ai-tools";
 import {
   type CompletionFn,
   type CreateGraphFn,
@@ -72,7 +72,7 @@ export interface CompletionUnitAdapter {
 
 /**
  * Catalog entry shape (matches LangGraphCatalogEntry<CreateGraphFn>).
- * Per TOOL_CATALOG_IS_CANONICAL: tools referenced by ID, resolved from TOOL_CATALOG.
+ * Per NODE_BUNDLE_IS_CANONICAL: tools referenced by ID, resolved from the injected node bundle.
  */
 interface ProviderCatalogEntry {
   readonly displayName: string;
@@ -98,14 +98,17 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
   readonly providerId = LANGGRAPH_PROVIDER_ID;
   private readonly log: Logger;
   private readonly catalog: LangGraphCatalog<CreateGraphFn>;
+  private readonly boundToolMap: ReadonlyMap<string, CatalogBoundTool>;
 
   constructor(
     private readonly adapter: CompletionUnitAdapter,
     private readonly toolSource: ToolSourcePort,
     private readonly getMcpToolSource: () => Promise<ToolSourcePort | null> = () =>
-      Promise.resolve(null)
+      Promise.resolve(null),
+    nodeBundle: readonly CatalogBoundTool[] = []
   ) {
     this.log = makeLogger({ component: "LangGraphInProcProvider" });
+    this.boundToolMap = new Map(nodeBundle.map((bt) => [bt.contract.name, bt]));
 
     // Use catalog from package (single source of truth)
     this.catalog = LANGGRAPH_CATALOG as LangGraphCatalog<CreateGraphFn>;
@@ -215,9 +218,10 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
       // Combined tool IDs for allowlist: native catalog tools + MCP tools
       const allToolIds = [...toolIds, ...mcpToolIds];
 
-      // Get catalog tools for contract extraction (still from TOOL_CATALOG)
+      // Get catalog tools for contract extraction from the injected node bundle
+      // (per NODE_BUNDLE_IS_CANONICAL — TOOL_CATALOG only has core tools post-bug.0319 ckpt 2)
       const catalogTools = catalogToolIds
-        .map((id) => TOOL_CATALOG[id])
+        .map((id) => this.boundToolMap.get(id))
         .filter((bt): bt is NonNullable<typeof bt> => bt !== undefined);
 
       // Create tool execution function factory

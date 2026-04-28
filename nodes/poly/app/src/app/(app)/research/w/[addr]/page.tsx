@@ -26,8 +26,6 @@ import {
 } from "@/features/wallet-analysis";
 import { getServerSessionUser } from "@/lib/auth/server";
 
-export const dynamic = "force-dynamic";
-
 type PageProps = {
   params: Promise<{ addr: string }>;
 };

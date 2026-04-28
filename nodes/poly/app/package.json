@@ -20,6 +20,7 @@
     "@auth/drizzle-adapter": "^1.7.0",
     "@cogni/ai-core": "workspace:*",
     "@cogni/ai-tools": "workspace:*",
+    "@cogni/poly-ai-tools": "workspace:*",
     "@cogni/aragon-osx": "workspace:*",
     "@cogni/attribution-ledger": "workspace:*",
     "@cogni/cogni-contracts": "workspace:*",

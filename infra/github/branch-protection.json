@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "Source-of-truth payload for `PUT /repos/Cogni-DAO/node-template/branches/main/protection`.",
+    "Apply with: gh api -X PUT repos/Cogni-DAO/node-template/branches/main/protection --input infra/github/branch-protection.json",
+    "Underscore-prefixed keys are stripped at apply-time by the apply script (see infra/github/README.md).",
+    "Merge-queue settings live in a separate API call — see merge-queue.json + README."
+  ],
+  "required_status_checks": {
+    "strict": false,
+    "contexts": [
+      "CodeQL",
+      "Validate PR title",
+      "static",
+      "unit",
+      "component",
+      "stack-test",
+      "manifest"
+    ]
+  },
+  "enforce_admins": null,
+  "required_pull_request_reviews": null,
+  "restrictions": null,
+  "required_linear_history": false,
+  "allow_force_pushes": false,
+  "allow_deletions": false,
+  "required_conversation_resolution": false,
+  "lock_branch": false,
+  "allow_fork_syncing": false
+}

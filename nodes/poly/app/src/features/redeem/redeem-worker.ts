@@ -6,22 +6,34 @@
  * Purpose: In-process worker for the event-driven CTF redeem pipeline (task.0388).
  *   Two responsibilities, one tick interval:
  *     1. Drain `pending` rows: dispatch CTF or NegRiskAdapter per `decision.flavor`,
- *        decode the receipt for funder-burn presence, transition to `submitted`.
- *     2. Reap stale `submitted` rows: rows that passed N=5 finality without an
- *        observed `PayoutRedemption` from funder. Branch on `receiptBurnObserved`
- *        per `core/redeem/transitions`.
+ *        decode the receipt for funder-burn presence (persisted as observational
+ *        only), transition to `submitted`.
+ *     2. Reap stale `submitted` rows past N=5 finality. Batch-fetches
+ *        `PayoutRedemption(redeemer=funder)` logs per flavor (CTF vs
+ *        NegRiskAdapter) and falls back to `balanceOf` per condition that
+ *        didn't match. Dispatches `reaper_chain_evidence` to
+ *        `core/redeem/transitions`. RPC failure on `getLogs` defers all
+ *        candidates of that flavor to the next tick.
  *   Replaces the old `runRedeemSweep` polling loop in `poly-trade-executor.ts`.
  * Scope: One instance per pod. Uses `FOR UPDATE SKIP LOCKED` for concurrency.
  *   No periodic Data-API enumerate-and-fire; all enqueues come from the
  *   subscriber + catch-up replay.
  * Invariants:
- *   - REDEEM_REQUIRES_BURN_OBSERVATION — every receipt is decoded and the
- *     `receiptBurnObserved` flag persisted; reaper consumes it at N=5.
+ *   - REAPER_QUERIES_CHAIN_TRUTH — at N=5 finality the reaper consults
+ *     `getLogs` for `PayoutRedemption(redeemer=funder)` and `balanceOf` for
+ *     the funder's position, then dispatches `reaper_chain_evidence`.
+ *     Receipt-burn flag is observational only; never decides confirm/bleed
+ *     (bug.0403).
+ *   - REDEEM_REQUIRES_BURN_OBSERVATION — bleed is detected when no payout
+ *     log was emitted AND `balanceOf > 0` for the funder. Balance-zero with
+ *     no payout is treated as off-pipeline settlement and confirmed
+ *     defensively at warn-level for audit visibility.
  *   - REDEEM_HAS_CIRCUIT_BREAKER — `attempt_count >= 3` transient failures
  *     escalate via `transitions` to `abandoned/transient_exhausted`.
  *   - FINALITY_IS_FIXED_N — reaper uses `REDEEM_FINALITY_BLOCKS` from env.
  * Side-effects: IO (Polygon RPC writes + reads, DB).
- * Links: docs/design/poly-positions.md § Worker, work/items/task.0388
+ * Links: docs/design/poly-positions.md § Worker, work/items/task.0388,
+ *   work/items/bug.0403
  * @public
  */
 
@@ -29,12 +41,15 @@ import {
   POLYGON_CONDITIONAL_TOKENS,
   POLYGON_NEG_RISK_ADAPTER,
   POLYGON_USDC_E,
+  polymarketCtfEventsAbi,
   polymarketCtfRedeemAbi,
   polymarketNegRiskAdapterAbi,
 } from "@cogni/market-provider/adapters/polymarket";
 import {
+  type AbiEvent,
   type Account,
   decodeEventLog,
+  getAbiItem,
   keccak256,
   type PublicClient,
   parseAbi,
@@ -47,6 +62,7 @@ import { polygon } from "viem/chains";
 import {
   REDEEM_MAX_TRANSIENT_ATTEMPTS,
   type RedeemFlavor,
+  type RedeemJob,
   transition,
 } from "@/core";
 import type { RedeemJobsPort } from "@/ports";
@@ -65,6 +81,18 @@ const TRANSFER_SINGLE_TOPIC = keccak256(
 const NEG_RISK_PAYOUT_TOPIC = keccak256(
   toBytes("PayoutRedemption(address,bytes32,uint256[],uint256)")
 );
+
+const ctfPayoutEvent = getAbiItem({
+  abi: polymarketCtfEventsAbi,
+  name: "PayoutRedemption",
+}) as AbiEvent;
+const negriskPayoutEvent = getAbiItem({
+  abi: polymarketNegRiskAdapterAbi,
+  name: "PayoutRedemption",
+}) as AbiEvent;
+
+const isNegRiskFlavor = (f: RedeemFlavor): boolean =>
+  f === "neg-risk-parent" || f === "neg-risk-adapter";
 
 interface LoggerLike {
   info: (obj: object, msg?: string) => void;
@@ -311,11 +339,96 @@ export class RedeemWorker {
       headBlock,
       this.deps.finalityBlocks
     );
+    if (candidates.length === 0) return;
+
+    // Batch one PayoutRedemption getLogs per flavor group across all
+    // candidates: filter by funder topic + the contract appropriate to the
+    // flavor, fromBlock = min(submittedAtBlock) - 1, toBlock = head.
+    // `null` return = RPC failure → defer all candidates of that flavor to
+    // next tick. Falling through to balanceOf on a getLogs RPC flake would
+    // pollute the `balance_zero_no_payout` audit channel with false-positive
+    // off-pipeline-settlement signals.
+    const ctfJobs = candidates.filter((j) => !isNegRiskFlavor(j.flavor));
+    const negJobs = candidates.filter((j) => isNegRiskFlavor(j.flavor));
+    const ctfPayouts = await this.fetchPayoutMap(ctfJobs, headBlock, "ctf");
+    const negPayouts = await this.fetchPayoutMap(negJobs, headBlock, "negrisk");
+
     for (const job of candidates) {
-      const result = transition(job, { kind: "reaper_finality_elapsed" });
+      const payouts = isNegRiskFlavor(job.flavor) ? negPayouts : ctfPayouts;
+      if (payouts === null) continue; // RPC-deferred for this flavor
+      const payoutTx = payouts.get(job.conditionId.toLowerCase());
+
+      let balance = 0n;
+      if (!payoutTx) {
+        try {
+          balance = (await this.deps.publicClient.readContract({
+            address: POLYGON_CONDITIONAL_TOKENS,
+            abi: ctfBalanceAbi,
+            functionName: "balanceOf",
+            args: [this.deps.funderAddress, BigInt(job.positionId)],
+          })) as bigint;
+        } catch (err) {
+          // RPC error reading balance — defer this job to next tick rather
+          // than risking a wrong-direction transition.
+          this.deps.logger.warn(
+            {
+              event: "poly.ctf.redeem.reaper_balance_read_failed",
+              job_id: job.id,
+              condition_id: job.conditionId,
+              err: err instanceof Error ? err.message : String(err),
+            },
+            "redeem-worker: balanceOf read failed; deferring reaper decision"
+          );
+          continue;
+        }
+      }
+
+      const result = transition(job, {
+        kind: "reaper_chain_evidence",
+        payoutObserved: payoutTx !== undefined,
+        balance,
+      });
       if (!result.ok) continue;
 
-      if (
+      if (result.transition.nextStatus === "confirmed") {
+        const txHashForLog =
+          payoutTx ?? (job.txHashes.at(-1) as `0x${string}` | undefined);
+        await this.deps.redeemJobs.markConfirmed({
+          jobId: job.id,
+          txHash: (txHashForLog ?? "0x0") as `0x${string}`,
+        });
+        await this.deps.redeemJobs.setLifecycleState({
+          jobId: job.id,
+          lifecycleState: "redeemed",
+        });
+        if (payoutTx) {
+          this.deps.logger.info(
+            {
+              event: "poly.ctf.redeem.job_confirmed",
+              source: "reaper",
+              job_id: job.id,
+              condition_id: job.conditionId,
+              tx_hash: payoutTx,
+              flavor: job.flavor,
+            },
+            "redeem-worker: job confirmed via reaper chain query"
+          );
+        } else {
+          // Defensive confirm: balance==0, no payout log. Settled
+          // off-pipeline. Distinct event so on-call can audit volume.
+          this.deps.logger.warn(
+            {
+              event: "poly.ctf.redeem.balance_zero_no_payout",
+              job_id: job.id,
+              condition_id: job.conditionId,
+              funder: job.funderAddress,
+              tx_hashes: job.txHashes,
+              flavor: job.flavor,
+            },
+            "redeem-worker: no payout + balance=0; confirming defensively"
+          );
+        }
+      } else if (
         result.transition.nextStatus === "abandoned" &&
         result.transition.errorClass === "malformed"
       ) {
@@ -324,7 +437,7 @@ export class RedeemWorker {
           errorClass: "malformed",
           error:
             result.transition.lastError ??
-            "REDEEM_REQUIRES_BURN_OBSERVATION violated",
+            "REDEEM_REQUIRES_BURN_OBSERVATION: no payout + balance>0",
         });
         this.deps.logger.error(
           {
@@ -335,24 +448,95 @@ export class RedeemWorker {
             funder: job.funderAddress,
             tx_hashes: job.txHashes,
             flavor: job.flavor,
+            balance: balance.toString(),
           },
-          "redeem-worker: BLEED DETECTED — receipt had no funder burn at N=5"
-        );
-      } else if (result.transition.nextStatus === "failed_transient") {
-        await this.deps.redeemJobs.markTransientFailure({
-          jobId: job.id,
-          error: result.transition.lastError ?? "burn_reorged_out",
-        });
-        this.deps.logger.warn(
-          {
-            event: "poly.ctf.redeem.tx_failed_transient",
-            job_id: job.id,
-            condition_id: job.conditionId,
-            reason: "burn_reorged_out",
-          },
-          "redeem-worker: burn was real but reorged out at N=5; retrying"
+          "redeem-worker: BLEED DETECTED — no payout + funder still holds position at N=5"
         );
       }
     }
+  }
+
+  /**
+   * Batch-fetch PayoutRedemption logs from the given contract over the
+   * smallest range covering all candidate submissions. Returns a Map keyed by
+   * lowercase conditionId → tx hash of the matching log. Restricted to
+   * `redeemer == funder` via the indexed-topic filter (no per-log scan).
+   *
+   * Returns `null` to signal RPC failure — caller defers all candidates of
+   * this flavor to the next tick rather than falling through to `balanceOf`,
+   * which would mark genuine-redeemed positions as `balance_zero_no_payout`
+   * and pollute the off-pipeline-settlement audit signal.
+   */
+  private async fetchPayoutMap(
+    jobs: ReadonlyArray<RedeemJob>,
+    headBlock: bigint,
+    kind: "ctf" | "negrisk"
+  ): Promise<Map<string, `0x${string}`> | null> {
+    const map = new Map<string, `0x${string}`>();
+    if (jobs.length === 0) return map;
+    const minBlock = jobs.reduce<bigint>(
+      (acc, j) =>
+        j.submittedAtBlock !== null && j.submittedAtBlock < acc
+          ? j.submittedAtBlock
+          : acc,
+      headBlock
+    );
+    const fromBlock = minBlock > 0n ? minBlock - 1n : 0n;
+    const conditionSet = new Set(jobs.map((j) => j.conditionId.toLowerCase()));
+    try {
+      const logs = await this.deps.publicClient.getLogs({
+        address:
+          kind === "ctf"
+            ? POLYGON_CONDITIONAL_TOKENS
+            : POLYGON_NEG_RISK_ADAPTER,
+        event: kind === "ctf" ? ctfPayoutEvent : negriskPayoutEvent,
+        args: { redeemer: this.deps.funderAddress },
+        fromBlock,
+        toBlock: headBlock,
+      });
+      for (const log of logs) {
+        if (log.removed) continue;
+        try {
+          const decoded = decodeEventLog({
+            abi:
+              kind === "ctf"
+                ? polymarketCtfEventsAbi
+                : polymarketNegRiskAdapterAbi,
+            eventName: "PayoutRedemption",
+            data: log.data,
+            topics: log.topics,
+          });
+          const args = decoded.args as unknown as {
+            redeemer: `0x${string}`;
+            conditionId: `0x${string}`;
+          };
+          if (
+            args.redeemer.toLowerCase() !==
+            this.deps.funderAddress.toLowerCase()
+          )
+            continue;
+          const cidLower = args.conditionId.toLowerCase();
+          if (!conditionSet.has(cidLower)) continue;
+          if (!map.has(cidLower) && log.transactionHash) {
+            map.set(cidLower, log.transactionHash as `0x${string}`);
+          }
+        } catch {
+          // Decode failure on a foreign-shape log — skip silently.
+        }
+      }
+    } catch (err) {
+      this.deps.logger.warn(
+        {
+          event: "poly.ctf.redeem.reaper_getlogs_failed",
+          kind,
+          from: fromBlock.toString(),
+          to: headBlock.toString(),
+          err: err instanceof Error ? err.message : String(err),
+        },
+        "redeem-worker: reaper getLogs failed; deferring flavor to next tick"
+      );
+      return null;
+    }
+    return map;
   }
 }

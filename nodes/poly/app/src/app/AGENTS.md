@@ -51,7 +51,17 @@ Next.js App Router delivery layer. UI pages and API routes that expose features 
   - Infra: `/health`, `/openapi.json`, `/meta/route-manifest` (via `(infra)/*`)
   - API: `/api/auth/*`, `/api/v1/chat/completions`
   - Internal ops: `/api/internal/ops/governance/schedules/sync` [POST] (deploy-only trigger)
-- **Files considered API:** layout.tsx, page.tsx, api/\*\*/route.ts, (infra)/\*\*/route.ts
+- **Files considered API:** layout.tsx, page.tsx, loading.tsx, error.tsx, api/\*\*/route.ts, (infra)/\*\*/route.ts
+- **Suspense / error boundaries:** each route group exposes a
+  `loading.tsx` + `error.tsx`. `(app)/loading.tsx` renders a generic
+  fallback inside the sidebar shell; high-traffic routes
+  (`/dashboard`, `/chat`, `/research`, `/work`, `/credits`,
+  `/activity`, `/gov/*`) override with a per-route `loading.tsx`
+  that mirrors the page's macro layout. `(public)/loading.tsx`
+  renders the marketing-shaped skeleton (Hero + cards + feed)
+  used by `/`; `propose/merge` overrides with a form skeleton.
+  Reusable primitives (`PageHeaderSkeleton`, `TableSkeleton`,
+  `CardGridSkeleton`) live under `kit/layout/`.
 
 ## Responsibilities
 
