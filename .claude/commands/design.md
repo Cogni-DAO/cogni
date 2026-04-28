@@ -145,7 +145,7 @@ Update frontmatter:
 
 **If architectural decision**: Create ADR in `docs/decisions/adr/`, link from work item.
 
-**If work decomposes**: Create additional `task.*` items at `needs_implement` for any sub-work discovered during design. The original item stays as the primary lifecycle carrier.
+**If work decomposes**: Do **not** fan out into new work items at design time. Keep the design on the original item, name the slices inline, and let `/review-design` decide which slice ships first as the MVP. Only `/review-design` (after approval) may promote at most 1–2 follow-up slices into sibling tasks under the same project — no work-item sprawl before review.
 
 ---
 
@@ -162,10 +162,10 @@ Update frontmatter:
 3. Run `pnpm check:docs` and fix any errors until clean.
 4. Commit all changes (work item(s), specs, `_index.md`) on the work item's branch.
 5. Push to remote.
-6. Report what was designed and the next command:
-   - **For stories**: story is `done`; created task(s) at `needs_implement` → `/implement`
+6. Report what was designed and the next command. **Never route directly to `/implement` from `/design`** — `/review-design` is the gate that catches over-scoped designs and forces simplification to an MVP first slice before code is written.
+   - **For stories**: story is `done`; created task(s) at `needs_review_design` → `/review-design`
    - **For projects**: `/task` (to start decomposition)
-   - **For tasks/bugs**: item is now at `needs_implement` → `/implement`
+   - **For tasks/bugs**: item is now at `needs_review_design` → `/review-design`. Only after review approves the (simplified) scope does the item move to `needs_implement`.
 
 ---
 

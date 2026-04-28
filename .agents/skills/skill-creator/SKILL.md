@@ -7,6 +7,24 @@ description: Create new skills, modify and improve existing skills, and measure 
 
 A skill for creating new skills and iteratively improving them.
 
+## Step 0 — Classify the skill: user-private vs repo-shared
+
+Before writing or editing anything, decide which surface the skill belongs to and confirm with the user. This decision determines where the file lives and what shipping path it follows.
+
+| Class            | Location                        | Shipping path                                                                                                                                                                                                              | Use when                                                                                                                                       |
+| ---------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **User-private** | `~/.claude/skills/<name>/`      | Edit in place. No PR. Lives only on the user's machine.                                                                                                                                                                    | Personal communication contracts, individual workflow shortcuts, anything tied to one user's identity / environment / scheduling.              |
+| **Repo-shared**  | `<repo>/.claude/skills/<name>/` | Treat the edit as a normal repo code/docs change — run the **`contribute-to-cogni`** loop end-to-end: worktree → branch → `pnpm check:fast` → PR → candidate-a flight → self-validate → ready for review → operator merge. | Anything other contributors / agents in this repo will load. Lifecycle skills, repo runbooks, `contribute-to-cogni` itself, this skill itself. |
+
+**Rules:**
+
+- If unsure, ask. Don't guess.
+- Editing an existing skill inherits its class — don't silently move a skill across surfaces. A move from private → repo (or vice versa) is its own decision.
+- Repo-shared skill edits are code/docs changes. They never ship via direct commit to `main` — same PR + flight gate as any other repo change.
+- User-private edits are fine to make immediately and need no commit.
+
+State the classification in one line at the start of any skill-creation or skill-edit task so the user can correct it before you write the file. Then proceed with the rest of this skill.
+
 At a high level, the process of creating a skill goes like this:
 
 - Decide what you want the skill to do and roughly how it should do it

@@ -25,7 +25,9 @@ At each phase: search the resource roots below for the relevant guides, specs, a
 
 1. Worktree off `main`. Read `CLAUDE.md` and the `AGENTS.md` files for every dir you'll touch.
 2. Find your work item in `work/items/` (or create one). Identify your **validation checklist** — the exact endpoint or behavior you will prove on candidate-a — before writing any code.
-3. Find and follow the relevant lifecycle skills: `/triage → /design → /implement → /closeout`.
+3. Find and follow the relevant lifecycle skills: `/triage → /design → /review-design → /implement → /closeout`. Two real off-ramps live in this chain — neither is a formality:
+   - **`/triage`** locates the relevant charter (`work/charters/`) and existing work items, then prioritizes against them. A valid triage outcome is a **pivot**: drop this idea for a lower-priority slot, redirect to a similar/related work item already in flight, or escalate as a request for a new node project direction. Don't assume your incoming idea survives triage — let it lose to higher-priority work when that's the right call.
+   - **`/review-design`** catches over-scoped designs. If `/design` lands a multi-PR plan, the review simplifies down to the **MVP first slice** and captures at most 1–2 follow-ups inside the same task/project. Do **not** fan out into new work items.
 4. `pnpm check:fast` must pass. Push branch. `gh pr create` with a conventional commit title.
 
 ## Phase 2 — Flight Request
