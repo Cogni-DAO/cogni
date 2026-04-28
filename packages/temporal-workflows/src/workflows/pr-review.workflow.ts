@@ -128,7 +128,7 @@ export async function PrReviewWorkflow(
           executionGrantId: null,
           input: {
             messages: context.graphMessages,
-            model: context.model,
+            modelRef: context.modelRef,
             responseFormat: context.responseFormat,
             actorUserId,
             billingAccountId,

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ai-tools/tools/market-list`
+ * Module: `@cogni/poly-ai-tools/tools/market-list`
  * Purpose: AI tool for listing prediction markets from Polymarket and Kalshi.
  * Scope: Read-only market listing via MarketProviderPort. Does not place trades or load env.
  * Invariants:
@@ -17,7 +17,7 @@
 
 import { z } from "zod";
 
-import type { BoundTool, ToolContract, ToolImplementation } from "../types";
+import type { BoundTool, ToolContract, ToolImplementation } from "@cogni/ai-tools";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Capability interface (injected at runtime)

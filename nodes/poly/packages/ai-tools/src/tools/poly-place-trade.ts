@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ai-tools/tools/poly-place-trade`
+ * Module: `@cogni/poly-ai-tools/tools/poly-place-trade`
  * Purpose: AI tool that places ONE Polymarket CLOB BUY order through a PolyTradeCapability. Any registered agent with poly-brain tools can invoke it; the capability uses the hardcoded operator EOA on the server side. Prototype scope — no per-user auth, no per-target routing.
  * Scope: Tool contract + capability interface + factory + stub. Pure package. Does not read env, does not load `@polymarket/clob-client`, does not know the operator wallet address. Returns the CLOB `order_id` + a Polymarket-profile URL the caller can surface to the user.
  * Invariants:
@@ -19,7 +19,7 @@
 
 import { z } from "zod";
 
-import type { BoundTool, ToolContract, ToolImplementation } from "../types";
+import type { BoundTool, ToolContract, ToolImplementation } from "@cogni/ai-tools";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Capability interface (injected at runtime)

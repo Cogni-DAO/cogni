@@ -2,6 +2,7 @@ name: CI
 
 on:
   pull_request:
+  merge_group: # Required so GitHub Merge Queue re-runs gates on the rebased queue candidate (task.0391)
   push:
     branches: [canary, staging, main]
 
@@ -11,6 +12,9 @@ permissions:
   packages: read # Required for pulling migrator images from GHCR
 
 concurrency:
+  # github.ref distinguishes pull_request, merge_group (gh-readonly-queue/main/...),
+  # and push:main, so each axis serializes independently and the queue isn't cancelled
+  # by a concurrent PR push.
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 

@@ -1039,6 +1039,9 @@ importers:
       '@cogni/node-streams':
         specifier: workspace:*
         version: link:../../../packages/node-streams
+      '@cogni/poly-ai-tools':
+        specifier: workspace:*
+        version: link:../packages/ai-tools
       '@cogni/poly-db-schema':
         specifier: workspace:*
         version: link:../packages/db-schema
@@ -1310,9 +1313,37 @@ importers:
       '@cogni/node-contracts':
         specifier: workspace:*
         version: link:../../../packages/node-contracts
+      '@cogni/poly-ai-tools':
+        specifier: workspace:*
+        version: link:../packages/ai-tools
       '@langchain/langgraph':
         specifier: ^1.0.7
         version: 1.1.2(@langchain/core@1.1.17(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.208.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.26.0(ws@8.19.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.76)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(zod-to-json-schema@3.25.2(zod@3.25.76))(zod@3.25.76)
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@swc/core@1.15.10)(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.3)
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+      vite-tsconfig-paths:
+        specifier: ^5.1.4
+        version: 5.1.4(typescript@5.9.3)(vite@7.2.1(@types/node@25.2.3)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.20.6)(yaml@2.8.3))
+      vitest:
+        specifier: ^4.0.9
+        version: 4.1.2(@opentelemetry/api@1.9.0)(@types/node@25.2.3)(happy-dom@20.9.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(jsdom@16.7.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(msw@2.12.1(@types/node@25.2.3)(typescript@5.9.3))(vite@7.2.1(@types/node@25.2.3)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.20.6)(yaml@2.8.3))
+
+  nodes/poly/packages/ai-tools:
+    dependencies:
+      '@cogni/ai-core':
+        specifier: workspace:*
+        version: link:../../../../packages/ai-core
+      '@cogni/ai-tools':
+        specifier: workspace:*
+        version: link:../../../../packages/ai-tools
       zod:
         specifier: ^3.24.0
         version: 3.25.76

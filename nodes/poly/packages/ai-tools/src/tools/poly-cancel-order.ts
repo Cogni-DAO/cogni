@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ai-tools/tools/poly-cancel-order`
+ * Module: `@cogni/poly-ai-tools/tools/poly-cancel-order`
  * Purpose: AI tool that cancels ONE open Polymarket CLOB order by id via PolyTradeCapability.cancelOrder. Companion to place_trade + list_orders; closes the prototype's C/R/D loop (Polymarket has no update op — cancel-and-replace only).
  * Scope: Tool contract + factory + stub. Pure package. Does not read env, does not import `@polymarket/clob-client`, does not access any adapter directly.
  * Invariants: TOOL_ID_NAMESPACED (core__poly_cancel_order), EFFECT_TYPED (state_change), REDACTION_REQUIRED, NO_LANGCHAIN, CAPABILITY_NOT_ADAPTER.
@@ -13,7 +13,7 @@
 
 import { z } from "zod";
 
-import type { BoundTool, ToolContract, ToolImplementation } from "../types";
+import type { BoundTool, ToolContract, ToolImplementation } from "@cogni/ai-tools";
 import type { PolyTradeCapability } from "./poly-place-trade";
 
 export const PolyCancelOrderInputSchema = z.object({

@@ -19,6 +19,7 @@ import type {
   RepoCapability,
   WebSearchCapability,
 } from "@cogni/ai-tools";
+import { CORE_TOOL_BUNDLE } from "@cogni/ai-tools";
 import type { AttributionStore } from "@cogni/attribution-ledger";
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import type { FinancialLedgerPort } from "@cogni/financial-ledger";
@@ -45,6 +46,7 @@ import {
 } from "@cogni/node-streams";
 import { numberToPpm } from "@cogni/operator-wallet";
 import { PrivyOperatorWalletAdapter } from "@cogni/operator-wallet/adapters/privy";
+import { POLY_TOOL_BUNDLE } from "@cogni/poly-ai-tools";
 import type { ScheduleControlPort } from "@cogni/scheduler-core";
 import type { WorkItemQueryPort } from "@cogni/work-items";
 import { MarkdownWorkItemAdapter } from "@cogni/work-items/markdown";
@@ -941,14 +943,11 @@ function createContainer(): Container {
   }
 
   // ToolSource with real implementations (per CAPABILITY_INJECTION).
-  // `polyTradeCapability` is intentionally omitted post-cutover: the
-  // single-operator `PolyTradeCapability` (place/list/cancel/close) is a
-  // v0 regression on the agent tool surface. Tool bindings substitute a
-  // "not configured" stub for `core__poly_{place_trade,list_orders,cancel_order}`.
-  // Re-enabling the surface means dispatching through the per-tenant
-  // `PolyTradeExecutor` with the invoking user's `billing_account_id` — a
-  // follow-up once the agent runtime surfaces actor identity at tool
-  // invocation time.
+  // The agent-facing trade tools (core__poly_{place_trade,list_orders,
+  // cancel_order}) are intentionally NOT in POLY_TOOL_BUNDLE — their contracts
+  // live in @cogni/poly-ai-tools for the future per-tenant re-wire (dispatch
+  // through PolyTradeExecutor with actor identity at tool invocation time).
+  // See bug.0319 ckpt 3.
   const toolBindings = createToolBindings({
     knowledgeCapability,
     marketCapability,
@@ -961,7 +960,10 @@ function createContainer(): Container {
     walletCapability,
     workItemCapability,
   });
-  const toolSource = createBoundToolSource(toolBindings);
+  const toolSource = createBoundToolSource(
+    [...CORE_TOOL_BUNDLE, ...POLY_TOOL_BUNDLE],
+    toolBindings
+  );
 
   // Config: rethrow in dev/test for diagnosis, respond_500 in production for safety
   const config: ContainerConfig = {

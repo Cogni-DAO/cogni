@@ -1,0 +1,202 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
+/**
+ * Module: `@cogni/tests/external/ci-gates/single-node-scope-e2e.external.test`
+ * Purpose: End-to-end proof that the `single-node-scope` CI gate fails a real cross-node PR with the spec'd diagnostic.
+ * Scope: Self-test of this repo's own gate — opens a draft PR on `Cogni-DAO/node-template` touching two non-operator nodes, polls Actions, asserts conclusion + annotation. Does NOT mock the workflow.
+ * Invariants: The gate concludes `failure`; annotation names both touched domains and instructs to split (matches §Diagnostic contract in spec.node-ci-cd-contract).
+ * Side-effects: IO (git push to a transient branch, gh PR create/close, GitHub Actions execution).
+ * Links: docs/spec/node-ci-cd-contract.md §Single-Domain Scope, .github/workflows/ci.yaml#single-node-scope, work/items/task.0381.*
+ * @internal
+ */
+
+import { execSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+// ---------------------------------------------------------------------------
+// Config — skip entire suite if `gh` CLI not installed or auth unavailable
+// ---------------------------------------------------------------------------
+
+const TEST_REPO = process.env.E2E_GATE_REPO ?? "Cogni-DAO/node-template";
+const CHECK_RUN_NAME = "single-node-scope";
+const POLL_INTERVAL_MS = 3_000;
+
+// Two non-operator nodes from `nodes/*` (excluding operator). Picked
+// statically because the gate's filter list is itself static — keeping
+// this in sync with the workflow is the meta-test's job, not ours.
+const NODE_A = "poly";
+const NODE_B = "resy";
+
+function exec(cmd: string, opts?: { cwd?: string }): string {
+  return execSync(cmd, {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+    ...opts,
+  }).trim();
+}
+
+function tryExec(cmd: string): boolean {
+  try {
+    execSync(cmd, { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const canRun = tryExec("gh --version") && tryExec("gh auth status");
+const describeIfReady = canRun ? describe : describe.skip;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+interface CheckRun {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  output: { summary: string | null; text: string | null };
+}
+
+function getCheckRuns(repo: string, sha: string): CheckRun[] {
+  const json = exec(
+    `gh api repos/${repo}/commits/${sha}/check-runs --jq '.check_runs | map({id, name, status, conclusion, output: {summary: .output.summary, text: .output.text}})'`
+  );
+  return JSON.parse(json) as CheckRun[];
+}
+
+interface Annotation {
+  message: string;
+  annotation_level: string;
+  path: string;
+}
+
+function getAnnotations(repo: string, checkRunId: number): Annotation[] {
+  const json = exec(
+    `gh api repos/${repo}/check-runs/${checkRunId}/annotations --jq 'map({message, annotation_level, path})'`
+  );
+  return JSON.parse(json) as Annotation[];
+}
+
+// ---------------------------------------------------------------------------
+// Suite — one transient cross-node PR, two assertions on it
+// ---------------------------------------------------------------------------
+
+describeIfReady(
+  "single-node-scope CI gate · cross-node PR (external e2e)",
+  () => {
+    const stamp = Date.now();
+    const branch = `gate-test/single-node-scope-${stamp}`;
+    let tempDir = "";
+    let prNumber = 0;
+    let headSha = "";
+
+    beforeAll(() => {
+      tempDir = mkdtempSync(join(tmpdir(), "cogni-gate-e2e-"));
+      exec(`gh repo clone ${TEST_REPO} ${tempDir} -- --quiet --depth 1`);
+      exec(`git switch -c ${branch} --quiet`, { cwd: tempDir });
+
+      // Touch one marker per node — `.txt` is invisible to lint/format/check:docs.
+      const markerA = join(tempDir, `nodes/${NODE_A}/.gate-test-marker.txt`);
+      const markerB = join(tempDir, `nodes/${NODE_B}/.gate-test-marker.txt`);
+      const body = `single-node-scope-e2e marker (${stamp}). Branch never merges; safe to ignore.\n`;
+      writeFileSync(markerA, body);
+      writeFileSync(markerB, body);
+
+      exec(
+        `git add nodes/${NODE_A}/.gate-test-marker.txt nodes/${NODE_B}/.gate-test-marker.txt`,
+        { cwd: tempDir }
+      );
+      exec(
+        `git -c user.name='cogni-bot' -c user.email='actions@users.noreply.github.com' commit -m 'test(gate): cross-node smoke ${stamp}' --quiet`,
+        { cwd: tempDir }
+      );
+      exec(`git push origin ${branch} --quiet`, { cwd: tempDir });
+
+      headSha = exec("git rev-parse HEAD", { cwd: tempDir });
+
+      // Draft PR — no review notifications, no merge risk.
+      const prUrl = exec(
+        `gh pr create -R ${TEST_REPO} --draft --title "[test:gate] single-node-scope cross-node smoke ${stamp}" --body "Auto-generated by single-node-scope-e2e.external.test.ts. Touches ${NODE_A} + ${NODE_B} to assert the gate fails with the spec'd diagnostic. Closes itself in afterAll." --base main --head ${branch}`
+      );
+      const match = prUrl.match(/(\d+)$/);
+      prNumber = parseInt(match?.[1] ?? "0", 10);
+    }, 60_000);
+
+    afterAll(() => {
+      if (prNumber) {
+        try {
+          exec(`gh pr close ${prNumber} -R ${TEST_REPO} --delete-branch`);
+        } catch {
+          // best-effort
+        }
+      }
+      if (tempDir) {
+        try {
+          rmSync(tempDir, { recursive: true, force: true });
+        } catch {
+          // best-effort
+        }
+      }
+    });
+
+    it(`single-node-scope check run completes with conclusion=failure within 90s`, async () => {
+      expect(prNumber).toBeGreaterThan(0);
+
+      const TIMEOUT_MS = 90_000;
+      let checkRun: CheckRun | undefined;
+      const start = Date.now();
+
+      while (Date.now() - start < TIMEOUT_MS) {
+        const runs = getCheckRuns(TEST_REPO, headSha);
+        checkRun = runs.find((r) => r.name === CHECK_RUN_NAME);
+        if (checkRun?.status === "completed") break;
+        await sleep(POLL_INTERVAL_MS);
+      }
+
+      expect(
+        checkRun,
+        `no '${CHECK_RUN_NAME}' check run on ${headSha}`
+      ).toBeDefined();
+      expect(checkRun?.status).toBe("completed");
+      expect(
+        checkRun?.conclusion,
+        `gate must FAIL on cross-node PR (touched ${NODE_A} + ${NODE_B})`
+      ).toBe("failure");
+    }, 120_000);
+
+    it("annotation matches the §Diagnostic contract — names both domains + 'split'", async () => {
+      const runs = getCheckRuns(TEST_REPO, headSha);
+      const checkRun = runs.find((r) => r.name === CHECK_RUN_NAME);
+      expect(checkRun).toBeDefined();
+      if (!checkRun) return;
+
+      const annotations = getAnnotations(TEST_REPO, checkRun.id);
+      const failureAnnotations = annotations.filter(
+        (a) => a.annotation_level === "failure"
+      );
+      expect(
+        failureAnnotations.length,
+        "::error:: workflow command must produce at least one failure annotation"
+      ).toBeGreaterThan(0);
+
+      const message = failureAnnotations.map((a) => a.message).join("\n");
+
+      // §Diagnostic contract requirements:
+      // 1. Names the conflicting domains explicitly
+      expect(message).toContain(NODE_A);
+      expect(message).toContain(NODE_B);
+
+      // 2. Suggests the split
+      expect(message.toLowerCase()).toMatch(/split/);
+
+      // 3. Indicates it's about node domains (not just any "scope error")
+      expect(message.toLowerCase()).toMatch(/domain|node/);
+    }, 30_000);
+  }
+);

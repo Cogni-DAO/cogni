@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ai-tools/tools/poly-close-position`
+ * Module: `@cogni/poly-ai-tools/tools/poly-close-position`
  * Purpose: AI tool that closes an open Polymarket position via a SELL order through PolyTradeCapability. Routes to `bundle.closePosition` which is the only legal SELL path for agents.
  * Scope: Tool contract + factory + stub. Pure package. Does not read env vars or import adapters.
  * Invariants:
@@ -17,7 +17,7 @@
 
 import { z } from "zod";
 
-import type { BoundTool, ToolContract, ToolImplementation } from "../types";
+import type { BoundTool, ToolContract, ToolImplementation } from "@cogni/ai-tools";
 import type {
   PolyClosePositionRequest,
   PolyPlaceTradeReceipt,

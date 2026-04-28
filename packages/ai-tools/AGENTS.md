@@ -67,9 +67,8 @@ Pure tool definitions for AI agent execution. Defines `ToolContract`, `ToolImple
   - `knowledgeSearchBoundTool`, `KNOWLEDGE_SEARCH_NAME`, `createKnowledgeSearchImplementation` - Knowledge search tool (read_only: text search by domain+query)
   - `knowledgeWriteBoundTool`, `KNOWLEDGE_WRITE_NAME`, `createKnowledgeWriteImplementation` - Knowledge write tool (state_change: upsert + auto dolt_commit)
   - `KnowledgeCapability`, `KnowledgeEntry`, `KnowledgeWriteParams`, `CONFIDENCE` - Knowledge capability types (see `@cogni/knowledge-store` for port + adapter)
-  - `polyDataPositionsBoundTool`, `polyDataActivityBoundTool`, `polyDataValueBoundTool`, `polyDataHoldersBoundTool`, `polyDataTradesMarketBoundTool`, `polyDataResolveUsernameBoundTool`, `polyDataHelpBoundTool` + their `POLY_DATA_*_NAME` consts + `create*Implementation` factories — 7 Polymarket Data-API research tools (task.0386). All `read_only`. `help` is pure (no capability); other 6 consume `PolyDataCapability`. (`core__poly_data_traded_events` was purged post-flight: `/traded-events` endpoint does not exist on data-api.polymarket.com — category focus derived from `/activity` instead.)
-  - `PolyDataCapability`, `PolyDataActivityType`, `PolyDataPositionsOutput`, `PolyDataActivityOutput`, `PolyDataValueOutput`, `PolyDataHoldersOutput`, `PolyDataMarketTradesOutput`, `PolyDataResolveUsernameOutput` — shared capability + output types (runtime impl lives in `nodes/poly/app/src/bootstrap/capabilities/poly-research.ts`).
-  - `TOOL_CATALOG` - Singleton catalog of all registered tools (Record<string, CatalogBoundTool>)
+  - `TOOL_CATALOG` - Singleton catalog of all core tool definitions (Record<string, CatalogBoundTool>)
+  - `CORE_TOOL_BUNDLE` - Cross-node core tool array (all non-Polymarket tools); pass to createBoundToolSource. Poly node additionally imports POLY_TOOL_BUNDLE from `@cogni/poly-ai-tools`.
   - `createToolCatalog()`, `getToolById()`, `getToolIds()`, `hasToolId()` - Catalog accessors
   - `toBoundToolRuntime()`, `contractToRuntime()` - Runtime adapter converters (contractToRuntime for DI)
   - `ToolCapabilities`, `AuthCapability`, `ClockCapability`, `MetricsCapability`, `RepoCapability` - Capability interfaces

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ai-tools/tools/poly-data-trades-market`
+ * Module: `@cogni/poly-ai-tools/tools/poly-data-trades-market`
  * Purpose: AI tool — list market-level trades (all wallets) via `GET /trades?market=`.
  * Scope: Read-only. Used for counterparty harvesting (NOT per-user history). Does not place trades, does not load env.
  * Invariants: TOOL_ID_NAMESPACED, EFFECT_READ_ONLY, PAGINATION_CONSISTENT, NO_LANGCHAIN_IMPORT.
@@ -14,7 +14,7 @@
 import { z } from "zod";
 
 import type { PolyDataCapability } from "../capabilities/poly-data";
-import type { BoundTool, ToolContract, ToolImplementation } from "../types";
+import type { BoundTool, ToolContract, ToolImplementation } from "@cogni/ai-tools";
 
 export const PolyDataTradesMarketInputSchema = z.object({
   market: z

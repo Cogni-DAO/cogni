@@ -13,13 +13,13 @@
  * @internal
  */
 
-import type { MarketCapability, MarketListOutput } from "@cogni/ai-tools";
 import type {
   MarketProviderPort,
   NormalizedMarket,
 } from "@cogni/market-provider";
 import { KalshiAdapter } from "@cogni/market-provider/adapters/kalshi";
 import { PolymarketAdapter } from "@cogni/market-provider/adapters/polymarket";
+import type { MarketCapability, MarketListOutput } from "@cogni/poly-ai-tools";
 
 /**
  * Convert NormalizedMarket[] from one or more providers into MarketListOutput.

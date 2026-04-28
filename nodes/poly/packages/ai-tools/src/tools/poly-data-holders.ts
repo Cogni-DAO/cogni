@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ai-tools/tools/poly-data-holders`
+ * Module: `@cogni/poly-ai-tools/tools/poly-data-holders`
  * Purpose: AI tool — list shareholders on a Polymarket market via `GET /holders`.
  * Scope: Read-only. Core hidden-gem wallet-discovery primitive. Does not place trades, does not load env.
  * Invariants: TOOL_ID_NAMESPACED, EFFECT_READ_ONLY, NO_LANGCHAIN_IMPORT.
@@ -14,7 +14,7 @@
 import { z } from "zod";
 
 import type { PolyDataCapability } from "../capabilities/poly-data";
-import type { BoundTool, ToolContract, ToolImplementation } from "../types";
+import type { BoundTool, ToolContract, ToolImplementation } from "@cogni/ai-tools";
 
 export const PolyDataHoldersInputSchema = z.object({
   market: z

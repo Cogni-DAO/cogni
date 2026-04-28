@@ -89,7 +89,7 @@ export interface ReviewActivities {
     rules: Record<string, unknown>;
     graphMessages: Array<{ role: string; content: string }>;
     responseFormat: { prompt: string; schemaId: string };
-    model: string;
+    modelRef: { providerKey: string; modelId: string; connectionId?: string };
     repoSpecYaml?: string;
   }>;
 

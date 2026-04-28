@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ai-tools/tools/poly-data-resolve-username`
+ * Module: `@cogni/poly-ai-tools/tools/poly-data-resolve-username`
  * Purpose: AI tool — Polymarket handle → proxyWallet resolver via Gamma `/public-search`.
  * Scope: Read-only. Different host (gamma-api.polymarket.com) vs the Data API. Does not place trades, does not load env.
  * Invariants: TOOL_ID_NAMESPACED, EFFECT_READ_ONLY, NO_LANGCHAIN_IMPORT.
@@ -14,7 +14,7 @@
 import { z } from "zod";
 
 import type { PolyDataCapability } from "../capabilities/poly-data";
-import type { BoundTool, ToolContract, ToolImplementation } from "../types";
+import type { BoundTool, ToolContract, ToolImplementation } from "@cogni/ai-tools";
 
 export const PolyDataResolveUsernameInputSchema = z.object({
   query: z

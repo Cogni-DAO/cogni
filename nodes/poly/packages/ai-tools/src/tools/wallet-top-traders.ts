@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ai-tools/tools/wallet-top-traders`
+ * Module: `@cogni/poly-ai-tools/tools/wallet-top-traders`
  * Purpose: AI tool for listing top Polymarket wallets by PnL for a rolling time window.
  * Scope: Read-only wallet scoreboard via WalletCapability. Does not place trades, does not load env.
  * Invariants:
@@ -17,7 +17,7 @@
 
 import { z } from "zod";
 
-import type { BoundTool, ToolContract, ToolImplementation } from "../types";
+import type { BoundTool, ToolContract, ToolImplementation } from "@cogni/ai-tools";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Capability interface (injected at runtime)

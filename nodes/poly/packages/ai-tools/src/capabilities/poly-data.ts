@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ai-tools/capabilities/poly-data`
+ * Module: `@cogni/poly-ai-tools/capabilities/poly-data`
  * Purpose: Shared capability interface for Polymarket Data-API research tools (task.0386).
  * Scope: Contract + output types for `core__poly_data_*` tools. Does not implement transport, does not load env.
  * Invariants:
