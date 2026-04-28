@@ -15,12 +15,12 @@
  * @internal
  */
 
+import { PolymarketDataApiClient } from "@cogni/market-provider/adapters/polymarket";
 import type {
   WalletCapability,
   WalletTopTraderItem,
   WalletTopTradersOutput,
-} from "@cogni/ai-tools";
-import { PolymarketDataApiClient } from "@cogni/market-provider/adapters/polymarket";
+} from "@cogni/poly-ai-tools";
 import { makeLogger } from "@/shared/observability";
 
 const log = makeLogger({ component: "wallet-capability" });

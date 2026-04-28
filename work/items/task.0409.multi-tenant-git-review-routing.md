@@ -24,7 +24,7 @@ created: 2026-04-28
 updated: 2026-04-28
 labels: [vcs, multi-tenant, github-app, review, test-infra, operator]
 external_refs:
-  - work/items/task.0403.reviewer-per-node-routing.md
+  - work/items/task.0410.reviewer-per-node-routing.md
   - work/items/task.0407.review-modelref-from-repo-spec.md
   - work/items/task.0408.split-temporal-workflows-per-node.md
   - docs/guides/github-app-webhook-setup.md
@@ -60,7 +60,7 @@ Today the operator's review pipeline knows one GitHub App. `.env.local` carries 
 
 - Per-node Temporal workflow split (task.0408) — adjacent architectural concern, can land independently.
 - Per-rule modelRef in repo-spec (task.0407) — orthogonal.
-- Reviewer per-node routing (task.0403) — already in flight; this task does not change the routing semantics, only the tenant identity used to authenticate the GitHub App calls.
+- Reviewer per-node routing (task.0410) — already in flight; this task does not change the routing semantics, only the tenant identity used to authenticate the GitHub App calls.
 - Per-user / BYO-AI tenants — different problem space (this task is system-actor multi-tenancy only).
 - Migrating prod review traffic — prod stays single-tenant for now; test tenant is added alongside.
 
@@ -88,5 +88,5 @@ Today the operator's review pipeline knows one GitHub App. `.env.local` carries 
 - [`docs/guides/github-app-webhook-setup.md`](../../docs/guides/github-app-webhook-setup.md) — single-tenant setup; this task generalizes it
 - [`docs/guides/agent-api-validation.md`](../../docs/guides/agent-api-validation.md) — discover → register → auth → execute flow this task validates against
 - [PR #920 (derekg1729/test-repo)](https://github.com/derekg1729/test-repo/pull/920) — bootstrap scaffolding to port to Cogni-DAO/test-repo
-- [task.0403](task.0403.reviewer-per-node-routing.md) — concurrent reviewer-side routing work; this task is the auth/tenancy layer beneath it
+- [task.0410](task.0410.reviewer-per-node-routing.md) — concurrent reviewer-side routing work; this task is the auth/tenancy layer beneath it
 - [task.0408](task.0408.split-temporal-workflows-per-node.md) — adjacent packaging concern; orthogonal

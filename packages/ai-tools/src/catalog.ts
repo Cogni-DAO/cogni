@@ -3,14 +3,14 @@
 
 /**
  * Module: `@cogni/ai-tools/catalog`
- * Purpose: Canonical registry of all tool definitions. Single source of truth.
- * Scope: Exports TOOL_CATALOG and createToolCatalog helper. Does NOT import @langchain.
+ * Purpose: Core tool bundle + id-keyed view, plus the shared createToolCatalog helper used by per-node bundles.
+ * Scope: Exports CORE_TOOL_BUNDLE (source of truth), TOOL_CATALOG (derived view), and createToolCatalog. Does NOT import @langchain, does NOT contain node-only tools (those live in nodes/<node>/packages/ai-tools/).
  * Invariants:
- *   - TOOL_CATALOG_IS_CANONICAL: Single source of truth for core__ tools
+ *   - CORE_BUNDLE_IS_CANONICAL: CORE_TOOL_BUNDLE is the single hand-maintained list; TOOL_CATALOG derives from it.
  *   - TOOL_ID_STABILITY: Duplicate IDs throw at construction time
  *   - TOOL_ID_NAMESPACED: IDs use core__<name> format
  * Side-effects: none
- * Links: TOOL_USE_SPEC.md, LANGGRAPH_AI.md
+ * Links: docs/spec/tool-use.md, work/items/bug.0319.ai-tools-per-node-packages.md
  * @public
  */
 
@@ -18,18 +18,7 @@ import { getCurrentTimeBoundTool } from "./tools/get-current-time";
 import { knowledgeReadBoundTool } from "./tools/knowledge-read";
 import { knowledgeSearchBoundTool } from "./tools/knowledge-search";
 import { knowledgeWriteBoundTool } from "./tools/knowledge-write";
-import { marketListBoundTool } from "./tools/market-list";
 import { metricsQueryBoundTool } from "./tools/metrics-query";
-import { polyCancelOrderBoundTool } from "./tools/poly-cancel-order";
-import { polyDataActivityBoundTool } from "./tools/poly-data-activity";
-import { polyDataHelpBoundTool } from "./tools/poly-data-help";
-import { polyDataHoldersBoundTool } from "./tools/poly-data-holders";
-import { polyDataPositionsBoundTool } from "./tools/poly-data-positions";
-import { polyDataResolveUsernameBoundTool } from "./tools/poly-data-resolve-username";
-import { polyDataTradesMarketBoundTool } from "./tools/poly-data-trades-market";
-import { polyDataValueBoundTool } from "./tools/poly-data-value";
-import { polyListOrdersBoundTool } from "./tools/poly-list-orders";
-import { polyPlaceTradeBoundTool } from "./tools/poly-place-trade";
 import { repoListBoundTool } from "./tools/repo-list";
 import { repoOpenBoundTool } from "./tools/repo-open";
 import { repoSearchBoundTool } from "./tools/repo-search";
@@ -40,7 +29,6 @@ import { vcsFlightCandidateBoundTool } from "./tools/vcs-flight-candidate";
 import { vcsGetCiStatusBoundTool } from "./tools/vcs-get-ci-status";
 import { vcsListPrsBoundTool } from "./tools/vcs-list-prs";
 import { vcsMergePrBoundTool } from "./tools/vcs-merge-pr";
-import { walletTopTradersBoundTool } from "./tools/wallet-top-traders";
 import { webSearchBoundTool } from "./tools/web-search";
 import { workItemQueryBoundTool } from "./tools/work-item-query";
 import { workItemTransitionBoundTool } from "./tools/work-item-transition";
@@ -102,36 +90,24 @@ export function createToolCatalog(
 }
 
 /**
- * TOOL_CATALOG: Canonical registry of all tool definitions.
+ * CORE_TOOL_BUNDLE: cross-node core tool bundle. Single source of truth for the
+ * `core__` tools shared by every node.
  *
- * This is the single source of truth for tools in the system.
- * langgraph-graphs wraps tools from this catalog; it does not define contracts.
+ * Each node's bootstrap imports this directly:
+ *   - Non-poly nodes: `createBoundToolSource([...CORE_TOOL_BUNDLE], toolBindings)`
+ *   - Poly node: `createBoundToolSource([...CORE_TOOL_BUNDLE, ...POLY_TOOL_BUNDLE], toolBindings)`
+ *     where POLY_TOOL_BUNDLE comes from @cogni/poly-ai-tools.
  *
- * To add a new tool:
- * 1. Create contract + implementation in tools/<name>.ts
- * 2. Add BoundTool to this catalog
- * 3. langgraph-graphs will pick it up automatically
- *
- * Per TOOL_ID_STABILITY: Duplicate IDs throw at construction time.
+ * Adding a new core tool (shared by all nodes): append the BoundTool here.
+ * Adding a node-only tool (e.g. poly-only): add it to that node's
+ * `nodes/<node>/packages/ai-tools/` package instead — never here.
  */
-export const TOOL_CATALOG: ToolCatalog = createToolCatalog([
-  // Core tools (core__ prefix)
+export const CORE_TOOL_BUNDLE: readonly CatalogBoundTool[] = [
   getCurrentTimeBoundTool as CatalogBoundTool,
   knowledgeReadBoundTool as CatalogBoundTool,
   knowledgeSearchBoundTool as CatalogBoundTool,
   knowledgeWriteBoundTool as CatalogBoundTool,
-  marketListBoundTool as CatalogBoundTool,
   metricsQueryBoundTool as CatalogBoundTool,
-  polyCancelOrderBoundTool as CatalogBoundTool,
-  polyDataActivityBoundTool as CatalogBoundTool,
-  polyDataHelpBoundTool as CatalogBoundTool,
-  polyDataHoldersBoundTool as CatalogBoundTool,
-  polyDataPositionsBoundTool as CatalogBoundTool,
-  polyDataResolveUsernameBoundTool as CatalogBoundTool,
-  polyDataTradesMarketBoundTool as CatalogBoundTool,
-  polyDataValueBoundTool as CatalogBoundTool,
-  polyListOrdersBoundTool as CatalogBoundTool,
-  polyPlaceTradeBoundTool as CatalogBoundTool,
   repoListBoundTool as CatalogBoundTool,
   repoOpenBoundTool as CatalogBoundTool,
   repoSearchBoundTool as CatalogBoundTool,
@@ -142,11 +118,25 @@ export const TOOL_CATALOG: ToolCatalog = createToolCatalog([
   vcsGetCiStatusBoundTool as CatalogBoundTool,
   vcsListPrsBoundTool as CatalogBoundTool,
   vcsMergePrBoundTool as CatalogBoundTool,
-  walletTopTradersBoundTool as CatalogBoundTool,
   webSearchBoundTool as CatalogBoundTool,
   workItemQueryBoundTool as CatalogBoundTool,
   workItemTransitionBoundTool as CatalogBoundTool,
-]);
+];
+
+/**
+ * TOOL_CATALOG: id-keyed view of CORE_TOOL_BUNDLE.
+ *
+ * Derived from CORE_TOOL_BUNDLE so the two never drift. Consumed by
+ * `@cogni/langgraph-graphs/runtime/{core/make-server-graph,cogni/make-cogni-graph}`
+ * which look core tools up by ID for the FAIL_FAST_ON_MISSING_TOOLS invariant.
+ *
+ * Per TOOL_ID_STABILITY: duplicate IDs throw at construction time (inside
+ * createToolCatalog).
+ *
+ * Node-only tool catalogs (e.g. POLY_TOOL_BUNDLE in @cogni/poly-ai-tools) do not
+ * appear here. Each runtime composes the catalog it needs from per-node bundles.
+ */
+export const TOOL_CATALOG: ToolCatalog = createToolCatalog(CORE_TOOL_BUNDLE);
 
 /**
  * Get all tool IDs in the catalog.

@@ -11,7 +11,7 @@
  *   - review.routed log emitted with owningNode shape
  *   - postRoutingDiagnosticActivity posts neutral check + diagnostic comment
  * Side-effects: none
- * Links: task.0403
+ * Links: task.0410
  * @internal
  */
 

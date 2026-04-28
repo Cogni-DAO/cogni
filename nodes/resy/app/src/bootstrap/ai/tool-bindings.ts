@@ -16,7 +16,6 @@
 
 import type {
   KnowledgeCapability,
-  MarketCapability,
   MetricsCapability,
   RepoCapability,
   ScheduleCapability,
@@ -29,7 +28,6 @@ import {
   createKnowledgeReadImplementation,
   createKnowledgeSearchImplementation,
   createKnowledgeWriteImplementation,
-  createMarketListImplementation,
   createMetricsQueryImplementation,
   createRepoListImplementation,
   createRepoOpenImplementation,
@@ -49,28 +47,7 @@ import {
   KNOWLEDGE_READ_NAME,
   KNOWLEDGE_SEARCH_NAME,
   KNOWLEDGE_WRITE_NAME,
-  MARKET_LIST_NAME,
   METRICS_QUERY_NAME,
-  POLY_CANCEL_ORDER_NAME,
-  POLY_DATA_ACTIVITY_NAME,
-  POLY_DATA_HELP_NAME,
-  POLY_DATA_HOLDERS_NAME,
-  POLY_DATA_POSITIONS_NAME,
-  POLY_DATA_RESOLVE_USERNAME_NAME,
-  POLY_DATA_TRADES_MARKET_NAME,
-  POLY_DATA_VALUE_NAME,
-  POLY_LIST_ORDERS_NAME,
-  POLY_PLACE_TRADE_NAME,
-  polyCancelOrderStubImplementation,
-  polyDataActivityStubImplementation,
-  polyDataHelpImplementation,
-  polyDataHoldersStubImplementation,
-  polyDataPositionsStubImplementation,
-  polyDataResolveUsernameStubImplementation,
-  polyDataTradesMarketStubImplementation,
-  polyDataValueStubImplementation,
-  polyListOrdersStubImplementation,
-  polyPlaceTradeStubImplementation,
   REPO_LIST_NAME,
   REPO_OPEN_NAME,
   REPO_SEARCH_NAME,
@@ -81,11 +58,9 @@ import {
   VCS_GET_CI_STATUS_NAME,
   VCS_LIST_PRS_NAME,
   VCS_MERGE_PR_NAME,
-  WALLET_TOP_TRADERS_NAME,
   WEB_SEARCH_NAME,
   WORK_ITEM_QUERY_NAME,
   WORK_ITEM_TRANSITION_NAME,
-  walletTopTradersStubImplementation,
 } from "@cogni/ai-tools";
 
 /**
@@ -94,7 +69,6 @@ import {
  */
 export interface ToolBindingDeps {
   readonly knowledgeCapability: KnowledgeCapability;
-  readonly marketCapability: MarketCapability;
   readonly metricsCapability: MetricsCapability;
   readonly webSearchCapability: WebSearchCapability;
   readonly repoCapability: RepoCapability;
@@ -142,47 +116,6 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
     [KNOWLEDGE_WRITE_NAME]: createKnowledgeWriteImplementation({
       knowledgeCapability: deps.knowledgeCapability,
     }) as AnyToolImplementation,
-
-    // I/O tools (require capability injection)
-    [MARKET_LIST_NAME]: createMarketListImplementation({
-      marketCapability: deps.marketCapability,
-    }) as AnyToolImplementation,
-
-    // Wallet top-traders: poly-only tool. Bound as stub here so the shared
-    // TOOL_CATALOG iteration in createBoundToolSource does not throw; the
-    // resy brain does not expose this tool to its graph.
-    [WALLET_TOP_TRADERS_NAME]:
-      walletTopTradersStubImplementation as AnyToolImplementation,
-
-    // Poly place-trade: poly-only tool. Stub on non-poly nodes for the same
-    // reason as wallet_top_traders.
-    [POLY_PLACE_TRADE_NAME]:
-      polyPlaceTradeStubImplementation as AnyToolImplementation,
-
-    // Poly list-orders: poly-only tool. Stub here for the same reason.
-    [POLY_LIST_ORDERS_NAME]:
-      polyListOrdersStubImplementation as AnyToolImplementation,
-
-    // Poly cancel-order: poly-only tool. Stub here for the same reason.
-    [POLY_CANCEL_ORDER_NAME]:
-      polyCancelOrderStubImplementation as AnyToolImplementation,
-
-    // Poly Data-API research tools (task.0386): poly-only. Stubs here so
-    // the shared TOOL_CATALOG iteration in createBoundToolSource does not
-    // throw. The help tool is static (no IO) and can use the real impl.
-    [POLY_DATA_POSITIONS_NAME]:
-      polyDataPositionsStubImplementation as AnyToolImplementation,
-    [POLY_DATA_ACTIVITY_NAME]:
-      polyDataActivityStubImplementation as AnyToolImplementation,
-    [POLY_DATA_VALUE_NAME]:
-      polyDataValueStubImplementation as AnyToolImplementation,
-    [POLY_DATA_HOLDERS_NAME]:
-      polyDataHoldersStubImplementation as AnyToolImplementation,
-    [POLY_DATA_TRADES_MARKET_NAME]:
-      polyDataTradesMarketStubImplementation as AnyToolImplementation,
-    [POLY_DATA_RESOLVE_USERNAME_NAME]:
-      polyDataResolveUsernameStubImplementation as AnyToolImplementation,
-    [POLY_DATA_HELP_NAME]: polyDataHelpImplementation as AnyToolImplementation,
 
     [METRICS_QUERY_NAME]: createMetricsQueryImplementation({
       metricsCapability: deps.metricsCapability,

@@ -8,7 +8,7 @@ rank: 1
 estimate: 5
 branch:
 summary: "`packages/temporal-workflows` started as a shared bundle (bug.0193) but has accumulated workflows owned by individual node concerns: `PrReviewWorkflow` (operator), governance heartbeat (operator), mirror-coordinator (poly). This is the same architectural drift that bug.0319 fixed for AI tools (per-node tool packages) and that recent work fixed for DB schema (`nodes/<X>/packages/db-schema`). Sovereign nodes need to own their workflows, not have them gate-kept in shared infra."
-outcome: "(1) `packages/temporal-workflows/` retains only cross-cutting workflows + types: `GraphRunWorkflow`, `GraphRunResult`, ledger workflows, base activity-type contracts, deterministic helpers. (2) Per-node workflows live at `nodes/<X>/packages/temporal-workflows/` — at minimum `nodes/operator/packages/temporal-workflows/` (PrReviewWorkflow, governance) and `nodes/poly/packages/temporal-workflows/` (mirror-coordinator). (3) Each node's scheduler-worker bundle imports its own workflows + the shared base. (4) Single-domain-hard-fail enforcement covers temporal-workflows: a poly PR cannot edit operator's PrReviewWorkflow, same way it can't edit operator's DB schema today. (5) The dev currently writing reviewer-per-node-routing (task.0403) lands on the new boundary, not the old one."
+outcome: "(1) `packages/temporal-workflows/` retains only cross-cutting workflows + types: `GraphRunWorkflow`, `GraphRunResult`, ledger workflows, base activity-type contracts, deterministic helpers. (2) Per-node workflows live at `nodes/<X>/packages/temporal-workflows/` — at minimum `nodes/operator/packages/temporal-workflows/` (PrReviewWorkflow, governance) and `nodes/poly/packages/temporal-workflows/` (mirror-coordinator). (3) Each node's scheduler-worker bundle imports its own workflows + the shared base. (4) Single-domain-hard-fail enforcement covers temporal-workflows: a poly PR cannot edit operator's PrReviewWorkflow, same way it can't edit operator's DB schema today. (5) The dev currently writing reviewer-per-node-routing (task.0410) lands on the new boundary, not the old one."
 spec_refs:
   - temporal-patterns
   - packages-architecture
@@ -25,7 +25,7 @@ updated: 2026-04-28
 labels: [architecture, temporal, per-node, packaging]
 external_refs:
   - work/items/bug.0193.worker-houses-workflow-definitions.md
-  - work/items/task.0403.reviewer-per-node-routing.md
+  - work/items/task.0410.reviewer-per-node-routing.md
   - work/items/task.0407.review-modelref-from-repo-spec.md
 ---
 
@@ -51,7 +51,7 @@ Workflows are the next domino. Without this split, a poly PR that adds a poly-sp
 
 ## Symptoms today
 
-- task.0403 (reviewer-per-node-routing) — operator-concern code lands in `packages/temporal-workflows/src/domain/review.ts`, `packages/temporal-workflows/src/workflows/pr-review.workflow.ts`. Mechanically necessary because there's nowhere else for it to go. The dev is doing it correctly _given current packaging_; the packaging is the problem.
+- task.0410 (reviewer-per-node-routing) — operator-concern code lands in `packages/temporal-workflows/src/domain/review.ts`, `packages/temporal-workflows/src/workflows/pr-review.workflow.ts`. Mechanically necessary because there's nowhere else for it to go. The dev is doing it correctly _given current packaging_; the packaging is the problem.
 - A future poly Phase 4 streaming workflow (task.0322) would land in shared land for the same reason. Inevitable accumulation.
 - `single-node-scope` CI gate (task.0381) would have to add `packages/temporal-workflows/` to operator's territory — but operator doesn't own poly's mirror-coordinator. The gate has no clean answer today.
 
@@ -66,7 +66,7 @@ Workflows are the next domino. Without this split, a poly PR that adds a poly-sp
 
 ## Out of scope
 
-- Migrating individual rule content (per-node `.cogni/rules/*`) — that's task.0403 + task.0407 territory.
+- Migrating individual rule content (per-node `.cogni/rules/*`) — that's task.0410 + task.0407 territory.
 - Per-node Temporal namespaces (still single namespace, queue-per-node isolation only — task.0280 stands).
 - Per-node billing / virtual-key changes — separate concern.
 
@@ -90,6 +90,6 @@ Workflows are the next domino. Without this split, a poly PR that adds a poly-sp
 ## Pointers
 
 - [bug.0193 — original consolidation](bug.0193.worker-houses-workflow-definitions.md)
-- [task.0403 — current reviewer-per-node-routing work, blocked on this](task.0403.reviewer-per-node-routing.md)
+- [task.0410 — current reviewer-per-node-routing work, blocked on this](task.0410.reviewer-per-node-routing.md)
 - [task.0407 — review.modelRef from repo-spec, parallel concern](task.0407.review-modelref-from-repo-spec.md)
 - [PR #1080 — bug.0319 ai-tools-per-node fix, the precedent](https://github.com/Cogni-DAO/node-template/pull/1080)

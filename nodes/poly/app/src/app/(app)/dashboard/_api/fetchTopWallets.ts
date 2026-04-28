@@ -15,7 +15,7 @@ import type {
   WalletOrderBy,
   WalletTimePeriod,
   WalletTopTradersOutput,
-} from "@cogni/ai-tools";
+} from "@cogni/poly-ai-tools";
 
 export interface FetchTopWalletsParams {
   timePeriod: WalletTimePeriod;

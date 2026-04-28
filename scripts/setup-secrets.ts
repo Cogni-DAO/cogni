@@ -240,6 +240,18 @@ const SECRETS: Secret[] = [
     ],
   },
   {
+    name: "TAVILY_API_KEY",
+    required: false,
+    category: "Core App",
+    source: "human",
+    description: "Tavily API key for AI web-search tool (WebSearchCapability)",
+    url: "https://app.tavily.com/home",
+    steps: [
+      "Sign in to Tavily and open the API Keys page",
+      "Create or copy an existing API key (starts with tvly-)",
+    ],
+  },
+  {
     name: "POSTHOG_API_KEY",
     required: true,
     category: "Core App",

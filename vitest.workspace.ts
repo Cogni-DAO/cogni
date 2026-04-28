@@ -22,6 +22,8 @@ export default defineWorkspace([
   "./nodes/*/app/vitest.*.config.mts",
   // Package-local tests
   "./packages/*/vitest.config.ts",
+  // Node-owned package tests (nodes/<node>/packages/<pkg>/vitest.config.ts)
+  "./nodes/*/packages/*/vitest.config.ts",
   // Service-local tests
   "./services/*/vitest.config.ts",
 ]);

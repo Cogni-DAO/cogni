@@ -13,7 +13,7 @@
  *     § Single-Domain Scope > Diagnostic contract: name conflicting domains,
  *     name operator-territory paths, suggest the split, link the spec.
  * Side-effects: none
- * Links: task.0191, task.0403, docs/spec/temporal-patterns.md, docs/spec/node-ci-cd-contract.md
+ * Links: task.0191, task.0410, docs/spec/temporal-patterns.md, docs/spec/node-ci-cd-contract.md
  * @internal
  */
 

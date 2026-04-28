@@ -17,7 +17,7 @@
  *   - `postRoutingDiagnosticActivity` handles `conflict` + `miss` outcomes with a
  *     pure formatter + neutral check run — no AI tokens, no GraphRunWorkflow child.
  * Side-effects: IO (GitHub API via Octokit)
- * Links: task.0191, task.0403, docs/spec/temporal-patterns.md, docs/spec/node-ci-cd-contract.md#single-domain-scope
+ * Links: task.0191, task.0410, docs/spec/temporal-patterns.md, docs/spec/node-ci-cd-contract.md#single-domain-scope
  * @internal
  */
 
@@ -87,7 +87,7 @@ export interface FetchPrContextOutput {
   rules: Record<string, Rule>;
   graphMessages: Array<{ role: string; content: string }>;
   responseFormat: { prompt: string; schemaId: string };
-  model: string;
+  modelRef: { providerKey: string; modelId: string; connectionId?: string };
   /** Raw repo-spec YAML for DAO config extraction in postReviewResult */
   repoSpecYaml?: string;
   /** Filenames from `octokit.pulls.listFiles`. Source for owning-domain resolution. */
@@ -132,7 +132,12 @@ export interface PostReviewResultInput {
 // ---------------------------------------------------------------------------
 
 const CHECK_RUN_NAME = "Cogni Git PR Review";
-const DEFAULT_REVIEW_MODEL = "gpt-4o-mini";
+// vNext (task.0395): per-node/per-rule modelRef from repo-spec. For now, system actor
+// uses the platform provider (LiteLLM-backed, no per-user connection required).
+const DEFAULT_REVIEW_MODELREF = {
+  providerKey: "platform",
+  modelId: "gpt-4o-mini",
+} as const;
 const MAX_PATCH_BYTES_PER_FILE = 100_000;
 const MAX_TOTAL_PATCH_BYTES = 500_000;
 const MAX_FILES_WITH_PATCHES = 30;
@@ -289,7 +294,7 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
         rules: {},
         graphMessages: [],
         responseFormat: { prompt: "", schemaId: "" },
-        model: DEFAULT_REVIEW_MODEL,
+        modelRef: DEFAULT_REVIEW_MODELREF,
         changedFiles,
         owningNode: { kind: "miss" },
       };
@@ -418,7 +423,7 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
         ? [{ role: "user", content: userMessage }]
         : [],
       responseFormat,
-      model: DEFAULT_REVIEW_MODEL,
+      modelRef: DEFAULT_REVIEW_MODELREF,
       repoSpecYaml,
       changedFiles,
       owningNode,

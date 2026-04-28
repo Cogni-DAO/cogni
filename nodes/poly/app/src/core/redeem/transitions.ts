@@ -10,15 +10,24 @@
  * Scope: Pure function. No DB, no chain, no time. The DB writes are the
  *   adapter's job; this module decides *what* to write.
  * Invariants:
- *   - REDEEM_COMPLETION_IS_EVENT_OBSERVED — only the `payout_redemption_observed`
- *     event flips a row to `confirmed`.
- *   - REDEEM_REQUIRES_BURN_OBSERVATION — `reaper_finality_elapsed` branches on
- *     `receiptBurnObserved`: false → abandoned/malformed; true → failed_transient.
+ *   - REDEEM_COMPLETION_IS_EVENT_OBSERVED — both `payout_redemption_observed`
+ *     (subscriber) and `reaper_chain_evidence` (reaper, with `payoutObserved`)
+ *     can flip a row to `confirmed`. Receipt-burn flag alone never confirms.
+ *   - REAPER_QUERIES_CHAIN_TRUTH — at N=5, the reaper consults `getLogs` for
+ *     `PayoutRedemption` and `balanceOf` for the position. The local
+ *     `receiptBurnObserved` flag is observational only and never decides
+ *     confirm-vs-bleed (bug.0403 — flag was previously corrupted by no-op
+ *     retries, producing false bleed alerts).
+ *   - REDEEM_REQUIRES_BURN_OBSERVATION — bleed is detected by the reaper when
+ *     no `PayoutRedemption` was emitted AND the funder still holds the
+ *     position (`balance > 0`). Balance-zero with no payout is treated as
+ *     "redeemed off-pipeline" and confirmed defensively.
  *   - REDEEM_HAS_CIRCUIT_BREAKER — three transient failures escalate to
  *     `abandoned/transient_exhausted`.
  *   - REDEEM_RETRY_IS_TRANSIENT_ONLY — malformed-class events skip the retry loop.
  * Side-effects: none
- * Links: docs/design/poly-positions.md § Lifecycle, work/items/task.0388
+ * Links: docs/design/poly-positions.md § Lifecycle, work/items/task.0388,
+ *   work/items/bug.0403
  * @public
  */
 
@@ -38,8 +47,10 @@ export const REDEEM_MAX_TRANSIENT_ATTEMPTS = 3;
  * - `payout_redemption_reorged` — subscriber observed a removed log: a
  *   `PayoutRedemption` we'd already counted just got rolled back.
  * - `transient_failure` — worker hit RPC/gas/reorg-class error during submit.
- * - `reaper_finality_elapsed` — N=5 blocks elapsed since `submitted_at_block`
- *   without an observed `PayoutRedemption`. Reaper branches on `receiptBurnObserved`.
+ * - `reaper_chain_evidence` — N=5 blocks elapsed; reaper queried chain truth.
+ *   `payoutObserved` ⇒ confirmed; `!payoutObserved && balance>0` ⇒ bleed →
+ *   abandoned/malformed; `!payoutObserved && balance==0` ⇒ confirmed
+ *   defensively (position settled off-pipeline; no money owed).
  */
 export type RedeemEvent =
   | {
@@ -61,7 +72,12 @@ export type RedeemEvent =
       error: string;
     }
   | {
-      kind: "reaper_finality_elapsed";
+      kind: "reaper_chain_evidence";
+      /** True iff `getLogs` found a `PayoutRedemption(redeemer=funder)` for
+       *  this conditionId on the appropriate contract (CTF or NegRiskAdapter). */
+      payoutObserved: boolean;
+      /** Funder's current `balanceOf` for the position. */
+      balance: bigint;
     };
 
 /** Why a transition was rejected. Caller should log + ignore. */
@@ -218,7 +234,7 @@ export function transition(
       };
     }
 
-    case "reaper_finality_elapsed": {
+    case "reaper_chain_evidence": {
       if (job.status !== "submitted") {
         return {
           ok: false,
@@ -226,28 +242,34 @@ export function transition(
           reason: `reaper from status=${job.status}`,
         };
       }
-      // The load-bearing branch — see REDEEM_REQUIRES_BURN_OBSERVATION.
-      // `null` should never happen in practice (the worker always writes the
-      // flag at submission_recorded time), but treat it defensively as
-      // "burn missing" — same routing-mistake hazard.
-      if (job.receiptBurnObserved !== true) {
+      // Happy path — chain emitted PayoutRedemption from funder.
+      if (event.payoutObserved) {
+        return {
+          ok: true,
+          transition: { nextStatus: "confirmed" },
+        };
+      }
+      // Bleed — no payout AND funder still holds the position.
+      if (event.balance > 0n) {
         return {
           ok: true,
           transition: {
             nextStatus: "abandoned",
             errorClass: "malformed",
             lastError:
-              "REDEEM_REQUIRES_BURN_OBSERVATION: no funder burn in receipt",
+              "REDEEM_REQUIRES_BURN_OBSERVATION: no payout + balance>0",
           },
         };
       }
-      // Burn was real but we never saw the corresponding PayoutRedemption at
-      // N=5 — it was reorged out. Retry as transient.
+      // Defensive confirm — no payout but balance is zero. The position
+      // settled outside the pipeline (legacy sweep, manual redeem, off-pod
+      // tx). No money is owed; mark `confirmed` so the row exits the
+      // submitted set. Caller logs at warn for audit visibility.
       return {
         ok: true,
         transition: {
-          nextStatus: "failed_transient",
-          lastError: "burn_reorged_out",
+          nextStatus: "confirmed",
+          lastError: "balance_zero_no_payout",
         },
       };
     }

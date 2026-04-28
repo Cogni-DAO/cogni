@@ -122,6 +122,7 @@ pnpm setup github --env production
      - `OPENROUTER_API_KEY` (prompt if not in local env)
      - `EVM_RPC_URL` (prompt if not in local env — Base-chain RPC from alchemy.com or infura.io)
      - `POLYGON_RPC_URL` (optional, Polygon mainnet RPC from alchemy.com — required for poly-node `/api/v1/poly/wallet/balance` to return live data; falls back to public polygon-rpc.com when absent)
+     - `TAVILY_API_KEY` (optional — Tavily web-search API key from app.tavily.com; without it `WebSearchCapability` is disabled and any AI tool calling `core__web_search` will fail)
      - `OPENCLAW_GATEWAY_TOKEN` (generated random, ≥32 chars — gateway WS auth)
      - `OPENCLAW_GITHUB_RW_TOKEN` (GitHub PAT with Contents:Write + Pull requests:Write — host-side git relay)
      - `DISCORD_BOT_TOKEN` (Discord bot token — from discord.com/developers/applications → Bot → Reset Token)

@@ -12,7 +12,7 @@
  *   - SIZING_POLICY_IS_DISCRIMINATED — MirrorTargetConfig.sizing is a discriminated union on `kind`; future policies (proportional, percentile) add variants, never flat fields.
  *   - CAPS_LIVE_IN_GRANT — daily + hourly caps are enforced by `PolyTraderWalletPort.authorizeIntent` against the per-tenant `poly_wallet_grants` row. `planMirrorFromFill` no longer owns those checks; this config surface no longer carries them.
  * Side-effects: none
- * Links: docs/spec/poly-multi-tenant-auth.md, work/items/task.0318
+ * Links: docs/spec/poly-multi-tenant-auth.md, work/items/task.0318, work/items/task.0404
  * @public
  */
 
@@ -21,9 +21,10 @@ import { z } from "zod";
 
 /**
  * Sizing policy — how the pipeline derives `OrderIntent.size_usdc` from a
- * target's fill. Discriminated union: today one variant; future variants
- * (proportional, percentile, historical-distribution) plug in by adding a new
- * `kind` without touching the adapter or the port.
+ * target's fill. Discriminated union: `"fixed"` (legacy desired-notional with
+ * scaling ceiling) and `"min_bet"` (always bet the market's min, clamped to a
+ * configured ceiling). Future variants (proportional, percentile, allocation)
+ * plug in by adding a new `kind` without touching the adapter or the port.
  */
 export const FixedSizingPolicySchema = z.object({
   kind: z.literal("fixed"),
@@ -39,8 +40,27 @@ export const FixedSizingPolicySchema = z.object({
 });
 export type FixedSizingPolicy = z.infer<typeof FixedSizingPolicySchema>;
 
+/**
+ * Always-min-bet policy. Bet size is the market's `minUsdcNotional` (clamped to
+ * `minShares × price` per SHARE_SPACE_MATH). When the floor exceeds
+ * `max_usdc_per_trade`, the pipeline skips with `below_market_min` BEFORE the
+ * `INSERT_BEFORE_PLACE` row lands — so cap-exceed cases are not duplicated at
+ * the `authorizeIntent` boundary as `placement_failed` decisions.
+ *
+ * FCFS budget gating across multi-target copy-trading is handled downstream by
+ * `authorizeIntent` against the tenant's `poly_wallet_grants` row
+ * (`CAPS_LIVE_IN_GRANT`); this policy intentionally does not read grant state.
+ */
+export const MinBetSizingPolicySchema = z.object({
+  kind: z.literal("min_bet"),
+  /** Hard per-intent ceiling. Skip at plan-mirror when floor exceeds this. */
+  max_usdc_per_trade: z.number().positive(),
+});
+export type MinBetSizingPolicy = z.infer<typeof MinBetSizingPolicySchema>;
+
 export const SizingPolicySchema = z.discriminatedUnion("kind", [
   FixedSizingPolicySchema,
+  MinBetSizingPolicySchema,
 ]);
 export type SizingPolicy = z.infer<typeof SizingPolicySchema>;
 

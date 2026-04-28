@@ -16,7 +16,7 @@
  *     `extractOwningNode`; the workflow only dispatches on `kind`.
  *   - TYPED_TERMINAL_ARTIFACT: GraphRunWorkflow child returns structuredOutput for parent consumption
  * Side-effects: none (deterministic orchestration only)
- * Links: docs/spec/temporal-patterns.md, docs/spec/node-ci-cd-contract.md#single-domain-scope, task.0191, task.0403
+ * Links: docs/spec/temporal-patterns.md, docs/spec/node-ci-cd-contract.md#single-domain-scope, task.0191, task.0410
  * @public
  */
 
@@ -152,7 +152,7 @@ export async function PrReviewWorkflow(
           executionGrantId: null,
           input: {
             messages: context.graphMessages,
-            model: context.model,
+            modelRef: context.modelRef,
             responseFormat: context.responseFormat,
             actorUserId,
             billingAccountId,

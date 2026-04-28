@@ -117,18 +117,30 @@ The endpoint rejects with `422` if CI is not green. The candidate-flight workflo
 
 **Step 7 — Self-validate on candidate-a**
 
-After a successful flight, hit your own feature endpoint on `test.cognidao.org` and confirm behavior. Post the result as a PR comment — this is the real validation gate.
+After a successful flight, hit your own feature endpoint on `test.cognidao.org` and confirm behavior. Post the result as a PR comment — this is the real validation gate. The `/validate-candidate` skill is the canonical procedure (agent or human).
+
+**Step 8 — Request merge**
+
+When validation passes, request merge. GitHub Merge Queue is enabled on `main` (see `infra/github/`):
+
+- Marking the PR for merge (UI "Merge when ready", `gh pr merge --auto --squash`, or `core__vcs_merge_pr`) enqueues it.
+- The queue rebases the PR onto current `main`, re-runs the required checks (`static`, `unit`, `component`, `stack-test`, `manifest`, `CodeQL`, `Validate PR title`) on the rebased candidate, and merges in order on green.
+- The agent does not rebase. The vendor primitive owns rebase + retest + merge, deterministically.
+- The agentic contribution loop terminates here. Post-merge, `push:main` triggers `flight-preview`, which auto-promotes the merged SHA to the preview environment for human review.
+
+The merge queue's load-bearing guarantee in our pipeline is **anchoring preview-environment content to the merged tree**. Mechanism: `pr-build.yml` accepts `merge_group:` events and overwrites the `pr-{N}-{X}` image tag with the rebased-tree content. The `manifest` job is required-on-merge_group, so the queue cannot squash-merge until the rebased image is in GHCR. `flight-preview.yml` then re-tags `pr-{N}-{X}` → `preview-{mainSHA}` on `push:main` — the existing re-tag path, but now sourcing correct content. Without this, flight-preview would re-tag pre-rebase content (the bug class observed in PR #924 and PR #1033).
 
 ### Responsibility Table
 
-| Responsibility            | `POST /api/v1/vcs/flight` | `pr-manager` graph |
-| ------------------------- | ------------------------- | ------------------ |
-| Verify CI green           | ✅                        | ✅ (also checks)   |
-| Dispatch candidate-flight | ✅                        | ✅                 |
-| Acquire slot lease        | ❌ (workflow owns it)     | ❌ (workflow owns) |
-| Monitor Argo rollout      | ❌                        | ✅                 |
-| Verify deployed SHA       | ❌                        | ✅                 |
-| Merge when green          | ❌                        | ✅                 |
+| Responsibility            | `POST /api/v1/vcs/flight` | `pr-manager` graph    |
+| ------------------------- | ------------------------- | --------------------- |
+| Verify CI green           | ✅                        | ✅ (also checks)      |
+| Dispatch candidate-flight | ✅                        | ✅                    |
+| Acquire slot lease        | ❌ (workflow owns it)     | ❌ (workflow owns)    |
+| Monitor Argo rollout      | ❌                        | ✅                    |
+| Verify deployed SHA       | ❌                        | ✅                    |
+| Request merge (enqueue)   | ❌                        | ✅                    |
+| Rebase + retest + merge   | ❌ (merge queue owns)     | ❌ (merge queue owns) |
 
 Use `/api/v1/vcs/flight` for deterministic dispatch (agent knows CI is green, wants to fly now).
 Use `pr-manager` for judgment-based flight (agent wants the system to decide when to fly, monitor, and merge).
@@ -159,3 +171,5 @@ All `POST /api/v1/vcs/flight` calls require auth.
 - `PRIMITIVE_OVER_POLICY` — `/api/v1/vcs/flight` is a primitive action; pr-manager is the policy layer; do not add flight logic to the REST endpoint
 - `OSS_FOR_CODE_WORK` — agents use standard git + `gh pr create` for code contribution; the operator provides only the flight gate
 - `SELF_VALIDATE` — agents are expected to validate their own changes on candidate-a; `deploy_verified: true` is the real gate, not `status: done`
+- `MERGE_QUEUE_DETERMINISM` — the rebase + retest + merge step is owned by GitHub Merge Queue (a deterministic vendor primitive), not by an agent or operator code path; agents only request merge, never rebase
+- `NO_AGENTIC_REBASE` — no LLM is in the merge path; rebase logic must remain a vendor primitive (GH Merge Queue, GitLab Merge Trains) so the merge sequence is auditable and reproducible

@@ -21,6 +21,7 @@
  */
 
 import type { SourceSystem, ToolSourcePort } from "@cogni/ai-core";
+import { CORE_TOOL_BUNDLE } from "@cogni/ai-tools";
 import type {
   ExecutionContext,
   GraphFinal,
@@ -534,8 +535,11 @@ function createInProcProvider(
   );
 
   const cache = getMcpCache();
-  return new LangGraphInProcProvider(inprocAdapter, container.toolSource, () =>
-    cache.getSource()
+  return new LangGraphInProcProvider(
+    inprocAdapter,
+    container.toolSource,
+    () => cache.getSource(),
+    [...CORE_TOOL_BUNDLE]
   );
 }
 

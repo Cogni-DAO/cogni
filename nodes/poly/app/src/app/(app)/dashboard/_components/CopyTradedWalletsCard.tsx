@@ -30,7 +30,7 @@
 
 "use client";
 
-import type { WalletTopTraderItem } from "@cogni/ai-tools";
+import type { WalletTopTraderItem } from "@cogni/poly-ai-tools";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Radio } from "lucide-react";
 import Link from "next/link";

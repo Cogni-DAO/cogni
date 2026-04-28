@@ -61,6 +61,22 @@ export function applySizingPolicy(
       }
       return { ok: true, size_usdc };
     }
+    case "min_bet": {
+      // Fail closed when market constraints are unknown — without
+      // minUsdcNotional we have no defensible "min" to bet.
+      if (minUsdcNotional === undefined) {
+        return { ok: false, reason: "below_market_min" };
+      }
+      const sharesForUsdcFloor = minUsdcNotional / price;
+      const floorShares = Math.max(minShares ?? 0, sharesForUsdcFloor);
+      const rawUsdc = floorShares * price;
+      // Same bug.0342 ε-clamp as the fixed branch.
+      const size_usdc = rawUsdc < minUsdcNotional ? minUsdcNotional : rawUsdc;
+      if (size_usdc > policy.max_usdc_per_trade) {
+        return { ok: false, reason: "below_market_min" };
+      }
+      return { ok: true, size_usdc };
+    }
   }
 }
 
