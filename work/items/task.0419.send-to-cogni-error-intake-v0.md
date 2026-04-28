@@ -74,18 +74,28 @@ candidate-a, with zero new infra.
 
 **1. Intake location → operator app, alongside existing patterns.**
 New route `nodes/operator/app/src/app/api/v1/error-report/route.ts`,
-modeled on
-`api/v1/attribution/epochs/[id]/finalize/route.ts` (auth → Zod
+modeled on `api/v1/attribution/epochs/[id]/finalize/route.ts` (Zod
 validate → start Temporal workflow → 202 with tracking id).
-**Reuses:** `wrapRouteHandlerWithLogging`, the Temporal client
-singleton in `bootstrap/container.ts:getTemporalWorkflowClient()`,
-auth middleware. **No new service.**
+**Auth: anonymous-allowed** so `(public)/error.tsx` can submit too;
+session userId is read best-effort and stored if present. Compensating
+controls: per-IP token-bucket rate limit (in-memory for v0, ~10/min)
+
+- hard byte caps in the Zod contract (see §3). **Reuses:**
+  `wrapRouteHandlerWithLogging`, `getTemporalWorkflowClient()`. **No
+  new service.**
 
 **2. Temporal vs Postgres outbox → Temporal.** Operator already runs
 `@temporalio/client` + a `scheduler-worker` process; adding one
-workflow + two activities is small. A Postgres outbox would
-introduce a new poller, a new failure mode, and zero reuse.
-**Justified per Derek's framing and confirmed by reuse math.**
+workflow + three activities is small. A Postgres outbox would
+introduce a new poller, a new failure mode, and zero reuse. **Workflow
+owns all writes** — the route handler does NOT pre-insert a `pending`
+row; it mints `trackingId` (uuid) and starts the workflow with the
+full payload. Workflow id = `trackingId` so a double-click is deduped
+at the Temporal layer (`WorkflowExecutionAlreadyStartedError`
+swallowed, returns existing trackingId). Activities run in order:
+`persistInitialActivity` (insert with `loki_status=pending`) →
+`pullLokiWindowActivity` → `updateLokiResultActivity`. Each retry is
+free; no orphan-row class of bug.
 
 **3. Persistence → Postgres, new `error_reports` slice.** The data
 is operational (system-written, operator-read), not AI-authored,
@@ -96,16 +106,28 @@ existing barrel; one migration in
 `nodes/operator/app/src/adapters/server/db/migrations/`. Row id =
 `trackingId` (uuid).
 
-**4. Loki query shape → narrow `LokiQueryPort` + a fetch-based
-adapter, queried by `correlation_id` first, falling back to
-`(build_sha, ±60s)`.** The client mints the `correlationId` and
-also passes it on the intake request as a header so the route
-handler logs it under the same id (Pino → Alloy → Loki). The
-worker activity then runs a single `query_range` for
-`{node="operator"} | json | correlation_id="<id>"` over a ±60s
-window around the report timestamp, with a fallback to
-`{build_sha="<sha>"}` if no rows. Result is stored as JSON in
-`error_reports.loki_window`.
+**4. Loki query shape → key on Next.js error `digest`, not a
+freshly-minted intake id.** Next.js stamps a server-side `digest` on
+every error that crosses an `error.tsx` boundary, and Pino logs
+already include it on the original failing request line. That's the
+log we actually want to fetch — not the intake POST. The client
+reads `error.digest` (already a prop of `error.tsx`) and includes it
+in the intake payload. The worker queries
+`{node="operator"} | json | digest="<digest>"` over server-received
+`ts ± 60s` (server clock, not client). Fallback if zero rows:
+`{node="operator", build_sha="<sha>"}` over the same window — bounded
+and labelled, no general dump. Result stored as JSON in
+`error_reports.loki_window`; status `fetched` / `empty` / `failed`.
+
+**4a. `LokiQueryPort` lives in a shared package, not app code.** The
+consumer is `services/scheduler-worker/**` — a different runtime from
+the operator app. Per packages-architecture.md (>1 runtime → shared
+package), a new minimal `packages/loki-query/` holds the port,
+domain types (Zod result schema), and a fetch-based adapter (~60
+lines total). Wiring (env-driven `LOKI_URL`) lives in
+`services/scheduler-worker/src/main.ts`, not in operator's
+`bootstrap/container.ts`. v0 has exactly one consumer; we still place
+it as a package because the activity runtime requires it.
 
 ### Reuses
 
@@ -123,9 +145,27 @@ window around the report timestamp, with a fallback to
   line for free; no new logging path.
 - **Operator `error.tsx` boundaries from task.0403** —
   `(app)/error.tsx` and `(public)/error.tsx`; we render the
-  button inside both.
-- **Operator `/version` endpoint** — UI reads `buildSha` from
-  there to attach to the report.
+  button inside both. The framework-supplied `error.digest` prop
+  becomes our Loki join key — no new correlation-id plumbing.
+- **Build SHA already on the client** — read from
+  `process.env.NEXT_PUBLIC_APP_BUILD_SHA` (already exposed at
+  build time per the operator's Next config), not via a runtime
+  GET to `/version`. A broken page shouldn't make extra hops.
+
+### Compensating controls (anonymous intake)
+
+Because the route is anonymous-allowed:
+
+- Per-IP token-bucket rate limit (in-memory, ~10/min/IP). Crude is
+  fine for v0; revisit when there's a second consumer.
+- Hard Zod byte caps: `error_message ≤ 2 KB`, `error_stack ≤ 20 KB`,
+  `component_stack ≤ 20 KB`, `user_note ≤ 1 KB`, `route ≤ 512 B`,
+  `digest ≤ 256 B`. Truncated client-side before send so a 100 KB
+  stack doesn't even leave the browser.
+- `user_id` field is best-effort: read from session if present,
+  `null` otherwise. Never trusted from the client.
+- Bot deterrent for v0: an `Origin` check (must match the operator's
+  own host); no captcha.
 
 ### Rejected alternatives
 
@@ -137,8 +177,24 @@ window around the report timestamp, with a fallback to
 - **Use Doltgres for `error_reports`.** Rejected — operational
   data, not AI-written; Doltgres is for graph/knowledge state.
 - **Build a generic `ObservabilityPort`.** Rejected for v0 —
-  speculative scope. The narrow `LokiQueryPort` is ~30 lines of
+  speculative scope. The narrow `LokiQueryPort` is ~60 lines of
   fetch + zod parse; generalize when a second caller exists.
+- **Place `LokiQueryPort` under `nodes/operator/app/src/ports/`
+  (mirroring `metrics-query.port.ts`).** Rejected — the consumer
+  is the worker runtime; cross-runtime imports of app code are
+  forbidden by packages-architecture.md. New `packages/loki-query/`.
+- **Mint a fresh client-side correlation id on click.** Rejected —
+  it tags only the intake POST, not the failing request the user
+  is trying to report. Use Next's existing `error.digest`.
+- **Pre-insert a `pending` row in the route handler before
+  starting the workflow.** Rejected — orphans on workflow-start
+  failure. Workflow owns all writes via its first activity.
+- **Require auth on the intake endpoint.** Rejected — would block
+  reports from `(public)/error.tsx`. Anonymous + rate-limit + size
+  caps + Origin check is the v0 compromise.
+- **GET `/version` from `error.tsx` to learn the build SHA.**
+  Rejected — extra round-trip from an already-broken page; the
+  SHA is already a build-time constant in `NEXT_PUBLIC_APP_BUILD_SHA`.
 - **Extract `<SendToCogniButton />` to a new `packages/ui-*`.**
   Rejected for v0 — no shared UI package exists today; creating
   one is its own project. Live in
@@ -153,10 +209,19 @@ window around the report timestamp, with a fallback to
 - [ ] CONTRACTS_ARE_SOT — `error-report.v1.contract.ts` is the
       only place the request/response shape is declared; route +
       facade + tests use `z.infer<typeof ...>`.
-- [ ] HEXAGONAL_LAYERS — `LokiQueryPort` is a port (interface)
-      under `packages/node-contracts/` or
-      `nodes/operator/app/src/ports/`; the fetch implementation
-      is an adapter under `adapters/server/`.
+- [ ] HEXAGONAL_LAYERS — `LokiQueryPort` interface, domain types,
+      and fetch adapter all live in shared `packages/loki-query/`
+      (>1 runtime consumer). Runtime wiring (env-driven `LOKI_URL`)
+      lives in the worker's `main.ts`, never in the package.
+- [ ] WORKFLOW_OWNS_ALL_WRITES — route handler does not write to
+      `error_reports`; the workflow's first activity does. Route
+      handler mints `trackingId` and starts the workflow only.
+- [ ] BOUNDED_INTAKE — Zod contract enforces hard byte caps on every
+      string field; client truncates before send; per-IP rate limit
+      is wired before workflow start.
+- [ ] DIGEST_IS_CORRELATION_KEY — the Loki join key is the Next.js
+      `error.digest`, propagated client → API → Pino log line on
+      the failing request → worker query.
 - [ ] SINGLE_NODE_SCOPE — touches only `nodes/operator/**` plus
       shared `packages/{temporal-workflows,node-contracts,db-schema}`
       and `services/scheduler-worker/**`. No other node touched.
@@ -186,39 +251,54 @@ window around the report timestamp, with a fallback to
   `loki_status (enum: pending|fetched|failed)`,
   `temporal_workflow_id`.
 - `nodes/operator/app/src/app/api/v1/error-report/route.ts` —
-  POST handler: auth → Zod parse → mint `trackingId` (uuid) →
-  insert `pending` row → start `ErrorReportIngestWorkflow` →
-  return 202 `{ trackingId, status: "queued" }`.
-- `nodes/operator/app/src/ports/loki-query.port.ts` — narrow
-  port: `queryRange(query: string, startNs: bigint, endNs: bigint)`.
-- `nodes/operator/app/src/adapters/server/loki-query.adapter.ts`
-  — fetch-based impl hitting `${LOKI_URL}/loki/api/v1/query_range`.
+  POST handler: Origin check → per-IP rate limit → Zod parse →
+  best-effort session userId → mint `trackingId` (uuid) → start
+  `ErrorReportIngestWorkflow` (workflowId = trackingId; idempotent
+  on retry) → return 202 `{ trackingId, status: "queued" }`. **No
+  DB write here.**
+- `packages/loki-query/package.json` + `src/index.ts` — exports
+  `LokiQueryPort` interface, `LokiQueryResultSchema` (Zod), and
+  `createLokiHttpAdapter({ baseUrl, fetch? })`. Fetch-based impl
+  hitting `${LOKI_URL}/loki/api/v1/query_range`. ~60 lines total.
 - `packages/temporal-workflows/src/workflows/error-report-ingest.workflow.ts`
-  — single workflow: calls `pullLokiWindowActivity`,
-  updates row to `fetched`/`failed`.
+  — single workflow: `persistInitialActivity` →
+  `pullLokiWindowActivity` → `updateLokiResultActivity`. Standard
+  retry policy on each.
 - `services/scheduler-worker/src/activities/error-report.ts` —
-  `pullLokiWindowActivity` (uses LokiQueryPort) +
-  `updateErrorReportActivity` (writes to DB).
+  the three activities. Constructs `LokiQueryAdapter` once at
+  module load using `LOKI_URL` from worker env; DB writes via the
+  worker's existing Drizzle client.
 - `nodes/operator/app/src/components/SendToCogniButton.tsx` —
-  client component; captures error context from props, mints
-  correlation id, POSTs `/api/v1/error-report`, shows tracking
-  id on success.
+  client component. Reads `error.digest` + the error itself from
+  props, reads build SHA from `process.env.NEXT_PUBLIC_APP_BUILD_SHA`,
+  truncates stack/message client-side, POSTs
+  `/api/v1/error-report`, shows tracking id on success / inline
+  error on fail.
 - `nodes/operator/app/src/adapters/server/db/migrations/<ts>_error_reports.sql`
   — generated migration.
+- `docs/spec/observability.md` — append a 5–10 line section
+  pointing at the contract, the table, and `digest` as the
+  correlation key. Story.0417 referenced as the standard.
 
 **Modify:**
 
 - `nodes/operator/app/src/app/(app)/error.tsx` and
   `(public)/error.tsx` — render `<SendToCogniButton />` inside
-  the existing recovery UI; pass error/digest/route props.
+  the existing recovery UI; pass `error`, `error.digest`, and
+  the route through.
+- Operator's Pino log enricher — ensure the `digest` field is on
+  the failing-request log line so the worker's Loki query can
+  join on it. (Likely already there via Next's default error
+  logging; confirm in implementation.)
 - `packages/db-schema/src/index.ts` (or barrel) — re-export
   `error-reports`.
 - `packages/temporal-workflows/src/activity-types.ts` — add the
-  new activity signatures.
+  three new activity signatures.
 - `services/scheduler-worker/src/worker.ts` — register the new
-  activities.
-- `nodes/operator/app/src/bootstrap/container.ts` — wire
-  `LokiQueryAdapter` (env-driven `LOKI_URL`).
+  activities; instantiate the Loki adapter from env.
+- `nodes/operator/app/next.config.*` — confirm
+  `NEXT_PUBLIC_APP_BUILD_SHA` is exposed (almost certainly
+  already is; if not, expose it).
 - AGENTS.md updates in: `nodes/operator/app/src/`,
   `packages/temporal-workflows/src/workflows/`,
   `services/scheduler-worker/src/activities/`,
