@@ -2,7 +2,7 @@
 id: story.0417
 type: story
 title: 'UI standard: every error surface has a "Send to Cogni" button that captures context and opens a fix loop'
-status: needs_triage
+status: done
 priority: 1
 rank: 99
 estimate: 5
@@ -11,7 +11,7 @@ outcome: "Every error UI in operator + node-template renders a 'Send to Cogni' a
 spec_refs:
 assignees: derekg1729
 credit:
-project:
+project: proj.observability-hardening
 branch:
 pr:
 reviewer:
@@ -28,6 +28,10 @@ external_refs:
 ---
 
 # UI standard: "Send to Cogni" on every error
+
+> **Triaged 2026-04-28** → `proj.observability-hardening`. v0 implementation
+> tracked in `task.0419` (capture-and-enqueue end-to-end loop). This story is
+> the durable intent record; status flips to `done` per story lifecycle.
 
 ## Problem
 
