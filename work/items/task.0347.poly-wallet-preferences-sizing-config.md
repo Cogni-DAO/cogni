@@ -13,8 +13,8 @@ spec_refs:
   - poly-multi-tenant-auth
 assignees: [derekg1729]
 project: proj.poly-bet-sizer
-branch:
-pr:
+branch: feat/task-0347-policy-ui
+pr: https://github.com/Cogni-DAO/node-template/pull/1103
 created: 2026-04-21
 updated: 2026-04-28
 labels: [poly, polymarket, wallets, ui, grants, money-page]
