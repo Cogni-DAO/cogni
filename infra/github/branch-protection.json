@@ -1,21 +1,22 @@
 {
   "_comment": [
-    "Source-of-truth payload for `PUT /repos/Cogni-DAO/node-template/branches/main/protection`.",
-    "Apply with: gh api -X PUT repos/Cogni-DAO/node-template/branches/main/protection --input infra/github/branch-protection.json",
-    "Underscore-prefixed keys are stripped at apply-time by the apply script (see infra/github/README.md).",
-    "Merge-queue settings live in a separate API call — see merge-queue.json + README."
+    "Source-of-truth payload for `PUT /repos/{owner}/{repo}/branches/main/protection`.",
+    "",
+    "Required-status-checks set is intentionally narrow. Every entry MUST be a check that:",
+    "  (a) is produced by a workflow with both `pull_request:` AND `merge_group:` triggers, AND",
+    "  (b) actually reports a status with the same context name on the merge queue ref.",
+    "",
+    "Empirically validated (Cogni-DAO/test-repo PR #53, 2026-04-28): GitHub's merge queue waits",
+    "FOREVER for required checks whose workflows lack a `merge_group:` trigger. CodeQL default-setup,",
+    "pr-lint.yaml, and similar PR-only workflows therefore CANNOT be in this list — the queue would",
+    "never drain.",
+    "",
+    "Apply: see infra/github/setup-main-branch.sh.",
+    "Spec: docs/spec/node-ci-cd-contract.md#repo-setup-fixture."
   ],
   "required_status_checks": {
     "strict": false,
-    "contexts": [
-      "CodeQL",
-      "Validate PR title",
-      "static",
-      "unit",
-      "component",
-      "stack-test",
-      "manifest"
-    ]
+    "contexts": ["unit", "component", "static", "manifest"]
   },
   "enforce_admins": null,
   "required_pull_request_reviews": null,

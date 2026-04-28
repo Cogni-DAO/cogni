@@ -124,7 +124,7 @@ After a successful flight, hit your own feature endpoint on `test.cognidao.org` 
 When validation passes, request merge. GitHub Merge Queue is enabled on `main` (see `infra/github/`):
 
 - Marking the PR for merge (UI "Merge when ready", `gh pr merge --auto --squash`, or `core__vcs_merge_pr`) enqueues it.
-- The queue rebases the PR onto current `main`, re-runs the required checks (`static`, `unit`, `component`, `stack-test`, `manifest`, `CodeQL`, `Validate PR title`) on the rebased candidate, and merges in order on green.
+- The queue rebases the PR onto current `main` and re-runs the required status checks on the rebased candidate (`unit`, `component`, `static`, `manifest`). All four are produced by workflows that fire on both `pull_request:` and `merge_group:` events — a hard requirement (see [`merge-queue-config.md`](./merge-queue-config.md), invariant `REPORT_OR_DON'T_REQUIRE`). PR-only checks like `CodeQL` and `Validate PR title` run on PRs as advisory signal but cannot be required, because GH's queue waits forever for required checks whose workflows lack a `merge_group:` trigger. Queue merges in order on green.
 - The agent does not rebase. The vendor primitive owns rebase + retest + merge, deterministically.
 - The agentic contribution loop terminates here. Post-merge, `push:main` triggers `flight-preview`, which auto-promotes the merged SHA to the preview environment for human review.
 

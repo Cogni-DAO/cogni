@@ -5,44 +5,50 @@ SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 # infra/github
 
-GitOps source-of-truth for repository-scope GitHub configuration. Today this covers branch protection and merge queue config for `main`.
+GitOps source-of-truth for repository-scope GitHub configuration on `main` — branch protection + merge queue. The fixtures here are **node-shape canonical**: any repo cloned/forked from `node-template` should be set up with the same config via [`setup-main-branch.sh`](./setup-main-branch.sh).
 
 The GitHub UI accepts changes anywhere — these files are not auto-applied. They exist so that:
 
 1. The current intended state is reviewable in code (PR diff = config diff).
-2. A new operator can re-apply the config from scratch without spelunking through Settings.
+2. A new fork can re-apply the config from scratch with one command.
 3. Drift is detectable (compare API GET vs file).
 
-## Apply procedure (one-time, repo-admin only)
+## Files
 
-Prerequisites: `gh` authed as a repo admin.
+| File                     | Status        | Purpose                                                                                                |
+| ------------------------ | ------------- | ------------------------------------------------------------------------------------------------------ |
+| `branch-protection.json` | **canonical** | `PUT .../branches/main/protection` payload — required status checks + main-branch rules.               |
+| `merge-queue.json`       | **canonical** | Merge-queue tuning values. Applied via UI (see below) — REST endpoint is documented but doesn't work.  |
+| `setup-main-branch.sh`   | **canonical** | One-command apply for any node-shaped fork: `bash infra/github/setup-main-branch.sh [<owner>/<repo>]`. |
+
+Spec: [`docs/spec/node-ci-cd-contract.md#repo-setup-fixture`](../../docs/spec/node-ci-cd-contract.md#repo-setup-fixture).
+
+## Apply procedure
 
 ```bash
-# 1. Apply branch protection (idempotent).
-#    The script strips _comment keys before sending to the API.
-jq 'del(._comment)' infra/github/branch-protection.json \
-  | gh api -X PUT repos/Cogni-DAO/node-template/branches/main/protection --input -
+# Apply to the current repo (uses gh auth context).
+bash infra/github/setup-main-branch.sh
 
-# 2. Enable repo-level auto-merge (one-time setting; required before merge queue is meaningful).
-#    UI: Settings → General → Pull Requests → check "Allow auto-merge".
-#    No stable REST endpoint; UI is canonical.
-
-# 3. Enable merge queue on main (UI is canonical at time of writing).
-#    UI: Settings → Branches → branch protection rule for main → check
-#    "Require merge queue" → fill the form using values from
-#    infra/github/merge-queue.json.
-
-# 4. Verify.
-gh api repos/Cogni-DAO/node-template/branches/main/protection \
-  | jq '.required_status_checks.contexts'
-# expected: ["CodeQL","Validate PR title","static","unit","component","stack-test","manifest"]
+# Apply to an explicit repo (e.g., a fork).
+bash infra/github/setup-main-branch.sh my-org/my-fork
 ```
+
+The script does what's API-doable in three steps:
+
+1. `PATCH /repos/{repo}` — squash-only, auto-merge enabled, delete-branch-on-merge.
+2. `PUT /repos/{repo}/branches/main/protection` — required status checks `["unit","component","static","manifest"]`.
+3. Prints the **one manual UI step** required for the merge queue. REST silently drops `required_merge_queue` (verified empirically against `Cogni-DAO/test-repo`, 2026-04-28). Until GitHub exposes this via REST, that toggle is a click in Settings → Branches.
+
+## Why these specific required checks
+
+The required-status-checks set is intentionally narrow because of an empirical constraint: **GitHub Merge Queue waits forever for required checks whose workflows lack a `merge_group:` trigger** (validated on `Cogni-DAO/test-repo` PR #53). Any check added to this list MUST be produced by a workflow that fires on both `pull_request:` AND `merge_group:` events.
+
+This forces a clear policy: **PR-only workflows (CodeQL default-setup, Validate PR title, etc.) cannot be required.** They run on PRs as advisory signal only. The deeper rationale and the alternatives considered (stub-job pattern, Rulesets) live in [`docs/spec/merge-queue-config.md`](../../docs/spec/merge-queue-config.md).
 
 ## Drift detection
 
 ```bash
-# Branch protection drift (file vs live):
-diff <(jq 'del(._comment)' infra/github/branch-protection.json) \
+diff <(jq 'with_entries(select(.key | startswith("_") | not))' infra/github/branch-protection.json) \
      <(gh api repos/Cogni-DAO/node-template/branches/main/protection \
         | jq '{required_status_checks:{strict:.required_status_checks.strict,contexts:.required_status_checks.contexts},
                enforce_admins:null,required_pull_request_reviews:null,restrictions:null,
@@ -64,5 +70,7 @@ Revisit if drift becomes a recurring issue or if change frequency rises.
 
 ## Related
 
-- [Agentic Contribution Loop](../../docs/spec/agentic-contribution-loop.md) — where merge queue fits in the contributor flow
-- [task.0391](../../work/items/task.0391.enable-merge-queue.md) — original adoption rationale
+- [docs/spec/node-ci-cd-contract.md](../../docs/spec/node-ci-cd-contract.md) — node sovereignty + merge-gate composition; this directory is referenced from the `## Repo Setup Fixture` section.
+- [docs/spec/merge-queue-config.md](../../docs/spec/merge-queue-config.md) — two-tier model design + the rejected Rulesets path + empirical findings.
+- [docs/spec/agentic-contribution-loop.md](../../docs/spec/agentic-contribution-loop.md) — where merge queue fits in the contributor flow.
+- [work/items/task.0391.enable-merge-queue.md](../../work/items/task.0391.enable-merge-queue.md) — original adoption rationale.
