@@ -2,7 +2,7 @@
 id: task.0415
 type: task
 title: "PrReviewWorkflowInput Zod schema + contract test — fix modelRef-shape regression class"
-status: needs_merge
+status: done
 priority: 0
 rank: 1
 estimate: 1
