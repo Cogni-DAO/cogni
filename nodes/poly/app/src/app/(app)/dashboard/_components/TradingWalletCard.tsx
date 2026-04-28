@@ -77,7 +77,7 @@ async function fetchWalletStatus(): Promise<PolyWalletStatusOutput> {
 }
 
 export function TradingWalletCard(): ReactElement {
-  const [interval, setInterval] = useState<PolyWalletOverviewInterval>("ALL");
+  const [interval, setInterval] = useState<PolyWalletOverviewInterval>("1W");
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard-trading-wallet", interval],
     queryFn: () => fetchTradingWallet(interval),
