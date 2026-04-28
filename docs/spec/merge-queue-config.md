@@ -36,7 +36,7 @@ Define the required-status-checks policy that actually works on GitHub today, ca
 
 1. **REPORT_OR_DON'T_REQUIRE**: A required status check MUST be produced by a workflow that fires on both `pull_request:` AND `merge_group:` events. PR-only workflows cannot be required — the queue would wait forever for a status that never arrives. Empirically validated.
 2. **QUEUE_GATE_IS_TREE_CORRECTNESS**: The queue's required-set's load-bearing entry is the image-build aggregator (`manifest`), which proves the rebased tree built into a usable image. Other entries are cheap deterministic checks (`static`, `unit`, `component`).
-3. **STUB_JOB_FOR_PR_INTENT**: When a check's "real validation" only makes sense on PR-time (e.g., title convention, security scan), the workflow MAY add a `merge_group:` trigger with a no-op passthrough step that emits a success status with the same context name. This makes the check visible on both events without doing duplicate work on the queue ref. Today we don't use this pattern; documenting as the only path to retaining PR-only intent as a queue-required gate.
+3. **STUB_JOB_FOR_PR_INTENT**: When a check's "real validation" only makes sense on PR-time (e.g., title convention, security scan, candidate-a flight), the workflow MAY add a `merge_group:` trigger with a no-op passthrough step that emits a success status with the same context name. This makes the check visible on both events without doing duplicate work on the queue ref. **Canonical example: `candidate-flight`** — required-on-PR (every external-agent contribution must dispatch `/vcs/flight` and pass), but explicitly NOT required-on-merge-queue (the queue's rebased SHA is different from the PR head; re-flighting it would conflict with the slot lease and waste a candidate-a deploy). Implementation: `candidate-flight.yml` adds `merge_group:` trigger + a passthrough job that emits `candidate-flight` success on merge_group events. Spec'd; implementation tracked in task.0414.
 4. **CONFIG_AS_CODE**: The set of required checks is committed to `infra/github/branch-protection.json`. Drift between live and committed is detectable (`gh api ... | diff`).
 
 ## The Empirical Finding (2026-04-28)
@@ -89,6 +89,12 @@ Excluded from required (advisory on PR-time only):
 | `CodeQL`            | (org-level default-setup) | No `merge_group:` trigger. Required → queue waits forever (see Empirical Finding). Still scans on PR + reports to Security tab.                                          |
 | `Validate PR title` | `pr-lint.yaml`            | No `merge_group:` trigger. Title convention is honor-system post-queue.                                                                                                  |
 | `stack-test`        | `ci.yaml`                 | Fires on `merge_group` but is flaky; ~10 min on the rebased candidate doubles flake surface. Real integration validation lives at candidate-a via `/validate-candidate`. |
+
+### Pending — `candidate-flight` (task.0414)
+
+`candidate-flight` is the contract gate for external-agent contributions: every PR must dispatch `/vcs/flight` and pass before merge. It is therefore required-on-PR. But it MUST NOT gate the merge queue — the queue's rebased SHA differs from the PR head, and re-flighting it would conflict with the candidate-slot lease and waste a candidate-a deploy.
+
+This is the canonical use of `STUB_JOB_FOR_PR_INTENT`: `candidate-flight.yml` will gain a `merge_group:` trigger with a passthrough job that emits `candidate-flight` success on merge_group events. Implementation tracked in `task.0414`. Once shipped, the canonical required set becomes `unit, component, static, manifest, candidate-flight` — the first stub-job-pattern entry in the live config.
 
 ## Implementation — Classic Branch Protection
 
