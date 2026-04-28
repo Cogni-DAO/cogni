@@ -266,6 +266,7 @@
 | 2 | 50 | 2 | needs_triage | bug.0404 | @cogni/poly-ai-tools fails fresh tsc -b with ZodObject not assignable to ZodType (TS2740) | Tool Use Evolution | proj.tool-use-evolution |
 | 2 | 60 | 1 | needs_implement | bug.0378 | reconcile-appset has no concurrency group — two concurrent flights race a shared kubectl apply | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 60 | 3 | needs_triage | task.0378 | poly anvil-fork test harness — verify CTF semantics against real Polygon chain state | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
+| 2 | 70 | 2 | needs_design | task.0414 | Promote candidate-flight to required-on-PR via stub-job pattern (REPORT_OR_DON'T_REQUIRE) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 99 | 1 | needs_design | bug.0093 | Ownership facade N+1 — sequential DB queries per epoch | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 2 | 99 | 2 | needs_design | task.0104 | Ledger production hardening — upsert batching, connection pooling, activity tests | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 2 | 99 | 3 | needs_design | task.0105 | Allocation algorithm expansion — multi-source credit estimate algos + per-source weight derivation | Transparent Credit Payouts | proj.transparent-credit-payouts |
@@ -289,6 +290,8 @@
 | 3 | 50 | 2 | needs_design | task.0390 | flatten `nodes/node-template/` migration baseline to a single 0000 fresh-start | Database Operations | proj.database-ops |
 | 3 | 80 | 3 | needs_design | task.0146 | Extract payments application orchestration + billing ports into packages | AI Operator Wallet | proj.ai-operator-wallet |
 | 3 | 80 | 5 | needs_design | task.0325 | Atlas + GitOps migrations (future upgrade, deferred) | Database Operations | proj.database-ops |
+| 3 | 95 | 2 | needs_design | task.0412 | Operator recovery from merge-queue cancellation: find + re-PR + re-queue dropped PRs | CI/CD Pipeline | proj.cicd-services-gitops |
+| 3 | 96 | 5 | needs_design | task.0413 | Promote Cogni-DAO/test-repo to a basic operator-template scaffold (turbo + real CICD + merge queue) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 3 | 99 | 1 | needs_triage | task.0098 | Temporal retry workflow for failed identity bindings + scheduled backstop | User Identity Bindings + DID Readiness | proj.decentralized-identity |
 | 3 | 99 | 1 | needs_triage | bug.0150 | getAllReceipts query is unbounded — will degrade at scale |  |  |
 | 3 | 99 | 2 | needs_triage | spike.0239 | Three.js agent observatory — prototype + performance budget | Premium Frontend UX | proj.premium-frontend-ux |

@@ -211,16 +211,38 @@ Centralizing lint/depcruise configs causes fork friction, policy fights, and los
 
 ### File Pointers
 
-| File                                       | Purpose                                                                               |
-| ------------------------------------------ | ------------------------------------------------------------------------------------- |
-| `.github/workflows/ci.yaml`                | CI entrypoint                                                                         |
-| `.github/workflows/build-multi-node.yml`   | Image build                                                                           |
-| `.github/workflows/promote-and-deploy.yml` | Promote + deploy + verify                                                             |
-| `.github/workflows/e2e.yml`                | E2E + promotion chain                                                                 |
-| `scripts/check-fast.sh`                    | `pnpm check:fast` implementation                                                      |
-| `scripts/check-all.sh`                     | `pnpm check` implementation                                                           |
-| `scripts/check-full.sh`                    | `pnpm check:full` implementation                                                      |
-| `tests/ci-invariants/`                     | Static pins on workflow shape, action SHA-pins, single-node-scope classifier fixtures |
+| File                                       | Purpose                                                                                        |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `.github/workflows/ci.yaml`                | CI entrypoint                                                                                  |
+| `.github/workflows/build-multi-node.yml`   | Image build                                                                                    |
+| `.github/workflows/promote-and-deploy.yml` | Promote + deploy + verify                                                                      |
+| `.github/workflows/e2e.yml`                | E2E + promotion chain                                                                          |
+| `scripts/check-fast.sh`                    | `pnpm check:fast` implementation                                                               |
+| `scripts/check-all.sh`                     | `pnpm check` implementation                                                                    |
+| `scripts/check-full.sh`                    | `pnpm check:full` implementation                                                               |
+| `tests/ci-invariants/`                     | Static pins on workflow shape, action SHA-pins, single-node-scope classifier fixtures          |
+| `infra/github/`                            | Canonical `main`-branch GH config (branch protection + merge queue) — see § Repo Setup Fixture |
+
+## Repo Setup Fixture
+
+Every Cogni node-template fork (and `node-template` itself) shares the same `main`-branch GitHub configuration: classic branch protection with a narrow required-status-checks set + GitHub Merge Queue. The canonical fixture lives in `infra/github/` and is applied via a single command:
+
+```bash
+bash infra/github/setup-main-branch.sh                      # current repo
+bash infra/github/setup-main-branch.sh my-org/my-fork       # explicit repo
+```
+
+What the fixture establishes:
+
+| Layer               | Source of truth                          | Apply mechanism                                                                                                                                              |
+| ------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Repo merge settings | `setup-main-branch.sh` step 1            | `gh api PATCH /repos/{repo}` — squash-only, auto-merge on, delete-branch-on-merge                                                                            |
+| Branch protection   | `infra/github/branch-protection.json`    | `gh api PUT /repos/{repo}/branches/main/protection` — required checks: `unit`, `component`, `static`, `manifest`                                             |
+| Merge queue toggle  | `infra/github/merge-queue.json` (values) | **UI-only**: Settings → Branches → main → "Require merge queue" + form values. REST silently drops `required_merge_queue` (verified empirically 2026-04-28). |
+
+The required-status-checks set is constrained by an empirical GitHub Merge Queue behavior: the queue waits forever for required checks whose workflows lack a `merge_group:` trigger. Full design + rationale in [`merge-queue-config.md`](./merge-queue-config.md), validated against `Cogni-DAO/test-repo` PR #53.
+
+External-node-formation impact: a fresh fork clones, runs `setup-main-branch.sh`, clicks once in Settings → Branches, and is in lock-step with `Cogni-DAO/node-template`'s gate. No spelunking through Settings; no ad-hoc divergence.
 
 ## Acceptance Checks
 
@@ -239,4 +261,6 @@ Centralizing lint/depcruise configs causes fork friction, policy fights, and los
 
 - [ci-cd.md](./ci-cd.md) — CI/CD pipeline specification
 - [check-full.md](./check-full.md) — check:full CI-parity gate
+- [merge-queue-config.md](./merge-queue-config.md) — required-status-checks policy + empirical merge-queue constraints + GitLab vFuture mapping
+- [infra/github/](../../infra/github/) — canonical `main`-branch GH config fixture
 - [Project: Reusable CI/CD Rails](../../work/projects/proj.ci-cd-reusable.md)
