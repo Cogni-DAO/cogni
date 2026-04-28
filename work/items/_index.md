@@ -103,6 +103,7 @@
 | 1 | 1 | 2 | needs_implement | task.0373 | candidate-flight self-heals deploy/candidate-a digests around PR rsync |  |  |
 | 1 | 1 | 1 | needs_merge | task.0380 | Node base-path resolver — `extractNodePath(spec, nodeId)` accessor + unit tests | VCS Integration | proj.vcs-integration |
 | 1 | 1 | 1 | needs_merge | bug.0389 | drizzle snapshot chain rot — `db:generate:poly` broken on main; wire `drizzle-kit check` per node | Database Operations | proj.database-ops |
+| 1 | 1 | 1 | needs_merge | bug.0403 | poly redeem reaper trusts stale receipt-burn flag → false bleed_detected on no-op retries | Cogni Poly | proj.poly-copy-trading |
 | 1 | 1 | 3 | needs_implement | task.0405 | Per-node skeleton-accuracy matrix — make each `loading.tsx` actually match its page |  |  |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
@@ -149,6 +150,7 @@
 | 1 | 5 | 3 | needs_triage | bug.0327 | No client-side crash telemetry — node apps can serve broken UX to users and we don't know | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 5 | 1 | needs_merge | bug.0333 | Base audit — move envs-identical ConfigMap values out of overlay patches into base | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 5 | 1 | needs_implement | bug.0379 | core__poly_data_holders schema is wrong — real /holders response is grouped per outcome token | Cogni Poly | proj.poly-prediction-bot |
+| 1 | 5 | 2 | needs_merge | task.0404 | Poly bet sizer v0 — `min_bet` SizingPolicy variant | Poly | proj.poly-bet-sizer |
 | 1 | 6 | 1 | needs_triage | bug.0036 | Chat route enqueues to closed assistant-stream controller — unhandled TypeError |  |  |
 | 1 | 6 | 1 | needs_triage | bug.0070 | OpenClaw CLI binary not executable as `openclaw` — agent CLI commands fail | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 6 | 2 | needs_design | task.0183 | Run list API: GET /api/v1/ai/runs — query graph_runs with filtering | Live Operations Dashboard | proj.live-dashboard |
@@ -191,7 +193,9 @@
 | 1 | 25 | 3 | needs_implement | task.0130 | Tokenomics Crawl: Budget Policy + kill Score UI | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 25 | 2 | needs_closeout | task.0165 | Live money e2e test — full OpenRouter top-up chain on Base mainnet | AI Operator Wallet | proj.ai-operator-wallet |
 | 1 | 30 | 1 | needs_review | bug.0336 | candidate-flight false-fails on rolling-update endpoint cutover race | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 35 | 2 | needs_review | task.0391 | Enable GitHub Merge Queue on main — fix stale-rebase merge-order bugs without manual rebase tax | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 40 | 3 | needs_triage | bug.0322 | Runs made on poly are visible via operator's /api/v1/agent/runs (cross-node data pollution) | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 50 | 5 | needs_merge | bug.0319 | Move node-only ai-tools into nodes/<X>/packages/ai-tools to satisfy SINGLE_DOMAIN_HARD_FAIL; kill the global TOOL_CATALOG closed-world iteration | Tool Use Evolution | proj.tool-use-evolution |
 | 1 | 50 | 2 | needs_triage | bug.0329 | Polymarket CLOB adapter SELL on neg_risk markets returns empty error — positions unclosable | Cogni Poly | proj.poly-copy-trading |
 | 1 | 99 | 3 | needs_triage | story.0089 | Discord Bot Conversation Evals |  |  |
 | 1 | 99 | 5 | needs_triage | story.0091 | Clawdbot as High-Level Manager Agent |  |  |
@@ -255,6 +259,7 @@
 | 2 | 50 | 3 | needs_triage | bug.0330 | poly /api/v1/chat/completions intermittently returns empty body on candidate-a | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 50 | 2 | needs_triage | bug.0337 | Per-node testcontainers setup uses operator's migrations — drift once any node diverges | Database Operations | proj.database-ops |
 | 2 | 50 | 3 | needs_triage | task.0377 | poly CTF redeem sweep — reactive architecture (replace per-tick RPC fan-out) | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
+| 2 | 50 | 2 | needs_triage | bug.0404 | @cogni/poly-ai-tools fails fresh tsc -b with ZodObject not assignable to ZodType (TS2740) | Tool Use Evolution | proj.tool-use-evolution |
 | 2 | 60 | 1 | needs_implement | bug.0378 | reconcile-appset has no concurrency group — two concurrent flights race a shared kubectl apply | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 60 | 3 | needs_triage | task.0378 | poly anvil-fork test harness — verify CTF semantics against real Polygon chain state | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
 | 2 | 99 | 1 | needs_design | bug.0093 | Ownership facade N+1 — sequential DB queries per epoch | Transparent Credit Payouts | proj.transparent-credit-payouts |
@@ -265,7 +270,6 @@
 | 2 | 99 | 2 | needs_triage | bug.0222 | Graph execution sends tools to models that declare capabilities.tools: false | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 2 | 99 | 2 | needs_triage | bug.0314 | External tests fail when only .env.test is loaded — need EVM_RPC_URL, smee webhook delivery, or safer skip-gates | System Test Architecture | proj.system-test-architecture |
 | 2 | 99 | 2 | needs_triage | bug.0317 | candidate-flight-infra.yml checks out main, so a feature branch cannot ship new env/secret plumbing via the infra lever | CI/CD Pipeline | proj.cicd-services-gitops |
-| 2 | 99 | 5 | needs_triage | bug.0319 | Split @cogni/ai-tools into per-node packages; kill the shared TOOL_CATALOG stub dance | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 99 | 5 | needs_design | task.0322 | Poly copy-trade Phase 4 design prep — dual-path ingestion, hot signer, target ranker, counterfactual baseline | Cogni Poly | proj.poly-copy-trading |
 | 2 | 99 | 3 | needs_review | task.0323 | Poly copy-trade v1 hardening — close the v0 gaps uncovered during candidate-a validation | Cogni Poly | proj.poly-copy-trading |
 | 3 | 3 | 2 | needs_design | task.0362 | Node-owned hostname declaration for verify + ingress | CI/CD Pipeline | proj.cicd-services-gitops |

@@ -5,7 +5,7 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2026-03-05
+- **Last reviewed:** 2026-04-27
 - **Status:** draft
 
 ## Purpose
@@ -52,7 +52,18 @@ Next.js App Router delivery layer. UI pages and API routes that expose features 
   - API: `/api/auth/*`, `/api/v1/chat/completions`
   - Internal ops: `/api/internal/ops/governance/schedules/sync` [POST] (deploy-only trigger)
   - Agent discovery: `/.well-known/agent.json` [GET] — public discovery document for machine clients
-- **Files considered API:** layout.tsx, page.tsx, api/\*\*/route.ts, (infra)/\*\*/route.ts, .well-known/\*\*/route.ts
+- **Files considered API:** layout.tsx, page.tsx, loading.tsx, error.tsx, api/\*\*/route.ts, (infra)/\*\*/route.ts, .well-known/\*\*/route.ts
+- **Suspense / error boundaries:** each route group exposes a
+  `loading.tsx` + `error.tsx`. `(app)/loading.tsx` renders a generic
+  fallback inside the sidebar shell; high-traffic routes
+  (`/dashboard`, `/chat`, `/work`, `/credits`, `/activity`, `/gov/*`)
+  override with a per-route `loading.tsx` that mirrors the page's
+  macro layout. `(public)/loading.tsx` renders the marketing-shaped
+  skeleton (Hero + cards + feed) used by `/`; `propose/merge`
+  overrides with a form skeleton. Reusable primitives
+  (`PageHeaderSkeleton`, `TableSkeleton`, `CardGridSkeleton`) live
+  under `kit/layout/`. **Forks inheriting this template inherit the
+  skeleton pattern.**
 
 ## Responsibilities
 

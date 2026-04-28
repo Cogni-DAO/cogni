@@ -20,7 +20,7 @@
 
 "use client";
 
-import type { WalletTopTraderItem } from "@cogni/ai-tools";
+import type { WalletTopTraderItem } from "@cogni/poly-ai-tools";
 import { createColumnHelper } from "@tanstack/react-table";
 import { Eye, Radio } from "lucide-react";
 import type { ReactNode } from "react";

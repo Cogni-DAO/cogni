@@ -11,6 +11,7 @@
  * @public
  */
 
+import { WEB_SEARCH_NAME } from "@cogni/ai-tools";
 import {
   MARKET_LIST_NAME,
   POLY_DATA_ACTIVITY_NAME,
@@ -21,8 +22,7 @@ import {
   POLY_DATA_TRADES_MARKET_NAME,
   POLY_DATA_VALUE_NAME,
   WALLET_TOP_TRADERS_NAME,
-  WEB_SEARCH_NAME,
-} from "@cogni/ai-tools";
+} from "@cogni/poly-ai-tools";
 
 /**
  * Tool bundle for the poly-research graph.

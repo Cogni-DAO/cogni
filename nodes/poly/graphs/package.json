@@ -29,6 +29,7 @@
   "dependencies": {
     "@cogni/ai-tools": "workspace:*",
     "@cogni/langgraph-graphs": "workspace:*",
+    "@cogni/poly-ai-tools": "workspace:*",
     "@cogni/node-contracts": "workspace:*",
     "@langchain/langgraph": "^1.0.7",
     "zod": "^3.24.0"

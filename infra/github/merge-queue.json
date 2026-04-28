@@ -1,0 +1,19 @@
+{
+  "_comment": [
+    "Source-of-truth payload for the merge queue configuration on `main`.",
+    "Apply via the GitHub UI (Settings → Branches → main → 'Require merge queue') or via REST:",
+    "  gh api -X PUT 'repos/Cogni-DAO/node-template/branches/main/protection' --input infra/github/branch-protection.json",
+    "  Then in UI: Settings → Branches → main → check 'Require merge queue', set merge method = squash,",
+    "  paste the values below into the form. (REST for queue config requires beta endpoints; UI is canonical.)",
+    "",
+    "Tuned for ~1-2 PR/day MVP cadence: queue depth ≈ 0, fast feedback, low burn.",
+    "Re-tune if observed depth > 2 sustained or merge wait > 30 min."
+  ],
+  "merge_method": "squash",
+  "grouping_strategy": "ALLGREEN",
+  "min_entries_to_merge": 1,
+  "max_entries_to_merge": 5,
+  "max_entries_to_build": 5,
+  "min_entries_to_merge_wait_minutes": 5,
+  "check_response_timeout_minutes": 60
+}

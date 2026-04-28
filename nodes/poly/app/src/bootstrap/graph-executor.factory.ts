@@ -21,6 +21,7 @@
  */
 
 import type { SourceSystem, ToolSourcePort } from "@cogni/ai-core";
+import { CORE_TOOL_BUNDLE } from "@cogni/ai-tools";
 import type {
   ExecutionContext,
   GraphFinal,
@@ -41,6 +42,7 @@ import {
   McpToolSource,
   parseMcpConfigFromEnv,
 } from "@cogni/langgraph-graphs";
+import { POLY_TOOL_BUNDLE } from "@cogni/poly-ai-tools";
 import { trace } from "@opentelemetry/api";
 import {
   type CompletionStreamFn,
@@ -534,8 +536,11 @@ function createInProcProvider(
   );
 
   const cache = getMcpCache();
-  return new LangGraphInProcProvider(inprocAdapter, container.toolSource, () =>
-    cache.getSource()
+  return new LangGraphInProcProvider(
+    inprocAdapter,
+    container.toolSource,
+    () => cache.getSource(),
+    [...CORE_TOOL_BUNDLE, ...POLY_TOOL_BUNDLE]
   );
 }
 

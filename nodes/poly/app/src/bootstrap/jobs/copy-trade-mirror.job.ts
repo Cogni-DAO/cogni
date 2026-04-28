@@ -53,13 +53,14 @@ const WARMUP_BACKLOG_SEC = 60;
  * by `authorizeIntent`.
  */
 const MIRROR_POLL_MS = 30_000;
-const MIRROR_USDC = 1;
 /**
- * Per-intent spend ceiling. The mirror will scale a $1 desired bet UP to the
- * market's share-minimum (in USDC terms) only when the scaled notional still
- * fits under this ceiling; otherwise it skips with `below_market_min`. Sized
- * at $5 because top-volume Polymarket markets require 5 shares min, and 5
- * shares × max_price (1.0) = $5 worst case. bug.0342.
+ * Per-intent spend ceiling on the `min_bet` policy. The mirror bets the
+ * market's `minUsdcNotional` (clamped to share-floor) up to this cap; markets
+ * above it skip at `plan-mirror` with `below_market_min`. Sized at $5 because
+ * top-volume Polymarket markets require 5 shares min, and 5 shares × max_price
+ * (1.0) = $5 worst case. Should match the operator wallet's grant
+ * `perOrderUsdcCap` so cap-exceed cases are not duplicated as
+ * `placement_failed` decisions at the `authorizeIntent` boundary. bug.0342.
  */
 const MIRROR_MAX_USDC_PER_TRADE = 5;
 
@@ -83,8 +84,7 @@ export function buildMirrorTargetConfig(params: {
     created_by_user_id: params.createdByUserId,
     mode: "live", // paper adapter body lands in P3; v0 only places live
     sizing: {
-      kind: "fixed",
-      mirror_usdc: MIRROR_USDC,
+      kind: "min_bet",
       max_usdc_per_trade: MIRROR_MAX_USDC_PER_TRADE,
     },
     enabled: true, // overwritten per-tick by the runtime kill-switch snapshot

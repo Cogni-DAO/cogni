@@ -41,6 +41,13 @@ function nominalSizeUsdc(sizing: SizingPolicy): number {
   switch (sizing.kind) {
     case "fixed":
       return sizing.mirror_usdc;
+    case "min_bet":
+      // The actual bet size is per-fill (market `minUsdcNotional` clamped to
+      // the share-floor and to `max_usdc_per_trade`). The policy's configured
+      // `max_usdc_per_trade` is the right scalar for this fn's two callers:
+      // (a) SELL-close `max_size_usdc` ceiling, (b) audit-blob projection of
+      // "the most this policy will spend on a single intent".
+      return sizing.max_usdc_per_trade;
   }
 }
 
