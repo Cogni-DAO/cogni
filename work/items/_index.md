@@ -365,6 +365,7 @@
 | 0 | task.0381 | Single-node-scope CI gate — reject PRs that touch >1 node domain (operator owns repo infra) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | bug.0383 | poly CTF redeem sweep loops on losing-outcome ERC1155 — bug.0376 fix-of-fix | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
 | 0 | task.0415 | Speed up `pnpm check:fast` — collapse to one turbo DAG, drop test serialization, cache docs/db checks |  |  |
+| 0 | task.0419 | PrReviewWorkflowInput Zod schema + contract test — fix modelRef-shape regression class | VCS Integration | proj.vcs-integration |
 | 1 | task.0006 | Collapse GraphProvider into GraphExecutorPort — single execution interface + namespace routing | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0007 | Billing enforcement decorator at GraphExecutorPort level | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0010 | OpenClaw gateway model selection — session-level override or agent-per-specialty | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
