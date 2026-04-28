@@ -146,6 +146,7 @@
 | 1 | 5 | 3 | needs_triage | bug.0327 | No client-side crash telemetry — node apps can serve broken UX to users and we don't know | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 5 | 1 | needs_merge | bug.0333 | Base audit — move envs-identical ConfigMap values out of overlay patches into base | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 5 | 1 | needs_implement | bug.0379 | core__poly_data_holders schema is wrong — real /holders response is grouped per outcome token | Cogni Poly | proj.poly-prediction-bot |
+| 1 | 5 | 2 | needs_merge | task.0404 | Poly bet sizer v0 — `min_bet` SizingPolicy variant | Poly | proj.poly-bet-sizer |
 | 1 | 6 | 1 | needs_triage | bug.0036 | Chat route enqueues to closed assistant-stream controller — unhandled TypeError |  |  |
 | 1 | 6 | 1 | needs_triage | bug.0070 | OpenClaw CLI binary not executable as `openclaw` — agent CLI commands fail | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 6 | 2 | needs_design | task.0183 | Run list API: GET /api/v1/ai/runs — query graph_runs with filtering | Live Operations Dashboard | proj.live-dashboard |
@@ -427,7 +428,6 @@
 | 1 | task.0384 | POST /api/v1/vcs/flight — CI-gated candidate-a flight endpoint + vcs/pr cleanup | Agentic Interoperability | proj.agentic-interop |
 | 1 | task.0389 | Poly wallet research — single-source PnL via Polymarket user-pnl-api | Cogni Poly | proj.poly-copy-trading |
 | 1 | spike.0401 | Next.js frontend perf — operator + poly SSR / transitions / bundle audit |  |  |
-| 1 | task.0404 | Poly bet sizer v0 — `min_bet` SizingPolicy variant | Poly | proj.poly-bet-sizer |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 2 | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |

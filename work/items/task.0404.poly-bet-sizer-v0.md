@@ -2,7 +2,7 @@
 id: task.0404
 type: task
 title: "Poly bet sizer v0 — `min_bet` SizingPolicy variant"
-status: done
+status: needs_merge
 priority: 1
 rank: 5
 estimate: 2

@@ -28,9 +28,9 @@ Users copy-trade wallets with $1M+ portfolios while holding $5–$50 themselves,
 
 **Goal:** Add a `{ kind: "min_bet" }` variant to the existing `SizingPolicy` discriminated union (the seam already exists per the `SIZING_POLICY_IS_DISCRIMINATED` invariant). Use the market's `minUsdcNotional` as the bet size instead of the hardcoded `MIRROR_USDC = 1` constant. FCFS budget gating remains in `authorizeIntent` (`CAPS_LIVE_IN_GRANT`). No new port, no new schema, no UI. ~30 LOC.
 
-| Deliverable                                                                          | Status          | Est | Work Item |
-| ------------------------------------------------------------------------------------ | --------------- | --- | --------- |
-| `min_bet` variant on `SizingPolicy` + bootstrap swap + delete `MIRROR_USDC` constant | Needs Implement | 2   | task.0404 |
+| Deliverable                                                                          | Status    | Est | Work Item |
+| ------------------------------------------------------------------------------------ | --------- | --- | --------- |
+| `min_bet` variant on `SizingPolicy` + bootstrap swap + delete `MIRROR_USDC` constant | In Review | 2   | task.0404 |
 
 ### Walk (P1) — per-target allocation + sub-min policy + UI
 
