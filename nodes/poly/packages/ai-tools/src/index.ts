@@ -58,19 +58,6 @@ export {
   polyCancelOrderStubImplementation,
 } from "./tools/poly-cancel-order";
 export {
-  createPolyClosePositionImplementation,
-  POLY_CLOSE_POSITION_NAME,
-  type PolyClosePositionDeps,
-  type PolyClosePositionInput,
-  PolyClosePositionInputSchema,
-  type PolyClosePositionOutput,
-  PolyClosePositionOutputSchema,
-  type PolyClosePositionRedacted,
-  polyClosePositionBoundTool,
-  polyClosePositionContract,
-  polyClosePositionStubImplementation,
-} from "./tools/poly-close-position";
-export {
   createPolyDataActivityImplementation,
   POLY_DATA_ACTIVITY_NAME,
   type PolyDataActivityDeps,
@@ -234,8 +221,6 @@ import { walletTopTradersBoundTool } from "./tools/wallet-top-traders";
  *   - polyPlaceTradeBoundTool / polyListOrdersBoundTool / polyCancelOrderBoundTool —
  *     pending per-tenant routing through PolyTradeExecutor with actor identity at
  *     tool-invocation time (see bug.0319 ckpt 3).
- *   - polyClosePositionBoundTool — used internally by the copy-trade reconciler,
- *     not exposed as a directly-bindable agent tool.
  */
 export const POLY_TOOL_BUNDLE: readonly CatalogBoundTool[] = [
   marketListBoundTool as CatalogBoundTool,
