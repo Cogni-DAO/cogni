@@ -42,6 +42,7 @@
 | 0 | 1 | 5 | needs_design | task.0409 | Multi-tenant git-review routing — operator selects target repo (test vs prod) via per-tenant GitHub App | VCS Integration | proj.vcs-integration |
 | 0 | 1 | 2 | needs_closeout | task.0410 | Reviewer per-node routing — wire `extractOwningNode` into PrReviewWorkflow so PR webhooks load per-node `.cogni/rules/` | VCS Integration | proj.vcs-integration |
 | 0 | 1 | 1 | needs_implement | task.0412 | Poly CTF redeem pipeline — multi-tenant fan-out (purge single-funder kill switch) | Cogni Poly | proj.poly-copy-trading |
+| 0 | 1 | 1 | needs_merge | task.0417 | Surface pod-startup diagnostics on rollout failure + fix /logs anti-pattern |  |  |
 | 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
 | 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD Pipeline | proj.cicd-services-gitops |

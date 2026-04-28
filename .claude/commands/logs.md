@@ -102,7 +102,26 @@ For CI failures, use `env="ci"`:
 
 ## 3. Collect Relevant Logs
 
-Focus queries based on the problem. Use appropriate LogQL:
+### Anti-pattern: chasing the symptom keyword
+
+When the user reports a downstream symptom (a webhook never fires, a job never starts, a comment never posts), do **NOT** filter your first query to that symptom keyword (`webhook`, `review.routed`, `dispatchPrReview`). The pod that should emit that event may not be running at all. A symptom-keyword filter on a dead pod returns silence — and silence misleads. **Look up the call chain first**, then narrow.
+
+**Top-down order — always:**
+
+1. **Is the pod even running?** Pull pod-level startup logs from the env, no symptom filter:
+
+   ```
+   {namespace="cogni-<env>", pod=~"<service>-.*"} |~ "Error|Invalid|EnvValidation|panic|unhandled|started|ready"
+   ```
+
+   Look for `EnvValidationError`, `ImagePullBackOff`, init-container failures, or absence of `app started`. If the pod is crash-looping, the symptom never fires because no one is listening.
+
+2. **Is the right SHA serving?** Compare deployed `/version.buildSha` against the source-sha map. If they don't match, the rolling deploy stalled and you're investigating the wrong code.
+
+3. **Only then** filter to the symptom-specific events:
+   ```
+   {service="app", env="<env>"} | json | event="<feature>"
+   ```
 
 **For errors:**
 
@@ -122,6 +141,19 @@ Focus queries based on the problem. Use appropriate LogQL:
 ```
 {service="app", env="<env>"} | json | event="payments.intent_created"
 ```
+
+### Recipe: deploy/rollout failure (CI says "stale ReplicaSet still present")
+
+If `wait-for-argocd.sh` failed in CI but didn't dump pod diagnostics (older runs predating the script's diagnostics block), reproduce them via Loki:
+
+```
+# 1. Find the newest pod created during the failing deploy window
+{namespace="cogni-<env>", container="migrate"} | json
+# 2. Pull that pod's app-container stderr — env validation + startup crashes land here
+{namespace="cogni-<env>", pod="<pod-from-step-1>", container="app", stream="stderr"}
+```
+
+If the app stderr shows `EnvValidationError`, the secret value is wrong/missing in that env — a recent secret-wiring PR (e.g. `cc328b478` for TAVILY) likely added validation that an existing prod secret no longer satisfies.
 
 **Time range:** Default 1 hour. Use `startRfc3339`/`endRfc3339` for custom ranges.
 

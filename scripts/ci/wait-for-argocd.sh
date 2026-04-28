@@ -239,6 +239,45 @@ rollout_check() {
   return 1
 }
 
+# Surface the actionable cause when a rollout fails. Without this, CI logs
+# only say "stale ReplicaSet still present" — investigators must SSH into
+# the VM to discover which container crashed and why. We have kubectl right
+# here; one round-trip pulls the events + crash reasons + tail of the new
+# pod's stderr, which is almost always the root cause (env-validation,
+# ImagePullBackOff, OOMKilled, init container fail).
+dump_pod_diagnostics() {
+  local app_name="$1"
+  local deployment="$2"
+  local namespace="cogni-${DEPLOY_ENVIRONMENT}"
+  [ -z "$deployment" ] && return 0
+
+  echo ""
+  echo "  ── pod diagnostics for ${app_name} (${deployment}/${namespace}) ──"
+
+  echo "  ▸ pods + container statuses:"
+  kubectl -n "$namespace" get pods -l "app=${deployment}" -o custom-columns=\
+'NAME:.metadata.name,READY:.status.containerStatuses[*].ready,STATE:.status.containerStatuses[*].state,RESTARTS:.status.containerStatuses[*].restartCount,REASON:.status.containerStatuses[*].state.waiting.reason,LAST-TERM-REASON:.status.containerStatuses[*].lastState.terminated.reason' 2>&1 | sed 's/^/    /' || true
+
+  echo "  ▸ recent namespace events (last 20):"
+  kubectl -n "$namespace" get events --sort-by=.lastTimestamp 2>&1 | tail -20 | sed 's/^/    /' || true
+
+  # Tail stderr from the newest non-Ready pod (where the new image is failing).
+  local newest
+  newest=$(kubectl -n "$namespace" get pods -l "app=${deployment}" \
+    --field-selector=status.phase!=Succeeded \
+    -o jsonpath='{range .items[*]}{.metadata.creationTimestamp} {.metadata.name} {.status.containerStatuses[*].ready}{"\n"}{end}' 2>/dev/null \
+    | grep -v 'true true' | sort | tail -1 | awk '{print $2}')
+  if [ -n "$newest" ]; then
+    echo "  ▸ newest non-Ready pod: ${newest}"
+    echo "  ▸ migrate init container (last 30 lines):"
+    kubectl -n "$namespace" logs "$newest" -c migrate --tail=30 2>&1 | sed 's/^/    /' || true
+    echo "  ▸ app container (last 30 lines, stderr-biased):"
+    kubectl -n "$namespace" logs "$newest" -c app --tail=30 2>&1 | sed 's/^/    /' || true
+  fi
+  echo "  ── end diagnostics ──"
+  echo ""
+}
+
 # task.0370 step 1 retired Argo PreSync hook Jobs — migrations are now
 # Deployment initContainers. The pre-sync hook-Job babysitting (delete_stale_hook_jobs,
 # clear_stale_missing_hook_operation) is gone with the hooks. The kick that
@@ -317,6 +356,7 @@ wait_for_app() {
         return 0
       fi
       echo "  ❌ ${app_name} rollout did not complete (sync.revision=${REV:0:8} Healthy but stale ReplicaSet still present)"
+      dump_pod_diagnostics "$app_name" "$deployment"
       return 1
     fi
 
@@ -341,6 +381,7 @@ wait_for_app() {
 
   echo "  ❌ ${app_name} timed out (rev=${REV:0:8} health=${HEALTH} phase=${SYNC_PHASE})"
   kubectl -n argocd get application "$app_name" -o jsonpath='{.status.sync.status} {.status.health.status} phase={.status.operationState.phase} msg={.status.operationState.message}{"\n"}' 2>/dev/null || true
+  dump_pod_diagnostics "$app_name" "$deployment"
   return 1
 }
 
