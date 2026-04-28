@@ -53,11 +53,17 @@ Next.js App Router delivery layer. UI pages and API routes that expose features 
   - Internal ops: `/api/internal/ops/governance/schedules/sync` [POST] (deploy-only trigger)
   - Agent discovery: `/.well-known/agent.json` [GET] — public discovery document for machine clients
 - **Files considered API:** layout.tsx, page.tsx, loading.tsx, error.tsx, api/\*\*/route.ts, (infra)/\*\*/route.ts, .well-known/\*\*/route.ts
-- **Suspense / error boundaries:** each route group exposes a `loading.tsx`
-  - `error.tsx`. `(app)/loading.tsx` renders inside the sidebar shell;
-    `(public)/loading.tsx` renders inside the public chrome. Do not add
-    a top-level `loading.tsx` next to root `layout.tsx` — it would render
-    outside both group layouts and flash the chrome.
+- **Suspense / error boundaries:** each route group exposes a
+  `loading.tsx` + `error.tsx`. `(app)/loading.tsx` renders a generic
+  fallback inside the sidebar shell; high-traffic routes
+  (`/dashboard`, `/chat`, `/work`, `/credits`, `/activity`, `/gov/*`)
+  override with a per-route `loading.tsx` that mirrors the page's
+  macro layout. `(public)/loading.tsx` renders the marketing-shaped
+  skeleton (Hero + cards + feed) used by `/`; `propose/merge`
+  overrides with a form skeleton. Reusable primitives
+  (`PageHeaderSkeleton`, `TableSkeleton`, `CardGridSkeleton`) live
+  under `kit/layout/`. `/setup/dao*` is left on the generic fallback
+  for v0 — wizard-flow shape isn't worth a bespoke skeleton yet.
 
 ## Responsibilities
 
