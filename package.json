@@ -158,7 +158,7 @@
     "test:component": "for cfg in nodes/*/app/vitest.component.config.mts; do echo \"Running component tests: $cfg\" && vitest run --config \"$cfg\" || exit 1; done",
     "test:comp": "pnpm test:component",
     "test:smee": "dotenv -e .env.test -- bash -c 'smee -u \"$GH_WEBHOOK_PROXY_URL\" -t http://localhost:3000/api/internal/webhooks/github'",
-    "test:external": "for cfg in nodes/*/app/vitest.external.config.mts; do echo \"External: $cfg\" && vitest run --config \"$cfg\" || exit 1; done",
+    "test:external": "for cfg in nodes/*/app/vitest.external.config.mts packages/*/vitest.external.config.ts; do [ -f \"$cfg\" ] || continue; echo \"External: $cfg\" && vitest run --config \"$cfg\" || exit 1; done",
     "test:external:money": "for cfg in nodes/*/app/vitest.external-money.config.mts; do echo \"External money: $cfg\" && vitest run --config \"$cfg\" || exit 1; done",
     "test:external:operator": "pnpm -F operator test:external",
     "test:external:poly": "pnpm -F @cogni/poly-app test:external",

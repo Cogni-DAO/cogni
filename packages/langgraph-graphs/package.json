@@ -36,7 +36,8 @@
     "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
-    "test:ci": "vitest run --config vitest.config.ts"
+    "test:ci": "vitest run --config vitest.config.ts",
+    "test:external": "vitest run --config vitest.external.config.ts"
   },
   "dependencies": {
     "@cogni/ai-core": "workspace:*",
