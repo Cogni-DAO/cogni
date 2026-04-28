@@ -2,8 +2,9 @@
 id: task.0415
 type: task
 title: "Speed up `pnpm check:fast` — collapse to one turbo DAG, drop test serialization, cache docs/db checks"
-status: needs_closeout
+status: done
 revision: 1
+pr: https://github.com/Cogni-DAO/node-template/pull/1110
 priority: 0
 rank: 1
 estimate: 3
