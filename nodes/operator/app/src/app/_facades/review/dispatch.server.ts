@@ -4,14 +4,15 @@
 /**
  * Module: `@app/_facades/review/dispatch.server`
  * Purpose: App-layer facade for dispatching PR reviews via Temporal workflow.
- * Scope: Extracts webhook payload, resolves billing context, starts PrReviewWorkflow. Fire-and-forget.
+ * Scope: Extracts webhook payload, resolves billing context, validates the workflow input via the source-of-truth Zod schema, then starts PrReviewWorkflow. Fire-and-forget.
  * Invariants:
  *   - Per NORMATIVE_WEBHOOK_PATTERN: starts Temporal workflow and exits immediately
- *   - Per ACTIVITY_IDEMPOTENCY: workflowId = pr-review:{owner}/{repo}/{prNumber}/{headSha}
+ *   - Per ACTIVITY_IDEMPOTENCY: workflowId = pr-review:{owner}/{repo}/{prNumber}/{headSha}, built from the parsed input (post-validation), not raw ctx
+ *   - Per DISPATCH_FAIL_FAST (task.0419): payload is parsed through `PrReviewWorkflowInputSchema` before `workflowClient.start(...)`; misshapen payloads fail with structured ZodError logged distinctly from infra failures
  *   - No inline graph execution — all AI runs through GraphRunWorkflow child
  *   - No secrets in workflow input — only installationId (public)
  * Side-effects: IO (starts Temporal workflow)
- * Links: task.0191, docs/spec/temporal-patterns.md
+ * Links: task.0191, task.0419, docs/spec/temporal-patterns.md
  * @public
  */
 
@@ -19,8 +20,10 @@ import {
   COGNI_SYSTEM_BILLING_ACCOUNT_ID,
   COGNI_SYSTEM_PRINCIPAL_USER_ID,
 } from "@cogni/node-shared";
+import { PrReviewWorkflowInputSchema } from "@cogni/temporal-workflows";
 import { WorkflowExecutionAlreadyStartedError } from "@temporalio/client";
 import type { Logger } from "pino";
+import { ZodError } from "zod";
 import { getContainer, getTemporalWorkflowClient } from "@/bootstrap/container";
 import { getNodeId } from "@/shared/config";
 
@@ -110,25 +113,31 @@ async function startPrReviewWorkflow(
     const { client: workflowClient, taskQueue } =
       await getTemporalWorkflowClient();
 
-    // Stable business key for idempotency — retries on same headSha are no-ops
-    const workflowId = `pr-review:${ctx.owner}/${ctx.repo}/${ctx.prNumber}/${ctx.headSha}`;
+    // Per DISPATCH_FAIL_FAST (task.0419): parse the input through the source-of-
+    // truth schema before starting the workflow. Misshapen payloads fail loudly
+    // here with a structured Zod error instead of becoming an Activity-side 400
+    // (the modelRef-shape regression class — PR #1067).
+    const workflowInput = PrReviewWorkflowInputSchema.parse({
+      nodeId: getNodeId(),
+      owner: ctx.owner,
+      repo: ctx.repo,
+      prNumber: ctx.prNumber,
+      headSha: ctx.headSha,
+      installationId: ctx.installationId,
+      actorUserId: COGNI_SYSTEM_PRINCIPAL_USER_ID,
+      billingAccountId: COGNI_SYSTEM_BILLING_ACCOUNT_ID,
+      virtualKeyId: billingAccount.defaultVirtualKeyId,
+    });
+
+    // Stable business key for idempotency — retries on same headSha are no-ops.
+    // Build from parsed input so a future shape drift in `ctx` cannot bypass
+    // validation by influencing the workflowId template.
+    const workflowId = `pr-review:${workflowInput.owner}/${workflowInput.repo}/${workflowInput.prNumber}/${workflowInput.headSha}`;
 
     await workflowClient.start("PrReviewWorkflow", {
       taskQueue,
       workflowId,
-      args: [
-        {
-          nodeId: getNodeId(),
-          owner: ctx.owner,
-          repo: ctx.repo,
-          prNumber: ctx.prNumber,
-          headSha: ctx.headSha,
-          installationId: ctx.installationId,
-          actorUserId: COGNI_SYSTEM_PRINCIPAL_USER_ID,
-          billingAccountId: COGNI_SYSTEM_BILLING_ACCOUNT_ID,
-          virtualKeyId: billingAccount.defaultVirtualKeyId,
-        },
-      ],
+      args: [workflowInput],
     });
 
     log.info(
@@ -140,6 +149,16 @@ async function startPrReviewWorkflow(
       log.info(
         { prNumber: ctx.prNumber, headSha: ctx.headSha },
         "PR review workflow already running — idempotent skip"
+      );
+      return;
+    }
+    // Per DISPATCH_FAIL_FAST: Zod parse failures emit structured `issues`,
+    // not opaque error strings. Logging them as a distinct event makes
+    // shape-drift bugs queryable in Loki separately from infra failures.
+    if (error instanceof ZodError) {
+      log.error(
+        { issues: error.issues, prNumber: ctx.prNumber, headSha: ctx.headSha },
+        "PR review dispatch input invalid — schema parse failed"
       );
       return;
     }

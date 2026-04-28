@@ -15,8 +15,12 @@
  *     tokens spent. Owning domain is resolved inside `fetchPrContextActivity` via
  *     `extractOwningNode`; the workflow only dispatches on `kind`.
  *   - TYPED_TERMINAL_ARTIFACT: GraphRunWorkflow child returns structuredOutput for parent consumption
+ *   - Per SINGLE_INPUT_CONTRACT (task.0419): input shape is defined exactly once
+ *     in `./pr-review.schema.ts` and consumed via `z.infer<>` — no parallel TS
+ *     interfaces. Producers parse with `PrReviewWorkflowInputSchema` before
+ *     `workflowClient.start(...)`.
  * Side-effects: none (deterministic orchestration only)
- * Links: docs/spec/temporal-patterns.md, docs/spec/node-ci-cd-contract.md#single-domain-scope, task.0191, task.0410
+ * Links: docs/spec/temporal-patterns.md, docs/spec/node-ci-cd-contract.md#single-domain-scope, task.0191, task.0410, task.0419
  * @public
  */
 
@@ -24,6 +28,7 @@ import { executeChild, proxyActivities, uuid4 } from "@temporalio/workflow";
 import { EXTERNAL_API_ACTIVITY_OPTIONS } from "../activity-profiles.js";
 import type { ReviewActivities } from "../activity-types.js";
 import type { GraphRunResult } from "./graph-run.workflow.js";
+import type { PrReviewWorkflowInput } from "./pr-review.schema.js";
 
 // All review activities: GitHub API calls with 5-min timeout, 3 retries
 const {
@@ -34,24 +39,14 @@ const {
 } = proxyActivities<ReviewActivities>(EXTERNAL_API_ACTIVITY_OPTIONS);
 
 /**
- * Input for PrReviewWorkflow.
- * All fields from the webhook payload + billing context — no secrets.
+ * Input for PrReviewWorkflow — re-exported from the Zod schema source-of-truth
+ * (`./pr-review.schema.ts`). Per SINGLE_INPUT_CONTRACT: do not duplicate the
+ * shape as a parallel TS interface. See task.0419 / PR #1067 for context.
  */
-export interface PrReviewWorkflowInput {
-  /** Originating node ID from repo-spec. Routes execution to correct node. */
-  nodeId: string;
-  owner: string;
-  repo: string;
-  prNumber: number;
-  headSha: string;
-  installationId: number;
-  /** System principal user ID (COGNI_SYSTEM_PRINCIPAL_USER_ID from @cogni/ids constants). */
-  actorUserId: string;
-  /** System billing account ID (resolved by webhook handler from DB). */
-  billingAccountId: string;
-  /** System virtual key ID (resolved by webhook handler from DB). */
-  virtualKeyId: string;
-}
+export {
+  type PrReviewWorkflowInput,
+  PrReviewWorkflowInputSchema,
+} from "./pr-review.schema.js";
 
 /**
  * PrReviewWorkflow — Temporal parent workflow for PR review.

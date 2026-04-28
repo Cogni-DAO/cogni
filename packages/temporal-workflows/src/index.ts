@@ -55,6 +55,9 @@ export type {
   GraphRunResult,
   GraphRunWorkflowInput,
 } from "./workflows/graph-run.workflow.js";
-export type { PrReviewWorkflowInput } from "./workflows/pr-review.workflow.js";
+export {
+  type PrReviewWorkflowInput,
+  PrReviewWorkflowInputSchema,
+} from "./workflows/pr-review.schema.js";
 export type { CollectSourcesInput } from "./workflows/stages/collect-sources.workflow.js";
 export type { EnrichAndAllocateInput } from "./workflows/stages/enrich-and-allocate.workflow.js";
