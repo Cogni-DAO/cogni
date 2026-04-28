@@ -164,7 +164,9 @@ const CTF_OPERATORS: readonly { label: string; address: Address }[] = [
   { label: "CTF → Neg-Risk Adapter", address: NEG_RISK_ADAPTER_POLYMARKET },
 ];
 
-const COLLATERAL_ONRAMP_WRAP_ABI = parseAbi(["function wrap(uint256 amount)"]);
+const COLLATERAL_ONRAMP_WRAP_ABI = parseAbi([
+  "function wrap(address asset, address to, uint256 amount)",
+]);
 
 const CTF_SET_APPROVAL_ABI = parseAbi([
   "function isApprovedForAll(address account, address operator) view returns (bool)",
@@ -1581,7 +1583,7 @@ export class PrivyPolyTraderWalletAdapter implements PolyTraderWalletPort {
         address: COLLATERAL_ONRAMP_POLYGON,
         abi: COLLATERAL_ONRAMP_WRAP_ABI,
         functionName: "wrap",
-        args: [amount],
+        args: [USDC_E_POLYGON, signingContext.funderAddress, amount],
       });
       this.log.info(
         {

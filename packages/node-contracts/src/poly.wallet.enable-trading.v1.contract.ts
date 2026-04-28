@@ -58,7 +58,7 @@ export const polyWalletEnableTradingOperation = {
     address: addressSchema,
     /** Decimal POL balance used for gas. `null` when Polygon RPC is not configured on this deployment. */
     pol_balance: z.number().nullable(),
-    steps: z.array(approvalStepSchema).min(6).max(6),
+    steps: z.array(approvalStepSchema).min(8).max(8),
     /** ISO timestamp when the readiness stamp was written; `null` when `ready: false`. */
     ready_at: z.string().datetime().nullable(),
   }),

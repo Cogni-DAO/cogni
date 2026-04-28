@@ -58,7 +58,9 @@ const CTF_OPERATORS: Array<{ name: string; address: Address }> = [
   { name: "Neg-Risk Adapter", address: POLYMARKET.negRiskAdapter as Address },
 ];
 
-const COLLATERAL_ONRAMP_WRAP_ABI = parseAbi(["function wrap(uint256 amount)"]);
+const COLLATERAL_ONRAMP_WRAP_ABI = parseAbi([
+  "function wrap(address asset, address to, uint256 amount)",
+]);
 const ERC20_BALANCEOF_ABI = parseAbi([
   "function balanceOf(address owner) view returns (uint256)",
 ]);
@@ -206,7 +208,7 @@ async function main(): Promise<void> {
       address: COLLATERAL_ONRAMP_POLYGON,
       abi: COLLATERAL_ONRAMP_WRAP_ABI,
       functionName: "wrap",
-      args: [usdcEBalance],
+      args: [USDC_E_POLYGON, expectedAddress, usdcEBalance],
     });
     console.log(`[approve]   tx: ${wrapHash}`);
     const wrapReceipt = await publicClient.waitForTransactionReceipt({

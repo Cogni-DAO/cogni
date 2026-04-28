@@ -1008,7 +1008,7 @@ describe("PrivyPolyTraderWalletAdapter.authorizeIntent + provisionWithGrant (com
     );
 
     expect(result.ready).toBe(true);
-    expect(result.steps).toHaveLength(6);
+    expect(result.steps).toHaveLength(8);
     expect(walletWriteContract).toHaveBeenCalledTimes(1);
     expect(walletWriteContract).toHaveBeenCalledWith(
       expect.objectContaining({
