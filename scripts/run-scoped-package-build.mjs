@@ -6,7 +6,7 @@
  * Module: `@scripts/run-scoped-package-build`
  * Purpose: Build only the workspace packages needed for local affected checks.
  * Scope: Local check orchestration only; does not replace full main/CI package builds or validation.
- * Invariants: Changed package workspaces always rebuild; unchanged local package deps only build when declarations are missing.
+ * Invariants: Changed packages always rebuild ; buildables with missing declaration outputs rebuild regardless of git diff.
  * Side-effects: IO (spawns pnpm/tsc subprocesses and writes package dist outputs)
  * Links: scripts/check-fast.sh, scripts/run-turbo-checks.sh, tsconfig.json
  * @internal
@@ -77,12 +77,6 @@ const changedWorkspaceNames = getChangedWorkspaceNames(
   workspaceGraph
 );
 
-if (changedWorkspaceNames.length === 0) {
-  console.log(`Package build scope: none (${scopeBase}...${scopeHead})`);
-  console.log("No workspace packages changed.");
-  process.exit(0);
-}
-
 const buildPlan = createBuildPlan(changedWorkspaceNames, workspaceGraph);
 
 if (buildPlan.targets.length === 0) {
@@ -114,10 +108,27 @@ function createBuildPlan(changedNames, workspaceGraph) {
   );
 
   const affectedBuildableNames = new Set(affectedBuildables.map((w) => w.name));
-  const missingBootstrapDeps = closureBuildables.filter(
+  const closureMissing = closureBuildables.filter(
     (workspace) =>
       !affectedBuildableNames.has(workspace.name) &&
       !hasDeclarationOutput(workspace)
+  );
+
+  // Always rebuild any buildable workspace whose declaration output is missing,
+  // even outside the changed-set closure. Catches fresh-worktree bootstrap where
+  // no source changed vs upstream but no packages have ever been built locally.
+  const closureMissingNames = new Set(closureMissing.map((w) => w.name));
+  const orphanMissing = [...workspaceGraph.byName.values()]
+    .filter((workspace) => workspace.buildable)
+    .filter(
+      (workspace) =>
+        !affectedBuildableNames.has(workspace.name) &&
+        !closureMissingNames.has(workspace.name) &&
+        !hasDeclarationOutput(workspace)
+    );
+
+  const missingBootstrapDeps = sortWorkspaces(
+    uniqueWorkspaces([...closureMissing, ...orphanMissing])
   );
 
   const targets = sortWorkspaces(
@@ -126,7 +137,7 @@ function createBuildPlan(changedNames, workspaceGraph) {
 
   return {
     affectedBuildables: sortWorkspaces(affectedBuildables),
-    bootstrapDeps: sortWorkspaces(missingBootstrapDeps),
+    bootstrapDeps: missingBootstrapDeps,
     targets,
   };
 }
