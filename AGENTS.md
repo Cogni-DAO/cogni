@@ -129,5 +129,3 @@ pnpm test:stack:dev           # stack tests (requires dev:stack:test running)
 ```
 
 `:fast` variants skip Docker rebuilds for faster startup.
-
-trailing whitespace line
