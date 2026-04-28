@@ -94,19 +94,27 @@
     "//#lint": {
       "inputs": [
         "biome.json",
+        "biome/*.json",
         "eslint.config.*",
         ".eslintrc*",
         ".eslintignore",
-        "nodes/operator/app/src/app/**/*.{ts,tsx,js,jsx}",
-        "nodes/operator/app/src/components/**/*.{ts,tsx,js,jsx}",
-        "nodes/operator/app/src/features/**/*.{ts,tsx,js,jsx}",
-        "nodes/operator/app/src/styles/**/*.{ts,tsx,js,jsx}"
+        "package.json",
+        "nodes/*/app/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
+        "!nodes/*/app/src/components/reui/**",
+        "packages/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
+        "services/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
+        "tests/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
+        "scripts/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
+        "infra/compose/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
+        "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}"
       ]
     },
     "//#format:check": {
       "inputs": [
         "**/*.{ts,tsx,js,jsx,mjs,cjs,json,md,yml,yaml}",
         "biome.json",
+        "biome/*.json",
+        "package.json",
         ".prettierrc*",
         ".prettierignore",
         "!**/dist/**",

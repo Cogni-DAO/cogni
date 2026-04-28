@@ -3,6 +3,7 @@ id: task.0415
 type: task
 title: "Speed up `pnpm check:fast` — collapse to one turbo DAG, drop test serialization, cache docs/db checks"
 status: needs_closeout
+revision: 1
 priority: 0
 rank: 1
 estimate: 3
@@ -214,6 +215,10 @@ The husky pre-push gate `pnpm check:fast` becomes fast enough that no agent or h
 - Modify: `turbo.json` — add `db:check` and `format:check` task definitions with `inputs:`. Confirm `lint` task already covers root lint.
 - Modify: `package.json` (root) — name the root workspace package so it's a turbo participant; expose `format:check` and root `lint` as scripts the turbo task can call.
 - Test: manual benchmark before/after on (a) clean `main` rerun (b) 1-file change (c) global build input change. Capture in PR description.
+
+## Review Feedback (revision 1)
+
+**B1 (fixed)**: First-cut `//#lint` inputs were narrow to `nodes/operator/app/src/{app,components,features,styles}` — that was the _ESLint_ scope, not the _biome_ scope. Biome's `files.includes` covers `nodes/*/app/**`, `packages/**`, `services/**`, `tests/**`, `scripts/**`, `infra/compose/**`, root files. The narrow inputs would have served stale-pass on biome violations introduced in those untracked paths (especially `scripts/` and `infra/compose/`). Fixed by expanding `inputs:` to mirror `biome.json`'s `files.includes`. Also added `package.json` to both `//#lint` and `//#format:check` so root script changes invalidate cache. Verified locally; CI green.
 
 ## Implementation Result
 
