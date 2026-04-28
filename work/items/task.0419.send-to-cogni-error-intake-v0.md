@@ -79,10 +79,9 @@ validate → start Temporal workflow → 202 with tracking id).
 **Auth: anonymous-allowed** so `(public)/error.tsx` can submit too;
 session userId is read best-effort and stored if present. Compensating
 controls: per-IP token-bucket rate limit (in-memory for v0, ~10/min)
-
-- hard byte caps in the Zod contract (see §3). **Reuses:**
-  `wrapRouteHandlerWithLogging`, `getTemporalWorkflowClient()`. **No
-  new service.**
+plus hard byte caps in the Zod contract (see "Compensating controls"
+below). **Reuses:** `wrapRouteHandlerWithLogging`,
+`getTemporalWorkflowClient()`. **No new service.**
 
 **2. Temporal vs Postgres outbox → Temporal.** Operator already runs
 `@temporalio/client` + a `scheduler-worker` process; adding one
