@@ -116,11 +116,33 @@ jobs:
           ref: ${{ needs.resolve.outputs.checkout_ref }}
           fetch-depth: 0
 
+      # Source-of-truth for "what this PR changed" is the GitHub
+      # `pulls/N/files` API — same list shown on the PR's Files Changed tab.
+      # `git diff origin/<base>...HEAD` is unsafe when this PR's branch was
+      # forked from another PR's branch: after the upstream PR is
+      # squash-merged, the orphaned commits stay reachable from this PR's
+      # head and pollute the diff with paths the PR never actually changed.
+      # See candidate-flight on PR #1088 → built all 4 nodes for a docs PR.
+      - id: pr-files
+        name: Fetch PR changed-paths from GitHub API
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
+          OUT: ${{ runner.temp }}/pr-changed-paths.txt
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/${{ github.repository }}/pulls/${PR_NUMBER}/files" \
+            --jq '.[].filename' > "$OUT"
+          COUNT=$(wc -l < "$OUT" | tr -d ' ')
+          echo "ℹ️  PR #${PR_NUMBER} changed ${COUNT} path(s) (per GitHub API)"
+          echo "changed_paths_file=$OUT" >> "$GITHUB_OUTPUT"
+
       - id: changed-catalog
         name: Detect catalog changes
+        env:
+          CHANGED_PATHS_FILE: ${{ steps.pr-files.outputs.changed_paths_file }}
         run: |
-          if git diff --name-only "origin/${{ needs.resolve.outputs.base_ref }}...HEAD" \
-             | grep -qE '^infra/catalog/'; then
+          if grep -qE '^infra/catalog/' "$CHANGED_PATHS_FILE"; then
             echo "catalog_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "catalog_changed=false" >> "$GITHUB_OUTPUT"
@@ -135,8 +157,7 @@ jobs:
       - name: Detect affected image targets
         id: detect
         env:
-          TURBO_SCM_BASE: origin/${{ needs.resolve.outputs.base_ref }}
-          TURBO_SCM_HEAD: HEAD
+          CHANGED_PATHS_FILE: ${{ steps.pr-files.outputs.changed_paths_file }}
         run: bash scripts/ci/detect-affected.sh
 
   build:
