@@ -176,9 +176,9 @@ jobs:
 
       # Re-tag only the images that were actually built (affected-only CI may skip services).
       # promote-and-deploy resolves preview-{sha} tags — this creates them without rebuilding.
-      # Source tags use pr_head_sha (matches pr-build.yml); destination uses head_sha
-      # (the commit on main) so promote-and-deploy can look up preview-{mainSHA}.
-      - name: Re-tag PR images as preview-{sha} in GHCR
+      # Source tag is mq-{N}-{HEAD_SHA} (pr-build merge_group output, bug.0412);
+      # destination is preview-{HEAD_SHA} so promote-and-deploy can look it up.
+      - name: Re-tag merge_group images as preview-{sha} in GHCR
         if: steps.pr.outputs.skip != 'true' && steps.images.outputs.has_images == 'true'
         env:
           PR_IMAGE_TAG: ${{ steps.pr.outputs.image_tag }}
@@ -221,7 +221,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
-          BUILD_SHA: ${{ steps.pr.outputs.pr_head_sha }}
+          # bug.0412 — pr-build (merge_group) bakes BUILD_SHA = queue commit
+          # = HEAD_SHA into the image, NOT the original PR head SHA. The
+          # source-sha-by-app map and verify-buildsha both assert against
+          # /version.buildSha, so build_sha here MUST equal HEAD_SHA.
+          BUILD_SHA: ${{ steps.pr.outputs.head_sha }}
           REPOSITORY: ${{ github.repository }}
           # task.0376: scope promote-and-deploy.yml's matrix to affected
           # targets (RESOLVED_TARGETS is space-delimited; convert to CSV).
