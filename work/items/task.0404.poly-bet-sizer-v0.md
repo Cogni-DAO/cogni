@@ -2,7 +2,7 @@
 id: task.0404
 type: task
 title: "Poly bet sizer v0 — `min_bet` SizingPolicy variant"
-status: needs_implement
+status: done
 priority: 1
 rank: 5
 estimate: 2
@@ -22,6 +22,12 @@ blocked_by: []
 deploy_verified: false
 created: 2026-04-27
 updated: 2026-04-27
+review_notes: |
+  Implementation reviewed 2026-04-27. APPROVE. Behavior is equivalent to the
+  prior `fixed` variant (no regression); the v0 outcome of "places real
+  min-bet orders on $2–$5 markets" only fully materializes after the
+  operator's grant `perOrderUsdcCap` is bumped from $1 to $5 — track that as
+  an out-of-band ops step in the closeout PR body.
 labels: [poly, polymarket, copy-trading, sizing, policy]
 external_refs:
   - nodes/poly/app/src/features/copy-trade/types.ts
