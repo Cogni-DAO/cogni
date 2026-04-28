@@ -454,10 +454,10 @@ describe("PolymarketClobAdapter", () => {
       attributes: { ...BASE_INTENT.attributes, post_only: true },
     });
     // postOnly path uses createAndPostOrder (limit) with GTC + postOnly=true.
-    // positional args: (userOrder, options, orderType, deferExec, postOnly)
+    // clob-client-v2 positional args: (userOrder, options, orderType, postOnly, deferExec).
     const call = createAndPostOrder.mock.calls[0] as unknown[];
     expect(call[2]).toBe("GTC");
-    expect(call[4]).toBe(true);
+    expect(call[3]).toBe(true);
   });
 
   it("placeOrder rejects when token_id attribute is missing", async () => {

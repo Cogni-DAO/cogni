@@ -41,22 +41,18 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@polymarket/clob-client-v2": "^1.0.2",
     "zod": "^3.24.0"
   },
   "peerDependencies": {
-    "@polymarket/clob-client": "^5.8.1",
     "viem": "^2.0.0"
   },
   "peerDependenciesMeta": {
-    "@polymarket/clob-client": {
-      "optional": true
-    },
     "viem": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@polymarket/clob-client": "^5.8.1",
     "tsup": "^8.5.1",
     "typescript": "^5",
     "viem": "^2.0.0"

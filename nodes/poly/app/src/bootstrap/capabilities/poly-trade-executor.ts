@@ -86,7 +86,8 @@ export async function createOrDerivePolymarketApiKeyForSigner({
   polygonRpcUrl?: string | undefined;
   host?: string | undefined;
 }): Promise<{ key: string; secret: string; passphrase: string }> {
-  const { ClobClient } = await import("@polymarket/clob-client");
+  // bug.0418 — clob-client-v2 takes an options object (not positional args).
+  const { ClobClient } = await import("@polymarket/clob-client-v2");
   const { createWalletClient, http } = await import("viem");
   const { polygon } = await import("viem/chains");
 
@@ -103,7 +104,11 @@ export async function createOrDerivePolymarketApiKeyForSigner({
   // Same cast rationale as above — dual-peerDep viem typing.
   // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
   const clobSignerAny: any = walletClient;
-  const clob = new ClobClient(host, POLYGON_CHAIN_ID, clobSignerAny);
+  const clob = new ClobClient({
+    host,
+    chain: POLYGON_CHAIN_ID,
+    signer: clobSignerAny,
+  });
   return clob.createOrDeriveApiKey();
 }
 

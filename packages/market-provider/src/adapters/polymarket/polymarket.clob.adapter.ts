@@ -18,12 +18,21 @@ import {
   type ApiKeyCreds,
   Chain,
   ClobClient,
-  type ClobSigner,
   OrderType,
   Side,
-  SignatureType,
+  SignatureTypeV2,
   type TickSize,
-} from "@polymarket/clob-client";
+} from "@polymarket/clob-client-v2";
+
+// clob-client-v2 declares `ClobSigner = EthersSigner | WalletClient` locally
+// but does not export it (1.0.2). The constructor's `signer` parameter type is
+// the canonical source — pluck it out via TS's parameter inference so we stay
+// in lockstep with the SDK without re-declaring its EthersSigner shape and
+// without depending on a specific viem version (we resolve viem@2.23.2 in this
+// repo while the SDK uses 2.39.3, and the WalletClient surface differs).
+type ClobSigner = NonNullable<
+  ConstructorParameters<typeof ClobClient>[0]["signer"]
+>;
 
 import type {
   GetOrderResult,
@@ -120,7 +129,7 @@ export interface PolymarketClobAdapterConfig {
   /** Chain id — defaults to Polygon mainnet (137). */
   chainId?: Chain;
   /** Signature type — defaults to EOA. Safe-proxy path is out of scope for P1. */
-  signatureType?: SignatureType;
+  signatureType?: SignatureTypeV2;
   /**
    * Structured-log sink. Defaults to a no-op; the node-app bootstrap should
    * pass a pino child logger bound with `{component: "poly-clob-adapter"}`.
@@ -178,14 +187,20 @@ export class PolymarketClobAdapter implements MarketProviderPort {
   constructor(config: PolymarketClobAdapterConfig) {
     this.funderAddress = config.funderAddress;
     this.chainId = config.chainId ?? Chain.POLYGON;
-    this.client = new ClobClient(
-      config.host ?? DEFAULT_CLOB_HOST,
-      this.chainId,
-      config.signer,
-      config.creds,
-      config.signatureType ?? SignatureType.EOA,
-      config.funderAddress
-    );
+    // bug.0418 — clob-client-v2 takes an options object (not positional args)
+    // and resolves the V1/V2 order envelope automatically based on the live
+    // exchange version. Replaces clob-client@5.8.1 which only signs against
+    // V1 exchange contracts (0x4bFb…982E / 0xC5d5…f80a) — Polymarket rolled
+    // V2 (0xE111… / 0xe222…) and rejects v1-signed orders with
+    // `order_version_mismatch`.
+    this.client = new ClobClient({
+      host: config.host ?? DEFAULT_CLOB_HOST,
+      chain: this.chainId,
+      signer: config.signer,
+      creds: config.creds,
+      signatureType: config.signatureType ?? SignatureTypeV2.EOA,
+      funderAddress: config.funderAddress,
+    });
     const baseLog = config.logger ?? noopLogger;
     this.log = baseLog.child({
       component: "poly-clob-adapter",
@@ -320,6 +335,9 @@ export class PolymarketClobAdapter implements MarketProviderPort {
       let response: unknown;
       if (postOnly) {
         orderTypeUsed = OrderType.GTC;
+        // clob-client-v2 swapped postOnly/deferExec arg order from v1:
+        //   v1: (order, options, orderType, deferExec, postOnly)
+        //   v2: (order, options, orderType, postOnly, deferExec)
         response = await this.client.createAndPostOrder(
           {
             tokenID: tokenId,
@@ -330,8 +348,8 @@ export class PolymarketClobAdapter implements MarketProviderPort {
           },
           { tickSize, negRisk },
           OrderType.GTC,
-          /* deferExec */ undefined,
-          /* postOnly */ true
+          /* postOnly */ true,
+          /* deferExec */ false
         );
       } else {
         orderTypeUsed = OrderType.FOK;
