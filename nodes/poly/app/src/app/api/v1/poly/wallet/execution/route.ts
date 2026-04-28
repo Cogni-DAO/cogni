@@ -114,14 +114,14 @@ export const GET = wrapRouteHandlerWithLogging(
       string,
       WalletExecutionLifecycleState
     >();
+    const tenantPipeline = container.redeemPipelineFor(account.id);
     if (
-      container.redeemPipeline &&
-      container.redeemPipeline.funderAddress.toLowerCase() ===
-        address.toLowerCase()
+      tenantPipeline &&
+      tenantPipeline.funderAddress.toLowerCase() === address.toLowerCase()
     ) {
       try {
-        const jobs = await container.redeemPipeline.redeemJobs.listForFunder(
-          container.redeemPipeline.funderAddress
+        const jobs = await tenantPipeline.redeemJobs.listForFunder(
+          tenantPipeline.funderAddress
         );
         for (const job of jobs) {
           lifecycleByConditionId.set(

@@ -4,11 +4,11 @@
 /**
  * Module: `@tests/unit/app/_facades/review/zod-version-cross-package.spec`
  * Purpose: Pin the cross-package Zod-version invariant — proves operator's `instanceof ZodError` recognizes errors thrown by `PrReviewWorkflowInputSchema` from `@cogni/temporal-workflows`.
- * Scope: Unit-level guard against the dual-instance bug fixed in task.0415 revision 3. Does not exercise dispatch logic or Temporal.
+ * Scope: Unit-level guard against the dual-instance bug fixed in task.0417 revision 3. Does not exercise dispatch logic or Temporal.
  * Invariants:
  *   - ZOD_VERSION_PARITY: schema parse errors are catchable via operator's `import { ZodError } from "zod"` — required for `dispatch.server.ts`'s structured-error log path to fire in production.
  * Side-effects: none
- * Links: task.0415, packages/temporal-workflows/src/workflows/pr-review.schema.ts
+ * Links: task.0417, packages/temporal-workflows/src/workflows/pr-review.schema.ts
  * @internal
  */
 

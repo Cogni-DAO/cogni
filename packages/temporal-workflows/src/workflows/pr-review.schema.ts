@@ -9,7 +9,7 @@
  *   - SINGLE_INPUT_CONTRACT: schema is the single source of truth (see Purpose).
  *   - DISPATCH_FAIL_FAST: producers parse with this schema before `workflowClient.start(...)`.
  * Side-effects: none
- * Links: task.0415, PR #1067 (modelRef-shape regression — the regression class this schema closes).
+ * Links: task.0417, PR #1067 (modelRef-shape regression — the regression class this schema closes).
  * @public
  */
 

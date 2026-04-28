@@ -66,6 +66,7 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 | Trading hardening — executor cache, cap-source column, prototype residue, agent tool re-enable                                    | Needs Triage    | 3   | [task.0354](../items/task.0354.poly-trading-hardening-followups.md)               |
 | Capability A — pure redeem policy + fixture audit (stops bug.0384 bleed; supersedes task.0379)                                    | Needs Implement | 3   | [task.0387](../items/task.0387.poly-redeem-policy-capability-a.md)                |
 | Capability B — event-driven redeem job queue (rips sweep + cooldown + mutex; removes SINGLE_POD_ASSUMPTION)                       | In Review       | 5   | [task.0388](../items/task.0388.poly-redeem-job-queue-capability-b.md)             |
+| Multi-tenant redeem fan-out — purge single-funder kill switch; per-tenant `(subscriber, worker)` keyed by `billingAccountId`      | In Review       | 1   | [task.0412](../items/task.0412.poly-redeem-multi-tenant-fanout.md)                |
 
 ### Phase 4 (P4) — Streaming + adversarial-robust ranking
 

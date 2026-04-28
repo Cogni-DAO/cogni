@@ -32,7 +32,7 @@ export default defineProject({
     globals: true,
     environment: "node",
     include: ["tests/**/*.{test,spec}.{ts,tsx}"],
-    exclude: ["node_modules", "dist"],
+    exclude: ["node_modules", "dist", "tests/external/**"],
     testTimeout: 10_000,
   },
 });

@@ -41,6 +41,7 @@
 | 0 | 1 | 1 | needs_merge | task.0408 | Port `loading.tsx` + `error.tsx` boundaries to poly + resy + node-template |  |  |
 | 0 | 1 | 5 | needs_design | task.0409 | Multi-tenant git-review routing — operator selects target repo (test vs prod) via per-tenant GitHub App | VCS Integration | proj.vcs-integration |
 | 0 | 1 | 2 | needs_closeout | task.0410 | Reviewer per-node routing — wire `extractOwningNode` into PrReviewWorkflow so PR webhooks load per-node `.cogni/rules/` | VCS Integration | proj.vcs-integration |
+| 0 | 1 | 1 | needs_implement | task.0412 | Poly CTF redeem pipeline — multi-tenant fan-out (purge single-funder kill switch) | Cogni Poly | proj.poly-copy-trading |
 | 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
 | 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -290,7 +291,7 @@
 | 3 | 50 | 2 | needs_design | task.0390 | flatten `nodes/node-template/` migration baseline to a single 0000 fresh-start | Database Operations | proj.database-ops |
 | 3 | 80 | 3 | needs_design | task.0146 | Extract payments application orchestration + billing ports into packages | AI Operator Wallet | proj.ai-operator-wallet |
 | 3 | 80 | 5 | needs_design | task.0325 | Atlas + GitOps migrations (future upgrade, deferred) | Database Operations | proj.database-ops |
-| 3 | 95 | 2 | needs_design | task.0412 | Operator recovery from merge-queue cancellation: find + re-PR + re-queue dropped PRs | CI/CD Pipeline | proj.cicd-services-gitops |
+| 3 | 95 | 2 | needs_design | task.0416 | Operator recovery from merge-queue cancellation: find + re-PR + re-queue dropped PRs | CI/CD Pipeline | proj.cicd-services-gitops |
 | 3 | 96 | 5 | needs_design | task.0413 | Promote Cogni-DAO/test-repo to a basic operator-template scaffold (turbo + real CICD + merge queue) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 3 | 99 | 1 | needs_triage | task.0098 | Temporal retry workflow for failed identity bindings + scheduled backstop | User Identity Bindings + DID Readiness | proj.decentralized-identity |
 | 3 | 99 | 1 | needs_triage | bug.0150 | getAllReceipts query is unbounded — will degrade at scale |  |  |
@@ -360,7 +361,8 @@
 | 0 | task.0361 | Poly — first-user onboarding flow v0 (sign-on → provision → fund → select targets) | Cogni Poly | proj.poly-copy-trading |
 | 0 | task.0381 | Single-node-scope CI gate — reject PRs that touch >1 node domain (operator owns repo infra) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | bug.0383 | poly CTF redeem sweep loops on losing-outcome ERC1155 — bug.0376 fix-of-fix | Poly Web3 Security Hardening | proj.poly-web3-security-hardening |
-| 0 | task.0415 | PrReviewWorkflowInput Zod schema + contract test — fix modelRef-shape regression class | VCS Integration | proj.vcs-integration |
+| 0 | task.0415 | Speed up `pnpm check:fast` — collapse to one turbo DAG, drop test serialization, cache docs/db checks |  |  |
+| 0 | task.0417 | PrReviewWorkflowInput Zod schema + contract test — fix modelRef-shape regression class | VCS Integration | proj.vcs-integration |
 | 1 | task.0006 | Collapse GraphProvider into GraphExecutorPort — single execution interface + namespace routing | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0007 | Billing enforcement decorator at GraphExecutorPort level | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0010 | OpenClaw gateway model selection — session-level override or agent-per-specialty | OpenClaw Capabilities Integration | proj.openclaw-capabilities |

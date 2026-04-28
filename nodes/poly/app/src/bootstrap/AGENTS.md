@@ -53,8 +53,8 @@ System setup installers were moved to `scripts/bootstrap/` and are out of scope 
   - `resetContainer()` - Reset singleton (tests only)
   - `startPolyPublishers(deps)` - Start health (60s) + market snapshot (60s) publishers to node stream
   - `Container` interface - Ports + logger + config (includes accountsForUser(userId), serviceAccountService, metricsQuery, metricsCapability, repoCapability, toolSource, threadPersistenceForUser(userId), modelCatalog, providerResolver, nodeStream, redeemPipeline; no usageService)
-  - `Container.redeemPipeline` - `{ redeemJobs: RedeemJobsPort, funderAddress } | null` — event-driven CTF redeem pipeline; `null` when no active `poly_wallet_connections` row at boot (task.0388)
-  - `startRedeemPipeline(deps)` - From `redeem-pipeline.ts`. Boots one `RedeemSubscriber` (3 viem `watchContractEvent` subs) + one `RedeemWorker` (drains pending + reaps stale at N=5) + a one-shot catch-up replay + lifecycle backfill against current funder positions. v0.2 single-funder; >1 active connection ⇒ no-op + warn (task.0318 Phase C)
+  - `Container.redeemPipelineFor(billingAccountId)` - `{ redeemJobs: RedeemJobsPort, funderAddress } | null` — event-driven CTF redeem pipeline scoped to one tenant; `null` when that tenant has no active `poly_wallet_connections` row (task.0388 + task.0412 multi-tenant)
+  - `startRedeemPipelines(deps)` - From `redeem-pipeline.ts`. For each active `poly_wallet_connections` row, boots one `RedeemSubscriber` (3 viem `watchContractEvent` subs) + one `RedeemWorker` (drains pending + reaps stale at N=5, claim is funder-scoped) + a one-shot catch-up replay + lifecycle backfill against that funder's positions. Returns a `Map<billingAccountId, RedeemPipelineHandles>`. (task.0412 retired the v0.2 single-funder kill switch.)
   - `ContainerConfig` interface - Runtime config (unhandledErrorPolicy, rateLimitBypass, DEPLOY_ENVIRONMENT)
   - `UnhandledErrorPolicy` type - `"rethrow" | "respond_500"`
   - `getTemporalWorkflowClient()` - Process-wide Temporal WorkflowClient singleton (race-safe init, cleaned up by resetContainer)

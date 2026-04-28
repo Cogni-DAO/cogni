@@ -80,11 +80,14 @@ export interface RedeemJobsPort {
   enqueue(input: EnqueueRedeemJobInput): Promise<EnqueueRedeemJobResult>;
 
   /**
-   * Atomically claim the next `status='pending'` row using
-   * `SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1`. Two concurrent workers
-   * never claim the same row.
+   * Atomically claim the next `status='pending'` row for `funderAddress` using
+   * `SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1`. Two concurrent workers — even
+   * for the same funder — never claim the same row. Cross-tenant claims are
+   * impossible because the predicate is funder-scoped: a worker bound to
+   * funder A never picks up a job for funder B (the calling worker would sign
+   * with the wrong wallet, which is the bug the multi-tenant fan-out closes).
    */
-  claimNextPending(): Promise<RedeemJob | null>;
+  claimNextPending(funderAddress: `0x${string}`): Promise<RedeemJob | null>;
 
   /**
    * Reaper — rows in `status='submitted'` whose `submitted_at_block + N <= head`

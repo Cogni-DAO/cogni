@@ -215,6 +215,7 @@
         "packages/cogni-contracts/tsup.config.ts",
         "packages/langgraph-graphs/tsup.config.ts",
         "packages/langgraph-graphs/vitest.config.ts",
+        "packages/langgraph-graphs/vitest.external.config.ts",
         "packages/graph-execution-core/tsup.config.ts",
         "packages/scheduler-core/tsup.config.ts",
         "packages/db-client/tsup.config.ts",

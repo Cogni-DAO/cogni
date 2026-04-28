@@ -3,24 +3,29 @@
 
 /**
  * Module: `@bootstrap/redeem-pipeline`
- * Purpose: Construct + start the event-driven CTF redeem pipeline at boot —
- *   one `RedeemSubscriber` (3 viem `watchContractEvent` subscriptions) +
- *   one `RedeemWorker` (drains pending jobs + reaps stale submitted rows
- *   at N=5 finality) + one catch-up replay against `last_processed_block`.
- *   Replaces the deleted `runRedeemSweep` polling loop in `poly-trade-executor.ts`.
- * Scope: v0.2 binds the pipeline to a single funder (the one active
- *   `poly_wallet_connections` row). Multi-tenant fan-out is task.0318 Phase C.
- *   When >1 active connection is present, the pipeline does not start and a
- *   warning is logged so the migration is forced rather than silently
- *   selecting one tenant's wallet.
+ * Purpose: Construct + start the event-driven CTF redeem pipeline at boot.
+ *   For each active `poly_wallet_connections` row, instantiate one
+ *   `RedeemSubscriber` (3 viem `watchContractEvent` subscriptions) +
+ *   one `RedeemWorker` (drains pending jobs scoped to that funder + reaps
+ *   stale submitted rows at N=5 finality) + one catch-up replay against
+ *   `last_processed_block`. Replaces the deleted `runRedeemSweep` polling
+ *   loop in `poly-trade-executor.ts`.
+ * Scope: Multi-tenant (task.0412). One pipeline instance per active
+ *   `poly_wallet_connections` row. Workers claim jobs with a funder filter
+ *   so cross-tenant claims are impossible. 0 active rows → no-op.
  * Invariants:
- *   - SINGLE_FUNDER_V0_2 — exactly one `poly_wallet_connections` row may be
- *     active when the pipeline starts. 0 → no-op (skip); 2+ → no-op (warn).
- *   - PIPELINE_BINDS_AT_BOOT — funder + signer are resolved once at start;
- *     a wallet revoke + re-provision requires a pod restart. Acceptable for
- *     v0.2 (1 user); refactor path is Phase C.
+ *   - PIPELINE_PER_TENANT — exactly one `(subscriber, worker)` pair per
+ *     active `poly_wallet_connections` row at boot. Wallet revoke + re-
+ *     provision still requires a pod restart for that tenant's pipeline
+ *     to pick up the new signing context (acceptable for v1; dynamic
+ *     registry is a future opt).
+ *   - WORKER_CLAIM_IS_FUNDER_SCOPED — `RedeemJobsPort.claimNextPending(funder)`
+ *     is the only contention-safe surface; cross-tenant claims would sign
+ *     a job for funder A with funder B's wallet, which the contract would
+ *     revert on but waste gas + emit noisy errors.
  * Side-effects: IO (DB query at boot, Polygon RPC long-poll while running).
- * Links: docs/design/poly-positions.md, work/items/task.0388
+ * Links: docs/design/poly-positions.md, work/items/task.0388,
+ *   work/items/task.0412, work/items/task.0318
  * @public
  */
 
@@ -53,6 +58,7 @@ import type { RedeemJobsPort } from "@/ports";
 export interface RedeemPipelineHandles {
   redeemJobs: RedeemJobsPort;
   funderAddress: `0x${string}`;
+  billingAccountId: string;
   stop: () => void;
 }
 
@@ -74,9 +80,13 @@ export interface StartRedeemPipelineDeps {
   initialFromBlock?: bigint;
 }
 
-export async function startRedeemPipeline(
+/**
+ * Boot every active tenant's redeem pipeline. Returns a map keyed by
+ * `billingAccountId`. Empty map = no active wallets at boot.
+ */
+export async function startRedeemPipelines(
   deps: StartRedeemPipelineDeps
-): Promise<RedeemPipelineHandles | null> {
+): Promise<Map<string, RedeemPipelineHandles>> {
   const log = deps.log.child({ subcomponent: "redeem-pipeline" });
 
   const activeConnections = await deps.serviceDb
@@ -87,24 +97,36 @@ export async function startRedeemPipeline(
   if (activeConnections.length === 0) {
     log.info(
       { event: "poly.ctf.redeem.pipeline_skipped", reason: "no_active_wallet" },
-      "redeem pipeline: no active poly_wallet_connections row; not starting"
+      "redeem pipeline: no active poly_wallet_connections rows; nothing to start"
     );
-    return null;
-  }
-  if (activeConnections.length > 1) {
-    log.warn(
-      {
-        event: "poly.ctf.redeem.pipeline_skipped",
-        reason: "multi_tenant_unsupported",
-        count: activeConnections.length,
-      },
-      "redeem pipeline: >1 active poly_wallet_connections — v0.2 binds a single funder; refactor required (task.0318 Phase C)"
-    );
-    return null;
+    return new Map();
   }
 
-  const billingAccountId = activeConnections[0]?.billingAccountId;
-  if (!billingAccountId) return null;
+  const pipelines = new Map<string, RedeemPipelineHandles>();
+  for (const { billingAccountId } of activeConnections) {
+    if (!billingAccountId) continue;
+    const handles = await startOneTenantPipeline(billingAccountId, deps, log);
+    if (handles !== null) pipelines.set(billingAccountId, handles);
+  }
+
+  log.info(
+    {
+      event: "poly.ctf.redeem.pipelines_boot_complete",
+      tenant_count: pipelines.size,
+      active_connections: activeConnections.length,
+    },
+    "redeem pipeline: boot complete"
+  );
+
+  return pipelines;
+}
+
+async function startOneTenantPipeline(
+  billingAccountId: string,
+  deps: StartRedeemPipelineDeps,
+  parentLog: Logger
+): Promise<RedeemPipelineHandles | null> {
+  const log = parentLog.child({ billing_account_id: billingAccountId });
 
   let signing: PolyTraderSigningContext | null;
   try {
@@ -116,7 +138,7 @@ export async function startRedeemPipeline(
         reason: "wallet_resolve_failed",
         err: err instanceof Error ? err.message : String(err),
       },
-      "redeem pipeline: walletPort.resolve threw; not starting"
+      "redeem pipeline: walletPort.resolve threw; skipping this tenant"
     );
     return null;
   }
@@ -126,7 +148,7 @@ export async function startRedeemPipeline(
         event: "poly.ctf.redeem.pipeline_skipped",
         reason: "no_signing_context",
       },
-      "redeem pipeline: walletPort.resolve returned null; not starting"
+      "redeem pipeline: walletPort.resolve returned null; skipping this tenant"
     );
     return null;
   }
@@ -221,6 +243,7 @@ export async function startRedeemPipeline(
   return {
     redeemJobs,
     funderAddress,
+    billingAccountId,
     stop: () => {
       subscriber.stop();
       worker.stop();

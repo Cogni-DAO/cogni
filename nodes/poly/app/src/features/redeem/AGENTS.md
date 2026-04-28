@@ -68,5 +68,5 @@ Event-driven CTF redeem pipeline (task.0388). Replaces the deleted polling sweep
 
 ## Notes
 
-- The pipeline is single-funder for v0.2 (one active `poly_wallet_connections` row). Multi-tenant fan-out is task.0318 Phase C.
+- The pipeline is multi-tenant (task.0412): one `(subscriber, worker)` pair per active `poly_wallet_connections` row, each bound to its tenant's `funderAddress`. Workers claim jobs via funder-scoped `claimNextPending(funder)`, so cross-tenant claims are impossible.
 - Skip-classification rows (`status='skipped'`) carry no work for the worker; they exist purely to back the dashboard's lifecycle projection (`/api/v1/poly/wallet/execution`).

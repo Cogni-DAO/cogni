@@ -297,11 +297,13 @@ export interface Container {
    */
   reconcilerLastTickAt: () => Date | null;
   /**
-   * Event-driven CTF redeem pipeline (task.0388). `null` when no active
-   * `poly_wallet_connections` row was found at boot. Routes that enqueue
-   * manual redeem jobs use `redeemPipeline.redeemJobs` + `funderAddress`.
+   * Event-driven CTF redeem pipeline (task.0388 + task.0412 multi-tenant).
+   * Returns the per-tenant pipeline for `billingAccountId`, or `null` when
+   * the tenant has no active `poly_wallet_connections` row (wallet not yet
+   * provisioned, or revoked since boot). Routes that enqueue manual redeem
+   * jobs resolve their session's billing account, then look up here.
    */
-  redeemPipeline: {
+  redeemPipelineFor(billingAccountId: string): {
     redeemJobs: import("@/ports").RedeemJobsPort;
     funderAddress: `0x${string}`;
   } | null;
@@ -876,27 +878,31 @@ function createContainer(): Container {
     );
   }
 
-  // task.0388 — event-driven redeem pipeline. Replaces the deleted
-  // `runRedeemSweep` polling loop. Bound to the single active
-  // `poly_wallet_connections` row at boot (v0.2 single-funder); skipped
+  // task.0388 + task.0412 — event-driven redeem pipeline. Replaces the
+  // deleted `runRedeemSweep` polling loop. One pipeline per active
+  // `poly_wallet_connections` row at boot (multi-tenant fan-out); skipped
   // when the trader-wallet adapter is unconfigured. Fire-and-forget like
-  // the mirror loop above; `redeemPipelineHandles` is read via a getter
-  // on the container so routes pick up the value once start completes.
-  let redeemPipelineHandles:
-    | import("./redeem-pipeline").RedeemPipelineHandles
-    | null = null;
+  // the mirror loop above; the per-tenant map is read via a getter on the
+  // container so routes pick up entries once boot completes.
+  const redeemPipelineHandlesByAccount = new Map<
+    string,
+    import("./redeem-pipeline").RedeemPipelineHandles
+  >();
   if (env.POLYGON_RPC_URL) {
     const polygonRpcUrl = env.POLYGON_RPC_URL;
     void (async () => {
       try {
         const walletPort = getPolyTraderWalletAdapter(log);
-        const { startRedeemPipeline } = await import("./redeem-pipeline");
-        redeemPipelineHandles = await startRedeemPipeline({
+        const { startRedeemPipelines } = await import("./redeem-pipeline");
+        const map = await startRedeemPipelines({
           serviceDb,
           walletPort,
           polygonRpcUrl,
           log,
         });
+        for (const [accountId, handles] of map) {
+          redeemPipelineHandlesByAccount.set(accountId, handles);
+        }
       } catch (err) {
         if (err instanceof WalletAdapterUnconfiguredError) {
           log.info(
@@ -1171,11 +1177,12 @@ function createContainer(): Container {
     reconcilerLastTickAt() {
       return _reconcilerHandle?.getLastTickAt() ?? null;
     },
-    get redeemPipeline() {
-      return redeemPipelineHandles
+    redeemPipelineFor(billingAccountId: string) {
+      const handles = redeemPipelineHandlesByAccount.get(billingAccountId);
+      return handles
         ? {
-            redeemJobs: redeemPipelineHandles.redeemJobs,
-            funderAddress: redeemPipelineHandles.funderAddress,
+            redeemJobs: handles.redeemJobs,
+            funderAddress: handles.funderAddress,
           }
         : null;
     },

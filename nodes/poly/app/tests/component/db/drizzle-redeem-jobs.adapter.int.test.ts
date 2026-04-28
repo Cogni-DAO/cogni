@@ -68,7 +68,7 @@ describe("DrizzleRedeemJobsAdapter (Component) — Blocker #2 regression", () =>
     });
     expect(result.alreadyExisted).toBe(false);
 
-    const claimed = await adapter.claimNextPending();
+    const claimed = await adapter.claimNextPending(FUNDER);
     expect(claimed).not.toBeNull();
     expect(claimed?.id).toBe(result.jobId);
     expect(claimed?.status).toBe("claimed");
@@ -130,15 +130,15 @@ describe("DrizzleRedeemJobsAdapter (Component) — Blocker #2 regression", () =>
     });
 
     const [a, b] = await Promise.all([
-      adapter.claimNextPending(),
-      adapter.claimNextPending(),
+      adapter.claimNextPending(FUNDER),
+      adapter.claimNextPending(FUNDER),
     ]);
     expect(a).not.toBeNull();
     expect(b).not.toBeNull();
     expect(a?.id).not.toBe(b?.id);
     expect([a?.status, b?.status]).toEqual(["claimed", "claimed"]);
 
-    const third = await adapter.claimNextPending();
+    const third = await adapter.claimNextPending(FUNDER);
     expect(third).toBeNull(); // pool drained
   });
 
@@ -186,8 +186,54 @@ describe("DrizzleRedeemJobsAdapter (Component) — Blocker #2 regression", () =>
 
     // And the worker still cannot claim it — `claimNextPending` filters
     // on status IN ('pending', 'failed_transient').
-    const claimed = await adapter.claimNextPending();
+    const claimed = await adapter.claimNextPending(FUNDER);
     expect(claimed).toBeNull();
+  });
+
+  it("claimNextPending is funder-scoped — funder A never claims funder B's row (task.0412 multi-tenant fan-out)", async () => {
+    const FUNDER_B = "0xbbbb000000000000000000000000000000000002" as const;
+    try {
+      // Two pending rows for two different funders.
+      await adapter.enqueue({
+        funderAddress: FUNDER,
+        conditionId: COND,
+        positionId: POSITION_ID,
+        outcomeIndex: 0,
+        flavor: "binary",
+        indexSet: ["1", "2"],
+        expectedShares: "1",
+        expectedPayoutUsdc: "1",
+        lifecycleState: "winner",
+      });
+      await adapter.enqueue({
+        funderAddress: FUNDER_B,
+        conditionId: COND_OTHER,
+        positionId: POSITION_ID,
+        outcomeIndex: 0,
+        flavor: "binary",
+        indexSet: ["1", "2"],
+        expectedShares: "1",
+        expectedPayoutUsdc: "1",
+        lifecycleState: "winner",
+      });
+
+      // Funder A's worker claims A's row. Funder B's row stays pending.
+      const aClaimed = await adapter.claimNextPending(FUNDER);
+      expect(aClaimed?.funderAddress).toBe(FUNDER);
+
+      // Funder A then sees nothing — its only pending row is now claimed.
+      const aSecond = await adapter.claimNextPending(FUNDER);
+      expect(aSecond).toBeNull();
+
+      // Funder B's worker still finds its own row untouched.
+      const bClaimed = await adapter.claimNextPending(FUNDER_B);
+      expect(bClaimed?.funderAddress).toBe(FUNDER_B);
+      expect(bClaimed?.id).not.toBe(aClaimed?.id);
+    } finally {
+      await db.execute(
+        sql`DELETE FROM ${polyRedeemJobs} WHERE funder_address = ${FUNDER_B}`
+      );
+    }
   });
 
   it("findByKey + listForFunder reflect the row state after enqueue", async () => {

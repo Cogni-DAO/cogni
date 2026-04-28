@@ -2,11 +2,11 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/langgraph-graphs/tests/inproc/mcp-real-server`
- * Purpose: Integration test — load tools from a real MCP server via stdio transport.
- * Scope: Validates loadMcpTools() against @modelcontextprotocol/server-everything. Does NOT test bootstrap wiring.
- * Invariants: none (integration tests)
- * Side-effects: IO (spawns MCP server subprocess via stdio)
+ * Module: `@cogni/langgraph-graphs/tests/external/mcp-real-server`
+ * Purpose: External integration test — load tools from a real MCP server via stdio transport.
+ * Scope: Validates loadMcpTools() against @modelcontextprotocol/server-everything (downloaded via npx). NOT in default CI.
+ * Invariants: none (external integration tests; require network + npm registry access)
+ * Side-effects: IO (spawns MCP server subprocess via stdio; downloads npm package on first run)
  * Links: {@link ../../src/runtime/mcp/client.ts loadMcpTools}
  * @internal
  */

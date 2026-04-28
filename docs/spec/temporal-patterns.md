@@ -63,7 +63,7 @@ Ensure all Temporal workflows are replay-safe, Workflow code performs no I/O dir
 
 9. **WORKFLOW_TOP_LEVEL_VISIBILITY**: User/admin UI shows Workflow executions as the primary object. Graph runs are drill-down detail linked from Workflow steps. The dashboard's live view lists Workflow runs; expanding a run reveals its child graph run stream.
 
-10. **SINGLE_INPUT_CONTRACT**: Each parent workflow's input shape is defined exactly once as a `.strict()` Zod schema in `packages/temporal-workflows/src/workflows/<name>.schema.ts`, consumed via `z.infer<typeof Schema>` at every call site. Producers parse with the schema before `workflowClient.start(...)`. Reference: `pr-review.schema.ts` (task.0415).
+10. **SINGLE_INPUT_CONTRACT**: Each parent workflow's input shape is defined exactly once as a `.strict()` Zod schema in `packages/temporal-workflows/src/workflows/<name>.schema.ts`, consumed via `z.infer<typeof Schema>` at every call site. Producers parse with the schema before `workflowClient.start(...)`. Reference: `pr-review.schema.ts` (task.0417).
 
 ## Design
 

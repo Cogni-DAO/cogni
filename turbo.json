@@ -90,6 +90,46 @@
         "OPENROUTER_PROVISIONING_KEY",
         "OPENROUTER_WALLET_SEED_PHRASE"
       ]
+    },
+    "//#lint": {
+      "inputs": [
+        "biome.json",
+        "biome/*.json",
+        "eslint.config.*",
+        ".eslintrc*",
+        ".eslintignore",
+        "package.json",
+        "nodes/*/app/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
+        "!nodes/*/app/src/components/reui/**",
+        "packages/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
+        "services/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
+        "tests/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
+        "scripts/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
+        "infra/compose/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
+        "*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}"
+      ]
+    },
+    "//#format:check": {
+      "inputs": [
+        "**/*.{ts,tsx,js,jsx,mjs,cjs,json,md,yml,yaml}",
+        "biome.json",
+        "biome/*.json",
+        "package.json",
+        ".prettierrc*",
+        ".prettierignore",
+        "!**/dist/**",
+        "!**/.next/**",
+        "!**/node_modules/**"
+      ]
+    },
+    "//#db:check": {
+      "inputs": [
+        "nodes/*/drizzle.config.ts",
+        "nodes/*/drizzle.doltgres.config.ts",
+        "nodes/*/packages/db-schema/**",
+        "nodes/*/packages/doltgres-schema/**",
+        "nodes/*/migrations/**"
+      ]
     }
   }
 }

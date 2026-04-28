@@ -50,7 +50,7 @@ Consolidate all VCS integration into this repo: a shared auth package (`packages
 | `extractNodePath` accessor + `@cogni/repo-spec/testing` fixtures                      | In Review   | 1   | task.0380            |
 | `extractOwningNode` resolver — paths → owning nodeId (P0)                             | Done        | 1   | task.0382            |
 | Reviewer per-node routing — wire `extractOwningNode` into `PrReviewWorkflow`          | In Review   | 2   | task.0410            |
-| `PrReviewWorkflowInputSchema` Zod contract — close modelRef-shape regression class    | In Review   | 1   | task.0415            |
+| `PrReviewWorkflowInputSchema` Zod contract — close modelRef-shape regression class    | In Review   | 1   | task.0417            |
 | Admin handler — merge PR, grant/revoke collaborator (on-chain authorized)             | Not Started | 2   | (create at P1 start) |
 | Onchain webhook — Alchemy HMAC verify + CogniAction parse                             | Not Started | 1   | (create at P1 start) |
 | Authorization policy — DAO allowlist enforcement                                      | Not Started | 1   | (create at P1 start) |

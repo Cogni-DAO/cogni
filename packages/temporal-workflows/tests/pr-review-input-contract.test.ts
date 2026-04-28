@@ -9,7 +9,7 @@
  *   - SINGLE_INPUT_CONTRACT: A canonical fixture representing a real dispatch payload validates without error.
  *   - DISPATCH_FAIL_FAST: Misshapen fixtures (missing field, wrong type, empty string, typo'd name) reject at parse time.
  * Side-effects: none
- * Links: task.0415, packages/temporal-workflows/src/workflows/pr-review.schema.ts
+ * Links: task.0417, packages/temporal-workflows/src/workflows/pr-review.schema.ts
  * @internal
  */
 

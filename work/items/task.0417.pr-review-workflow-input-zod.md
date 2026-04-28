@@ -1,5 +1,5 @@
 ---
-id: task.0415
+id: task.0417
 type: task
 title: "PrReviewWorkflowInput Zod schema + contract test — fix modelRef-shape regression class"
 status: done
@@ -101,7 +101,7 @@ Add `PrReviewWorkflowInputSchema = z.object({...})` in `packages/temporal-workfl
 ### Blocking (resolved in revision 2)
 
 - **B1 — Stale base branch.** Branch `feat/task-0410-pr-review-input-zod` was based on `cb2d46355`; PR #1098 (`33aa1a003`) merged in between. Diff against current `origin/main` showed ~1100 lines of regressions. Rebased onto current `origin/main`. Auto-merge resolved code-side conflicts in `pr-review.workflow.ts` and `index.ts`; the only manual conflict was `_index.md` (regenerated post-rename).
-- **B2 — Task ID collision.** PR #1098 renumbered the dev's `task.0403` → `task.0410` at merge, taking the ID. My filing renumbered to `task.0415` (next available — my originally-filed `task.0415` tenant-config-audit was dropped from PR #1098's merge, so the slot reopened). Branch renamed to `feat/task-0412-pr-review-input-zod`. References in `task.0407`, `task.0411`, this file, and the schema file's docstring updated to point at `task.0415`.
+- **B2 — Task ID collision.** PR #1098 renumbered the dev's `task.0403` → `task.0410` at merge, taking the ID. My filing renumbered to `task.0417` (next available — my originally-filed `task.0417` tenant-config-audit was dropped from PR #1098's merge, so the slot reopened). Branch renamed to `feat/task-0412-pr-review-input-zod`. References in `task.0407`, `task.0411`, this file, and the schema file's docstring updated to point at `task.0417`.
 - **B3 — Missing ZodError handling in dispatch.** `dispatch.server.ts` now catches `ZodError` distinctly from `WorkflowExecutionAlreadyStartedError`, logs structured `issues` payload to Pino at `error` level with a separate message, and returns. Drift bugs are now queryable in Loki separately from infra failures.
 
 ### Suggestions (applied in revision 2)
@@ -146,4 +146,4 @@ Add `PrReviewWorkflowInputSchema = z.object({...})` in `packages/temporal-workfl
 
 ### Renumbering (B3 from this round)
 
-PR #1107 (merge-queue tracking) merged `task.0412` and `task.0413` while this PR was in review. My filing renumbered `task.0412` → `task.0415` (next available). Branch renamed `feat/task-0412-*` → `feat/task-0415-*`. PR #1109 retitled to match.
+PR #1107 (merge-queue tracking) merged `task.0412` and `task.0413` while this PR was in review. My filing renumbered `task.0412` → `task.0417` (next available). Branch renamed `feat/task-0412-*` → `feat/task-0415-*`. PR #1109 retitled to match.

@@ -109,23 +109,29 @@ if [ "$VERBOSE" = true ]; then
 fi
 
 # Rebuild only the package declarations needed for affected workspace checks.
+# Phase-2 follow-up will eliminate this prebuild via TS project references / isolatedDeclarations.
 run_check "packages:build" "node scripts/run-scoped-package-build.mjs"
-run_check "workspace:typecheck" "bash scripts/run-turbo-checks.sh typecheck"
 
+# In --fix mode, run lint and prettier auto-fix as a pre-pass so the verify-only turbo run
+# below sees the auto-fixed tree (lint:fix mutates files; turbo would cache stale state otherwise).
 if [ "$FIX_MODE" = true ]; then
-  run_check "lint" "pnpm lint:fix"
-else
-  run_check "lint" "pnpm lint"
-fi
-run_check "workspace:lint" "bash scripts/run-turbo-checks.sh lint"
-if [ "$FIX_MODE" = true ]; then
+  run_check "lint:fix" "pnpm lint:fix"
   run_check "format" "pnpm format"
-else
-  run_check "format" "pnpm format:check"
 fi
+
+# One turbo invocation drives all parallel-safe checks: per-package lint + typecheck + test,
+# plus root-level //#lint, //#format:check, //#db:check (defined in turbo.json).
+# All participate in the same DAG so Turbo can schedule across the whole graph and cache per
+# task hash. Re-runs on no-change hit cache in <1s per task.
+#
+# --concurrency=50% bounds parallelism to half the CPU count to prevent vitest fork-pool
+# exhaustion (the original reason for --concurrency=1 — see commit 42b2b432b). Scales with
+# hardware: 8-core dev → 4 parallel; 4-core CI → 2 parallel; 16-core → 8.
+run_check "workspace" "bash scripts/run-turbo-checks.sh lint typecheck test format:check db:check --concurrency=50%"
+
+# check:docs stays outside the turbo graph for now — it regenerates work/items/_index.md via
+# work:index, which makes its output also an input. Caching is deferred to a separate task.
 run_check "check:docs" "pnpm -s check:docs"
-run_check "db:check" "pnpm -s db:check"
-run_check "workspace:test" "bash scripts/run-turbo-checks.sh test --concurrency=1"
 
 # Drift check — flag any content-level mutation caused *by this script* (ignore pre-existing WIP).
 # In strict mode this catches check:docs regenerating _index.md or other surprise writes.

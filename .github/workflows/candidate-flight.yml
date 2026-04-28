@@ -73,15 +73,34 @@ jobs:
           TARGET_URL: ${{ steps.meta.outputs.status_url }}
         run: bash scripts/ci/report-candidate-status.sh
 
+      # Use the GitHub PR `files` API (same list as the Files Changed tab)
+      # as the authoritative changed-paths source. `git diff origin/main...HEAD`
+      # is unreliable here: when a branch is forked from a sibling branch
+      # that later gets squash-merged into main, the original commits stay
+      # reachable from HEAD and pollute the merge-base diff with paths the
+      # PR never actually changed.
+      - name: Fetch PR changed-paths from GitHub API
+        id: pr-files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          OUT: ${{ runner.temp }}/pr-changed-paths.txt
+        run: |
+          set -euo pipefail
+          # Emit both filename and previous_filename so cross-directory
+          # renames trigger rebuilds for the source side too (otherwise
+          # renaming nodes/A/x.ts → nodes/B/x.ts only rebuilds B).
+          gh api --paginate "repos/${{ github.repository }}/pulls/${PR_NUMBER}/files" \
+            --jq '.[] | (.filename, .previous_filename) | select(. != null)' > "$OUT"
+          COUNT=$(wc -l < "$OUT" | tr -d ' ')
+          echo "ℹ️  PR #${PR_NUMBER} changed ${COUNT} path(s) (per GitHub API)"
+          echo "changed_paths_file=$OUT" >> "$GITHUB_OUTPUT"
+
       - name: Detect affected nodes
         id: detect
         env:
-          TURBO_SCM_BASE: origin/main
-          TURBO_SCM_HEAD: ${{ steps.meta.outputs.head_sha }}
-        run: |
-          set -euo pipefail
-          git fetch origin "${{ steps.meta.outputs.head_sha }}" --depth=100 || true
-          bash scripts/ci/detect-affected.sh
+          CHANGED_PATHS_FILE: ${{ steps.pr-files.outputs.changed_paths_file }}
+        run: bash scripts/ci/detect-affected.sh
 
       - name: Set up Docker Buildx
         if: steps.detect.outputs.has_targets == 'true'

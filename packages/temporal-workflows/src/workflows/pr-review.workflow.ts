@@ -15,12 +15,12 @@
  *     tokens spent. Owning domain is resolved inside `fetchPrContextActivity` via
  *     `extractOwningNode`; the workflow only dispatches on `kind`.
  *   - TYPED_TERMINAL_ARTIFACT: GraphRunWorkflow child returns structuredOutput for parent consumption
- *   - Per SINGLE_INPUT_CONTRACT (task.0415): input shape is defined exactly once
+ *   - Per SINGLE_INPUT_CONTRACT (task.0417): input shape is defined exactly once
  *     in `./pr-review.schema.ts` and consumed via `z.infer<>` — no parallel TS
  *     interfaces. Producers parse with `PrReviewWorkflowInputSchema` before
  *     `workflowClient.start(...)`.
  * Side-effects: none (deterministic orchestration only)
- * Links: docs/spec/temporal-patterns.md, docs/spec/node-ci-cd-contract.md#single-domain-scope, task.0191, task.0410, task.0415
+ * Links: docs/spec/temporal-patterns.md, docs/spec/node-ci-cd-contract.md#single-domain-scope, task.0191, task.0410, task.0417
  * @public
  */
 
@@ -41,7 +41,7 @@ const {
 /**
  * Input for PrReviewWorkflow — re-exported from the Zod schema source-of-truth
  * (`./pr-review.schema.ts`). Per SINGLE_INPUT_CONTRACT: do not duplicate the
- * shape as a parallel TS interface. See task.0415 / PR #1067 for context.
+ * shape as a parallel TS interface. See task.0417 / PR #1067 for context.
  */
 export {
   type PrReviewWorkflowInput,

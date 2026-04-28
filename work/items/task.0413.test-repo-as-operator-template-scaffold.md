@@ -22,7 +22,7 @@ updated: 2026-04-28
 labels: [cicd, operator-template, scaffolding, test-repo]
 external_refs:
   - work/items/task.0391.enable-merge-queue.md
-  - work/items/task.0412.operator-recover-from-merge-queue-cancel.md
+  - work/items/task.0416.operator-recover-from-merge-queue-cancel.md
 ---
 
 # task.0413 — Promote test-repo to a basic operator-template scaffold
@@ -71,5 +71,5 @@ When a new fork is created from this template:
 
 ## PR / Links
 
-- Filed alongside task.0412 on PR #1096 — both are merge-queue-rollout follow-ups, neither blocks the PR.
+- Filed alongside task.0416 (originally task.0412 — renumbered to resolve duplicate id with task.0412.poly-redeem-multi-tenant-fanout) on PR #1096 — both are merge-queue-rollout follow-ups, neither blocks the PR.
 - Future related tasks (not yet filed): rename `test-repo` → `operator-template`; split `node-template` into individual node repos; agentic node-setup that targets the new operator-template.

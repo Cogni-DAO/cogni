@@ -123,7 +123,9 @@ export class DrizzleRedeemJobsAdapter implements RedeemJobsPort {
     return { jobId: existingRow.id, alreadyExisted: true };
   }
 
-  async claimNextPending(): Promise<RedeemJob | null> {
+  async claimNextPending(
+    funderAddress: `0x${string}`
+  ): Promise<RedeemJob | null> {
     // Atomic claim: a single UPDATE statement is the only contention-safe
     // surface. The naive two-step (SELECT FOR UPDATE SKIP LOCKED + later
     // UPDATE in a separate autocommit tx) releases the row lock between
@@ -131,6 +133,11 @@ export class DrizzleRedeemJobsAdapter implements RedeemJobsPort {
     // each fire a redeem tx. The CTE here selects with SKIP LOCKED inside
     // the same statement that flips status to 'claimed', so two pods get
     // distinct rows or nothing.
+    //
+    // The funder filter is inside the SELECT (not the outer UPDATE) so the
+    // SKIP LOCKED predicate stays correct under concurrent claims from
+    // different tenants — workers for funder B simply skip past funder A's
+    // locked rows rather than blocking on them.
     //
     // RETURNING is intentionally id-only: `db.execute(sql`…`)` yields raw
     // snake_case rows from postgres, but every consumer of `RedeemJob`
@@ -141,6 +148,7 @@ export class DrizzleRedeemJobsAdapter implements RedeemJobsPort {
       WITH next_job AS (
         SELECT id FROM ${polyRedeemJobs}
         WHERE status IN ('pending', 'failed_transient')
+          AND ${polyRedeemJobs.funderAddress} = ${funderAddress}
         ORDER BY enqueued_at ASC
         FOR UPDATE SKIP LOCKED
         LIMIT 1

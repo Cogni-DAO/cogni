@@ -4,9 +4,9 @@
 /**
  * Module: `@app/api/v1/poly/wallet/positions/redeem`
  * Purpose: HTTP POST — enqueue a redeem job through the event-driven pipeline (task.0388) for a resolved Polymarket condition. The user-facing entry point holds the connection up to 30s waiting for the worker to confirm; falls back to `202 + job_id` past that ceiling so an in-cluster ALB / ingress timeout cannot orphan the request.
- * Scope: Validates input with `polyWalletRedeemPositionOperation`, asserts the session wallet matches the pipeline's bound funder (v0.2 single-funder), enqueues via `RedeemJobsPort`, polls `findByKey` until terminal or timeout. Does not place CLOB orders, does not sign transactions.
+ * Scope: Validates input with `polyWalletRedeemPositionOperation`, resolves the calling tenant's billing account → per-tenant redeem pipeline (task.0412 multi-tenant fan-out), enqueues via that pipeline's `RedeemJobsPort`, polls `findByKey` until terminal or timeout. Does not place CLOB orders, does not sign transactions.
  * Invariants:
- *   - TENANT_SCOPED — the session wallet must equal the pipeline's bound funder; multi-tenant fan-out is task.0318 Phase C.
+ *   - TENANT_SCOPED — each tenant gets their own redeem pipeline keyed by `billingAccountId`; the route resolves the calling session's billing account and uses only that tenant's pipeline + funder, never another tenant's.
  *   - REDEEM_DEDUP_IS_PERSISTED — the port UPSERTs on `(funder, condition_id)`; double-clicks return the same `jobId`.
  * Side-effects: One DB write (job enqueue) + repeated polls; no chain writes from the route. Worker handles tx submission.
  * Links: nodes/poly/app/src/bootstrap/redeem-pipeline.ts, nodes/poly/app/src/features/redeem/resolve-redeem-decision.ts
@@ -77,17 +77,24 @@ export const POST = wrapRouteHandlerWithLogging(
       .accountsForUser(toUserId(sessionUser.id))
       .getOrCreateBillingAccountForUser({ userId: sessionUser.id });
 
-    const pipeline = container.redeemPipeline;
+    const pipeline = container.redeemPipelineFor(account.id);
     if (!pipeline) {
+      // The calling tenant's pipeline isn't running. Either their wallet
+      // isn't provisioned yet, was provisioned after this pod's last boot
+      // (pipeline registry is built once at startup), or the trader-wallet
+      // adapter is unconfigured.
+      ctx.log.info(
+        { billing_account_id: account.id },
+        "poly.wallet.positions.redeem.pipeline_unavailable_for_tenant"
+      );
       return NextResponse.json(
         { error: "redeem_pipeline_unavailable" },
         { status: 503 }
       );
     }
 
-    let walletAdapter: ReturnType<typeof getPolyTraderWalletAdapter>;
     try {
-      walletAdapter = getPolyTraderWalletAdapter(ctx.log);
+      getPolyTraderWalletAdapter(ctx.log);
     } catch (err) {
       if (err instanceof WalletAdapterUnconfiguredError) {
         return NextResponse.json(
@@ -96,25 +103,6 @@ export const POST = wrapRouteHandlerWithLogging(
         );
       }
       throw err;
-    }
-
-    const tenantAddress = await walletAdapter.getAddress(account.id);
-    if (!tenantAddress) {
-      return NextResponse.json({ error: "no_active_wallet" }, { status: 409 });
-    }
-    if (tenantAddress.toLowerCase() !== pipeline.funderAddress.toLowerCase()) {
-      ctx.log.warn(
-        {
-          billing_account_id: account.id,
-          tenant_address: tenantAddress,
-          pipeline_funder: pipeline.funderAddress,
-        },
-        "poly.wallet.positions.redeem.tenant_funder_mismatch"
-      );
-      return NextResponse.json(
-        { error: "multi_tenant_redeem_not_supported" },
-        { status: 503 }
-      );
     }
 
     const env = serverEnv();

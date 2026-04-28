@@ -213,7 +213,9 @@ export class RedeemWorker {
   }
 
   private async drainOnePending(): Promise<void> {
-    const job = await this.deps.redeemJobs.claimNextPending();
+    const job = await this.deps.redeemJobs.claimNextPending(
+      this.deps.funderAddress
+    );
     if (job === null) return;
 
     const args = await buildSubmitArgs(job, {

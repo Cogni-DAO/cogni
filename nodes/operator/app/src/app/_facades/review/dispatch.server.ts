@@ -8,11 +8,11 @@
  * Invariants:
  *   - Per NORMATIVE_WEBHOOK_PATTERN: starts Temporal workflow and exits immediately
  *   - Per ACTIVITY_IDEMPOTENCY: workflowId = pr-review:{owner}/{repo}/{prNumber}/{headSha}, built from the parsed input (post-validation), not raw ctx
- *   - Per DISPATCH_FAIL_FAST (task.0415): payload is parsed through `PrReviewWorkflowInputSchema` before `workflowClient.start(...)`; misshapen payloads fail with structured ZodError logged distinctly from infra failures
+ *   - Per DISPATCH_FAIL_FAST (task.0417): payload is parsed through `PrReviewWorkflowInputSchema` before `workflowClient.start(...)`; misshapen payloads fail with structured ZodError logged distinctly from infra failures
  *   - No inline graph execution — all AI runs through GraphRunWorkflow child
  *   - No secrets in workflow input — only installationId (public)
  * Side-effects: IO (starts Temporal workflow)
- * Links: task.0191, task.0415, docs/spec/temporal-patterns.md
+ * Links: task.0191, task.0417, docs/spec/temporal-patterns.md
  * @public
  */
 
@@ -113,7 +113,7 @@ async function startPrReviewWorkflow(
     const { client: workflowClient, taskQueue } =
       await getTemporalWorkflowClient();
 
-    // Per DISPATCH_FAIL_FAST (task.0415): parse the input through the source-of-
+    // Per DISPATCH_FAIL_FAST (task.0417): parse the input through the source-of-
     // truth schema before starting the workflow. Misshapen payloads fail loudly
     // here with a structured Zod error instead of becoming an Activity-side 400
     // (the modelRef-shape regression class — PR #1067).
