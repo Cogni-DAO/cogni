@@ -18,7 +18,7 @@
  * @public
  */
 
-import { index, jsonb, pgTable, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 /**
  * Knowledge — domain-specific facts, claims, and curated assertions with provenance.
@@ -45,5 +45,36 @@ export const knowledge = pgTable(
     index("idx_knowledge_domain").on(table.domain),
     index("idx_knowledge_entity").on(table.entityId),
     index("idx_knowledge_source_type").on(table.sourceType),
+  ],
+);
+
+/**
+ * Knowledge contributions metadata — tracks external-agent submissions while
+ * their proposed `knowledge` rows live on a `contrib/<agent>-<id>` Dolt branch.
+ * State / principal / idempotency / close-reason live here on `main` so they
+ * survive branch deletion. See docs/design/knowledge-contribution-api.md.
+ */
+export const knowledgeContributions = pgTable(
+  "knowledge_contributions",
+  {
+    id: text("id").primaryKey(),
+    branch: text("branch").notNull(),
+    state: text("state").notNull(),
+    principalId: text("principal_id").notNull(),
+    principalKind: text("principal_kind").notNull(),
+    message: text("message").notNull(),
+    entryCount: integer("entry_count").notNull(),
+    commitHash: text("commit_hash").notNull(),
+    mergedCommit: text("merged_commit"),
+    closedReason: text("closed_reason"),
+    idempotencyKey: text("idempotency_key"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolvedBy: text("resolved_by"),
+  },
+  (table) => [
+    index("idx_knowledge_contrib_state").on(table.state),
+    index("idx_knowledge_contrib_principal").on(table.principalId, table.state),
+    uniqueIndex("uniq_knowledge_contrib_idempotency").on(table.principalId, table.idempotencyKey),
   ],
 );
