@@ -154,7 +154,7 @@ async function main(): Promise<void> {
     );
     console.error(
       "[attach]   https://dashboard.privy.io → Wallets →",
-      protoWalletAddr.slice(0, 10) + "…"
+      `${protoWalletAddr.slice(0, 10)}…`
     );
     console.error("[attach] Last error:", lastErr);
     process.exit(1);

@@ -174,8 +174,7 @@ async function main(): Promise<void> {
           success: receipt.attributes?.success,
           transactionsHashes: receipt.attributes?.transactionsHashes,
         },
-        operator_profile:
-          "https://polymarket.com/profile/" + expectedAddress.toLowerCase(),
+        operator_profile: `https://polymarket.com/profile/${expectedAddress.toLowerCase()}`,
       },
       null,
       2
