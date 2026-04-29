@@ -2,7 +2,7 @@
 id: task.0428
 type: task
 title: "Doltgres work-item create/read/patch API — new items only (v0)"
-status: needs_closeout
+status: done
 priority: 0
 rank: 5
 estimate: 3
@@ -17,7 +17,7 @@ pr:
 reviewer:
 revision: 2
 blocked_by:
-deploy_verified: false
+deploy_verified: true
 created: 2026-04-28
 updated: 2026-04-28
 labels: [work-system, agents, doltgres, operator, api]
