@@ -2,7 +2,8 @@
 id: task.0424
 type: task
 title: "Poly bet sizer — per-(tenant, market) position cap (reuse `max_usdc_per_trade` for v0)"
-status: needs_triage
+status: needs_implement
+revision: 1
 priority: 1
 rank: 5
 estimate: 2
@@ -82,3 +83,22 @@ In `applySizingPolicy` (or directly in `plan-mirror.ts` BUY branch — pick whic
 ```
 
 Should fire once per attempted-but-capped fill, with `existing_usdc + intent_usdc > max_usdc_per_trade`.
+
+## Review Feedback (revision 1)
+
+PR #1131 review surfaced a blocker plus several non-blocking suggestions. The blocker is the only thing required before re-review.
+
+**BLOCKER — function name vs behavior mismatch.** `OrderLedger.cumulativeFilledForMarket` is named "Filled" and the doc claims "committed exposure", but the SQL sums `attributes->>'size_usdc'` (intent), not `attributes->>'filled_size_usdc'` (actual fill). In the current FOK-heavy regime this matters: a `pending` row holds intent $5 for ~30s before the reconciler stamps `canceled`, so cumulative inflates well past actual on-chain exposure during that window. Pick one and ship it explicitly:
+
+- **Option A — keep intent-based, rename + document.** Rename to `cumulativeIntentForMarket`. Add a docstring sentence: "v0 sums intent because filled would let FOK no-matches keep firing through the cap; revisit when FOK miss-rate drops post-task.0427." Update the `RuntimeState.cumulative_filled_usdc_for_market` field name to match (`cumulative_intent_usdc_for_market`).
+- **Option B — switch to filled.** Read `(attributes->>'filled_size_usdc')::numeric`, narrow status set to `('filled', 'partial')`, keep the `cumulativeFilled…` name. Note: this means a tenant on a busy target could re-attempt many times before any of them fills enough to trip the cap.
+
+Lean toward A unless the implementer disagrees — better matches "don't keep placing intents past the cap", which is what surfaced this work in the first place.
+
+**Non-blocking suggestions (consider but not required):**
+
+- `mirror-pipeline.ts:224-228` — gate the cumulative DB read on `!snapshot.already_placed_ids.includes(client_order_id)` so duplicate fills don't trigger a redundant query. Bug.0426 (same PR) drops the duplicate-fill rate ~10×, so the impact is muted post-merge — but the structural fix is to do cheap checks first.
+- Add a boundary-equality test (`cumulative + size === max_usdc_per_trade` exactly should place).
+- Add one min_bet-variant fixture in `plan-mirror-sizing-min-bet.test.ts` exercising the cap.
+- Add a direct unit test for `FakeOrderLedger.cumulativeFilledForMarket` covering tenant + market + status filter.
+- Long-term: expression index on `attributes->>'market_id'` for multi-tenant scale-up. Out of scope for v0.
