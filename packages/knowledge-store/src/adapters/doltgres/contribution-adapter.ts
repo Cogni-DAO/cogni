@@ -6,8 +6,8 @@
  * Purpose: Doltgres-backed implementation of KnowledgeContributionPort using Dolt branches.
  * Scope: Adapter only. Each contribution is one contrib/<agent>-<id> branch + one commit.
  * Invariants:
- *   - All branch ops run inside sql.reserve(...) so dolt_checkout pins to one connection.
- *   - try/finally restores dolt_checkout('main') before connection release.
+ *   - All branch ops run inside sql.reserve() so dolt_checkout pins to one connection.
+ *   - try/finally restores dolt_checkout('main') and releases the connection on error.
  *   - knowledge_contributions metadata table on main tracks state/principal/idempotency.
  *   - Reads from a branch use reserved-conn checkout (AS OF deferred to v1).
  * Side-effects: IO (database reads/writes, dolt branch ops)
@@ -93,6 +93,23 @@ function mapRecord(row: Record<string, unknown>): ContributionRecord {
   };
 }
 
+async function withReserved<T>(
+  sql: Sql,
+  fn: (conn: ReservedSql) => Promise<T>,
+): Promise<T> {
+  const conn = await sql.reserve();
+  try {
+    return await fn(conn);
+  } finally {
+    try {
+      await conn.unsafe(`SELECT dolt_checkout('main')`);
+    } catch {
+      /* swallow */
+    }
+    conn.release();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Adapter
 // ---------------------------------------------------------------------------
@@ -122,57 +139,47 @@ export class DoltgresKnowledgeContributionAdapter
     const branch = `contrib/${slug}-${sid}`;
     const sourceRef = `agent:${input.principal.id}:${contributionId}`;
 
-    return await this.sql.reserve(async (conn: ReservedSql) => {
-      try {
-        // 1. Create branch from main HEAD
+    return await withReserved(this.sql, async (conn) => {
+      // 1. Create branch from main HEAD
+      await conn.unsafe(
+        `SELECT dolt_checkout('-b', ${escapeRef(branch)}, 'main')`,
+      );
+
+      // 2. Insert each entry on the feature branch
+      for (const entry of input.entries) {
+        const confidencePct =
+          input.principal.kind === "agent" ? 30 : (entry.confidencePct ?? 30);
+        const entryId = `${contributionId}:${randomBytes(3).toString("hex")}`;
         await conn.unsafe(
-          `SELECT dolt_checkout('-b', ${escapeRef(branch)}, 'main')`,
+          `INSERT INTO knowledge (id, domain, entity_id, title, content, confidence_pct, source_type, source_ref, tags) VALUES (${escapeValue(entryId)}, ${escapeValue(entry.domain)}, ${escapeValue(entry.entityId ?? null)}, ${escapeValue(entry.title)}, ${escapeValue(entry.content)}, ${escapeValue(confidencePct)}, ${escapeValue("external")}, ${escapeValue(sourceRef)}, ${entry.tags ? escapeValue(entry.tags) : "NULL"})`,
         );
-
-        // 2. Insert each entry on the feature branch
-        for (const entry of input.entries) {
-          const confidencePct =
-            input.principal.kind === "agent"
-              ? 30
-              : (entry.confidencePct ?? 30);
-          const entryId = `${contributionId}:${randomBytes(3).toString("hex")}`;
-          await conn.unsafe(
-            `INSERT INTO knowledge (id, domain, entity_id, title, content, confidence_pct, source_type, source_ref, tags) VALUES (${escapeValue(entryId)}, ${escapeValue(entry.domain)}, ${escapeValue(entry.entityId ?? null)}, ${escapeValue(entry.title)}, ${escapeValue(entry.content)}, ${escapeValue(confidencePct)}, ${escapeValue("external")}, ${escapeValue(sourceRef)}, ${entry.tags ? escapeValue(entry.tags) : "NULL"})`,
-          );
-        }
-
-        // 3. Commit on the branch
-        const commitMsg = `contrib(${slug}): ${input.message}`;
-        const commitResult = await conn.unsafe(
-          `SELECT dolt_commit('-Am', ${escapeValue(commitMsg)})`,
-        );
-        const commitField = (commitResult[0] as Record<string, unknown>)
-          .dolt_commit;
-        const commitHash = Array.isArray(commitField)
-          ? String(commitField[0])
-          : String(commitField);
-
-        // 4. Back to main and write metadata row
-        await conn.unsafe(`SELECT dolt_checkout('main')`);
-        await conn.unsafe(
-          `INSERT INTO knowledge_contributions (id, branch, state, principal_id, principal_kind, message, entry_count, commit_hash, idempotency_key) VALUES (${escapeValue(contributionId)}, ${escapeValue(branch)}, 'open', ${escapeValue(input.principal.id)}, ${escapeValue(input.principal.kind)}, ${escapeValue(input.message)}, ${escapeValue(input.entries.length)}, ${escapeValue(commitHash)}, ${escapeValue(input.idempotencyKey ?? null)})`,
-        );
-        await conn.unsafe(
-          `SELECT dolt_commit('-Am', ${escapeValue(`contrib-meta: ${contributionId}`)})`,
-        );
-
-        // 5. Read back the full record
-        const rows = await conn.unsafe(
-          `SELECT * FROM knowledge_contributions WHERE id = ${escapeValue(contributionId)} LIMIT 1`,
-        );
-        return mapRecord(rows[0] as Record<string, unknown>);
-      } finally {
-        try {
-          await conn.unsafe(`SELECT dolt_checkout('main')`);
-        } catch {
-          /* swallow — connection is being released */
-        }
       }
+
+      // 3. Commit on the branch
+      const commitMsg = `contrib(${slug}): ${input.message}`;
+      const commitResult = await conn.unsafe(
+        `SELECT dolt_commit('-Am', ${escapeValue(commitMsg)})`,
+      );
+      const commitField = (commitResult[0] as Record<string, unknown>)
+        .dolt_commit;
+      const commitHash = Array.isArray(commitField)
+        ? String(commitField[0])
+        : String(commitField);
+
+      // 4. Back to main and write metadata row
+      await conn.unsafe(`SELECT dolt_checkout('main')`);
+      await conn.unsafe(
+        `INSERT INTO knowledge_contributions (id, branch, state, principal_id, principal_kind, message, entry_count, commit_hash, idempotency_key) VALUES (${escapeValue(contributionId)}, ${escapeValue(branch)}, 'open', ${escapeValue(input.principal.id)}, ${escapeValue(input.principal.kind)}, ${escapeValue(input.message)}, ${escapeValue(input.entries.length)}, ${escapeValue(commitHash)}, ${escapeValue(input.idempotencyKey ?? null)})`,
+      );
+      await conn.unsafe(
+        `SELECT dolt_commit('-Am', ${escapeValue(`contrib-meta: ${contributionId}`)})`,
+      );
+
+      // 5. Read back the full record
+      const rows = await conn.unsafe(
+        `SELECT * FROM knowledge_contributions WHERE id = ${escapeValue(contributionId)} LIMIT 1`,
+      );
+      return mapRecord(rows[0] as Record<string, unknown>);
     });
   }
 
@@ -215,16 +222,10 @@ export class DoltgresKnowledgeContributionAdapter
       const row = r as Record<string, unknown>;
       const diffType = String(row.diff_type ?? "modified");
       const before: Record<string, unknown> | null = row.from_id
-        ? {
-            id: row.from_id,
-            title: row.from_title ?? null,
-          }
+        ? { id: row.from_id, title: row.from_title ?? null }
         : null;
       const after: Record<string, unknown> | null = row.to_id
-        ? {
-            id: row.to_id,
-            title: row.to_title ?? null,
-          }
+        ? { id: row.to_id, title: row.to_title ?? null }
         : null;
       const rowId = String(row.to_id ?? row.from_id ?? "");
       return {
@@ -249,57 +250,43 @@ export class DoltgresKnowledgeContributionAdapter
       );
     }
 
-    return await this.sql.reserve(async (conn: ReservedSql) => {
+    return await withReserved(this.sql, async (conn) => {
+      await conn.unsafe(`SELECT dolt_checkout('main')`);
+
+      let mergeCommit: string;
       try {
-        await conn.unsafe(`SELECT dolt_checkout('main')`);
-
-        let mergeCommit: string;
-        try {
-          const mergeRes = await conn.unsafe(
-            `SELECT dolt_merge(${escapeRef(rec.branch)})`,
-          );
-          const mergeField = (mergeRes[0] as Record<string, unknown>)
-            .dolt_merge;
-          mergeCommit = Array.isArray(mergeField)
-            ? String(mergeField[0])
-            : String(mergeField);
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          throw new ContributionConflictError(
-            `dolt_merge failed for ${rec.branch}: ${msg}`,
-          );
-        }
-
-        // Optional confidence promotion on merge
-        if (input.confidencePct != null) {
-          const sourceRef = `agent:${rec.principalId}:${rec.contributionId}`;
-          await conn.unsafe(
-            `UPDATE knowledge SET confidence_pct = ${escapeValue(input.confidencePct)} WHERE source_ref = ${escapeValue(sourceRef)}`,
-          );
-        }
-
-        // Drop the branch
-        await conn.unsafe(
-          `SELECT dolt_branch('-D', ${escapeRef(rec.branch)})`,
+        const mergeRes = await conn.unsafe(
+          `SELECT dolt_merge(${escapeRef(rec.branch)})`,
         );
-
-        // Update metadata
-        await conn.unsafe(
-          `UPDATE knowledge_contributions SET state = 'merged', merged_commit = ${escapeValue(mergeCommit)}, resolved_at = now(), resolved_by = ${escapeValue(input.principal.id)} WHERE id = ${escapeValue(input.contributionId)}`,
+        const mergeField = (mergeRes[0] as Record<string, unknown>).dolt_merge;
+        mergeCommit = Array.isArray(mergeField)
+          ? String(mergeField[0])
+          : String(mergeField);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new ContributionConflictError(
+          `dolt_merge failed for ${rec.branch}: ${msg}`,
         );
-
-        await conn.unsafe(
-          `SELECT dolt_commit('-Am', ${escapeValue(`contrib-merge: ${input.contributionId}`)})`,
-        );
-
-        return { commitHash: mergeCommit };
-      } finally {
-        try {
-          await conn.unsafe(`SELECT dolt_checkout('main')`);
-        } catch {
-          /* swallow */
-        }
       }
+
+      if (input.confidencePct != null) {
+        const sourceRef = `agent:${rec.principalId}:${rec.contributionId}`;
+        await conn.unsafe(
+          `UPDATE knowledge SET confidence_pct = ${escapeValue(input.confidencePct)} WHERE source_ref = ${escapeValue(sourceRef)}`,
+        );
+      }
+
+      await conn.unsafe(`SELECT dolt_branch('-D', ${escapeRef(rec.branch)})`);
+
+      await conn.unsafe(
+        `UPDATE knowledge_contributions SET state = 'merged', merged_commit = ${escapeValue(mergeCommit)}, resolved_at = now(), resolved_by = ${escapeValue(input.principal.id)} WHERE id = ${escapeValue(input.contributionId)}`,
+      );
+
+      await conn.unsafe(
+        `SELECT dolt_commit('-Am', ${escapeValue(`contrib-merge: ${input.contributionId}`)})`,
+      );
+
+      return { commitHash: mergeCommit };
     });
   }
 
@@ -316,25 +303,15 @@ export class DoltgresKnowledgeContributionAdapter
       );
     }
 
-    await this.sql.reserve(async (conn: ReservedSql) => {
-      try {
-        await conn.unsafe(`SELECT dolt_checkout('main')`);
-        await conn.unsafe(
-          `SELECT dolt_branch('-D', ${escapeRef(rec.branch)})`,
-        );
-        await conn.unsafe(
-          `UPDATE knowledge_contributions SET state = 'closed', closed_reason = ${escapeValue(input.reason)}, resolved_at = now(), resolved_by = ${escapeValue(input.principal.id)} WHERE id = ${escapeValue(input.contributionId)}`,
-        );
-        await conn.unsafe(
-          `SELECT dolt_commit('-Am', ${escapeValue(`contrib-close: ${input.contributionId}`)})`,
-        );
-      } finally {
-        try {
-          await conn.unsafe(`SELECT dolt_checkout('main')`);
-        } catch {
-          /* swallow */
-        }
-      }
+    await withReserved(this.sql, async (conn) => {
+      await conn.unsafe(`SELECT dolt_checkout('main')`);
+      await conn.unsafe(`SELECT dolt_branch('-D', ${escapeRef(rec.branch)})`);
+      await conn.unsafe(
+        `UPDATE knowledge_contributions SET state = 'closed', closed_reason = ${escapeValue(input.reason)}, resolved_at = now(), resolved_by = ${escapeValue(input.principal.id)} WHERE id = ${escapeValue(input.contributionId)}`,
+      );
+      await conn.unsafe(
+        `SELECT dolt_commit('-Am', ${escapeValue(`contrib-close: ${input.contributionId}`)})`,
+      );
     });
   }
 }

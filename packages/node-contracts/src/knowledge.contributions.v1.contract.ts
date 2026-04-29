@@ -85,8 +85,8 @@ export type ContributionRecord = z.infer<typeof ContributionRecordSchema>;
 export const ContributionDiffEntrySchema = z.object({
   changeType: z.enum(["added", "modified", "removed"]),
   rowId: z.string(),
-  before: z.record(z.unknown()).nullable(),
-  after: z.record(z.unknown()).nullable(),
+  before: z.record(z.string(), z.unknown()).nullable(),
+  after: z.record(z.string(), z.unknown()).nullable(),
 });
 export type ContributionDiffEntry = z.infer<
   typeof ContributionDiffEntrySchema
