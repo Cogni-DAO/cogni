@@ -12,15 +12,11 @@
  *   PolyDataCapability; reads + writes via KnowledgeCapability. Does not place
  *   trades, does not load env.
  * Invariants:
- *   - TOOL_ID_NAMESPACED, USER_PARAM_IS_PROXY_WALLET.
- *   - EFFECT_READ_WRITE because the cache write is a side-effect on the knowledge store;
- *     the upstream curve fetch is pure read-only and the cache write is content-addressable
- *     (same wallet → same id → upsert).
- *   - REDACTION_ALLOWLIST.
- *   - DETERMINISTIC_FOR_FIXED_NOW: pure function modulo the upstream fetch + the
- *     `now` clock; cache replays are fully deterministic.
+ *   - TOOL_ID_NAMESPACED, USER_PARAM_IS_PROXY_WALLET, REDACTION_ALLOWLIST.
+ *   - EFFECT_STATE_CHANGE: the cache write upserts a knowledge-store row on every cache miss; this is by-design idempotent (same wallet → same id) but is still a state change for policy purposes.
+ *   - DETERMINISTIC_FOR_FIXED_NOW: pure modulo the upstream fetch + the `now` clock; cache replays are fully deterministic.
  * Side-effects: IO (PolyDataCapability.getUserPnl + KnowledgeCapability.get/write)
- * Links: work/charters/POLY_WALLET_RESEARCH.md, work/items/task.0419.poly-wallet-curve-metrics-tools.md, docs/research/poly-wallet-methodology-self-review.md
+ * Links: work/charters/POLY_WALLET_RESEARCH.md, work/items/task.0422.poly-data-user-pnl-summary-tool.md, docs/research/poly-wallet-methodology-self-review.md
  * @public
  */
 
@@ -44,7 +40,7 @@ const CACHE_TTL_SECONDS = 24 * 60 * 60; // 24h
 
 export const PolyDataUserPnlSummaryInputSchema = z.object({
   user: PolyAddressSchema.describe(
-    "Polymarket proxy-wallet (Safe) address, NOT the signing EOA. Wrong address type returns degenerate=true with totalPnl=0."
+    "Polymarket proxy-wallet (Safe) address (40-hex). Passing an EOA instead of a Safe-proxy will validate but the upstream user-pnl curve will be empty, yielding `degenerate=true` with `totalPnl=0`."
   ),
   forceRefresh: z
     .boolean()
@@ -119,7 +115,7 @@ export const polyDataUserPnlSummaryContract: ToolContract<
     "IMPORTANT: `verdict.passed` only checks the numerical hard filters (H1/H3/H4 + " +
     "slope sign); category (H5) and bot-vs-bot (H8) gates still require " +
     "`core__poly_data_activity` and a separate decision step.",
-  effect: "read_only",
+  effect: "state_change",
   inputSchema: PolyDataUserPnlSummaryInputSchema,
   outputSchema: PolyDataUserPnlSummaryOutputSchema,
   redact: (out) => out,
