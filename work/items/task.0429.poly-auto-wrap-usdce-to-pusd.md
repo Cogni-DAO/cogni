@@ -152,6 +152,20 @@ Carries `billing_account_id`, `connection_id`, `usdc_e_amount`, `tx_hash` where 
 
 Should fire `detected → submitted → confirmed` once per drift event. No more `insufficient_balance` mirror failures while USDC.e is sitting in the wallet.
 
+## How to start (next-dev orientation)
+
+Worktree is bootstrapped at `/Users/derek/dev/cogni-template-worktrees/feat-poly-auto-wrap-usdce-to-pusd` (branch `feat/poly-auto-wrap-usdce-to-pusd`). `pnpm install --frozen-lockfile` already ran. `pnpm packages:build` already produced `.d.ts` for downstream typecheck. **Don't re-bootstrap.**
+
+Suggested first three commits in order:
+
+1. **Schema migration** — copy `nodes/poly/app/src/adapters/server/db/migrations/0032_poly_wallet_trading_approvals.sql` as a template; create `0034_poly_wallet_auto_wrap_consent.sql` adding `auto_wrap_consent_at TIMESTAMPTZ NULL` + `auto_wrap_floor_usdc_e NUMERIC(18,6) NOT NULL DEFAULT 1.0` to `poly_wallet_connections`. Update `nodes/poly/packages/db-schema/src/wallet-connections.ts` to match.
+
+2. **Port + adapter** — add `getAutoWrapConsent` / `setAutoWrapConsent` to `packages/poly-wallet/src/port/poly-trader-wallet.port.ts`. Implement on `PrivyPolyTraderWalletAdapter`.
+
+3. **Bootstrap job** — copy `nodes/poly/app/src/bootstrap/jobs/copy-trade-mirror.job.ts` shape into `auto-wrap.job.ts`. setInterval-driven, single-flight per `(billing_account_id)`, uses existing `submitCollateralWrap` adapter method.
+
+After those three: contract + route + UI toggle.
+
 ## Notes for the implementer
 
 - Don't reinvent the wrap call — `submitCollateralWrap` already exists on the adapter and is what Step 2 of Enable Trading runs.

@@ -80,6 +80,18 @@ Also surface in observability:
 - NegRisk adapter changes. Already correct.
 - Backfilling failed-redeem jobs from before the fix. Separate cleanup spec if needed.
 
+## How to start (next-dev orientation)
+
+Worktree at `/Users/derek/dev/cogni-template-worktrees/feat-poly-auto-wrap-usdce-to-pusd` is bootstrapped. Same branch as task.0429 — these two ship together because they both close the wallet-currency cycle (V2 redeems pay out pUSD; auto-wrap handles the V1-legacy + deposit residue).
+
+Suggested first commit:
+
+1. **Capture vintage at job-create time.** Find where `poly_redeem_jobs` rows get inserted (likely `redeem-subscriber.ts` or a redeem-coordinator equivalent). At insert time we already know whether the position is V1 or V2 — either from the trade ledger row or from a chain query. Add a `collateral_token` column to the redeem-job row.
+2. **Use it at dispatch.** Replace the hardcoded `POLYGON_USDC_E` at `nodes/poly/app/src/features/redeem/redeem-worker.ts:259` with the value from the job row.
+3. **Audit log fields.** Add `collateral_token_used` + `collateral_token_inferred_from` to the `poly.ctf.redeem.tx.confirmed` event payload.
+
+Test path: existing `nodes/poly/app/tests/component/redeem/...` integration tests + a unit test asserting V1-vintage → USDC.e and V2-vintage → pUSD.
+
 ## Validation
 
 **exercise:** on candidate-a, hold a V2 vanilla-CTF position to settlement (or simulate via a fixture). Observe redeem fires with `collateral_token_used = pUSD` and pUSD balance increases by the position payout.
