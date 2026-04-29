@@ -11,7 +11,7 @@
  * @internal
  */
 
-import { noopMetrics } from "@cogni/market-provider";
+import { noopMetrics } from "@cogni/poly-market-provider";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FakeOrderLedger } from "@/adapters/test/trading/fake-order-ledger";

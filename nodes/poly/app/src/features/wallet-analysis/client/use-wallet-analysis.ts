@@ -21,7 +21,7 @@ import type {
   WalletAnalysisResponse,
   WalletAnalysisSnapshot,
   WalletAnalysisTrades,
-} from "@cogni/node-contracts";
+} from "@cogni/poly-node-contracts";
 import { useQuery } from "@tanstack/react-query";
 
 import type { WalletAnalysisData } from "../types/wallet-analysis";

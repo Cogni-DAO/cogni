@@ -11,7 +11,7 @@
  *   - REDACTION_REQUIRED: Allowlist in contract
  *   - NO LangChain imports
  * Side-effects: IO (HTTP to prediction market APIs via capability)
- * Links: packages/market-provider/, work/items/task.0230.market-data-package.md
+ * Links: nodes/poly/packages/market-provider/, work/items/task.0230.market-data-package.md
  * @public
  */
 

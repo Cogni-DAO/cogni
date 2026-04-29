@@ -15,21 +15,21 @@
  * Links: docs/spec/poly-trader-wallet-port.md,
  *        docs/spec/poly-multi-tenant-auth.md,
  *        nodes/poly/packages/db-schema/src/wallet-grants.ts,
- *        packages/node-contracts/src/poly.wallet.grants.v1.contract.ts,
+ *        nodes/poly/packages/node-contracts/src/poly.wallet.grants.v1.contract.ts,
  *        work/items/task.0347.poly-wallet-preferences-sizing-config.md
  * @public
  */
 
 import { withTenantScope } from "@cogni/db-client";
 import { toUserId, userActor } from "@cogni/ids";
+import type { SessionUser } from "@cogni/node-shared";
+import { polyWalletGrants } from "@cogni/poly-db-schema";
 import type {
   PolyWalletGrantsErrorCode,
   PolyWalletGrantsGetOutput,
   PolyWalletGrantsPutInput,
   PolyWalletGrantsPutOutput,
-} from "@cogni/node-contracts";
-import type { SessionUser } from "@cogni/node-shared";
-import { polyWalletGrants } from "@cogni/poly-db-schema";
+} from "@cogni/poly-node-contracts";
 import { and, desc, gt, isNull, or, sql } from "drizzle-orm";
 import type { Logger } from "pino";
 

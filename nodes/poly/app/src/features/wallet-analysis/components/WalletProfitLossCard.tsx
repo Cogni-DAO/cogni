@@ -23,7 +23,7 @@
 
 "use client";
 
-import type { PolyWalletOverviewInterval } from "@cogni/node-contracts";
+import type { PolyWalletOverviewInterval } from "@cogni/poly-node-contracts";
 import type { ReactElement } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {

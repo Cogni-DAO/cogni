@@ -9,7 +9,7 @@ summary: Internal @cogni/* packages — pure TypeScript libraries with strict is
 read_when: Creating a new package, debugging package builds, or working with @cogni/* imports.
 owner: derekg1729
 created: 2026-02-06
-verified: 2026-03-17
+verified: 2026-04-28
 tags: [infra, meta]
 ---
 
@@ -17,7 +17,9 @@ tags: [infra, meta]
 
 ## Context
 
-The `packages/` directory contains **Node-owned** internal packages — pure TypeScript libraries with no `src/` or `services/` imports. Each package declares its target environment (isomorphic or node-only) via tsconfig/tsup. These enable future repo splits and clean dependency boundaries.
+The `packages/` directory contains **cross-node** internal packages — pure TypeScript libraries with no `src/` or `services/` imports, consumed by two or more nodes. Each package declares its target environment (isomorphic or node-only) via tsconfig/tsup. These enable future repo splits and clean dependency boundaries.
+
+**Single-node packages live under `nodes/<X>/packages/`** — same shape rules as cross-node packages, but ownership is scoped so changes don't trip `single-node-scope`. See [Node CI/CD Contract § Node-owned packages](./node-ci-cd-contract.md#node-owned-packages) for the carve-out rule, naming convention (`@cogni/<node>-<bare-name>`), and the carve-out playbook.
 
 ## Goal
 
@@ -216,6 +218,20 @@ TypeScript project references build packages incrementally using `.tsbuildinfo` 
 | `src/app/`, `src/features/` | Yes, via `@cogni/<name>` | Yes                | App code resolves packages via `dist/`      |
 | `packages/<name>/src/`      | Yes, other packages      | **NO**             | Never import `@/` aliases or `src/**` paths |
 | `packages/<other>/src/`     | Yes, via workspace       | **NO**             | Package-to-package via `@cogni/<other>`     |
+
+### Where a new package belongs
+
+Decision rule:
+
+```
+Is the package consumed by ≥2 nodes' app/graphs?
+  yes → packages/<bare-name>/                 (cross-node; this spec)
+  no  → nodes/<X>/packages/<bare-name>/       (node-owned; node-ci-cd-contract.md)
+```
+
+If a node-owned package later gains a cross-node consumer, carve it back to root in a single PR — don't symlink, don't dual-publish. The location is the source of truth for ownership.
+
+Per-node `packages/` directories already work for every node — `pnpm-workspace.yaml` globs `nodes/*/packages/*` and `pnpm packages:build` builds them in dependency order. Today `nodes/poly/packages/` (7 packages) and `nodes/node-template/packages/knowledge/` exercise the pattern; `nodes/operator/packages/` and `nodes/resy/packages/` don't exist yet but inherit the same plumbing the moment they're created.
 
 ### Existing Packages
 

@@ -18,7 +18,7 @@
  * Links: src/features/redeem/decision-to-enqueue-input.ts, work/items/task.0388
  */
 
-import type { RedeemDecision } from "@cogni/market-provider/policy";
+import type { RedeemDecision } from "@cogni/poly-market-provider/policy";
 import { describe, expect, it } from "vitest";
 
 import { decisionToEnqueueInput } from "@/features/redeem/decision-to-enqueue-input";

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/market-provider/analysis/position-timelines` tests
+ * Module: `@cogni/poly-market-provider/analysis/position-timelines` tests
  * Purpose: Pin the execution-position mapper against the three lifecycle
  * states the dashboard depends on: open, closed round-trip, and redeemable.
  * Scope: Pure unit tests only. No network, no file I/O.
@@ -16,8 +16,8 @@ import type {
   ClobPriceHistoryPoint,
   PolymarketUserPosition,
   PolymarketUserTrade,
-} from "../../../../../../../packages/market-provider/src/adapters/polymarket/index.ts";
-import { mapExecutionPositions } from "../../../../../../../packages/market-provider/src/analysis/position-timelines.ts";
+} from "../../../../../../../nodes/poly/packages/market-provider/src/adapters/polymarket/index.ts";
+import { mapExecutionPositions } from "../../../../../../../nodes/poly/packages/market-provider/src/analysis/position-timelines.ts";
 
 describe("mapExecutionPositions", () => {
   it("keeps open positions open and builds the real market URL", () => {

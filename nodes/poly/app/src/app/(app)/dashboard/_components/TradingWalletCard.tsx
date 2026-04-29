@@ -34,7 +34,7 @@ import type {
   PolyWalletOverviewInterval,
   PolyWalletOverviewOutput,
   PolyWalletStatusOutput,
-} from "@cogni/node-contracts";
+} from "@cogni/poly-node-contracts";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import type { ReactElement } from "react";

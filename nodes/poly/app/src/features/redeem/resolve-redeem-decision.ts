@@ -16,7 +16,7 @@
  *   - PURE_OF_PERSISTENCE — does not import port/adapter; returns a value the
  *     caller decides what to do with.
  *   - DECIDE_REDEEM_IS_AUTHORITY — never re-implements policy; always defers
- *     to `@cogni/market-provider/policy:decideRedeem`.
+ *     to `@cogni/poly-market-provider/policy:decideRedeem`.
  * Side-effects: IO (Data-API HTTP, Polygon RPC).
  * Links: docs/design/poly-positions.md, work/items/task.0388
  * @public
@@ -26,11 +26,11 @@ import {
   normalizePolygonConditionId,
   POLYGON_CONDITIONAL_TOKENS,
   type PolymarketDataApiClient,
-} from "@cogni/market-provider/adapters/polymarket";
+} from "@cogni/poly-market-provider/adapters/polymarket";
 import {
   decideRedeem,
   type RedeemDecision,
-} from "@cogni/market-provider/policy";
+} from "@cogni/poly-market-provider/policy";
 import { type PublicClient, parseAbi } from "viem";
 
 const ctfReadAbi = parseAbi([

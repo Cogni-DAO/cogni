@@ -38,8 +38,8 @@
  * @internal
  */
 
-import type { LoggerPort } from "@cogni/market-provider";
 import { EVENT_NAMES } from "@cogni/node-shared";
+import type { LoggerPort } from "@cogni/poly-market-provider";
 import type {
   CopyTradeTargetSource,
   EnumeratedTarget,

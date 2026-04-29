@@ -43,14 +43,14 @@
  * @internal
  */
 
+import { EVENT_NAMES } from "@cogni/node-shared";
 // TODO(task.0329): redemption-sync will add `getOperatorPositions` back.
 import type {
   GetOrderResult,
   LoggerPort,
   MetricsPort,
   OrderStatus,
-} from "@cogni/market-provider";
-import { EVENT_NAMES } from "@cogni/node-shared";
+} from "@cogni/poly-market-provider";
 
 import type { LedgerRow, LedgerStatus, OrderLedger } from "@/features/trading";
 

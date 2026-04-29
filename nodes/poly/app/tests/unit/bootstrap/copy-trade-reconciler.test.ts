@@ -19,7 +19,7 @@
  * @public
  */
 
-import type { LoggerPort } from "@cogni/market-provider";
+import type { LoggerPort } from "@cogni/poly-market-provider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type CopyTradeReconcilerDeps,

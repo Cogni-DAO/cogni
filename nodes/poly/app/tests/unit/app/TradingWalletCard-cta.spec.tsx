@@ -18,7 +18,7 @@
 import type {
   PolyWalletOverviewOutput,
   PolyWalletStatusOutput,
-} from "@cogni/node-contracts";
+} from "@cogni/poly-node-contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";

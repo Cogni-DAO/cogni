@@ -12,7 +12,7 @@
  */
 
 import path from "node:path";
-import { PolymarketClobAdapter } from "@cogni/market-provider/adapters/polymarket";
+import { PolymarketClobAdapter } from "@cogni/poly-market-provider/adapters/polymarket";
 import { config } from "dotenv";
 import {
   createWalletClient,

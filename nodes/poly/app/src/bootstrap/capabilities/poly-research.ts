@@ -15,11 +15,11 @@
  * @internal
  */
 
+import type { PolyDataCapability } from "@cogni/poly-ai-tools";
 import type {
   PolymarketDataApiClient,
   PolymarketUserPnlClient,
-} from "@cogni/market-provider/adapters/polymarket";
-import type { PolyDataCapability } from "@cogni/poly-ai-tools";
+} from "@cogni/poly-market-provider/adapters/polymarket";
 
 export interface CreatePolyResearchCapabilityDeps {
   dataApiClient: PolymarketDataApiClient;

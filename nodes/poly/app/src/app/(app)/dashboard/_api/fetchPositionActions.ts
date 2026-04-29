@@ -17,7 +17,7 @@
 import type {
   PolyWalletClosePositionOutput,
   PolyWalletRedeemPositionOutput,
-} from "@cogni/node-contracts";
+} from "@cogni/poly-node-contracts";
 
 async function readError(response: Response): Promise<string> {
   try {

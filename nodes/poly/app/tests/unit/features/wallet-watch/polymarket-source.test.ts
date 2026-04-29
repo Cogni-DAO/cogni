@@ -4,18 +4,21 @@
 /**
  * Module: `@tests/unit/features/wallet-watch/polymarket-source.test`
  * Purpose: Unit tests for `createPolymarketActivitySource`. Validates cursor advance, empty-tx rejection + counter, fill-shape correctness, and skip bucketing.
- * Scope: Mocked `PolymarketDataApiClient` — no network. Uses real `createRecordingMetrics` + `noopLogger` from `@cogni/market-provider`.
+ * Scope: Mocked `PolymarketDataApiClient` — no network. Uses real `createRecordingMetrics` + `noopLogger` from `@cogni/poly-market-provider`.
  * Invariants: CURSOR_IS_MAX_TIMESTAMP; DA_EMPTY_HASH_REJECTED; WALLET_WATCH_IS_GENERIC.
  * Side-effects: none
  * Links: src/features/wallet-watch/polymarket-source.ts
  * @internal
  */
 
-import { createRecordingMetrics, noopLogger } from "@cogni/market-provider";
+import {
+  createRecordingMetrics,
+  noopLogger,
+} from "@cogni/poly-market-provider";
 import type {
   PolymarketDataApiClient,
   PolymarketUserTrade,
-} from "@cogni/market-provider/adapters/polymarket";
+} from "@cogni/poly-market-provider/adapters/polymarket";
 import { describe, expect, it } from "vitest";
 
 import {

@@ -14,7 +14,7 @@
 import {
   PolymarketDataApiClient,
   type PolymarketUserTrade,
-} from "@cogni/market-provider/adapters/polymarket";
+} from "@cogni/poly-market-provider/adapters/polymarket";
 
 const TRADE_LIMIT = 10;
 

@@ -17,8 +17,8 @@ import { toUserId } from "@cogni/ids";
 import {
   normalizePolygonConditionId,
   PolymarketDataApiClient,
-} from "@cogni/market-provider/adapters/polymarket";
-import { polyWalletRedeemPositionOperation } from "@cogni/node-contracts";
+} from "@cogni/poly-market-provider/adapters/polymarket";
+import { polyWalletRedeemPositionOperation } from "@cogni/poly-node-contracts";
 import { NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
 import { polygon } from "viem/chains";

@@ -9,7 +9,7 @@
  * @public
  */
 
-import type { PolyWalletExecutionOutput } from "@cogni/node-contracts";
+import type { PolyWalletExecutionOutput } from "@cogni/poly-node-contracts";
 
 export async function fetchExecution(): Promise<PolyWalletExecutionOutput> {
   const response = await fetch("/api/v1/poly/wallet/execution", {

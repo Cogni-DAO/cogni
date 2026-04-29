@@ -102,7 +102,7 @@ export type WalletPosition = {
 /**
  * Trade-derived metrics. Nullable when the resolved-position sample is too
  * small to be meaningful (< `minResolvedForMetrics` in
- * `packages/market-provider/src/analysis/wallet-metrics.ts`, default 5).
+ * `nodes/poly/packages/market-provider/src/analysis/wallet-metrics.ts`, default 5).
  * The UI must distinguish "0%" (real) from "not enough data" (null) —
  * molecules render an em-dash for null rather than a fake zero.
  *

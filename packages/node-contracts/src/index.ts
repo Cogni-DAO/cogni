@@ -70,20 +70,7 @@ export * from "./payments.credits.summary.v1.contract";
 export * from "./payments.intent.v1.contract";
 export * from "./payments.status.v1.contract";
 export * from "./payments.submit.v1.contract";
-// ── Poly copy-trade (task.0315, @scaffolding surfaces — removed in Phase 4) ─
-export * from "./poly.copy-trade.orders.v1.contract";
-export * from "./poly.copy-trade.targets.v1.contract";
-export * from "./poly.research-report.v1.contract";
-export * from "./poly.sync-health.v1.contract";
-export * from "./poly.wallet.balance.v1.contract";
-export * from "./poly.wallet.balances.v1.contract";
-export * from "./poly.wallet.connection.v1.contract";
-export * from "./poly.wallet.enable-trading.v1.contract";
-export * from "./poly.wallet.execution.v1.contract";
-export * from "./poly.wallet.grants.v1.contract";
-export * from "./poly.wallet.overview.v1.contract";
-export * from "./poly.wallet.position-actions.v1.contract";
-export * from "./poly.wallet-analysis.v1.contract";
+// Poly contracts moved to @cogni/poly-node-contracts (task.0421).
 // ── Runs ────────────────────────────────────────────────────────────────────
 export * from "./run-stream.contract";
 export * from "./runs.stream.v1.contract";

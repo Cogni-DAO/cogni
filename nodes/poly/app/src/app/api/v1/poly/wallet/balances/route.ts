@@ -16,7 +16,7 @@
  *     with the corresponding field `null`; the response stays 200.
  * Side-effects: IO (DB read, Polygon RPC).
  * Links: docs/spec/poly-trader-wallet-port.md,
- *        packages/node-contracts/src/poly.wallet.balances.v1.contract.ts
+ *        nodes/poly/packages/node-contracts/src/poly.wallet.balances.v1.contract.ts
  * @public
  */
 
@@ -24,7 +24,7 @@ import { toUserId } from "@cogni/ids";
 import {
   type PolyWalletBalancesOutput,
   polyWalletBalancesOperation,
-} from "@cogni/node-contracts";
+} from "@cogni/poly-node-contracts";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";

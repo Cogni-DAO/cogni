@@ -9,7 +9,7 @@ read_when: Modifying CI workflows, adding checks to merge gate, or planning mult
 implements: []
 owner: cogni-dev
 created: 2025-12-22
-verified: 2026-04-27
+verified: 2026-04-28
 tags:
   - ci-cd
   - deployment
@@ -128,6 +128,76 @@ Cross-domain rejections must do half the contributor's work in the failure annot
 4. **Link the substrate-request convention** so the rejected change becomes a roadmap input rather than dropped friction. (Convention TBD; until it lands, link this spec section.)
 
 Each gate firing is a feedback loop, not a barrier. Future: rejections logged structurally (Loki, work-item, attribution surface) so operator's roadmap-building agent reads the queue.
+
+---
+
+## Node-owned packages
+
+The single-node-scope rule classifies any path outside `nodes/<X>/**` as `operator`. So a "shared" package at root that is in fact only consumed by one node turns every change to it into an `operator` PR — even though no operator code is touched. Carving such packages under `nodes/<X>/packages/` makes their domain match their actual ownership.
+
+### Rule
+
+A package is **node-owned** iff its only in-repo importer is `nodes/<X>/app`, `nodes/<X>/graphs`, or another `nodes/<X>/packages/<...>` package. Node-owned packages live at:
+
+```
+nodes/<X>/packages/<bare-name>/
+```
+
+Cross-node packages — anything imported by two or more nodes' `app`/`graphs` — stay at root `packages/`. If a package starts node-owned and later attracts a cross-node consumer, move it back to root in a single carve-back PR.
+
+### Naming convention
+
+Folder is the bare name (no `<node>-` prefix in the path); package name is `@cogni/<node>-<bare-name>`:
+
+| Folder                                    | Package name                                   |
+| ----------------------------------------- | ---------------------------------------------- |
+| `nodes/poly/packages/wallet/`             | `@cogni/poly-wallet`                           |
+| `nodes/poly/packages/market-provider/`    | `@cogni/poly-market-provider`                  |
+| `nodes/poly/packages/node-contracts/`     | `@cogni/poly-node-contracts`                   |
+| `nodes/poly/packages/ai-tools/`           | `@cogni/poly-ai-tools`                         |
+| `nodes/node-template/packages/knowledge/` | `@cogni/node-template-knowledge` (when carved) |
+
+The `<node>-` prefix on the package name is what makes ownership visible in `package.json` / lockfile / npm registry views; the path makes it visible in grep / file tree. Both signals point the same way.
+
+### Workspace plumbing
+
+Already wired:
+
+- `pnpm-workspace.yaml` globs `nodes/*/packages/*`.
+- `vitest.workspace.ts` includes `./nodes/*/packages/*/vitest.config.ts`.
+- `pnpm packages:build` builds every `nodes/*/packages/*` and asserts each emits `dist/index.d.ts` (35 packages green as of task.0421).
+- pnpm symlinks resolve `@cogni/*` automatically — no `tsconfig.json` `paths` aliases needed.
+
+What a new node-owned package must do:
+
+1. `package.json` — name `@cogni/<node>-<bare-name>`, same shape as existing peers (`exports`, `tsup`/`typecheck` scripts, `dist/` in `files`).
+2. `tsconfig.json` — `composite: true`, `references` to any imported sibling packages (use `../../../../packages/<x>` or `../<sibling>` paths).
+3. Add a `{ "path": "./nodes/<node>/packages/<bare-name>" }` entry to root `tsconfig.json` `references`.
+4. Add the package to `biome/base.json` if it has any non-Biome-default config files (e.g. `tsup.config.ts`).
+5. `AGENTS.md` mirroring the shared-package shape (Owners, Status, Boundaries JSON block, Public Surface, Responsibilities, Notes) — `pnpm check:docs` validates.
+
+### Carve-out playbook
+
+When moving an existing root package under a node:
+
+1. Audit who imports it. `grep -rln "@cogni/<old-name>" --include="*.ts" --include="*.tsx" --include="*.json"`. If any non-target-node `app/package.json` declares it _without any code import_, that's a stale dep — drop it as a drive-by.
+2. `git mv packages/<old-name> nodes/<node>/packages/<bare-name>`.
+3. Rename the package: `package.json` `"name"` → `@cogni/<node>-<bare-name>`. Bulk find-replace the import name across the repo.
+4. **Audit overlapping seds.** If you do two find-replaces whose results contain each other's targets (e.g. `s|packages/foo/|nodes/poly/packages/foo/|` after `s|../packages/foo/|../nodes/poly/packages/foo/|`), the second one re-prefixes the first's output. Always `grep -rln "nodes/<node>/nodes/<node>"` after a multi-sed pass.
+5. **Audit fixture-relative paths in tests.** Tests that read `__dirname`-relative fixtures via `../../../docs/...` need extra `../` levels for the new depth. `pnpm exec vitest run nodes/<node>/packages/<bare-name>` catches these.
+6. Update root `tsconfig.json` `references`, `biome/base.json` lint scopes, `.dependency-cruiser.cjs` rule paths.
+7. **Importers with mixed symbols.** If splitting a package whose moved subset shares an `index.ts` with what stays behind, build the symbol allowlist from the moved files' actual exports — not from a name prefix. Files that import a mix get split into two `import { ... } from "@cogni/..."` statements.
+8. **Re-exports too, not just imports.** `export { ... } from "<pkg>"` re-exports must also be redirected. Greppable with `from "@cogni/<old>"`.
+9. `pnpm install` → `pnpm packages:build` → targeted `pnpm --filter @cogni/<new-name> typecheck` + targeted vitest run for the package and its consumers.
+10. Drive-by stale-dep cleanup: drop `@cogni/<old-name>` declarations from any `app/package.json` that has no actual code importer.
+
+### Drive-by-rule
+
+When carving a package out, also remove its declaration from any `package.json` that doesn't actually import it. Stale workspace deps are silent landmines: they make `single-node-scope` think a node still consumes the package, and they make refactor-tooling slower for no reason.
+
+### Per-node dep-cruiser is intentionally separate
+
+This standard does not split `.dependency-cruiser.cjs` per node. That's a separate question (root-rules vs node-rules composition) tracked in [task.0422](../../work/items/task.0422.dep-cruiser-inter-intra-node-design.md) — pre-requires this carve-out so paths are stable before the dep-cruiser split lands.
 
 ---
 

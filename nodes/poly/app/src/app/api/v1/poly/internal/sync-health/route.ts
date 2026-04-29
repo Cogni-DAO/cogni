@@ -17,7 +17,7 @@
  * @public
  */
 
-import { PolySyncHealthResponseSchema } from "@cogni/node-contracts";
+import { PolySyncHealthResponseSchema } from "@cogni/poly-node-contracts";
 import { NextResponse } from "next/server";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";

@@ -17,7 +17,7 @@ import {
   PolymarketClobAdapter,
   PolymarketDataApiClient,
   type PolymarketUserTrade,
-} from "@cogni/market-provider/adapters/polymarket";
+} from "@cogni/poly-market-provider/adapters/polymarket";
 import { ClobClient, type OrderBookSummary } from "@polymarket/clob-client";
 import { PrivyClient } from "@privy-io/node";
 import { createViemAccount } from "@privy-io/node/viem";

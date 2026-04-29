@@ -11,7 +11,7 @@
  * @internal
  */
 
-import { clientOrderIdFor, type Fill } from "@cogni/market-provider";
+import { clientOrderIdFor, type Fill } from "@cogni/poly-market-provider";
 import { describe, expect, it } from "vitest";
 
 import { planMirrorFromFill } from "@/features/copy-trade/plan-mirror";

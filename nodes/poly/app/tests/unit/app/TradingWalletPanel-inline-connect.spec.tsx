@@ -20,7 +20,7 @@
  * @vitest-environment jsdom
  */
 
-import type { PolyWalletStatusOutput } from "@cogni/node-contracts";
+import type { PolyWalletStatusOutput } from "@cogni/poly-node-contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";

@@ -14,7 +14,7 @@
 import type {
   PolyWalletOverviewInterval,
   PolyWalletOverviewOutput,
-} from "@cogni/node-contracts";
+} from "@cogni/poly-node-contracts";
 
 export async function fetchTradingWallet(
   interval: PolyWalletOverviewInterval

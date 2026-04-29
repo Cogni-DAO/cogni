@@ -17,7 +17,7 @@
  * @public
  */
 
-import { PolyAddressSchema } from "@cogni/node-contracts";
+import { PolyAddressSchema } from "@cogni/poly-node-contracts";
 import { notFound, redirect } from "next/navigation";
 import type { ReactElement } from "react";
 import {

@@ -9,17 +9,17 @@
  *   - NO_SECRETS_IN_CONTEXT: Kalshi credentials resolved from env, never passed to tools
  *   - READ_ONLY: Only listMarkets, no order placement
  * Side-effects: none (factory only)
- * Links: packages/market-provider/, work/items/task.0230.market-data-package.md
+ * Links: nodes/poly/packages/market-provider/, work/items/task.0230.market-data-package.md
  * @internal
  */
 
+import type { MarketCapability, MarketListOutput } from "@cogni/poly-ai-tools";
 import type {
   MarketProviderPort,
   NormalizedMarket,
-} from "@cogni/market-provider";
-import { KalshiAdapter } from "@cogni/market-provider/adapters/kalshi";
-import { PolymarketAdapter } from "@cogni/market-provider/adapters/polymarket";
-import type { MarketCapability, MarketListOutput } from "@cogni/poly-ai-tools";
+} from "@cogni/poly-market-provider";
+import { KalshiAdapter } from "@cogni/poly-market-provider/adapters/kalshi";
+import { PolymarketAdapter } from "@cogni/poly-market-provider/adapters/polymarket";
 
 /**
  * Convert NormalizedMarket[] from one or more providers into MarketListOutput.

@@ -29,7 +29,7 @@ import {
   type PolymarketDataApiClient,
   polymarketCtfEventsAbi,
   polymarketNegRiskAdapterAbi,
-} from "@cogni/market-provider/adapters/polymarket";
+} from "@cogni/poly-market-provider/adapters/polymarket";
 import { decodeEventLog, type Log, type PublicClient } from "viem";
 
 import { transition } from "@/core";

@@ -11,8 +11,8 @@
  * Scope: Client layout shell only. Panels own their own data fetching.
  * Invariants: No URL rename — relabel-only per the project charter.
  * Side-effects: none (panels perform their own IO).
- * Links: packages/node-contracts/src/poly.wallet.connection.v1.contract.ts,
- *        packages/node-contracts/src/poly.wallet.balances.v1.contract.ts
+ * Links: nodes/poly/packages/node-contracts/src/poly.wallet.connection.v1.contract.ts,
+ *        nodes/poly/packages/node-contracts/src/poly.wallet.balances.v1.contract.ts
  * @public
  */
 

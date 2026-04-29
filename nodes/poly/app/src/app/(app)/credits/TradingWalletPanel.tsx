@@ -22,9 +22,9 @@
  *   - PARTIAL_FAILURE_VISIBLE: render USDC.e/POL as "—" when the RPC errored.
  * Side-effects: IO (fetch API via React Query; `onConnected` triggers
  *   `poly-wallet-status` invalidation).
- * Links: packages/node-contracts/src/poly.wallet.connection.v1.contract.ts,
- *        packages/node-contracts/src/poly.wallet.balances.v1.contract.ts,
- *        packages/node-contracts/src/poly.wallet.enable-trading.v1.contract.ts,
+ * Links: nodes/poly/packages/node-contracts/src/poly.wallet.connection.v1.contract.ts,
+ *        nodes/poly/packages/node-contracts/src/poly.wallet.balances.v1.contract.ts,
+ *        nodes/poly/packages/node-contracts/src/poly.wallet.enable-trading.v1.contract.ts,
  *        work/items/task.0355.poly-trading-wallet-enable-trading.md,
  *        work/items/task.0361.poly-first-user-onboarding-flow-v0.md,
  *        work/items/task.0365.poly-onboarding-ux-polish-v0-1.md,
@@ -38,7 +38,7 @@
 import type {
   PolyWalletBalancesOutput,
   PolyWalletStatusOutput,
-} from "@cogni/node-contracts";
+} from "@cogni/poly-node-contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Info } from "lucide-react";
 import Link from "next/link";

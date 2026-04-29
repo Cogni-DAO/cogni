@@ -18,12 +18,12 @@
  */
 
 import { toUserId } from "@cogni/ids";
-import { noopMetrics } from "@cogni/market-provider";
+import { noopMetrics } from "@cogni/poly-market-provider";
 import {
   PolyWalletOverviewIntervalSchema,
   type PolyWalletOverviewOutput,
   polyWalletOverviewOperation,
-} from "@cogni/node-contracts";
+} from "@cogni/poly-node-contracts";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import {

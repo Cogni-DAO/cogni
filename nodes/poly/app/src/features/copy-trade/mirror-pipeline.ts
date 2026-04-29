@@ -18,14 +18,14 @@
  * @public
  */
 
+import { EVENT_NAMES } from "@cogni/node-shared";
 import {
   clientOrderIdFor,
   type LoggerPort,
   type MetricsPort,
   type OrderIntent,
   type OrderReceipt,
-} from "@cogni/market-provider";
-import { EVENT_NAMES } from "@cogni/node-shared";
+} from "@cogni/poly-market-provider";
 
 import type { OrderLedger } from "@/features/trading";
 import type { WalletActivitySource } from "@/features/wallet-watch";
@@ -138,7 +138,7 @@ export async function runMirrorTick(deps: MirrorPipelineDeps): Promise<void> {
   const cursor = deps.getCursor();
 
   let result: {
-    fills: import("@cogni/market-provider").Fill[];
+    fills: import("@cogni/poly-market-provider").Fill[];
     newSince: number;
   };
   try {
@@ -164,7 +164,7 @@ export async function runMirrorTick(deps: MirrorPipelineDeps): Promise<void> {
 }
 
 async function processFill(
-  fill: import("@cogni/market-provider").Fill,
+  fill: import("@cogni/poly-market-provider").Fill,
   deps: MirrorPipelineDeps,
   clock: () => Date,
   log: LoggerPort
@@ -269,7 +269,7 @@ async function processFill(
 
 /** Handles a SELL fill: position-check then close, or skip. */
 async function processSellFill(args: {
-  fill: import("@cogni/market-provider").Fill;
+  fill: import("@cogni/poly-market-provider").Fill;
   deps: MirrorPipelineDeps;
   client_order_id: `0x${string}`;
   source: DecisionSource;
@@ -431,7 +431,7 @@ async function processSellFill(args: {
  */
 async function executeMirrorOrder(
   deps: MirrorPipelineDeps,
-  fill: import("@cogni/market-provider").Fill,
+  fill: import("@cogni/poly-market-provider").Fill,
   client_order_id: `0x${string}`,
   decisionBase: {
     target_id: string;
@@ -565,7 +565,7 @@ function emitDecisionMetric(
 }
 
 function buildDecisionIntentBlob(
-  fill: import("@cogni/market-provider").Fill,
+  fill: import("@cogni/poly-market-provider").Fill,
   target: MirrorTargetConfig,
   client_order_id: `0x${string}`,
   extra?: Record<string, unknown>

@@ -24,7 +24,7 @@ import {
   type PolymarketDataApiClient,
   polymarketCtfEventsAbi,
   polymarketNegRiskAdapterAbi,
-} from "@cogni/market-provider/adapters/polymarket";
+} from "@cogni/poly-market-provider/adapters/polymarket";
 import type { Abi, PublicClient } from "viem";
 import { decodeEventLog, getAbiItem } from "viem";
 

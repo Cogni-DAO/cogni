@@ -17,7 +17,7 @@
 
 "use client";
 
-import type { PolyWalletOverviewInterval } from "@cogni/node-contracts";
+import type { PolyWalletOverviewInterval } from "@cogni/poly-node-contracts";
 import type { ReactElement, ReactNode } from "react";
 import { useState } from "react";
 import { useWalletAnalysis } from "../client/use-wallet-analysis";

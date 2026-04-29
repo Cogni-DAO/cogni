@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
-import type { OrderReceipt } from "@cogni/market-provider";
+import type { OrderReceipt } from "@cogni/poly-market-provider";
 import type { PolyTraderWalletPort } from "@cogni/poly-wallet";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -15,7 +15,7 @@ const writeContract = vi.fn();
 const waitForTransactionReceipt = vi.fn();
 const multicall = vi.fn();
 
-vi.mock("@cogni/market-provider/adapters/polymarket", () => {
+vi.mock("@cogni/poly-market-provider/adapters/polymarket", () => {
   class FakePolymarketClobAdapter {
     placeOrder = placeOrder;
     sellPositionAtMarket = sellPositionAtMarket;

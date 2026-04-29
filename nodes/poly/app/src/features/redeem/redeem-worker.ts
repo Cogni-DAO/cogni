@@ -44,7 +44,7 @@ import {
   polymarketCtfEventsAbi,
   polymarketCtfRedeemAbi,
   polymarketNegRiskAdapterAbi,
-} from "@cogni/market-provider/adapters/polymarket";
+} from "@cogni/poly-market-provider/adapters/polymarket";
 import {
   type AbiEvent,
   type Account,

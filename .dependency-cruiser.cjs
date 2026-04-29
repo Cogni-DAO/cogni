@@ -720,7 +720,7 @@ module.exports = {
 
     // =========================================================================
     // Pure-policy boundary rules (PURE_POLICY_NO_IO)
-    // packages/market-provider/src/policy/** is the pure decision layer for
+    // nodes/poly/packages/market-provider/src/policy/** is the pure decision layer for
     // redeem / close / exit policies. It must not import any I/O (viem,
     // @polymarket/clob-client*) or any app/bootstrap code. Bug.0384's predicate
     // defect was made possible because the prior in-line decideRedeem was
@@ -732,21 +732,23 @@ module.exports = {
       name: "no-io-in-policy",
       severity: "error",
       from: {
-        path: "^packages/market-provider/src/policy/",
+        path: "^nodes/poly/packages/market-provider/src/policy/",
       },
       to: {
         path: [
           "^node_modules/viem",
           "^node_modules/@polymarket/clob-client/",
           "^node_modules/@polymarket/clob-client-v2/",
-          "^nodes/",
+          "^nodes/[^/]+/(app|graphs)/",
           "^services/",
         ],
       },
       comment:
         "PURE_POLICY_NO_IO — policy modules must not import viem, " +
         "@polymarket/clob-client (any version), app/bootstrap, or any node/service code. " +
-        "See docs/design/poly-positions.md § Capability A.",
+        "See docs/design/poly-positions.md § Capability A. " +
+        "Path is `nodes/<X>/(app|graphs)/` so within-package imports under " +
+        "`nodes/poly/packages/market-provider/src/policy/` don't false-fire (task.0421).",
     },
 
     // SINGLE_DOMAIN_HARD_FAIL: @cogni/poly-ai-tools is poly-domain only.

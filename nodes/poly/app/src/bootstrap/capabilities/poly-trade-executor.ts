@@ -55,8 +55,8 @@ import type {
   MetricsPort,
   OrderIntent,
   OrderReceipt,
-} from "@cogni/market-provider";
-import type { PolymarketUserPosition } from "@cogni/market-provider/adapters/polymarket";
+} from "@cogni/poly-market-provider";
+import type { PolymarketUserPosition } from "@cogni/poly-market-provider/adapters/polymarket";
 import type {
   OrderIntentSummary,
   PolyTraderWalletPort,
@@ -284,7 +284,7 @@ async function buildExecutor(
   }
 
   const { PolymarketClobAdapter, PolymarketDataApiClient } = await import(
-    "@cogni/market-provider/adapters/polymarket"
+    "@cogni/poly-market-provider/adapters/polymarket"
   );
   const { createWalletClient, http } = await import("viem");
   const { polygon } = await import("viem/chains");
@@ -567,7 +567,7 @@ async function buildExecutor(
 function mapOpenOrderSummary(
   order: Awaited<
     ReturnType<
-      import("@cogni/market-provider/adapters/polymarket").PolymarketClobAdapter["listOpenOrders"]
+      import("@cogni/poly-market-provider/adapters/polymarket").PolymarketClobAdapter["listOpenOrders"]
     >
   >[number]
 ): OpenOrderSummary {

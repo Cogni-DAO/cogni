@@ -17,11 +17,11 @@
 import {
   PolymarketUserPnlClient,
   type PolymarketUserPnlPoint,
-} from "@cogni/market-provider/adapters/polymarket";
+} from "@cogni/poly-market-provider/adapters/polymarket";
 import type {
   PolyWalletOverviewInterval,
   PolyWalletOverviewPnlPoint,
-} from "@cogni/node-contracts";
+} from "@cogni/poly-node-contracts";
 
 let userPnlClient: PolymarketUserPnlClient | undefined;
 

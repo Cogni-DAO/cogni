@@ -15,7 +15,7 @@
  * @public
  */
 
-import type { OrderIntent } from "@cogni/market-provider";
+import type { OrderIntent } from "@cogni/poly-market-provider";
 
 import type {
   MirrorPlan,

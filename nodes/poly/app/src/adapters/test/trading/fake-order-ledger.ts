@@ -121,7 +121,7 @@ export class FakeOrderLedger implements OrderLedger {
 
   async markOrderId(params: {
     client_order_id: string;
-    receipt: import("@cogni/market-provider").OrderReceipt;
+    receipt: import("@cogni/poly-market-provider").OrderReceipt;
   }): Promise<void> {
     const row = this.rows.find(
       (r) => r.client_order_id === params.client_order_id
@@ -243,7 +243,7 @@ export class FakeOrderLedger implements OrderLedger {
 }
 
 function mapReceiptStatus(
-  s: import("@cogni/market-provider").OrderReceipt["status"]
+  s: import("@cogni/poly-market-provider").OrderReceipt["status"]
 ): LedgerStatus {
   switch (s) {
     case "filled":

@@ -19,7 +19,7 @@ import path from "node:path";
 import {
   type ApiKeyCreds,
   PolymarketClobAdapter,
-} from "@cogni/market-provider/adapters/polymarket";
+} from "@cogni/poly-market-provider/adapters/polymarket";
 import { PrivyClient } from "@privy-io/node";
 import { createViemAccount } from "@privy-io/node/viem";
 import { config } from "dotenv";

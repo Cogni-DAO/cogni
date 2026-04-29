@@ -25,7 +25,7 @@
  *     `/api/v1/poly/wallet/overview`; this route stays focused on positions
  *     and trade cadence only.
  * Side-effects: IO (DB read, Polymarket Data API, public CLOB).
- * Links: packages/node-contracts/src/poly.wallet.execution.v1.contract.ts,
+ * Links: nodes/poly/packages/node-contracts/src/poly.wallet.execution.v1.contract.ts,
  *        docs/spec/poly-trader-wallet-port.md,
  *        work/items/task.0354.poly-trading-hardening-followups.md
  * @public
@@ -36,7 +36,7 @@ import {
   PolyWalletExecutionOutputSchema,
   polyWalletExecutionOperation,
   type WalletExecutionLifecycleState,
-} from "@cogni/node-contracts";
+} from "@cogni/poly-node-contracts";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";

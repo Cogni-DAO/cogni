@@ -17,7 +17,7 @@ import {
   PolymarketDataApiClient,
   type PolymarketLeaderboardEntry,
   type PolymarketUserTrade,
-} from "@cogni/market-provider/adapters/polymarket";
+} from "@cogni/poly-market-provider/adapters/polymarket";
 
 const TRADE_FETCH_LIMIT = 500;
 const LEADERBOARD_TOP_N = 25;

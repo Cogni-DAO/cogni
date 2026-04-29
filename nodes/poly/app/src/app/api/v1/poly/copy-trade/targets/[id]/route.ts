@@ -19,8 +19,8 @@
 
 import { withTenantScope } from "@cogni/db-client";
 import { toUserId, userActor } from "@cogni/ids";
-import { polyCopyTradeTargetDeleteOperation } from "@cogni/node-contracts";
 import { polyCopyTradeTargets } from "@cogni/poly-db-schema";
+import { polyCopyTradeTargetDeleteOperation } from "@cogni/poly-node-contracts";
 import { and, eq, isNull } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { NextResponse } from "next/server";

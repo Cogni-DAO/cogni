@@ -22,7 +22,7 @@
  *     Same pill, same shape, same one line — just a different color says
  *     "approvals on-chain, but you have $0 USDC.e so you can't trade yet".
  * Side-effects: IO (POST enable-trading; React Query cache invalidation).
- * Links: packages/node-contracts/src/poly.wallet.enable-trading.v1.contract.ts,
+ * Links: nodes/poly/packages/node-contracts/src/poly.wallet.enable-trading.v1.contract.ts,
  *        work/items/task.0355.poly-trading-wallet-enable-trading.md,
  *        work/items/task.0365.poly-onboarding-ux-polish-v0-1.md
  * @public
@@ -30,7 +30,7 @@
 
 "use client";
 
-import type { PolyWalletEnableTradingOutput } from "@cogni/node-contracts";
+import type { PolyWalletEnableTradingOutput } from "@cogni/poly-node-contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
 import type { ReactElement } from "react";

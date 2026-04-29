@@ -20,11 +20,11 @@
  *   - CONTRACT_STABLE: response shape matches `polyWalletBalanceOperation.output`
  *     — callers downstream of the contract type-check without changes.
  * Side-effects: none.
- * Links: packages/node-contracts/src/poly.wallet.balance.v1.contract.ts
+ * Links: nodes/poly/packages/node-contracts/src/poly.wallet.balance.v1.contract.ts
  * @public
  */
 
-import { polyWalletBalanceOperation } from "@cogni/node-contracts";
+import { polyWalletBalanceOperation } from "@cogni/poly-node-contracts";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
