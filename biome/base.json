@@ -230,7 +230,7 @@
         "packages/attribution-pipeline-plugins/tsup.config.ts",
         "packages/operator-wallet/tsup.config.ts",
         "packages/operator-wallet/vitest.config.ts",
-        "packages/poly-wallet/tsup.config.ts",
+        "nodes/poly/packages/wallet/tsup.config.ts",
         "packages/attribution-pipeline-plugins/vitest.config.ts",
         "packages/financial-ledger/tsup.config.ts",
         "packages/financial-ledger/vitest.config.ts",

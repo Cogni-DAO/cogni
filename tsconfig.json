@@ -20,7 +20,6 @@
     { "path": "./packages/attribution-pipeline-contracts" },
     { "path": "./packages/attribution-pipeline-plugins" },
     { "path": "./packages/operator-wallet" },
-    { "path": "./packages/poly-wallet" },
     { "path": "./packages/scheduler-core" },
     { "path": "./packages/temporal-workflows" },
     { "path": "./packages/repo-spec" },
@@ -36,6 +35,7 @@
     { "path": "./nodes/poly/packages/ai-tools" },
     { "path": "./nodes/poly/packages/knowledge" },
     { "path": "./nodes/poly/packages/db-schema" },
-    { "path": "./nodes/poly/packages/doltgres-schema" }
+    { "path": "./nodes/poly/packages/doltgres-schema" },
+    { "path": "./nodes/poly/packages/wallet" }
   ]
 }
