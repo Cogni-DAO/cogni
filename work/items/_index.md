@@ -163,6 +163,8 @@
 | 1 | 5 | 2 | needs_implement | bug.0405 | Polymarket BUY GTC partial-fills land below min_order_size — produces structurally unsellable dust | Cogni Poly | proj.poly-copy-trading |
 | 1 | 5 | 1 | needs_merge | task.0421 | Poly wallet research charter + first live screen + Dolt schema proposal | Cogni Poly | proj.poly-prediction-bot |
 | 1 | 5 | 2 | needs_review | task.0424 | Poly bet sizer — per-(tenant, market) position cap (reuse `max_usdc_per_trade` for v0) | Poly | proj.poly-bet-sizer |
+| 1 | 5 | 3 | needs_triage | bug.0428 | Redeem worker hardcodes USDC.e collateralToken — V2 vanilla CTF positions silently bleed or yield wrong token | Cogni Poly | proj.poly-copy-trading |
+| 1 | 5 | 5 | needs_design | task.0429 | Poly trading wallet — auto-wrap USDC.e → pUSD (kill the human-click-on-cycle requirement) | Cogni Poly | proj.poly-copy-trading |
 | 1 | 6 | 1 | needs_triage | bug.0036 | Chat route enqueues to closed assistant-stream controller — unhandled TypeError |  |  |
 | 1 | 6 | 1 | needs_triage | bug.0070 | OpenClaw CLI binary not executable as `openclaw` — agent CLI commands fail | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 6 | 2 | needs_design | task.0183 | Run list API: GET /api/v1/ai/runs — query graph_runs with filtering | Live Operations Dashboard | proj.live-dashboard |
