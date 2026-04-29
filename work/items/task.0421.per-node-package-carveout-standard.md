@@ -15,7 +15,7 @@ assignees: derekg1729
 credit:
 project: proj.cicd-services-gitops
 branch: refactor/task-0421-poly-package-carveout
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/1125
 reviewer:
 revision: 0
 blocked_by: []
