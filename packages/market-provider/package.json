@@ -45,7 +45,7 @@
     "zod": "^3.24.0"
   },
   "peerDependencies": {
-    "viem": "^2.0.0"
+    "viem": "^2.48.4"
   },
   "peerDependenciesMeta": {
     "viem": {
@@ -55,6 +55,6 @@
   "devDependencies": {
     "tsup": "^8.5.1",
     "typescript": "^5",
-    "viem": "^2.0.0"
+    "viem": "^2.48.4"
   }
 }
