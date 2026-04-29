@@ -133,7 +133,6 @@
 | 1 | 2 | 1 | needs_review | bug.0359 | candidate-flight false-green: wait-for-argocd accepts revision-advanced apps whose Deployment stays OutOfSync | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 3 | needs_merge | task.0365 | Poly onboarding UX polish (v0.1) — Money page layout, funding tip, approval-state design | Cogni Poly | proj.poly-copy-trading |
 | 1 | 2 | 2 | needs_design | task.0406 | Wire PostHog access for data agents — close the client-perf observability gap |  |  |
-| 1 | 2 | 5 | needs_merge | task.0421 | Per-node package carve-out standard — `nodes/<X>/packages/*` ownership rules + first carve-out (poly) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 3 | 1 | needs_design | bug.0011 | Gateway streaming truncates output mid-sentence in UI | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 3 | 3 | needs_design | task.0099 | Node + scope identity infra: repo-spec, DB persistence, scope_id columns, boot-time drift protection |  |  |
 | 1 | 3 | 3 | needs_research | spike.0119 | Quarterly people-centric attribution review — evaluation payload, governance input, and signal collection | Transparent Credit Payouts | proj.transparent-credit-payouts |
@@ -146,7 +145,6 @@
 | 1 | 3 | 3 | needs_design | task.0278 | Git manager skill + GitHub App permissions for AI branch operations | Agentic Dev Setup | proj.agentic-dev-setup |
 | 1 | 3 | 2 | needs_closeout | task.0279 | Node-aware execution routing — nodeId in workflow input + per-node API dispatch | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | 3 | 5 | needs_design | task.0284 | Secrets single source of truth — External Secrets Operator + secret store |  |  |
-| 1 | 3 | 3 | needs_design | task.0422 | Dep-cruiser inter- and intra-node design — root rules vs `nodes/<X>/.dependency-cruiser.cjs` | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 4 | 1 | needs_design | bug.0009 | Mock-LLM SSE streaming incompatible with OpenClaw pi-ai parser — gateway returns empty payloads | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 4 | 2 | needs_merge | bug.0197 | Scheduled runs accumulate messages in a single shared thread per schedule |  |  |
 | 1 | 4 | 5 | needs_design | task.0234 | Design: node repo creation + CI/CD onboarding pipeline | Node Formation & Launch | proj.node-formation-ui |
@@ -458,6 +456,7 @@
 | 1 | bug.0412 | candidate-flight verify fails when merge-queue rebuild mutates pr-{N}-{X} GHCR tag mid-flight | Reusable CI/CD Rails & Multi-Node Pipeline | proj.ci-cd-reusable |
 | 1 | bug.0421 | FOK success-with-zero-fill logged as outcome=placed — masks bug.0405 divergence in dashboards | Cogni Poly | proj.poly-copy-trading |
 | 1 | task.0422 | Poly data user-pnl-summary — agent's default wallet snapshot tool | Cogni Poly | proj.poly-prediction-bot |
+| 1 | task.0425 | Per-node package carve-out standard — `nodes/<X>/packages/*` ownership rules + first carve-out (poly) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 2 | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |

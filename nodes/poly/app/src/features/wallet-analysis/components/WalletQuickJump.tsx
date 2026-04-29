@@ -11,7 +11,7 @@
  *   - Empty input: button disabled; no error shown.
  *   - Invalid: error shown, navigation blocked.
  * Side-effects: router navigation on submit.
- * Links: docs/design/wallet-analysis-components.md, packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts
+ * Links: docs/design/wallet-analysis-components.md, nodes/poly/packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts
  * @public
  */
 

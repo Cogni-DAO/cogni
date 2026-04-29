@@ -7,7 +7,7 @@
  * Scope: Pure re-exports. Tool code imports from here; contract body lives in node-contracts. Does not define new types, does not load env.
  * Invariants: SINGLE_CONTRACT_SOURCE.
  * Side-effects: none
- * Links: packages/node-contracts/src/poly.research-report.v1.contract.ts
+ * Links: nodes/poly/packages/node-contracts/src/poly.research-report.v1.contract.ts
  * @public
  */
 

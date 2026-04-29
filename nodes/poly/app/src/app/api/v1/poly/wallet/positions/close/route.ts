@@ -9,7 +9,7 @@
  *   - TENANT_SCOPED — the funder address always comes from the caller's trading connection, never from the request body.
  *   - EXIT_ON_PATH — `exitPosition` sells the caller's full share balance for the token via a market order; grant caps never block user exits.
  * Side-effects: Polymarket CLOB HTTPS, possible on-chain fill when the order matches.
- * Links: packages/node-contracts/src/poly.wallet.position-actions.v1.contract.ts,
+ * Links: nodes/poly/packages/node-contracts/src/poly.wallet.position-actions.v1.contract.ts,
  *        nodes/poly/app/src/bootstrap/capabilities/poly-trade-executor.ts
  * @public
  */

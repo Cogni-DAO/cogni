@@ -8,7 +8,7 @@
  * Invariants: SAME_COMPONENT_BOTH_PLACES — Money page and per-target view mount this exact file; no divergent layouts. NUMERIC_VALIDATION — both values are positive numbers and `daily >= per_order` enforced before `onSave`. NO_NEW_TOKENS — only existing kit primitives + Tailwind utility classes.
  * Side-effects: none (component-local state only).
  * Notes: Two affordances total — `edit` link top-right when `!readonly`, `Edit on Money →` link below the row when `readonly`. Inputs use `inputMode="decimal"` not `type="number"` so the number-spinner UI doesn't appear.
- * Links: work/items/task.0347.poly-wallet-preferences-sizing-config.md, packages/node-contracts/src/poly.wallet.grants.v1.contract.ts
+ * Links: work/items/task.0347.poly-wallet-preferences-sizing-config.md, nodes/poly/packages/node-contracts/src/poly.wallet.grants.v1.contract.ts
  * @public
  */
 

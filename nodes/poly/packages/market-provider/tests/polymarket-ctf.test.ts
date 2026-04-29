@@ -7,7 +7,7 @@
  * Scope: `normalizePolygonConditionId` only. Does not hit RPC or chain.
  * Invariants: Valid ids are 32-byte hex.
  * Side-effects: none
- * Links: packages/market-provider/src/adapters/polymarket/polymarket.ctf.ts
+ * Links: nodes/poly/packages/market-provider/src/adapters/polymarket/polymarket.ctf.ts
  * @internal
  */
 

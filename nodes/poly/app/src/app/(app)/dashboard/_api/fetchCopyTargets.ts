@@ -8,7 +8,7 @@
  * Scope: Data fetching only. Returns contract shapes; empty on failure for reads,
  *        thrown errors for mutations so React Query can surface them in the UI.
  * Side-effects: IO (HTTP fetch).
- * Links: packages/node-contracts/src/poly.copy-trade.targets.v1.contract.ts
+ * Links: nodes/poly/packages/node-contracts/src/poly.copy-trade.targets.v1.contract.ts
  * @public
  */
 

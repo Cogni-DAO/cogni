@@ -20,7 +20,7 @@
  *   - IDEMPOTENT_RETRY: POSTing twice is safe — adapter skips satisfied targets.
  * Side-effects: IO (Polygon RPC reads + up to 5 Privy-signed writes; 1 DB
  *   stamp on success).
- * Links: packages/node-contracts/src/poly.wallet.enable-trading.v1.contract.ts,
+ * Links: nodes/poly/packages/node-contracts/src/poly.wallet.enable-trading.v1.contract.ts,
  *        nodes/poly/packages/wallet/src/port/poly-trader-wallet.port.ts,
  *        docs/spec/poly-trader-wallet-port.md,
  *        work/items/task.0355.poly-trading-wallet-enable-trading.md

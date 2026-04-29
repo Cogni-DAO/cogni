@@ -19,7 +19,7 @@
  *   - IDENTITY_FREE: reads no profile/session data beyond the `userId` passed
  *     in by the parent — keeps the component reusable in any shell.
  * Side-effects: IO (POST /api/v1/poly/wallet/connect).
- * Links: packages/node-contracts/src/poly.wallet.connection.v1.contract.ts,
+ * Links: nodes/poly/packages/node-contracts/src/poly.wallet.connection.v1.contract.ts,
  *        work/items/task.0318.poly-trading-wallet-port.md,
  *        work/items/task.0361.poly-first-user-onboarding-flow-v0.md
  * @public

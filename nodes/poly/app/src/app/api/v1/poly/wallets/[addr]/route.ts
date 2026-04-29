@@ -8,7 +8,7 @@
  * Invariants: Any 0x address → 200 (slice availability decides what's populated). 401 when unauthenticated. Address normalized to lowercase by the contract before any handler logic runs.
  * Side-effects: IO (Polymarket Data API + CLOB public + public user-pnl via the service layer).
  * Notes: Cache + concurrency + reuse-mandate live in the service module.
- * Links: docs/design/wallet-analysis-components.md, packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts
+ * Links: docs/design/wallet-analysis-components.md, nodes/poly/packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts
  * @public
  */
 

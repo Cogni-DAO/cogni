@@ -20,7 +20,7 @@
  *   - CONTRACT_STABLE: response shape matches `polyWalletBalanceOperation.output`
  *     — callers downstream of the contract type-check without changes.
  * Side-effects: none.
- * Links: packages/node-contracts/src/poly.wallet.balance.v1.contract.ts
+ * Links: nodes/poly/packages/node-contracts/src/poly.wallet.balance.v1.contract.ts
  * @public
  */
 

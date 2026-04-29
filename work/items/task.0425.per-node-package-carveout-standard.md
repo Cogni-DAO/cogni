@@ -1,8 +1,8 @@
 ---
-id: task.0421
+id: task.0425
 type: task
 title: "Per-node package carve-out standard — `nodes/<X>/packages/*` ownership rules + first carve-out (poly)"
-status: needs_merge
+status: done
 priority: 1
 rank: 2
 estimate: 5

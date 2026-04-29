@@ -12,7 +12,7 @@
  * Side-effects: IO via facade.
  * Links: docs/spec/poly-multi-tenant-auth.md,
  *        docs/spec/poly-trader-wallet-port.md,
- *        packages/node-contracts/src/poly.wallet.grants.v1.contract.ts,
+ *        nodes/poly/packages/node-contracts/src/poly.wallet.grants.v1.contract.ts,
  *        nodes/poly/app/src/app/_facades/poly/wallet-grants.server.ts,
  *        work/items/task.0347.poly-wallet-preferences-sizing-config.md
  * @public

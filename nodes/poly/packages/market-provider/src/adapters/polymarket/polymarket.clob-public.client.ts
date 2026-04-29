@@ -7,7 +7,7 @@
  * Scope: One method (`getMarketResolution`). Does not place orders, does not require auth, does not load env. Distinct from `polymarket.clob.adapter.ts` (which signs orders) — this is a public-read sibling.
  * Invariants: PACKAGES_NO_ENV, READ_ONLY. Returns `null` (not throws) when the upstream fails — callers treat unresolved markets as open positions.
  * Side-effects: IO (HTTP fetch to https://clob.polymarket.com)
- * Links: docs/design/wallet-analysis-components.md, packages/market-provider/src/analysis/wallet-metrics.ts
+ * Links: docs/design/wallet-analysis-components.md, nodes/poly/packages/market-provider/src/analysis/wallet-metrics.ts
  * @public
  */
 

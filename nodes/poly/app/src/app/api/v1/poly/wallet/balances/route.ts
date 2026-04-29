@@ -16,7 +16,7 @@
  *     with the corresponding field `null`; the response stays 200.
  * Side-effects: IO (DB read, Polygon RPC).
  * Links: docs/spec/poly-trader-wallet-port.md,
- *        packages/node-contracts/src/poly.wallet.balances.v1.contract.ts
+ *        nodes/poly/packages/node-contracts/src/poly.wallet.balances.v1.contract.ts
  * @public
  */
 

@@ -9,7 +9,7 @@
  * Side-effects: HTTP (fetch /api/v1/poly/wallet/grants).
  * Links: nodes/poly/app/src/components/kit/policy/PolicyControls.tsx,
  *        nodes/poly/app/src/app/api/v1/poly/wallet/grants/route.ts,
- *        packages/node-contracts/src/poly.wallet.grants.v1.contract.ts,
+ *        nodes/poly/packages/node-contracts/src/poly.wallet.grants.v1.contract.ts,
  *        work/items/task.0347.poly-wallet-preferences-sizing-config.md
  * @public
  */

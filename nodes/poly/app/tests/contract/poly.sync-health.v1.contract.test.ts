@@ -7,7 +7,7 @@
  * Scope: Pure Zod schema validation. No DB, no HTTP transport.
  * Invariants: SYNC_HEALTH_IS_PUBLIC — stable shape; all four fields present. Field renamed oldest_synced_row_age_ms (task.0328 rev1).
  * Side-effects: none
- * Links: packages/node-contracts/src/poly.sync-health.v1.contract.ts (task.0328 CP4)
+ * Links: nodes/poly/packages/node-contracts/src/poly.sync-health.v1.contract.ts (task.0328 CP4)
  * @internal
  */
 
