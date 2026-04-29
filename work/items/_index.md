@@ -389,6 +389,7 @@
 | 0 | bug.0418 | Polymarket CLOB rejects 100% of placeOrder calls with reason="order_version_mismatch" | Cogni Poly | proj.poly-copy-trading |
 | 0 | task.0419 | PrReviewWorkflowInput Zod schema + contract test — fix modelRef-shape regression class | VCS Integration | proj.vcs-integration |
 | 0 | task.0428 | Doltgres work-item create/read/patch API — new items only (v0) | DAO Agentic Project Management | proj.agentic-project-management |
+| 0 | task.5002 | One-shot markdown → Doltgres work-item importer (operator v1) | DAO Agentic Project Management | proj.agentic-project-management |
 | 1 | task.0006 | Collapse GraphProvider into GraphExecutorPort — single execution interface + namespace routing | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0007 | Billing enforcement decorator at GraphExecutorPort level | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0010 | OpenClaw gateway model selection — session-level override or agent-per-specialty | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
