@@ -164,7 +164,7 @@
 | 1 | 5 | 2 | needs_implement | bug.0405 | Polymarket BUY GTC partial-fills land below min_order_size — produces structurally unsellable dust | Cogni Poly | proj.poly-copy-trading |
 | 1 | 5 | 3 | needs_implement | task.0420 | v1 'Send to Cogni' error intake — Temporal worker + shared LokiQueryPort | Observability Hardening | proj.observability-hardening |
 | 1 | 5 | 1 | needs_merge | task.0421 | Poly wallet research charter + first live screen + Dolt schema proposal | Cogni Poly | proj.poly-prediction-bot |
-| 1 | 5 | 2 | needs_implement | task.0425 | Send-to-Cogni: shadcn-composed widget that posts a bug work item via the Doltgres work-items API | Observability Hardening | proj.observability-hardening |
+| 1 | 5 | 2 | needs_implement | task.0425 | Stage 1 — Send-to-Cogni POC: shadcn widget + work-items API on operator's (app)/error.tsx | Observability Hardening | proj.observability-hardening |
 | 1 | 6 | 1 | needs_triage | bug.0036 | Chat route enqueues to closed assistant-stream controller — unhandled TypeError |  |  |
 | 1 | 6 | 1 | needs_triage | bug.0070 | OpenClaw CLI binary not executable as `openclaw` — agent CLI commands fail | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 6 | 2 | needs_design | task.0183 | Run list API: GET /api/v1/ai/runs — query graph_runs with filtering | Live Operations Dashboard | proj.live-dashboard |
