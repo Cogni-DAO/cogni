@@ -38,17 +38,28 @@ Per-fill_id breakdown: each unique `fill_id` shows up in `mirror.decision` 11–
 
 ## Why this happens
 
-`INSERT_BEFORE_PLACE` correctly prevents double-placement at the COID layer — that's the at-most-once guarantee, working as designed. But the **decision pipeline runs upstream** of the COID check:
+`INSERT_BEFORE_PLACE` correctly prevents double-placement at the COID layer — that's the at-most-once guarantee, working as designed. The cursor pipeline (`getCursor` / `setCursor` / `WalletActivitySource.fetchSince`) is also wired correctly end-to-end. The bug is in **two specific pieces** that conspire to defeat the cursor:
 
-1. Wallet-watch poll fires every 30s.
-2. Polymarket data-api `/trades?user=<target>` returns the last N fills (no cursor support agent-side; we just request the window).
-3. Each returned fill is fed into `mirror.decision`.
-4. The decision derives `client_order_id`, queries `poly_copy_trade_orders` for an existing row.
-5. Existing row → log `skipped already_placed` and exit.
+1. **Client-side filter is `>=`, not `>`.** `packages/market-provider/src/adapters/polymarket/polymarket.data-api.client.ts:220`:
+   ```ts
+   if (params?.sinceTs !== undefined) {
+     const since = params.sinceTs;
+     return trades.filter((t) => t.timestamp >= since);
+   }
+   ```
+   The cursor (`newSince`) is set to `max(trade.timestamp)` from the prior tick. On the next tick, the boundary fill (`t.timestamp === since`) is re-included. Off-by-one — `>=` should be `>`.
 
-Steps 3–5 run for every fill in the window every 30s, even fills processed an hour ago. The `/trades` window is wider than the poll period, so each fill is "in scope" for 11–12 successive ticks before it falls off.
+2. **`limit=1000` and no server-side cutoff.** Same client, line 213: `url.searchParams.set("limit", String(params?.limit ?? 1000))`. The Polymarket data-api endpoint does not accept a `since` query param — we always pull the most recent 1000 trades and filter client-side. For high-frequency targets producing 100+ fills/min, the 1000-trade window covers ~10 minutes; every 30s tick re-pulls all fills inside that window and only filters out the ones older than `since`. Each new fill therefore re-enters `mirror.decision` ~20× before it falls off the back of the 1000-row window.
 
-This is wasted DB load and log cardinality, not an at-most-once bug. CLOB sees exactly one placement per fill_id.
+The decision pipeline then runs steps 1–5 for every fill in the returned window every 30s:
+
+1. `mirror-pipeline.runMirrorTick()` fires.
+2. `WalletActivitySource.fetchSince(cursor)` returns the over-broad window.
+3. Each fill is fed into the decision logic.
+4. `clientOrderIdFor(target_id, fill_id)` derives the COID; ledger snapshot lookup hits `poly_copy_trade_fills`.
+5. COID found → log `skipped already_placed` and exit.
+
+This is wasted DB load + log cardinality, not an at-most-once bug. CLOB sees exactly one placement per fill_id.
 
 ## Why it's worth fixing now (not later)
 
@@ -58,9 +69,11 @@ This is wasted DB load and log cardinality, not an at-most-once bug. CLOB sees e
 
 ## Scope
 
-**Per-target cursor.** Add a `last_processed_fill_ts` (or `last_processed_fill_id`) column to whatever table tracks per-target poll state — likely an extension of the wallet-watch state, not a new table. After each poll batch, advance the cursor to the latest fill's timestamp. Subsequent polls filter to `ts > cursor` before feeding the decision pipeline.
+**v0 fix — one-line filter correction.** Change the boundary filter in `polymarket.data-api.client.ts` from `t.timestamp >= since` to `t.timestamp > since`. That alone caps the boundary fill from re-replaying. Coupled with the existing in-memory cursor (`copy-trade-mirror.job.ts` `NO_CURSOR_PERSISTENCE_V0`), each fill should be processed at most once per pod lifetime under steady-state.
 
-Choose timestamp over fill_id because fill_id contains a target-side tx that doesn't sort cleanly across markets; timestamps from data-api are monotonic per-target and that's the actual property we need.
+**Limit-window narrowing — separate concern, separate task if needed.** The 1000-trade fetch is over-broad for high-frequency targets and can mask a stale cursor on a slow tick. Reducing to a smaller `limit` (e.g. `limit = 100`) trades safety against bursty targets for less wasted work. Defer until v0 fix lands and we can re-measure on production. Don't fold into this bug.
+
+Cursor persistence (across pod restarts) is `NO_CURSOR_PERSISTENCE_V0`'s deferred follow-up — also out of scope here.
 
 **Idempotency invariant unchanged.** The COID-level guard stays exactly as is. This bug is purely a "don't do redundant work upstream of an already-correct guard."
 
@@ -73,9 +86,8 @@ Choose timestamp over fill_id because fill_id contains a target-side tx that doe
 
 ## Files to touch
 
-- `nodes/poly/app/src/features/copy-trade/wallet-watch.ts` — read cursor before fetching, pass cursor as filter, advance after batch processed.
-- Wherever per-target poll state lives (likely in `poly_copy_trade_targets` or a sibling table) — add `last_processed_fill_ts NULLABLE`. Migration that defaults to NULL means first poll after deploy still hydrates from the full window once.
-- Tests: replay a fixture where the same fills appear in two consecutive poll responses; assert the second batch yields zero `mirror.decision` calls.
+- `packages/market-provider/src/adapters/polymarket/polymarket.data-api.client.ts:220` — `>=` → `>` on the `sinceTs` filter.
+- `packages/market-provider/test/...` — add a unit fixture: fetch with `sinceTs = T`, assert a trade with `timestamp === T` is NOT returned but `T+1` IS.
 
 ## Validation
 
