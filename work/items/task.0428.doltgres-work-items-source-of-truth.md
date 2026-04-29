@@ -1,5 +1,5 @@
 ---
-id: task.0424
+id: task.0428
 type: task
 title: "Doltgres work-item create/read/patch API — new items only (v0)"
 status: needs_closeout
@@ -12,7 +12,7 @@ spec_refs: [knowledge-data-plane-spec, work-items-port, development-lifecycle]
 assignees: []
 credit:
 project: proj.agentic-project-management
-branch: feat/task.0424-doltgres-work-items-source-of-truth
+branch: feat/task.0428-doltgres-work-items-source-of-truth
 pr:
 reviewer:
 revision: 2
@@ -227,7 +227,7 @@ exercise:
     actor: "external agent registered via /contribute-to-cogni"
     steps:
       - "curl https://test.cognidao.org/.well-known/agent.json"
-      - 'curl -X POST https://test.cognidao.org/api/v1/agent/register -H "content-type: application/json" -d ''{"name":"task.0424-validator"}'' → apiKey'
+      - 'curl -X POST https://test.cognidao.org/api/v1/agent/register -H "content-type: application/json" -d ''{"name":"task.0428-validator"}'' → apiKey'
       - 'POST /api/v1/work/items with body {"type":"task","title":"v0 doltgres write proof","node":"operator","summary":"first item ever created via API"} → 201, returns full row with server-allocated id (e.g. task.04XX)'
       - "GET /api/v1/work/items/<id> → 200, body matches"
       - 'PATCH /api/v1/work/items/<id> with body {"status":"done","summary":"validated"} → 200, returns updated row'
@@ -244,7 +244,7 @@ observability:
 
 ## Review Checklist
 
-- [ ] **Work Item:** `task.0424` linked in PR body
+- [ ] **Work Item:** `task.0428` linked in PR body
 - [ ] **Auth:** all four routes reject without operator API key
 - [ ] **Spec:** `work-items-port.md` documents `node` field + v0 operator-local adapter
 - [ ] **Contracts:** all HTTP shapes in `packages/node-contracts/src/work/`

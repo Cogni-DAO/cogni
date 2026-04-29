@@ -53,7 +53,7 @@
 | 0 | 3 | 2 | needs_merge | task.0294 | Policy-gated release: kill auto-release PR conveyor belt | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 4 | 2 | needs_design | bug.0037 | Gateway proxy billing records $0 cost — x-litellm-response-cost header absent for streaming | Unified Graph Launch | proj.unified-graph-launch |
 | 0 | 5 | 3 | needs_design | bug.0056 | Thread switch aborts in-flight stream — credits consumed, response lost to user | Thread Persistence | proj.thread-persistence |
-| 0 | 5 | 3 | needs_closeout | task.0424 | Doltgres work-item create/read/patch API — new items only (v0) | DAO Agentic Project Management | proj.agentic-project-management |
+| 0 | 5 | 3 | needs_closeout | task.0428 | Doltgres work-item create/read/patch API — new items only (v0) | DAO Agentic Project Management | proj.agentic-project-management |
 | 0 | 6 | 2 | needs_implement | bug.0088 | OpenClaw gateway LLM calls missing billing headers — Discord + subagent calls unbilled |  |  |
 | 0 | 7 | 1 | needs_triage | bug.0067 | OpenClaw model allowlist blocks openrouter/auto — governance sessions.patch failures at 75% rate |  |  |
 | 0 | 7 | 2 | needs_design | task.0152 | Migrate /triage + /implement skills to use WorkItemPort | DAO Agentic Project Management | proj.agentic-project-management |

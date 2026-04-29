@@ -100,7 +100,7 @@ The port's `SubjectRef` must align with actor kinds so that when the `actors` ta
 
 | Deliverable                                                                                | Status      | Est | Work Item            |
 | ------------------------------------------------------------------------------------------ | ----------- | --- | -------------------- |
-| Doltgres work-item create/read/patch API — new items only (operator v0)                    | Not Started | 3   | task.0424            |
+| Doltgres work-item create/read/patch API — new items only (operator v0)                    | Not Started | 3   | task.0428            |
 | One-shot markdown → Doltgres importer + dashboard facade rewire (operator v1)              | Not Started | 2   | (create after 0423)  |
 | Transition state-machine + `expectedRevision` concurrency + relations/external-refs tables | Not Started | 3   | (create after 0423)  |
 | Propagate Doltgres work-item plane to other nodes (or keep operator-only) — TBD            | Not Started | 3   | (create after v1)    |
