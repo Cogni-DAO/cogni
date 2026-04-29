@@ -35,9 +35,25 @@ Design lives in [docs/design/knowledge-contribution-api.md](../../docs/design/kn
 ## Scope
 
 - Surface lives in `@cogni/knowledge-store` (cross-node shared); per-node app code provides ~10-line Next route bindings — see design doc § Architecture.
-- Both poly and operator wire the same routes in this PR. No node-asymmetry; operator gains its first `knowledge` table here.
+- Both poly and operator wire the same routes. No node-asymmetry.
 - Dolt branch-per-PR semantics with reserved-conn pinning. Internal `core__knowledge_write` unchanged.
+- Implementation aligned with `docs/spec/knowledge-syntropy.md`: external contributions stamp `source_type='agent'` + `source_node=<principal>`, status lifecycle (`draft`→`candidate`/`established`/`canonical`), optional `cites` per entry creates citation edges on the same branch.
 - Pre-implementation `AS OF` spike against Doltgres 0.56 testcontainer is **gating** — see design § Open Questions.
+
+## Delivery — 4 stacked PRs
+
+Single-node-scope blocks landing this as one PR (touches node-template + poly + operator). Splitting:
+
+| PR | Scope | What lands |
+| -- | ----- | ---------- |
+| **PR-A** | node-template | `nodes/node-template/packages/knowledge/src/schema.ts` extends `knowledge` with `entry_type`/`status`/`source_node`/`updated_at`; adds `citations` + `domains` + `sources` + `knowledge_contributions` Drizzle tables; extends `source_type` constraint to include `agent`. `index.ts` re-exports. **TS only — no migrations regenerated yet.** |
+| **PR-B** | poly | drizzle-kit regen → `nodes/poly/app/src/adapters/server/db/doltgres-migrations/0001_syntropy_seeds.sql` extends `knowledge` and creates `citations`/`domains`/`sources`/`knowledge_contributions`. Stamp-commit unchanged. |
+| **PR-C** | operator | `nodes/operator/packages/doltgres-schema/src/knowledge.ts` re-exports the syntropy bundle from `@cogni/node-template-knowledge`; updates operator's `drizzle.doltgres.config.ts` + index re-export; drizzle-kit regen → operator's first knowledge migration with all 5 tables. |
+| **PR-D** | operator (this PR, rebased) | Port + adapter + service in `@cogni/knowledge-store`; HTTP contract in `@cogni/node-contracts`; per-node Next route bindings; bootstrap wiring; spec edits to `knowledge-data-plane.md`. Adapter writes `source_type='agent'`/`source_node=<principal-id>`/`source_ref='contribution:<contribId>'`; status lifecycle on merge; optional citations per entry; `findByIdempotencyKey` race-fix; Drizzle query-builder for metadata writes; component tests against testcontainer Doltgres. |
+
+Sequence: PR-A merges → PR-B + PR-C land in parallel (independent nodes) → PR-D rebases.
+
+## Out of scope (v1+)
 
 ## Out of scope (v1+)
 
