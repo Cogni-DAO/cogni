@@ -332,3 +332,7 @@ export {
   buildDoltgresClient,
   type DoltgresClientConfig,
 } from "./build-client.js";
+export {
+  DoltgresKnowledgeContributionAdapter,
+  type DoltgresKnowledgeContributionAdapterConfig,
+} from "./contribution-adapter.js";

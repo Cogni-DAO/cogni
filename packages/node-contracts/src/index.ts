@@ -89,6 +89,7 @@ export * from "./users.profile.v1.contract";
 // ── VCS ─────────────────────────────────────────────────────────────────────
 export * from "./vcs.flight.v1.contract";
 // ── Work items ──────────────────────────────────────────────────────────────
+export * from "./knowledge.contributions.v1.contract";
 export * from "./work.items.create.v1.contract";
 export * from "./work.items.get.v1.contract";
 export * from "./work.items.list.v1.contract";

@@ -3,11 +3,11 @@
 
 /**
  * Module: `@cogni/knowledge-store`
- * Purpose: Knowledge data plane capability — port, domain types, and Zod schemas.
- * Scope: Root barrel exports port interface and domain types. Does not export adapter implementations (use subpath imports).
+ * Purpose: Knowledge data plane capability — port, domain types, contribution service, and Zod schemas.
+ * Scope: Root barrel exports port interfaces, domain types, and the framework-agnostic contribution service factory. Adapters live behind subpath imports.
  * Invariants: PACKAGES_NO_ENV, PACKAGES_NO_LIFECYCLE, PACKAGES_NO_SRC_IMPORTS.
  * Side-effects: none
- * Links: docs/spec/knowledge-data-plane.md
+ * Links: docs/spec/knowledge-data-plane.md, docs/design/knowledge-contribution-api.md
  * @public
  */
 
@@ -26,5 +26,37 @@ export {
   type SourceType,
   SourceTypeSchema,
 } from "./domain/schemas.js";
-// Port interface
+// Contribution domain
+export {
+  type ContributionDiffEntry,
+  ContributionDiffEntrySchema,
+  type ContributionRecord,
+  ContributionRecordSchema,
+  type ContributionState,
+  ContributionStateSchema,
+  type KnowledgeEntryInput,
+  KnowledgeEntryInputSchema,
+  type Principal,
+  type PrincipalKind,
+  PrincipalKindSchema,
+  PrincipalSchema,
+} from "./domain/contribution-schemas.js";
+// Port interfaces
 export type { KnowledgeStorePort } from "./port/knowledge-store.port.js";
+export {
+  ContributionConflictError,
+  ContributionForbiddenError,
+  ContributionNotFoundError,
+  ContributionQuotaError,
+  ContributionStateError,
+  type KnowledgeContributionPort,
+} from "./port/contribution.port.js";
+// Contribution service (framework-agnostic, cross-node shared)
+export {
+  type ContributionService,
+  type ContributionServiceDeps,
+  type CreateBody,
+  type ListQuery,
+  createContributionService,
+  defaultCanMergeKnowledge,
+} from "./service/contribution-service.js";
