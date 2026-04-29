@@ -8,8 +8,8 @@
  * @public
  */
 
-// Schema (Drizzle table definitions — drizzle-kit owns migrations)
-export { knowledge, knowledgeContributions } from "./schema.js";
+// Schema (Drizzle table definition — drizzle-kit owns migrations)
+export { knowledge } from "./schema.js";
 
 // Seeds
 export { BASE_KNOWLEDGE_SEEDS } from "./seeds/base.js";
