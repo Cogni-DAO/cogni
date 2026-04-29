@@ -14,14 +14,14 @@
  * @public
  */
 
-import {
-  PolymarketUserPnlClient,
-  type PolymarketUserPnlPoint,
-} from "@cogni/market-provider/adapters/polymarket";
 import type {
   PolyWalletOverviewInterval,
   PolyWalletOverviewPnlPoint,
 } from "@cogni/node-contracts";
+import {
+  PolymarketUserPnlClient,
+  type PolymarketUserPnlPoint,
+} from "@cogni/poly-market-provider/adapters/polymarket";
 
 let userPnlClient: PolymarketUserPnlClient | undefined;
 

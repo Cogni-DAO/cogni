@@ -29,8 +29,8 @@
  * @public
  */
 
-import { PolymarketDataApiClient } from "@cogni/market-provider/adapters/polymarket";
 import { polyWalletConnections } from "@cogni/poly-db-schema";
+import { PolymarketDataApiClient } from "@cogni/poly-market-provider/adapters/polymarket";
 import type {
   PolyTraderSigningContext,
   PolyTraderWalletPort,

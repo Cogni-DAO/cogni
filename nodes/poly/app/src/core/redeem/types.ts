@@ -16,9 +16,9 @@
  * @public
  */
 
-import type { RedeemFlavor } from "@cogni/market-provider/policy";
+import type { RedeemFlavor } from "@cogni/poly-market-provider/policy";
 
-export type { RedeemFlavor } from "@cogni/market-provider/policy";
+export type { RedeemFlavor } from "@cogni/poly-market-provider/policy";
 
 /**
  * Job lifecycle status — drives the worker state machine.

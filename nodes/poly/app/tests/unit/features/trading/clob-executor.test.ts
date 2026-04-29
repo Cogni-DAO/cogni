@@ -15,7 +15,7 @@ import {
   createRecordingMetrics,
   type OrderIntent,
   type OrderReceipt,
-} from "@cogni/market-provider";
+} from "@cogni/poly-market-provider";
 import { describe, expect, it, vi } from "vitest";
 
 import {

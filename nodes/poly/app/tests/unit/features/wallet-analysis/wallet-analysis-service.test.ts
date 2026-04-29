@@ -18,7 +18,7 @@
 import {
   PolymarketClobPublicClient,
   PolymarketDataApiClient,
-} from "@cogni/market-provider/adapters/polymarket";
+} from "@cogni/poly-market-provider/adapters/polymarket";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearTtlCache } from "@/features/wallet-analysis/server/coalesce";
 import {

@@ -15,13 +15,13 @@
  * @public
  */
 
+import { EVENT_NAMES } from "@cogni/node-shared";
 import type {
   LoggerPort,
   MetricsPort,
   OrderIntent,
   OrderReceipt,
-} from "@cogni/market-provider";
-import { EVENT_NAMES } from "@cogni/node-shared";
+} from "@cogni/poly-market-provider";
 
 /**
  * Metric names emitted by the executor. Dashboards reference these.

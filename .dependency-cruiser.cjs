@@ -720,7 +720,7 @@ module.exports = {
 
     // =========================================================================
     // Pure-policy boundary rules (PURE_POLICY_NO_IO)
-    // packages/market-provider/src/policy/** is the pure decision layer for
+    // nodes/poly/packages/market-provider/src/policy/** is the pure decision layer for
     // redeem / close / exit policies. It must not import any I/O (viem,
     // @polymarket/clob-client*) or any app/bootstrap code. Bug.0384's predicate
     // defect was made possible because the prior in-line decideRedeem was
@@ -732,7 +732,7 @@ module.exports = {
       name: "no-io-in-policy",
       severity: "error",
       from: {
-        path: "^packages/market-provider/src/policy/",
+        path: "^nodes/poly/packages/market-provider/src/policy/",
       },
       to: {
         path: [

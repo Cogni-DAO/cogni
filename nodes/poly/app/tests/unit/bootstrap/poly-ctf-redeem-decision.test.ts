@@ -4,7 +4,7 @@
 /**
  * Module: `tests/unit/bootstrap/poly-ctf-redeem-decision`
  * Purpose: Drive the new `decideRedeem` policy
- *   (`@cogni/market-provider/policy/redeem`) from the captured Polymarket +
+ *   (`@cogni/poly-market-provider/policy/redeem`) from the captured Polymarket +
  *   Polygon decision-table fixture (one assertion per real-chain row).
  *   Ensures the policy reproduces the exact decisions for the historical
  *   snapshot — the bug.0383 corpus in real-chain form.
@@ -24,7 +24,7 @@ import {
   decideRedeem,
   REDEEM_PARENT_COLLECTION_ID_ZERO,
   type RedeemDecision,
-} from "@cogni/market-provider/policy";
+} from "@cogni/poly-market-provider/policy";
 import { describe, expect, it } from "vitest";
 
 const FIXTURE_DIR = join(

@@ -4,7 +4,7 @@
 /**
  * Module: `@features/wallet-watch/polymarket-source`
  * Purpose: `WalletActivitySource` port + Polymarket Data-API adapter. Emits normalized `Fill[]` for a target wallet since a prior cursor. Used by the mirror-coordinator (CP4.3d) and, in the future, by any feature that needs to observe a Polymarket wallet (PnL tracker, audit view, research tool).
- * Scope: Pure adapter over `@cogni/market-provider`'s `PolymarketDataApiClient` + `normalizePolymarketDataApiFill`. Does not build the HTTP client (caller injects); does not read env; does not place orders. Knows nothing about copy-trade vocabulary.
+ * Scope: Pure adapter over `@cogni/poly-market-provider`'s `PolymarketDataApiClient` + `normalizePolymarketDataApiFill`. Does not build the HTTP client (caller injects); does not read env; does not place orders. Knows nothing about copy-trade vocabulary.
  * Invariants:
  *   - WALLET_WATCH_IS_GENERIC — MUST NOT import from `features/copy-trade/` or `features/trading/`. Emits `Fill[]` only.
  *   - DA_EMPTY_HASH_REJECTED — empty-tx rows dropped + counter-incremented; the underlying normalizer is pinned to `fill_id = "data-api:<tx>:<asset>:<side>:<ts>"`.
@@ -14,13 +14,17 @@
  * @public
  */
 
-import type { Fill, LoggerPort, MetricsPort } from "@cogni/market-provider";
+import { EVENT_NAMES } from "@cogni/node-shared";
+import type {
+  Fill,
+  LoggerPort,
+  MetricsPort,
+} from "@cogni/poly-market-provider";
 import {
   normalizePolymarketDataApiFill,
   type PolymarketDataApiClient,
   type PolymarketNormalizeSkipReason,
-} from "@cogni/market-provider/adapters/polymarket";
-import { EVENT_NAMES } from "@cogni/node-shared";
+} from "@cogni/poly-market-provider/adapters/polymarket";
 
 /** Metric names emitted by the Polymarket activity source. */
 export const WALLET_WATCH_METRICS = {

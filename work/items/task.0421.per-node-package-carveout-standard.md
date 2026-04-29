@@ -69,18 +69,20 @@ The package is already named `@cogni/poly-wallet`; this batch is purely a folder
 - [x] `biome/base.json`: `packages/poly-wallet/tsup.config.ts` → `nodes/poly/packages/wallet/tsup.config.ts`
 - [x] Doc-comment in `nodes/poly/app/src/app/api/v1/poly/wallet/enable-trading/route.ts` updated (only path-string outside the package itself)
 - [x] `pnpm install` → `pnpm packages:build` green (all 34 incl. new path declared) → `@cogni/poly-wallet typecheck` + `@cogni/poly-app typecheck` clean
-- [ ] Commit: `refactor(poly): carve poly-wallet into nodes/poly/packages/wallet`
+- [x] Commit: `refactor(poly): carve poly-wallet into nodes/poly/packages/wallet (task.0421 batch 1)` — `6a7ddf9e7`
 
-### Batch 2 — `@cogni/market-provider` → `@cogni/poly-market-provider` (rename + 53 importers)
+### Batch 2 — `@cogni/market-provider` → `@cogni/poly-market-provider` (rename + ~54 importers)
 
-- [ ] `git mv packages/market-provider nodes/poly/packages/market-provider`
-- [ ] In `nodes/poly/packages/market-provider/package.json`: rename `"name": "@cogni/market-provider"` → `"@cogni/poly-market-provider"`
-- [ ] Find-replace `@cogni/market-provider` → `@cogni/poly-market-provider` across all 53 importers (all under `nodes/poly/**` per audit)
-- [ ] Drop stale `@cogni/market-provider` from `nodes/{operator,resy,node-template}/app/package.json`
-- [ ] Update `nodes/poly/app/package.json`: dep entry name updated
-- [ ] Update root `.dependency-cruiser.cjs`: replace `packages/market-provider` paths
-- [ ] Update root `tsconfig.json` / `turbo.json` if they reference the old name
-- [ ] `pnpm install` → targeted: `pnpm --filter @cogni/poly-market-provider test typecheck` + `pnpm --filter @cogni/poly-app typecheck` (all 53 importers live there)
+- [x] `git mv packages/market-provider nodes/poly/packages/market-provider`
+- [x] Renamed `package.json` `"name"` to `"@cogni/poly-market-provider"`
+- [x] Bulk find-replace `@cogni/market-provider` → `@cogni/poly-market-provider` across all importers (95 files touched incl. internal package refs)
+- [x] Dropped stale `@cogni/market-provider` from `nodes/{operator,resy,node-template}/app/package.json` (no code importers there)
+- [x] `tsconfig.json`: dropped `./packages/market-provider`, added `./nodes/poly/packages/market-provider`
+- [x] `.dependency-cruiser.cjs`: updated `^packages/market-provider/src/policy/` → `^nodes/poly/packages/market-provider/src/policy/` (PURE_POLICY_NO_IO rule still in effect)
+- [x] Doc-comment refs (`packages/market-provider/...` in source `Links:` strings) updated to new path
+- [x] Fixed two test files referencing `__dirname`-relative `../../../docs/research/fixtures/...` — added 2 levels for the deeper move (`../../../../../docs/...`)
+- [x] Fixed `nodes/poly/app/tests/unit/packages/market-provider/position-timelines.test.ts` relative imports — caught + repaired a double-prefix (`nodes/poly/nodes/poly/...`) introduced by overlapping seds
+- [x] `pnpm install` → `pnpm packages:build` green → `@cogni/poly-market-provider` 163 tests pass, `position-timelines` 3 tests pass, `@cogni/poly-app typecheck` clean, dep-cruiser config parses
 - [ ] Commit: `refactor(poly): rename @cogni/market-provider → @cogni/poly-market-provider, move under nodes/poly/packages/`
 
 ### Batch 3 — Carve out `@cogni/poly-node-contracts` (13 contracts, ~26 importers)

@@ -16,7 +16,7 @@
  * @public
  */
 
-import type { Fill, OrderIntent } from "@cogni/market-provider";
+import type { Fill, OrderIntent } from "@cogni/poly-market-provider";
 import { z } from "zod";
 
 /**

@@ -29,7 +29,7 @@ import type { BoundTool, ToolContract, ToolImplementation } from "@cogni/ai-tool
  * Placement request handed to the capability. The tool populates every field
  * from validated user input; the capability is responsible for the
  * `client_order_id` idempotency key (generated via the pinned
- * `clientOrderIdFor` helper from `@cogni/market-provider` so that any future
+ * `clientOrderIdFor` helper from `@cogni/poly-market-provider` so that any future
  * caller — this tool, CP4.3's autonomous poll, a P4 WS ingester — produces
  * compatible keys for the `poly_copy_trade_fills` PK) as well as orderbook
  * lookups (tickSize / negRisk / feeRateBps), signing, and CLOB submission.
@@ -246,7 +246,7 @@ export interface PolyPlaceTradeDeps {
 
 /**
  * The tool does not generate `client_order_id` — that's the capability's job,
- * using the pinned `clientOrderIdFor` helper from `@cogni/market-provider`.
+ * using the pinned `clientOrderIdFor` helper from `@cogni/poly-market-provider`.
  * Keeping the key generation at the capability layer ensures the tool, CP4.3's
  * autonomous poll, and any future WS ingester all write compatible keys into
  * `poly_copy_trade_fills` (composite PK dedupe depends on it).

@@ -22,7 +22,7 @@ import {
   POLYGON_NEG_RISK_ADAPTER,
   polymarketCtfEventsAbi,
   polymarketNegRiskAdapterAbi,
-} from "@cogni/market-provider/adapters/polymarket";
+} from "@cogni/poly-market-provider/adapters/polymarket";
 import { decodeEventLog } from "viem";
 import { describe, expect, it } from "vitest";
 

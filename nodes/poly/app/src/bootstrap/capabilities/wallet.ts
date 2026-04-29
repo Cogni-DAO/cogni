@@ -11,16 +11,16 @@
  *   - READ_ONLY: No order placement path touched from this capability
  *   - CAPABILITY_NOT_POLICY: Raw scoreboard only; ranking policy lives in tool consumers
  * Side-effects: none (factory only; returned closures do IO)
- * Links: packages/market-provider/src/adapters/polymarket/polymarket.data-api.client.ts, work/items/task.0315
+ * Links: nodes/poly/packages/market-provider/src/adapters/polymarket/polymarket.data-api.client.ts, work/items/task.0315
  * @internal
  */
 
-import { PolymarketDataApiClient } from "@cogni/market-provider/adapters/polymarket";
 import type {
   WalletCapability,
   WalletTopTraderItem,
   WalletTopTradersOutput,
 } from "@cogni/poly-ai-tools";
+import { PolymarketDataApiClient } from "@cogni/poly-market-provider/adapters/polymarket";
 import { makeLogger } from "@/shared/observability";
 
 const log = makeLogger({ component: "wallet-capability" });

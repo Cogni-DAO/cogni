@@ -264,7 +264,7 @@ export const serverSchema = z.object({
   POLY_WALLET_AEAD_KEY_HEX: optionalString,
   POLY_WALLET_AEAD_KEY_ID: optionalString,
   // Polymarket CLOB host override. Default matches
-  // `@cogni/market-provider/adapters/polymarket` DEFAULT_CLOB_HOST
+  // `@cogni/poly-market-provider/adapters/polymarket` DEFAULT_CLOB_HOST
   // (https://clob.polymarket.com). Used by the per-tenant
   // `PolyTradeExecutor` factory + CLOB L2 cred derivation at provision time.
   POLY_CLOB_HOST: optionalUrl,

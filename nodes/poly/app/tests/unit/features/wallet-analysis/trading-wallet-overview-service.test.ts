@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
-import { PolymarketUserPnlClient } from "@cogni/market-provider/adapters/polymarket";
+import { PolymarketUserPnlClient } from "@cogni/poly-market-provider/adapters/polymarket";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   __setTradingWalletOverviewUserPnlClientForTests,

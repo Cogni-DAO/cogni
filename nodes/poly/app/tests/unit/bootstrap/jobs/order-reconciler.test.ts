@@ -13,8 +13,8 @@
  * @internal
  */
 
-import type { GetOrderResult, OrderReceipt } from "@cogni/market-provider";
-import { noopMetrics } from "@cogni/market-provider";
+import type { GetOrderResult, OrderReceipt } from "@cogni/poly-market-provider";
+import { noopMetrics } from "@cogni/poly-market-provider";
 import { COGNI_SYSTEM_BILLING_ACCOUNT_ID } from "@tests/_fakes";
 import { describe, expect, it, vi } from "vitest";
 import { FakeOrderLedger } from "@/adapters/test/trading/fake-order-ledger";
@@ -58,7 +58,7 @@ function makeRow(overrides: Partial<LedgerRow> = {}): LedgerRow {
 function perTenant(
   fn: (
     orderId: string
-  ) => Promise<import("@cogni/market-provider").GetOrderResult>
+  ) => Promise<import("@cogni/poly-market-provider").GetOrderResult>
 ) {
   return (_billingAccountId: string, orderId: string) => fn(orderId);
 }

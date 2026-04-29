@@ -185,7 +185,7 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
 
     async markOrderId(params: {
       client_order_id: string;
-      receipt: import("@cogni/market-provider").OrderReceipt;
+      receipt: import("@cogni/poly-market-provider").OrderReceipt;
     }): Promise<void> {
       // Update by `client_order_id` — unique-by-construction across rows since
       // cid is deterministic from `(target_id, fill_id)` (PK).
@@ -389,7 +389,7 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
  * polymarket-shaped enum; map to the ledger's canonical set.
  */
 function mapReceiptStatus(
-  receiptStatus: import("@cogni/market-provider").OrderReceipt["status"]
+  receiptStatus: import("@cogni/poly-market-provider").OrderReceipt["status"]
 ): LedgerRow["status"] {
   switch (receiptStatus) {
     case "filled":

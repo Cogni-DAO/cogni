@@ -21,7 +21,7 @@ import {
   noopLogger,
   type OrderIntent,
   type OrderReceipt,
-} from "@cogni/market-provider";
+} from "@cogni/poly-market-provider";
 import { COGNI_SYSTEM_BILLING_ACCOUNT_ID, TEST_USER_ID_1 } from "@tests/_fakes";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeOrderLedger } from "@/adapters/test";

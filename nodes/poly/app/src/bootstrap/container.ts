@@ -32,11 +32,11 @@ import {
   DoltgresKnowledgeStoreAdapter,
 } from "@cogni/knowledge-store/adapters/doltgres";
 import { parseMcpConfigFromEnv } from "@cogni/langgraph-graphs";
-import { noopMetrics as noopMetricsForExecutor } from "@cogni/market-provider";
+import { noopMetrics as noopMetricsForExecutor } from "@cogni/poly-market-provider";
 import {
   PolymarketDataApiClient,
   PolymarketUserPnlClient,
-} from "@cogni/market-provider/adapters/polymarket";
+} from "@cogni/poly-market-provider/adapters/polymarket";
 import {
   COGNI_SYSTEM_PRINCIPAL_USER_ID,
   EVENT_NAMES,
@@ -758,11 +758,11 @@ function createContainer(): Container {
           "@/features/wallet-watch"
         );
         const { PolymarketDataApiClient } = await import(
-          "@cogni/market-provider/adapters/polymarket"
+          "@cogni/poly-market-provider/adapters/polymarket"
         );
         // noopMetrics for v0 — real prom-client wiring folds into a follow-up
         // once the `poly_mirror_*` series has a Grafana dashboard to back it.
-        const { noopMetrics } = await import("@cogni/market-provider");
+        const { noopMetrics } = await import("@cogni/poly-market-provider");
         const { buildMirrorTargetConfig } = await import(
           "@/bootstrap/jobs/copy-trade-mirror.job"
         );
@@ -773,7 +773,7 @@ function createContainer(): Container {
         // pino's Logger is structurally compatible with LoggerPort's subset
         // (debug/info/warn/error/child with object + optional msg).
         const mirrorLogger =
-          log as unknown as import("@cogni/market-provider").LoggerPort;
+          log as unknown as import("@cogni/poly-market-provider").LoggerPort;
 
         // Ledger reconciler — syncs open/pending rows from CLOB getOrder,
         // dispatched per tenant. Each ledger row carries its

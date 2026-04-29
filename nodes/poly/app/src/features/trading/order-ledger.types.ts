@@ -12,7 +12,7 @@
  * @public
  */
 
-import type { OrderIntent, OrderReceipt } from "@cogni/market-provider";
+import type { OrderIntent, OrderReceipt } from "@cogni/poly-market-provider";
 
 /** Canonical status set for `poly_copy_trade_fills.status` (migration 0027 CHECK). */
 export type LedgerStatus =

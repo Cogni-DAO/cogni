@@ -17,8 +17,8 @@
 import { randomBytes } from "node:crypto";
 
 import { toUserId } from "@cogni/ids";
-import { noopMetrics } from "@cogni/market-provider";
 import { polyWalletClosePositionOperation } from "@cogni/node-contracts";
+import { noopMetrics } from "@cogni/poly-market-provider";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import {

@@ -30,7 +30,7 @@
     "@cogni/ingestion-core": "workspace:*",
     "@cogni/knowledge-store": "workspace:*",
     "@cogni/langgraph-graphs": "workspace:*",
-    "@cogni/market-provider": "workspace:*",
+    "@cogni/poly-market-provider": "workspace:*",
     "@cogni/node-app": "workspace:*",
     "@cogni/node-contracts": "workspace:*",
     "@cogni/node-core": "workspace:*",

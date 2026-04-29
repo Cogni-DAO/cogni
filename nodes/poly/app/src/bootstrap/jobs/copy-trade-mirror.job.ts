@@ -21,12 +21,12 @@
  * @internal
  */
 
+import { EVENT_NAMES } from "@cogni/node-shared";
 import type {
   LoggerPort,
   MetricsPort,
   OrderReceipt,
-} from "@cogni/market-provider";
-import { EVENT_NAMES } from "@cogni/node-shared";
+} from "@cogni/poly-market-provider";
 import {
   type MirrorPipelineDeps,
   type OperatorPosition,
