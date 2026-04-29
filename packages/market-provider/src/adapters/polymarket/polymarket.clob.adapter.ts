@@ -334,6 +334,23 @@ export class PolymarketClobAdapter implements MarketProviderPort {
       }
 
       const receipt = mapOrderResponseToReceipt(response, intent);
+      // FOK success-with-0-fill is semantically a no-match — CLOB returns
+      // `{success: true, orderID, makingAmount: "0"}` when no liquidity matched
+      // the FOK price cap. Without this throw, mirror pipeline records
+      // `outcome=placed` for a fill that acquired zero shares, masking
+      // bug.0405's documented divergence-vs-dust trade-off in dashboards.
+      if (orderTypeUsed === OrderType.FOK && receipt.filled_size_usdc === 0) {
+        throw new ClobRejectionError(
+          "PolymarketClobAdapter.placeOrder: FOK matched zero shares (no liquidity at limit_price).",
+          {
+            error_code: POLY_CLOB_ERROR_CODES.fokNoMatch,
+            response_keys: Object.keys(
+              (response as Record<string, unknown>) ?? {}
+            ),
+            reason: "fok_zero_fill",
+          }
+        );
+      }
       const duration_ms = Date.now() - start;
       this.metrics.incr(POLY_CLOB_METRICS.placeTotal, { result: "ok" });
       this.metrics.observeDurationMs(
