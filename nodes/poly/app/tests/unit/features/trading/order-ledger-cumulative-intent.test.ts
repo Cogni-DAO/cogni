@@ -3,7 +3,7 @@
 
 /**
  * Module: `@tests/unit/features/trading/order-ledger-cumulative-intent`
- * Purpose: Unit tests for `FakeOrderLedger.cumulativeIntentForMarket` — sum intent size_usdc by (billing_account_id, market_id) over non-failed rows.
+ * Purpose: Unit tests for `FakeOrderLedger.cumulativeIntentForMarket` — sum intent size_usdc by (billing_account_id, market_id) over non-canceled rows (error rows included; bug.0430).
  * Scope: In-memory FakeOrderLedger only. No DB.
  * Side-effects: none
  * Links: src/adapters/test/trading/fake-order-ledger.ts (task.0424)
@@ -67,7 +67,7 @@ describe("FakeOrderLedger.cumulativeIntentForMarket", () => {
     expect(result).toBe(5);
   });
 
-  it("excludes rows in failed status (canceled, error)", async () => {
+  it("excludes canceled rows but includes error rows (bug.0430: errors can fill on chain silently)", async () => {
     const ledger = new FakeOrderLedger({
       initial: [
         makeRow({
@@ -88,7 +88,7 @@ describe("FakeOrderLedger.cumulativeIntentForMarket", () => {
       ],
     });
     const result = await ledger.cumulativeIntentForMarket(TENANT_A, MARKET_X);
-    expect(result).toBe(2);
+    expect(result).toBe(7);
   });
 
   it("excludes rows for a different market", async () => {
@@ -125,6 +125,20 @@ describe("FakeOrderLedger.cumulativeIntentForMarket", () => {
     });
     const result = await ledger.cumulativeIntentForMarket(TENANT_A, MARKET_X);
     expect(result).toBe(1);
+  });
+
+  it("regression: 5 error rows × $1 reach the $5 cap (bug.0430 prod scenario)", async () => {
+    const ledger = new FakeOrderLedger({
+      initial: Array.from({ length: 5 }, (_, i) =>
+        makeRow({
+          fill_id: `err-${i}`,
+          status: "error",
+          attributes: { market_id: MARKET_X, size_usdc: 1 },
+        })
+      ),
+    });
+    const result = await ledger.cumulativeIntentForMarket(TENANT_A, MARKET_X);
+    expect(result).toBe(5);
   });
 
   it("returns Infinity when failConfigRead is set (fail-closed)", async () => {

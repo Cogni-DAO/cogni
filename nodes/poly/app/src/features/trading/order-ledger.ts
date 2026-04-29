@@ -150,11 +150,16 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
             and(
               eq(polyCopyTradeFills.billingAccountId, billing_account_id),
               sql`${polyCopyTradeFills.attributes}->>'market_id' = ${market_id}`,
+              // bug.0430: `error` rows count toward the cap. Some errored
+              // placements actually mint CTF on chain (FOK zero-fill races,
+              // post-broadcast timeouts) — pessimistic inclusion is the v0
+              // hard fix until a reconciler can prove non-fill.
               inArray(polyCopyTradeFills.status, [
                 "pending",
                 "open",
                 "filled",
                 "partial",
+                "error",
               ])
             )
           );
