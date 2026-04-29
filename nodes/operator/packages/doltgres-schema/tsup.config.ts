@@ -14,13 +14,13 @@
 import { defineConfig } from "tsup";
 
 export const tsupConfig = defineConfig({
-  entry: ["src/index.ts", "src/work-items.ts"],
+  entry: ["src/index.ts", "src/work-items.ts", "src/knowledge.ts"],
   format: ["esm"],
   dts: false,
   clean: false,
   sourcemap: true,
   platform: "node",
-  external: ["drizzle-orm"],
+  external: ["drizzle-orm", "@cogni/node-template-knowledge"],
 });
 
 // biome-ignore lint/style/noDefaultExport: required by tsup

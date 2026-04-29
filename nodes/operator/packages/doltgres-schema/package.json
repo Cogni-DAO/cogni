@@ -15,6 +15,11 @@
       "types": "./dist/work-items.d.ts",
       "import": "./dist/work-items.js",
       "default": "./dist/work-items.js"
+    },
+    "./knowledge": {
+      "types": "./dist/knowledge.d.ts",
+      "import": "./dist/knowledge.js",
+      "default": "./dist/knowledge.js"
     }
   },
   "files": [
@@ -22,10 +27,11 @@
   ],
   "scripts": {
     "build": "tsup",
-    "postbuild": "node -e \"const fs=require('fs'); for(const f of ['dist/index.js','dist/work-items.js']){if(!fs.existsSync(f)){console.error('ERROR: '+f+' missing'); process.exit(1)}}\"",
+    "postbuild": "node -e \"const fs=require('fs'); for(const f of ['dist/index.js','dist/work-items.js','dist/knowledge.js']){if(!fs.existsSync(f)){console.error('ERROR: '+f+' missing'); process.exit(1)}}\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@cogni/node-template-knowledge": "workspace:*",
     "drizzle-orm": "^0.44.7"
   },
   "devDependencies": {

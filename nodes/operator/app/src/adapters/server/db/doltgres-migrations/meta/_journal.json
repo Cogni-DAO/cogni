@@ -8,6 +8,13 @@
       "when": 1777426992514,
       "tag": "0000_init_work_items",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777517639101,
+      "tag": "0001_syntropy_seeds",
+      "breakpoints": true
     }
   ]
 }
