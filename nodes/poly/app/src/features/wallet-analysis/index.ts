@@ -14,7 +14,6 @@ export { BalanceBar } from "./components/BalanceBar";
 export { BalanceOverTimeChart } from "./components/BalanceOverTimeChart";
 export { CopyWalletButton } from "./components/CopyWalletButton";
 export { EdgeHypothesis } from "./components/EdgeHypothesis";
-export { PositionsTable } from "./components/PositionsTable";
 export { PositionTimelineChart } from "./components/PositionTimelineChart";
 export { RecentTradesTable } from "./components/RecentTradesTable";
 export { StatGrid } from "./components/StatGrid";

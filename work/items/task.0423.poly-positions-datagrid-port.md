@@ -74,15 +74,15 @@ Out of scope:
 
 exercise:
 
-- GET `https://test.cognidao.org/research/w/<known-wallet-addr>` — page renders new positions table; every column header has the dropdown chevron; clicking "P/L %" sorts; clicking the eye/menu hides a column.
-- GET `https://test.cognidao.org/dashboard` — operator's positions card (`ExecutionActivityCard`) renders the new table; Close/Redeem button still appears for open positions.
-- History variant: confirm a wallet with closed positions shows the "Closed" column instead of "Current" + Action (use any wallet with realized P/L).
+- GET `https://test.cognidao.org/dashboard` (signed-in) — `ExecutionActivityCard` renders the new positions table on the "Open" toggle. Every column header has the dropdown chevron; clicking the "P/L %" header sorts; opening the column-visibility menu hides a column. Close/Redeem button still appears for open positions and is gated by lifecycle.
+- Toggle the card to "History" — same table renders with the "Closed" column instead of "Current" + Action; no action buttons appear.
+- Confirm `/version.buildSha` on the deployed candidate-a matches the PR head SHA.
 
 observability:
 
-- Loki query at deployed SHA: `{app="poly", env="candidate"} |= "/research/w/" |= "<my-test-wallet>"` returns the request line for my own page load.
-- Loki query: `{app="poly", env="candidate"} |= "/dashboard" | json | http_status="200"` returns my dashboard load.
-- SHA in `/version` matches PR head sha.
+- Loki query at deployed SHA: `{app="poly", env="candidate"} |= "/dashboard" | json | line_format "{{.msg}}"` returns my own dashboard request.
+- Loki query: `{app="poly", env="candidate"} |~ "GET /api/v1/poly/wallet/positions"` returns my own positions fetch.
+- `/version.buildSha` matches PR head sha.
 
 ## Design
 
