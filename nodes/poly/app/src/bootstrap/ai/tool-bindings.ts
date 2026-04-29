@@ -74,6 +74,7 @@ import {
   createPolyDataPositionsImplementation,
   createPolyDataResolveUsernameImplementation,
   createPolyDataTradesMarketImplementation,
+  createPolyDataUserPnlSummaryImplementation,
   createPolyDataValueImplementation,
   createWalletTopTradersImplementation,
   MARKET_LIST_NAME,
@@ -83,6 +84,7 @@ import {
   POLY_DATA_POSITIONS_NAME,
   POLY_DATA_RESOLVE_USERNAME_NAME,
   POLY_DATA_TRADES_MARKET_NAME,
+  POLY_DATA_USER_PNL_SUMMARY_NAME,
   POLY_DATA_VALUE_NAME,
   polyDataHelpImplementation,
   WALLET_TOP_TRADERS_NAME,
@@ -190,6 +192,11 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
         polyDataCapability: deps.polyDataCapability,
       }) as AnyToolImplementation,
     [POLY_DATA_HELP_NAME]: polyDataHelpImplementation as AnyToolImplementation,
+    [POLY_DATA_USER_PNL_SUMMARY_NAME]:
+      createPolyDataUserPnlSummaryImplementation({
+        polyDataCapability: deps.polyDataCapability,
+        knowledgeCapability: deps.knowledgeCapability,
+      }) as AnyToolImplementation,
 
     [WEB_SEARCH_NAME]: createWebSearchImplementation({
       webSearchCapability: deps.webSearchCapability,

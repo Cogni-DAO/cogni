@@ -21,6 +21,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
+import { PositionsTable } from "@/app/(app)/_components/positions-table";
 import {
   Card,
   CardContent,
@@ -29,10 +30,7 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components";
-import {
-  PositionsTable,
-  type WalletPosition,
-} from "@/features/wallet-analysis";
+import type { WalletPosition } from "@/features/wallet-analysis";
 import { fetchExecution } from "../_api/fetchExecution";
 import {
   postClosePosition,
@@ -85,6 +83,13 @@ export function ExecutionActivityCard(): ReactElement {
     positionAction.isPending && positionAction.variables
       ? positionAction.variables.position.positionId
       : null;
+
+  const handlePositionAction = useCallback(
+    (position: WalletPosition, action: "close" | "redeem") => {
+      positionAction.mutate({ kind: action, position });
+    },
+    [positionAction]
+  );
 
   const {
     data: executionData,
@@ -184,9 +189,7 @@ export function ExecutionActivityCard(): ReactElement {
             warnings={executionData?.warnings ?? []}
             isLoading={isExecutionLoading}
             isError={isExecutionError}
-            onPositionAction={(position, action) => {
-              positionAction.mutate({ kind: action, position });
-            }}
+            onPositionAction={handlePositionAction}
             pendingActionPositionId={pendingActionPositionId}
             positionActionError={positionActionError}
           />

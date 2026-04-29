@@ -47,7 +47,7 @@ domain. Mirrors the `nodes/poly/packages/knowledge/` shape.
 - `polyListOrdersBoundTool`, `POLY_LIST_ORDERS_NAME`, `createPolyListOrdersImplementation`, `polyListOrdersStubImplementation` — order listing tool
 - `polyCancelOrderBoundTool`, `POLY_CANCEL_ORDER_NAME`, `createPolyCancelOrderImplementation`, `polyCancelOrderStubImplementation` — order cancellation tool
 - `polyClosePositionBoundTool`, `POLY_CLOSE_POSITION_NAME`, `createPolyClosePositionImplementation`, `polyClosePositionStubImplementation` — position close tool (not in POLY_TOOL_BUNDLE — internal use only via copy-trade reconciler)
-- `PolyDataCapability` + 7 `polyData*` tools (activity, help, holders, positions, resolve-username, trades-market, value) — Polymarket Data-API research tools (task.0386)
+- `PolyDataCapability` + 8 `polyData*` tools (activity, help, holders, positions, resolve-username, trades-market, value, **user-pnl-summary**) — Polymarket Data-API research tools. `user-pnl-summary` is the canonical AI snapshot — sparkline + curve metrics + chr.poly-wallet-research verdict + score, 24h-cached via `KnowledgeCapability`. Backed by the poly-internal `analysis/pnl-curve-metrics` pure module (intentional v0 duplication of `packages/market-provider/src/analysis/pnl-curve-metrics.ts` — collapses post-PR-#1120-merge).
 
 ## Ports
 

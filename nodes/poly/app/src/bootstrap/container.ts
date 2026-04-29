@@ -33,7 +33,10 @@ import {
 } from "@cogni/knowledge-store/adapters/doltgres";
 import { parseMcpConfigFromEnv } from "@cogni/langgraph-graphs";
 import { noopMetrics as noopMetricsForExecutor } from "@cogni/market-provider";
-import { PolymarketDataApiClient } from "@cogni/market-provider/adapters/polymarket";
+import {
+  PolymarketDataApiClient,
+  PolymarketUserPnlClient,
+} from "@cogni/market-provider/adapters/polymarket";
 import {
   COGNI_SYSTEM_PRINCIPAL_USER_ID,
   EVENT_NAMES,
@@ -682,6 +685,7 @@ function createContainer(): Container {
   // import block so pods without Polymarket creds avoid loading that code path.
   const polyDataCapability = createPolyResearchCapability({
     dataApiClient: new PolymarketDataApiClient(),
+    userPnlClient: new PolymarketUserPnlClient(),
   });
 
   // Copy-trade target source — always DB-backed. Component + stack tests

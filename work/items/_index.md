@@ -113,6 +113,7 @@
 | 1 | 1 | 2 | needs_design | task.0407 | Wire per-node/per-rule review.modelRef from repo-spec into PR review pipeline |  |  |
 | 1 | 1 | 5 | needs_design | task.0411 | Split `@cogni/temporal-workflows` per-node — `nodes/<X>/packages/temporal-workflows` for node-owned workflows |  |  |
 | 1 | 1 | 1 | needs_closeout | task.0417 | Fresh-worktree bootstrap fixes — drop `.env.local` from `db:check`, detect orphan-missing dist in scoped build |  |  |
+| 1 | 1 | 2 | needs_implement | task.0423 | Port poly PositionsTable onto reui DataGrid (mirror wallets-table) | Premium Frontend UX | proj.premium-frontend-ux |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -160,6 +161,7 @@
 | 1 | 5 | 1 | needs_implement | bug.0379 | core__poly_data_holders schema is wrong — real /holders response is grouped per outcome token | Cogni Poly | proj.poly-prediction-bot |
 | 1 | 5 | 2 | needs_merge | task.0404 | Poly bet sizer v0 — `min_bet` SizingPolicy variant | Poly | proj.poly-bet-sizer |
 | 1 | 5 | 2 | needs_implement | bug.0405 | Polymarket BUY GTC partial-fills land below min_order_size — produces structurally unsellable dust | Cogni Poly | proj.poly-copy-trading |
+| 1 | 5 | 1 | needs_merge | task.0421 | Poly wallet research charter + first live screen + Dolt schema proposal | Cogni Poly | proj.poly-prediction-bot |
 | 1 | 6 | 1 | needs_triage | bug.0036 | Chat route enqueues to closed assistant-stream controller — unhandled TypeError |  |  |
 | 1 | 6 | 1 | needs_triage | bug.0070 | OpenClaw CLI binary not executable as `openclaw` — agent CLI commands fail | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 6 | 2 | needs_design | task.0183 | Run list API: GET /api/v1/ai/runs — query graph_runs with filtering | Live Operations Dashboard | proj.live-dashboard |
@@ -453,6 +455,7 @@
 | 1 | spike.0401 | Next.js frontend perf — operator + poly SSR / transitions / bundle audit |  |  |
 | 1 | bug.0412 | candidate-flight verify fails when merge-queue rebuild mutates pr-{N}-{X} GHCR tag mid-flight | Reusable CI/CD Rails & Multi-Node Pipeline | proj.ci-cd-reusable |
 | 1 | bug.0421 | FOK success-with-zero-fill logged as outcome=placed — masks bug.0405 divergence in dashboards | Cogni Poly | proj.poly-copy-trading |
+| 1 | task.0422 | Poly data user-pnl-summary — agent's default wallet snapshot tool | Cogni Poly | proj.poly-prediction-bot |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 2 | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |

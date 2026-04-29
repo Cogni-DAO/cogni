@@ -24,6 +24,7 @@ export type {
   PolyDataMarketTradesOutput,
   PolyDataPositionsOutput,
   PolyDataResolveUsernameOutput,
+  PolyDataUserPnlOutput,
   PolyDataValueOutput,
 } from "./capabilities/poly-data";
 
@@ -130,6 +131,19 @@ export {
   polyDataTradesMarketStubImplementation,
 } from "./tools/poly-data-trades-market";
 export {
+  createPolyDataUserPnlSummaryImplementation,
+  POLY_DATA_USER_PNL_SUMMARY_NAME,
+  type PolyDataUserPnlSummaryDeps,
+  type PolyDataUserPnlSummaryInput,
+  PolyDataUserPnlSummaryInputSchema,
+  type PolyDataUserPnlSummaryOutput,
+  PolyDataUserPnlSummaryOutputSchema,
+  type PolyDataUserPnlSummaryRedacted,
+  polyDataUserPnlSummaryBoundTool,
+  polyDataUserPnlSummaryContract,
+  polyDataUserPnlSummaryStubImplementation,
+} from "./tools/poly-data-user-pnl-summary";
+export {
   createPolyDataValueImplementation,
   POLY_DATA_VALUE_NAME,
   type PolyDataValueDeps,
@@ -206,6 +220,7 @@ import { polyDataHoldersBoundTool } from "./tools/poly-data-holders";
 import { polyDataPositionsBoundTool } from "./tools/poly-data-positions";
 import { polyDataResolveUsernameBoundTool } from "./tools/poly-data-resolve-username";
 import { polyDataTradesMarketBoundTool } from "./tools/poly-data-trades-market";
+import { polyDataUserPnlSummaryBoundTool } from "./tools/poly-data-user-pnl-summary";
 import { polyDataValueBoundTool } from "./tools/poly-data-value";
 import { walletTopTradersBoundTool } from "./tools/wallet-top-traders";
 
@@ -230,6 +245,7 @@ export const POLY_TOOL_BUNDLE: readonly CatalogBoundTool[] = [
   polyDataPositionsBoundTool as CatalogBoundTool,
   polyDataResolveUsernameBoundTool as CatalogBoundTool,
   polyDataTradesMarketBoundTool as CatalogBoundTool,
+  polyDataUserPnlSummaryBoundTool as CatalogBoundTool,
   polyDataValueBoundTool as CatalogBoundTool,
   walletTopTradersBoundTool as CatalogBoundTool,
 ];

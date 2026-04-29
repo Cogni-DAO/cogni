@@ -24,6 +24,7 @@
   "dependencies": {
     "@cogni/ai-core": "workspace:*",
     "@cogni/ai-tools": "workspace:*",
+    "@cogni/market-provider": "workspace:*",
     "zod": "^3.24.0"
   },
   "devDependencies": {

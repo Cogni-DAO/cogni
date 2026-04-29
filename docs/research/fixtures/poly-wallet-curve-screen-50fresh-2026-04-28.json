@@ -1,0 +1,1517 @@
+[
+  {
+    "wallet": "0xa61ef8773ec2e821962306ca87d4b57e39ff0abd",
+    "name": "risk-manager",
+    "lbSlice": "ALL/VOL",
+    "passed": false,
+    "rejectReasons": [
+      "pnl<500k ($319k)"
+    ],
+    "metrics": {
+      "n": 518,
+      "monthsActive": 17.23,
+      "totalPnl": 318819,
+      "peak": 318819,
+      "maxDdPctOfPeak": 0.1536,
+      "slopeR2": 0.8199,
+      "slopeSign": "+",
+      "daysSinceLastChange": 0,
+      "score": 0.463
+    },
+    "category": "finance",
+    "topMarkets": [
+      "Will the Fed decrease interest rates by 50+ bps after the April 2026 meeting?",
+      "Will the Fed increase interest rates by 25+ bps after the April 2026 meeting?",
+      "Will Arvid Lindblad be the 2026 F1 Drivers' Champion?"
+    ],
+    "botRisk": "high",
+    "notes": "fail: pnl<500k ($319k) · bot signal (cadence=1032.5/d, crypto-buckets=0)"
+  },
+  {
+    "wallet": "0x6480542954b70a674a74bd1a6015dec362dc8dc5",
+    "name": "tripping",
+    "lbSlice": "ALL/VOL",
+    "passed": false,
+    "rejectReasons": [
+      "pnl<500k ($93k)"
+    ],
+    "metrics": {
+      "n": 391,
+      "monthsActive": 13,
+      "totalPnl": 92857,
+      "peak": 104755,
+      "maxDdPctOfPeak": 0.1136,
+      "slopeR2": 0.8568,
+      "slopeSign": "+",
+      "daysSinceLastChange": 0,
+      "score": 0.2611
+    },
+    "category": "politics",
+    "topMarkets": [
+      "Will Ahn Cheol-soo win the 2026 Seoul Mayoral Election",
+      "Will Jeon Hyun-heui win the 2026 Seoul Mayoral Election",
+      "Will Ivanka Trump win the 2028 US Presidential Election?"
+    ],
+    "botRisk": "high",
+    "notes": "fail: pnl<500k ($93k) · bot signal (cadence=264.3/d, crypto-buckets=0)"
+  },
+  {
+    "wallet": "0xd218e474776403a330142299f7796e8ba32eb5c9",
+    "name": "cigarettes",
+    "lbSlice": "ALL/VOL",
+    "passed": false,
+    "rejectReasons": [
+      "DD 49%"
+    ],
+    "metrics": {
+      "n": 518,
+      "monthsActive": 17.23,
+      "totalPnl": 884856,
+      "peak": 1001591,
+      "maxDdPctOfPeak": 0.4872,
+      "slopeR2": 0.8539,
+      "slopeSign": "+",
+      "daysSinceLastChange": 0,
+      "score": 0.8032
+    },
+    "category": "mixed",
+    "topMarkets": [
+      "Houston Astros vs. Baltimore Orioles",
+      "Will Botafogo FR win on 2026-04-28?",
+      "Tampa Bay Rays vs. Cleveland Guardians"
+    ],
+    "botRisk": "high",
+    "notes": "fail: DD 49% · bot signal (cadence=1191.4/d, crypto-buckets=0)"
+  },
+  {
+    "wallet": "0x9c667a1d1c1337c6dca9d93241d386e4ed346b66",
+    "name": "InfiniteCrypt0",
+    "lbSlice": "ALL/VOL",
+    "passed": false,
+    "rejectReasons": [
+      "pnl<500k ($109k)"
+    ],
+    "metrics": {
+      "n": 407,
+      "monthsActive": 13.53,
+      "totalPnl": 109222,
+      "peak": 109273,
+      "maxDdPctOfPeak": 0.1939,
+      "slopeR2": 0.8832,
+      "slopeSign": "+",
+      "daysSinceLastChange": 0,
+      "score": 0.2919
+    },
+    "category": "mixed",
+    "topMarkets": [
+      "Will the Los Angeles Angels win the 2026 World Series?",
+      "Will the Miami Marlins win the 2026 World Series?",
+      "Will the Colorado Rockies win the 2026 World Series?"
+    ],
+    "botRisk": "high",
+    "notes": "fail: pnl<500k ($109k) · bot signal (cadence=381.2/d, crypto-buckets=0)"
+  },
+  {
+    "wallet": "0x24c8cf69a0e0a17eee21f69d29752bfa32e823e1",
+    "name": "debased",
+    "lbSlice": "ALL/VOL",
+    "passed": false,
+    "rejectReasons": [
+      "DD 31%"
+    ],
+    "metrics": {
+      "n": 518,
+      "monthsActive": 17.23,
+      "totalPnl": 1456383,
+      "peak": 1456383,
+      "maxDdPctOfPeak": 0.3094,
+      "slopeR2": 0.9864,
+      "slopeSign": "+",
+      "daysSinceLastChange": 0,
+      "score": 1.1904
+    },
+    "category": "mixed",
+    "topMarkets": [
+      "Clavicular pregnancy in 2026?",
+      "Will the DHS shutdown end between April 29-30, 2026?",
+      "Will the DHS shutdown end after April 30, 2026?"
+    ],
+    "botRisk": "high",
+    "notes": "fail: DD 31% · bot signal (cadence=386.8/d, crypto-buckets=0)"
+  },
+  {
+    "wallet": "0x2d27e4d20f3b8a2ee3bc861d9b83752f338676d8",
+    "name": "interstellaar",
+    "lbSlice": "ALL/VOL",
+    "passed": false,
+    "rejectReasons": [
+      "pnl<500k ($121k)"
+    ],
+    "metrics": {
+      "n": 518,
+      "monthsActive": 17.23,
+      "totalPnl": 121401,
+      "peak": 121401,
+      "maxDdPctOfPeak": 0.061,
+      "slopeR2": 0.7755,
+      "slopeSign": "+",
+      "daysSinceLastChange": 0,
+      "score": 0.2702
+    },
+    "category": "culture",
+    "topMarkets": [
+      "Will Claudia López win the 2026 Colombian presidential election?",
+      "Will Wicked: For Good be the top grossing movie of 2026?",
+      "Will Carlos Felipe Córdoba win the 2026 Colombian presidential election?"
+    ],
+    "botRisk": "high",
+    "notes": "fail: pnl<500k ($121k) · bot signal (cadence=131.7/d, crypto-buckets=0)"
+  },
+  {
+    "wallet": "0x9f47f1fcb1701bf9eaf31236ad39875e5d60af93",
+    "name": "TheGuru-791",
+    "lbSlice": "ALL/VOL",
+    "passed": false,
+    "rejectReasons": [
+      "idle 192.9d",
+      "DD 47%",
+      "slope-"
+    ],
+    "metrics": {
+      "n": 518,
+      "monthsActive": 17.23,
+      "totalPnl": 574050,
+      "peak": 1088873,
+      "maxDdPctOfPeak": 0.4728,
+      "slopeR2": 0.6019,
+      "slopeSign": "-",
+      "daysSinceLastChange": 192.92,
+      "score": 0
+    },
+    "category": "mixed",
+    "topMarkets": [
+      "Will Erling Haaland be the top goalscorer in the EPL?",
+      "Will Manchester City win the UEFA Champions League?",
+      "Will Liverpool finish in the top 4 of EPL?"
+    ],
+    "botRisk": "low",
+    "notes": "fail: idle 192.9d; DD 47%; slope-"
+  },
+  {
+    "wallet": "0xc8ab97a9089a9ff7e6ef0688e6e591a066946418",
+    "name": "ArmageddonRewardsBilly",
+    "lbSlice": "ALL/VOL",
+    "passed": false,
+    "rejectReasons": [
+      "pnl<500k ($488k)",
+      "DD 40%"
+    ],
+    "metrics": {
+      "n": 459,
+      "monthsActive": 15.26,
+      "totalPnl": 488231,
+      "peak": 684476,
+      "maxDdPctOfPeak": 0.3972,
+      "slopeR2": 0.942,
+      "slopeSign": "+",
+      "daysSinceLastChange": 0,
+      "score": 0.6582
+    },
+    "category": "tech",
+    "topMarkets": [
+      "US x Iran permanent peace deal by June 30, 2026?",
+      "US x Iran permanent peace deal by May 31, 2026?",
+      "Will Jared Kushner attend the next US x Iran diplomatic meeting?"
+    ],
+    "botRisk": "high",
+    "notes": "fail: pnl<500k ($488k); DD 40% · bot signal (cadence=12485.5/d, crypto-buckets=0)"
+  },
+  {
+    "wallet": "0xfbfd14dd4bb607373119de95f1d4b21c3b6c0029",
+    "name": "XAE12Archangel",
+    "lbSlice": "ALL/VOL",
+    "passed": false,
+    "rejectReasons": [
+      "pnl<500k ($165k)"
+    ],
+    "metrics": {
+      "n": 518,
+      "monthsActive": 17.23,
+      "totalPnl": 164918,
+      "peak": 194549,
+      "maxDdPctOfPeak": 0.1826,
+      "slopeR2": 0.5905,
+      "slopeSign": "+",
+      "daysSinceLastChange": 0,
+      "score": 0.2398
+    },
+    "category": "finance",
+    "topMarkets": [
+      "Will there be no change in Fed interest rates after the April 2026 meeting?",
+      "Will Crude Oil (CL) hit (HIGH) $120 by end of June?",
+      "Will Crude Oil (CL) hit (LOW) $55 by end of June?"
+    ],
+    "botRisk": "high",
+    "notes": "fail: pnl<500k ($165k) · bot signal (cadence=520.2/d, crypto-buckets=0)"
+  },
+  {
+    "wallet": "0x4bac379da2f29d87c01ff737843e396a2cec02b1",
+    "name": "LuckyNFT444",
+    "lbSlice": "ALL/VOL",
+    "passed": false,
+    "rejectReasons": [
+      "pnl<500k ($66k)",
+      "DD 27%"
+    ],
+    "metrics": {
+      "n": 518,
+      "monthsActive": 17.23,
+      "totalPnl": 65959,
+      "peak": 72023,
+      "maxDdPctOfPeak": 0.2741,
+      "slopeR2": 0.7515,
+      "slopeSign": "+",
+      "daysSinceLastChange": 0,
+      "score": 0.193
+    },
+    "category": "sports",
+    "topMarkets": [
+      "Will Sergio Pérez be the 2026 F1 Drivers' Champion?",
+      "Will Wicked: For Good be the top grossing movie of 2026?",
+      "Will Scream 7 be the top grossing movie of 2026?"
+    ],
+    "botRisk": "low",
+    "notes": "fail: pnl<500k ($66k); DD 27%"
+  },
+  {
+    "wallet": "0xfc25f141ed27bb1787338d2c4e7f51e3a15e1f7f",
+    "name": ".Sisyphus",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 515,
+      "monthsActive": 17.130555555555556,
+      "totalPnl": 446526.66,
+      "peak": 525141.8,
+      "maxDd": 127734.52000000002,
+      "maxDdPctOfPeak": 0.24323815015296824,
+      "slope": 0.012696647713395041,
+      "slopeSign": 1,
+      "r2": 0.920757681318504,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.920757681318504,
+      "magnitudeFactor": 0.668226503515088,
+      "livenessFactor": 1,
+      "score": 0.6152746859721236
+    },
+    "passed": false,
+    "failReasons": [
+      "pnl<500k ($0.45M)"
+    ],
+    "category": "mixed",
+    "topTitles": [
+      "LoL: Fnatic vs Shifters (BO3) - Esports World Cup EMEA Qualifier Playoffs",
+      "Madrid Open: Aryna Sabalenka vs Hailey Baptiste",
+      "Southampton FC vs. Ipswich Town FC: O/U 3.5"
+    ],
+    "cadencePerDay": 1782.1782178217823,
+    "cryptoBucketHits": 0,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0x2663daca3cecf3767ca1c3b126002a8578a8ed1f",
+    "name": "Q96s3kwozynxpau",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 518,
+      "monthsActive": 17.230555555555554,
+      "totalPnl": 390714.56,
+      "peak": 390714.56,
+      "maxDd": 33568.95,
+      "maxDdPctOfPeak": 0.29808034515533693,
+      "slope": 0.002611572644838375,
+      "slopeSign": 1,
+      "r2": 0.4628285166785143,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.4628285166785143,
+      "magnitudeFactor": 0.6250716438937219,
+      "livenessFactor": 1,
+      "score": 0.28930098176113184
+    },
+    "passed": false,
+    "failReasons": [
+      "pnl<500k ($0.39M)",
+      "DD 30%"
+    ],
+    "category": "politics",
+    "topTitles": [
+      "Will Spain win the 2026 FIFA World Cup?",
+      "Will Vivek Ramaswamy win the 2028 Republican presidential nomination?",
+      "Will Cory Booker win the 2028 Democratic presidential nomination?"
+    ],
+    "cadencePerDay": 2168.6746987951806,
+    "cryptoBucketHits": 0,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0xb41ac4e8907de5460e2dac0a98df8d1530d33a25",
+    "name": "GMIB",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 492,
+      "monthsActive": 16.363888888888887,
+      "totalPnl": 76487.96,
+      "peak": 76487.96,
+      "maxDd": 11629.519,
+      "maxDdPctOfPeak": 0.4755931296483688,
+      "slope": 0.0018960923468472083,
+      "slopeSign": 1,
+      "r2": 0.7893789904902742,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.7893789904902742,
+      "magnitudeFactor": 0.27656456750639624,
+      "livenessFactor": 1,
+      "score": 0.21831425910357835
+    },
+    "passed": false,
+    "failReasons": [
+      "pnl<500k ($0.08M)",
+      "DD 48%"
+    ],
+    "category": "mixed",
+    "topTitles": [
+      "Russia x Ukraine ceasefire by May 31, 2026?",
+      "Russia x Ukraine ceasefire by April 30, 2026?",
+      "Will Bitcoin reach $150,000 in April?"
+    ],
+    "cadencePerDay": 0.9044557636338855,
+    "cryptoBucketHits": 1,
+    "botRisk": "low"
+  },
+  {
+    "wallet": "0x6d3c5bd13984b2de47c3a88ddc455309aab3d294",
+    "name": "VeryLucky888",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 174,
+      "monthsActive": 5.763888888888889,
+      "totalPnl": 178763.62,
+      "peak": 217232.69,
+      "maxDd": 67764.07,
+      "maxDdPctOfPeak": 0.3119423232295287,
+      "slope": 0.016791517469711092,
+      "slopeSign": 1,
+      "r2": 0.9033231946054449,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.9033231946054449,
+      "magnitudeFactor": 0.42280447017504436,
+      "livenessFactor": 1,
+      "score": 0.3819290846919836
+    },
+    "passed": false,
+    "failReasons": [
+      "pnl<500k ($0.18M)",
+      "DD 31%"
+    ],
+    "category": "unknown",
+    "topTitles": [
+      "Spread: Celtics (-11.5)",
+      "76ers vs. Celtics",
+      "Bruins vs. Sabres: O/U 6.5"
+    ],
+    "cadencePerDay": 7322.033898305084,
+    "cryptoBucketHits": 0,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0xa58d4f278d7953cd38eeb929f7e242bfc7c0b9b8",
+    "name": "AiBird",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 495,
+      "monthsActive": 16.46388888888889,
+      "totalPnl": 94093.78,
+      "peak": 94093.78,
+      "maxDd": 27466.147999999997,
+      "maxDdPctOfPeak": 0.4661749435186425,
+      "slope": 0.001260700101993766,
+      "slopeSign": 1,
+      "r2": 0.7117338273631454,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.7117338273631454,
+      "magnitudeFactor": 0.30674709452576726,
+      "livenessFactor": 1,
+      "score": 0.21832228361934888
+    },
+    "passed": false,
+    "failReasons": [
+      "pnl<500k ($0.09M)",
+      "DD 47%"
+    ],
+    "category": "mixed",
+    "topTitles": [
+      "Will Wes Moore win the 2028 US Presidential Election?",
+      "Elon Musk wins $10b+ settlement against Altman/OpenAI?",
+      "Ben Pasternak jailed?"
+    ],
+    "cadencePerDay": 199.72260748959778,
+    "cryptoBucketHits": 0,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0xb4f2f0c858566fef705edf8efc1a5e9fba307862",
+    "name": "Desy-1725192185234",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 518,
+      "monthsActive": 17.230555555555554,
+      "totalPnl": 94666.31,
+      "peak": 96492.46,
+      "maxDd": 8496.390000000007,
+      "maxDdPctOfPeak": 0.13093985565529886,
+      "slope": 0.0011523859010836956,
+      "slopeSign": 1,
+      "r2": 0.701550865493515,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.701550865493515,
+      "magnitudeFactor": 0.30767890730435193,
+      "livenessFactor": 1,
+      "score": 0.21585240371346706
+    },
+    "passed": false,
+    "failReasons": [
+      "pnl<500k ($0.09M)"
+    ],
+    "category": "sports",
+    "topTitles": [
+      "Will Franco Colapinto be the 2026 F1 Drivers' Champion?",
+      "Will Gabriel Bortoleto be the 2026 F1 Drivers' Champion?",
+      "Will Tim Walz win the 2028 US Presidential Election?"
+    ],
+    "cadencePerDay": 598.5037406483791,
+    "cryptoBucketHits": 0,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0x07e78f5f58f8fa839f298cfe3fefd258883aa343",
+    "name": "Spon",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 508,
+      "monthsActive": 16.897222222222222,
+      "totalPnl": 132773.42,
+      "peak": 149785.77,
+      "maxDd": 18819.889999999985,
+      "maxDdPctOfPeak": 0.12564538006514228,
+      "slope": 0.002175649088294018,
+      "slopeSign": 1,
+      "r2": 0.7388729541341283,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.7388729541341283,
+      "magnitudeFactor": 0.3643808721653759,
+      "livenessFactor": 1,
+      "score": 0.2692311714468015
+    },
+    "passed": false,
+    "failReasons": [
+      "pnl<500k ($0.13M)"
+    ],
+    "category": "sports",
+    "topTitles": [
+      "Will England win the 2026 FIFA World Cup?",
+      "Will Cape Verde win the 2026 FIFA World Cup?",
+      "Will JD Vance win the 2028 US Presidential Election?"
+    ],
+    "cadencePerDay": 26.150437656630224,
+    "cryptoBucketHits": 0,
+    "botRisk": "low"
+  },
+  {
+    "wallet": "0x55b4af6a1cff148a307cad8ad098206a028e80ea",
+    "name": "StarryPath",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 518,
+      "monthsActive": 17.230555555555554,
+      "totalPnl": 44441.71,
+      "peak": 53267.996,
+      "maxDd": 12473.735999999997,
+      "maxDdPctOfPeak": 0.2341694251084647,
+      "slope": 0.00021746928010248415,
+      "slopeSign": 1,
+      "r2": 0.06825144471779636,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.06825144471779636,
+      "magnitudeFactor": 0.21081202527370208,
+      "livenessFactor": 1,
+      "score": 0.014388225288814767
+    },
+    "passed": false,
+    "failReasons": [
+      "pnl<500k ($0.04M)"
+    ],
+    "category": "sports",
+    "topTitles": [
+      "Will Connor McDavid win the 2025–2026 NHL Hart Memorial Trophy?",
+      "Will Macklin Celebrini win the 2025–2026 NHL Hart Memorial Trophy?",
+      "Will Nikita Kucherov win the 2025–2026 NHL Hart Memorial Trophy?"
+    ],
+    "cadencePerDay": 24.19490338840661,
+    "cryptoBucketHits": 0,
+    "botRisk": "low"
+  },
+  {
+    "wallet": "0x4133bcbad1d9c41de776646696f41c34d0a65e70",
+    "name": "EF203F2IPFC2ICP20W-CP3",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 180,
+      "monthsActive": 5.963888888888889,
+      "totalPnl": -43758.598,
+      "peak": 849805.44,
+      "maxDd": 940703.47,
+      "maxDdPctOfPeak": 1.1069633421033407,
+      "slope": 0.00694823035371501,
+      "slopeSign": 1,
+      "r2": 0.01611901218658944,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.01611901218658944,
+      "magnitudeFactor": 0,
+      "livenessFactor": 1,
+      "score": 0
+    },
+    "passed": false,
+    "failReasons": [
+      "pnl<500k ($-0.04M)",
+      "DD 111%"
+    ],
+    "category": "unknown",
+    "topTitles": [
+      "Will Los Angeles Galaxy win on 2026-04-22?",
+      "Will CD Guadalajara win on 2026-04-22?",
+      "Club Tijuana vs. CF Pachuca: O/U 4.5"
+    ],
+    "cadencePerDay": 160.01185272983184,
+    "cryptoBucketHits": 0,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0x4ce73141dbfce41e65db3723e31059a730f0abad",
+    "name": "qrpenc",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 518,
+      "monthsActive": 17.230555555555554,
+      "totalPnl": 332566.88,
+      "peak": 332674.25,
+      "maxDd": 301.3999999999651,
+      "maxDdPctOfPeak": 0.0009063827509407107,
+      "slope": 1.092956378673773E-7,
+      "slopeSign": 1,
+      "r2": 0.0030818449391527033,
+      "daysSinceLastChange": 346.9166666666667,
+      "curveQuality": 0.0030818449391527033,
+      "magnitudeFactor": 0.5766861191324099,
+      "livenessFactor": 0,
+      "score": 0
+    },
+    "passed": false,
+    "failReasons": [
+      "idle 346.9d",
+      "pnl<500k ($0.33M)"
+    ],
+    "category": "politics",
+    "topTitles": [
+      "No prison time for Hunter Biden in gun case? ",
+      "Will the Republican candidate win Pennsylvania by 1.5%-2.0%? ",
+      "Democrats win popular vote by 2-3%?"
+    ],
+    "cadencePerDay": 16.74678244689099,
+    "cryptoBucketHits": 0,
+    "botRisk": "low"
+  },
+  {
+    "wallet": "0x63d43bbb87f85af03b8f2f9e2fad7b54334fa2f1",
+    "name": "wokerjoesleeper",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 518,
+      "monthsActive": 17.230555555555554,
+      "totalPnl": 744697.25,
+      "peak": 744697.25,
+      "maxDdPctOfPeak": 0.7357183014755929,
+      "slope": 0.015109132993505166,
+      "slopeSign": 1,
+      "r2": 0.883554984562753,
+      "daysSinceLastChange": 0,
+      "score": 0.7624712213201449
+    },
+    "passed": false,
+    "category": "mixed",
+    "topMarkets": [
+      "Starmer out by December 31, 2026?",
+      "Will there be no change in Fed interest rates after the April 2026 meeting?",
+      "Starmer out by June 30, 2026?"
+    ],
+    "cadencePerDay": 10.581233007568521,
+    "botRisk": "low"
+  },
+  {
+    "wallet": "0xd0d6053c3c37e727402d84c14069780d360993aa",
+    "name": "k9Q2mX4L8A7ZP3R",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 133,
+      "monthsActive": 4.397222222222222,
+      "totalPnl": 1720272.4,
+      "peak": 1720273.8,
+      "maxDdPctOfPeak": 0.05875154337010221,
+      "slope": 0.19749214069741192,
+      "slopeSign": 1,
+      "r2": 0.9503041155551335,
+      "daysSinceLastChange": 21.916666666666668,
+      "score": 0
+    },
+    "passed": false,
+    "category": "crypto-buckets",
+    "topMarkets": [
+      "Bitcoin Up or Down - December 18, 2:45PM-3:00PM ET",
+      "XRP Up or Down - February 24, 2:00AM-2:05AM ET",
+      "XRP Up or Down - March 3, 12:10AM-12:15AM ET"
+    ],
+    "cadencePerDay": 500,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0xed107a85a4585a381e48c7f7ca4144909e7dd2e5",
+    "name": "bobe2",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 518,
+      "monthsActive": 17.230555555555554,
+      "totalPnl": 1716052.4,
+      "peak": 1719721.2,
+      "maxDdPctOfPeak": 0.08789156597315159,
+      "slope": 0.029144628275479312,
+      "slopeSign": 1,
+      "r2": 0.9575732161253713,
+      "daysSinceLastChange": 0,
+      "score": 1.2544035158718845
+    },
+    "passed": true,
+    "category": "geopolitics",
+    "topMarkets": [
+      "Will there be no change in Fed interest rates after the April 2026 meeting?",
+      "Will the US officially declare war on Iran by April 30, 2026?",
+      "US x Iran ceasefire extended by April 22, 2026?"
+    ],
+    "cadencePerDay": 500,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0x4ffe49ba2a4cae123536a8af4fda48faeb609f71",
+    "name": "planktonXD",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 440,
+      "monthsActive": 14.630555555555556,
+      "totalPnl": 107230.53,
+      "peak": 107230.53,
+      "maxDdPctOfPeak": 0.16835375285358842,
+      "slope": 0.00329039242093812,
+      "slopeSign": 1,
+      "r2": 0.9406751049388937,
+      "daysSinceLastChange": 0,
+      "score": 0.30803415699831166
+    },
+    "passed": false,
+    "category": "mixed",
+    "topMarkets": [
+      "Will Donald Trump publicly insult someone on April 27, 2026?",
+      "Bank of Japan increases interest rates by 50+ bps after the April 2026 meeting?",
+      "Will Fulham finish in 3rd place in the 2025-26 English Premier League?"
+    ],
+    "cadencePerDay": 238.46323691764186,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0xd42f6a1634a3707e27cbae14ca966068e5d1047d",
+    "name": "Apsalar",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 518,
+      "monthsActive": 17.230555555555554,
+      "totalPnl": 983029.9,
+      "peak": 1072619.4,
+      "maxDdPctOfPeak": 0.0973520461260882,
+      "slope": -0.0009654985238416687,
+      "slopeSign": -1,
+      "r2": 0.38704436597867514,
+      "daysSinceLastChange": 48.916666666666664,
+      "score": 0
+    },
+    "passed": false,
+    "category": "unknown",
+    "topMarkets": [
+      "Will Gavin Newsom win the 2028 Democratic presidential nomination?"
+    ],
+    "cadencePerDay": 1.029167610665893,
+    "botRisk": "low"
+  },
+  {
+    "wallet": "0xdd572169e741c72227589c5cb56b9ddd638d694d",
+    "name": "Ignisss",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 270,
+      "monthsActive": 8.963888888888889,
+      "totalPnl": 37389.04,
+      "peak": 144447.83,
+      "maxDdPctOfPeak": 0.8060416622388857,
+      "slope": 0.002432606565936263,
+      "slopeSign": 1,
+      "r2": 0.40298590669705553,
+      "daysSinceLastChange": 0,
+      "score": 0.07792234528761202
+    },
+    "passed": false,
+    "category": "politics",
+    "topMarkets": [
+      "Will John Fetterman win the 2028 Democratic presidential nomination?",
+      "Democratic Presidential Nominee 2028",
+      "Will Gavin Newsom win the 2028 Democratic presidential nomination?"
+    ],
+    "cadencePerDay": 3.599385105044555,
+    "botRisk": "low"
+  },
+  {
+    "wallet": "0x59ee6c6a56d7b00223f0c30f8002c4df762b684d",
+    "name": "undertaker",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 518,
+      "monthsActive": 17.230555555555554,
+      "totalPnl": 286474.44,
+      "peak": 286816.62,
+      "maxDdPctOfPeak": 0.0011930270986388201,
+      "slope": -8.714153854860241E-7,
+      "slopeSign": -1,
+      "r2": 0.1250942252621483,
+      "daysSinceLastChange": 48.916666666666664,
+      "score": 0
+    },
+    "passed": false,
+    "category": "politics",
+    "topMarkets": [
+      "Neither a Democrat nor a Republican wins popular vote?"
+    ],
+    "cadencePerDay": 34.60872909055951,
+    "botRisk": "low"
+  },
+  {
+    "wallet": "0x751a2b86cab503496efd325c8344e10159349ea1",
+    "name": "Sharky6999",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 477,
+      "monthsActive": 15.863888888888889,
+      "totalPnl": 838726.2,
+      "peak": 838726.2,
+      "maxDdPctOfPeak": 0.4149987412963949,
+      "slope": 0.02109360141226346,
+      "slopeSign": 1,
+      "r2": 0.9237089697542713,
+      "daysSinceLastChange": 0,
+      "score": 0.8459511121685254
+    },
+    "passed": false,
+    "category": "unknown",
+    "topMarkets": [
+      "Madrid Open: Daniil Medvedev vs Flavio Cobolli",
+      "Opendoor (OPEN) Up or Down on April 28?",
+      "Cagliari: Moez Echargui vs Cristian Garin"
+    ],
+    "cadencePerDay": 500,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0xb744f56635b537e859152d14b022af5afe485210",
+    "name": "wasianiversonworldchamp2025",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 192,
+      "monthsActive": 6.363888888888889,
+      "totalPnl": -2432082.5,
+      "peak": 1212247.6,
+      "maxDdPctOfPeak": 4.802199909612324,
+      "slope": -0.11959436267702747,
+      "slopeSign": -1,
+      "r2": 0.2828184988632417,
+      "daysSinceLastChange": 112.91666666666667,
+      "score": 0
+    },
+    "passed": false,
+    "category": "unknown",
+    "topMarkets": [
+      "Spread: 49ers (-6.5)",
+      "49ers vs. Colts"
+    ],
+    "cadencePerDay": 500,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0x216509be5332c6037105b4f871966eb97240f598",
+    "name": "HotChili",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 518,
+      "monthsActive": 17.230555555555554,
+      "totalPnl": 83199.7,
+      "peak": 95816.97,
+      "maxDdPctOfPeak": 0.9516205735877613,
+      "slope": 0.0021857379796943227,
+      "slopeSign": 1,
+      "r2": 0.7996035680425181,
+      "daysSinceLastChange": 0,
+      "score": 0.23064051735033572
+    },
+    "passed": false,
+    "category": "esports",
+    "topMarkets": [
+      "Will Spain win the 2026 FIFA World Cup?",
+      "Will Panama win the 2026 FIFA World Cup?",
+      "Will Lance Stroll be the 2026 F1 Drivers' Champion?"
+    ],
+    "cadencePerDay": 7.876944620703236,
+    "botRisk": "low"
+  },
+  {
+    "wallet": "0x241f846866c2de4fb67cdb0ca6b963d85e56ef50",
+    "name": "Pestle",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 431,
+      "monthsActive": 14.330555555555556,
+      "totalPnl": 143468.53,
+      "peak": 154556.86,
+      "maxDd": 123264.862,
+      "maxDdPctOfPeak": 0.79753730762905,
+      "slope": 0.003875490384041495,
+      "slopeSign": 1,
+      "r2": 0.703494109732936,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.703494109732936,
+      "magnitudeFactor": 0.3787723986776228,
+      "livenessFactor": 1,
+      "score": 0.26646415139912294
+    },
+    "passed": false,
+    "category": "finance",
+    "top3Markets": [
+      "Will there be no change in Fed interest rates after the April 2026 meeting?",
+      "Will there be no change in Fed interest rates after the April 2026 meeting?",
+      "Will Donald Trump not announce a next United States Attorney General by June 30?"
+    ],
+    "botRisk": "low",
+    "cadencePerDay": 11.97478642192273,
+    "bucketHits": 0
+  },
+  {
+    "wallet": "0x5d189e816b4149be00977c1a3c8840374aec4972",
+    "name": "gloriafoster",
+    "lbSlice": "ALL/VOL",
+    "metrics": {
+      "n": 334,
+      "monthsActive": 11.097222222222221,
+      "totalPnl": 1095.652,
+      "peak": 49300.516,
+      "maxDd": 71444.225,
+      "maxDdPctOfPeak": 1.449157753237309,
+      "slope": 0.0000493551393330058,
+      "slopeSign": 1,
+      "r2": 0.0005337121725427706,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.0005337121725427706,
+      "magnitudeFactor": 0.03310063443500744,
+      "livenessFactor": 1,
+      "score": 0.000017666211516851865
+    },
+    "passed": false,
+    "category": "sports",
+    "top3Markets": [
+      "Will Cory Booker win the 2028 Democratic presidential nomination?",
+      "Will Jared Polis win the 2028 Democratic presidential nomination?",
+      "Will Hillary Clinton win the 2028 Democratic presidential nomination?"
+    ],
+    "botRisk": "high",
+    "cadencePerDay": 323.4501347708895,
+    "bucketHits": 0
+  },
+  {
+    "wallet": "0xfe787d2da716d60e8acff57fb87eb13cd4d10319",
+    "name": "ferrariChampions2026",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 29,
+      "monthsActive": 0.9305555555555556,
+      "totalPnl": 266864.6,
+      "peak": 486266.78,
+      "maxDd": 494394.0827,
+      "maxDdPctOfPeak": 1.0167136704259336,
+      "slope": 0.023987847466938748,
+      "slopeSign": 1,
+      "r2": 0.015397175193473332,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.015397175193473332,
+      "magnitudeFactor": 0.5165893920707237,
+      "livenessFactor": 1,
+      "score": 0.007954017372802817
+    },
+    "passed": false,
+    "category": "unknown",
+    "top3Markets": [
+      "Madrid Open: Jakub Mensik vs Alexander Zverev",
+      "Madrid Open: Jakub Mensik vs Alexander Zverev",
+      "Madrid Open: Jakub Mensik vs Alexander Zverev"
+    ],
+    "botRisk": "high",
+    "cadencePerDay": 23225.8064516129,
+    "bucketHits": 0
+  },
+  {
+    "wallet": "0x43e98f912cd6ddadaad88d3297e78c0648e688e5",
+    "name": "ashash111",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 61,
+      "monthsActive": 1.9972222222222222,
+      "totalPnl": 32143.154,
+      "peak": 35790.43,
+      "maxDd": 3875.1589999999997,
+      "maxDdPctOfPeak": 0.10827360833608313,
+      "slope": 0.008196932751007005,
+      "slopeSign": 1,
+      "r2": 0.9411133458431482,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.9411133458431482,
+      "magnitudeFactor": 0.17928511929326427,
+      "livenessFactor": 1,
+      "score": 0.1687276184779719
+    },
+    "passed": false,
+    "category": "mixed",
+    "top3Markets": [
+      "US x Iran ceasefire extended by April 22, 2026?",
+      "Will the Washington Nationals win the 2026 World Series?",
+      "Will the Chicago White Sox win the 2026 World Series?"
+    ],
+    "botRisk": "high",
+    "cadencePerDay": 768.4098185699039,
+    "bucketHits": 0
+  },
+  {
+    "wallet": "0x9e9c8b080659b08c3474ea761790a20982e26421",
+    "name": "meetgoodlife",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 33,
+      "monthsActive": 1.0638888888888889,
+      "totalPnl": 5389.256,
+      "peak": 11663.727,
+      "maxDd": 6312.487300000001,
+      "maxDdPctOfPeak": 0.5412067086275253,
+      "slope": 0.0016184632282145995,
+      "slopeSign": 1,
+      "r2": 0.24742559199885092,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.24742559199885092,
+      "magnitudeFactor": 0.07341155222442855,
+      "livenessFactor": 1,
+      "score": 0.018163896768683796
+    },
+    "passed": false,
+    "category": "politics",
+    "top3Markets": [
+      "Will Tom Brady win the 2028 Republican presidential nomination?",
+      "Will Iran win the 2026 FIFA World Cup?",
+      "Will Carlos Roberto Massa Júnior win the 2026 Brazilian presidential election?"
+    ],
+    "botRisk": "low",
+    "cadencePerDay": 40.899795501022496,
+    "bucketHits": 0
+  },
+  {
+    "wallet": "0xd99f3bec8e060ada0aef0c4057695dd5bc22fcdc",
+    "name": "BakerMcKenzie",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 29,
+      "monthsActive": 0.9305555555555556,
+      "totalPnl": 113576.766,
+      "peak": 117675.49,
+      "maxDd": 13138.070000000007,
+      "maxDdPctOfPeak": 0.18565645486239135,
+      "slope": 0.05011675001036143,
+      "slopeSign": 1,
+      "r2": 0.8969645836829012,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.8969645836829012,
+      "magnitudeFactor": 0.3370115220582228,
+      "livenessFactor": 1,
+      "score": 0.30228739957929474
+    },
+    "passed": false,
+    "category": "geopolitics",
+    "top3Markets": [
+      "US x Iran ceasefire extended by April 22, 2026?",
+      "US x Iran ceasefire extended by April 22, 2026?",
+      "US x Iran ceasefire extended by April 22, 2026?"
+    ],
+    "botRisk": "low",
+    "cadencePerDay": 63.41749853200235,
+    "bucketHits": 0
+  },
+  {
+    "wallet": "0xc21ea96be762bb55041529af6e386e7c53b80215",
+    "name": "Just2SeeULaugh",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 158,
+      "monthsActive": 5.230555555555555,
+      "totalPnl": 98650.664,
+      "peak": 126485.555,
+      "maxDd": 27834.89099999999,
+      "maxDdPctOfPeak": 0.22006379305526225,
+      "slope": 0.010773662518987964,
+      "slopeSign": 1,
+      "r2": 0.9226958880478249,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.9226958880478249,
+      "magnitudeFactor": 0.31408703252442627,
+      "livenessFactor": 1,
+      "score": 0.28980681339943154
+    },
+    "passed": false,
+    "category": "mixed",
+    "top3Markets": [
+      "Will Zohran Mamdani win the 2028 Democratic presidential nomination?",
+      "Will Frances Tiafoe win the 2026 Men's French Open?",
+      "Will Stephen Smith win the 2028 US Presidential Election?"
+    ],
+    "botRisk": "high",
+    "cadencePerDay": 12934.131736526946,
+    "bucketHits": 0
+  },
+  {
+    "wallet": "0x2785e7022dc20757108204b13c08cea8613b70ae",
+    "name": "poorsob",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 184,
+      "monthsActive": 6.097222222222222,
+      "totalPnl": 210489.3,
+      "peak": 233226.38,
+      "maxDd": 93772.93,
+      "maxDdPctOfPeak": 0.4020682823272393,
+      "slope": 0.013678494415680692,
+      "slopeSign": 1,
+      "r2": 0.871818123777169,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.871818123777169,
+      "magnitudeFactor": 0.45879112894649565,
+      "livenessFactor": 1,
+      "score": 0.39998242124374306
+    },
+    "passed": false,
+    "category": "geopolitics",
+    "top3Markets": [
+      "Will Kevin Warsh be confirmed as Fed Chair?",
+      "Will Kevin Warsh be confirmed as Fed Chair?",
+      "Will Kevin Warsh be confirmed as Fed Chair?"
+    ],
+    "botRisk": "low",
+    "cadencePerDay": 23.931396662899687,
+    "bucketHits": 0
+  },
+  {
+    "wallet": "0x4c2966a198cd7ac982110d0219b037afa9997570",
+    "name": "0x4c2966a198cd7ac982110d0219b037afa9997570",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 118,
+      "monthsActive": 3.897222222222222,
+      "totalPnl": -4190.0264,
+      "peak": 12770.206,
+      "maxDd": 16960.2324,
+      "maxDdPctOfPeak": 1.3281095387184827,
+      "slope": 0.0012428124561490708,
+      "slopeSign": 1,
+      "r2": 0.5512761557371273,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.5512761557371273,
+      "magnitudeFactor": 0,
+      "livenessFactor": 1,
+      "score": 0
+    },
+    "passed": false,
+    "category": "finance",
+    "top3Markets": [
+      "Will the Fed decrease interest rates by 25 bps after the April 2026 meeting?",
+      "Will the Fed decrease interest rates by 25 bps after the April 2026 meeting?",
+      "Will the Fed decrease interest rates by 25 bps after the April 2026 meeting?"
+    ],
+    "botRisk": "high",
+    "cadencePerDay": 1049.5626822157435,
+    "bucketHits": 0
+  },
+  {
+    "wallet": "0xeebde7a0e019a63e6b476eb425505b7b3e6eba30",
+    "name": "Bonereaper",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 35,
+      "monthsActive": 1.1305555555555555,
+      "totalPnl": 550758.5,
+      "peak": 550758.5,
+      "maxDd": 8691,
+      "maxDdPctOfPeak": 0.017007297267478586,
+      "slope": 0.19443143127249624,
+      "slopeSign": 1,
+      "r2": 0.9657632583994386,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.9657632583994386,
+      "magnitudeFactor": 0.7421310531166312,
+      "livenessFactor": 1,
+      "score": 0.7167229040173245
+    },
+    "passed": false,
+    "category": "crypto-buckets",
+    "top3Markets": [
+      "Ethereum Up or Down - April 28, 6:55PM-7:00PM ET",
+      "Ethereum Up or Down - April 28, 6:55PM-7:00PM ET",
+      "Ethereum Up or Down - April 28, 6:55PM-7:00PM ET"
+    ],
+    "botRisk": "high",
+    "cadencePerDay": 13090.909090909092,
+    "bucketHits": 0
+  },
+  {
+    "wallet": "0xb27bc932bf8110d8f78e55da7d5f0497a18b5b82",
+    "name": "0xB27BC932bf8110D8F78e55da7d5f0497A18B5b82-1772569391020",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 57,
+      "monthsActive": 1.863888888888889,
+      "totalPnl": 530061.9,
+      "peak": 534449.1,
+      "maxDd": 8483.72000000003,
+      "maxDdPctOfPeak": 0.019247850665145973,
+      "slope": 0.1404662422349926,
+      "slopeSign": 1,
+      "r2": 0.9219657461072255,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.9219657461072255,
+      "magnitudeFactor": 0.7280535007813642,
+      "livenessFactor": 1,
+      "score": 0.671240389053868
+    },
+    "passed": false,
+    "category": "crypto",
+    "top3Markets": [
+      "Bitcoin Up or Down - April 28, 6:55PM-7:00PM ET",
+      "Bitcoin Up or Down - April 28, 6:55PM-7:00PM ET",
+      "Bitcoin Up or Down - April 28, 6:55PM-7:00PM ET"
+    ],
+    "activityCount": 50,
+    "cadencePerDay": 540000,
+    "cryptoBucketMatches": 50,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0x68146921df11eab44296dc4e58025ca84741a9e7",
+    "name": "LynxTitan",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 135,
+      "monthsActive": 4.463888888888889,
+      "totalPnl": 197208.7,
+      "peak": 392265.22,
+      "maxDd": 195056.51999999996,
+      "maxDdPctOfPeak": 0.4972567284960924,
+      "slope": 0.037723281651990216,
+      "slopeSign": 1,
+      "r2": 0.8309586686216253,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.8309586686216253,
+      "magnitudeFactor": 0.444081861822795,
+      "livenessFactor": 1,
+      "score": 0.3690136726592823
+    },
+    "passed": false,
+    "category": "sports",
+    "top3Markets": [
+      "Colorado Rockies vs. Cincinnati Reds",
+      "San Francisco Giants vs. Philadelphia Phillies",
+      "Wild vs. Stars: O/U 5.5"
+    ],
+    "activityCount": 50,
+    "cadencePerDay": 15652.173913043478,
+    "cryptoBucketMatches": 0,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0x5d58e38cd0a7e6f5fa67b7f9c2f70dd70df09a15",
+    "name": "Dhdhsjsj",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 186,
+      "monthsActive": 6.163888888888889,
+      "totalPnl": -1307882.8,
+      "peak": 1127372,
+      "maxDd": 2435254.8,
+      "maxDdPctOfPeak": 2.160116447809596,
+      "slope": -0.024982118110037296,
+      "slopeSign": -1,
+      "r2": 0.13824813981692355,
+      "daysSinceLastChange": 5.916666666666667,
+      "curveQuality": 0,
+      "magnitudeFactor": 0,
+      "livenessFactor": 0.5773809523809523,
+      "score": 0
+    },
+    "passed": false,
+    "category": "esports",
+    "top3Markets": [
+      "Trail Blazers vs. Spurs",
+      "76ers vs. Celtics",
+      "Trail Blazers vs. Spurs"
+    ],
+    "activityCount": 50,
+    "cadencePerDay": 233.51351351351352,
+    "cryptoBucketMatches": 0,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0x5d05b1f588780423488a09d9aefeb64df54d6320",
+    "name": "SP888",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 119,
+      "monthsActive": 3.9305555555555554,
+      "totalPnl": 7851.887,
+      "peak": 12821.259,
+      "maxDd": 8394.7094,
+      "maxDdPctOfPeak": 1.3735607097053448,
+      "slope": 0.0009035634000311642,
+      "slopeSign": 1,
+      "r2": 0.5192134885599318,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.5192134885599318,
+      "magnitudeFactor": 0.08861087405053626,
+      "livenessFactor": 1,
+      "score": 0.04600796104012366
+    },
+    "passed": false,
+    "category": "geopolitics",
+    "top3Markets": [
+      "US x Iran diplomatic meeting by April 30, 2026?",
+      "US x Iran diplomatic meeting by April 30, 2026?",
+      "US x Iran diplomatic meeting by April 30, 2026?"
+    ],
+    "activityCount": 50,
+    "cadencePerDay": 264.83570377636096,
+    "cryptoBucketMatches": 0,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0xe40ea00e74059c76c0035c919ef6b99c3e25a94d",
+    "name": "restart77",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 430,
+      "monthsActive": 14.297222222222222,
+      "totalPnl": 452134.16,
+      "peak": 463547.38,
+      "maxDd": 35246.580000000016,
+      "maxDdPctOfPeak": 0.14215201198693678,
+      "slope": 0.005994651007151659,
+      "slopeSign": 1,
+      "r2": 0.4456065426429352,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.4456065426429352,
+      "magnitudeFactor": 0.6724092206387416,
+      "livenessFactor": 1,
+      "score": 0.29962994805006027
+    },
+    "passed": false,
+    "category": "sports",
+    "top3Markets": [
+      "Will England win the 2026 FIFA World Cup?",
+      "Will France win the 2026 FIFA World Cup?",
+      "Will France win the 2026 FIFA World Cup?"
+    ],
+    "activityCount": 50,
+    "cadencePerDay": 95.14999339236157,
+    "cryptoBucketMatches": 0,
+    "botRisk": "low"
+  },
+  {
+    "wallet": "0x63a51cbb37341837b873bc29d05f482bc2988e33",
+    "name": "noMoohyun523",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 27,
+      "monthsActive": 0.8638888888888889,
+      "totalPnl": -347915.22,
+      "peak": 1418802.1,
+      "maxDd": 1766836.1300000001,
+      "maxDdPctOfPeak": 1.2453013214457465,
+      "slope": -0.08512445456812025,
+      "slopeSign": -1,
+      "r2": 0.012998827930460968,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0,
+      "magnitudeFactor": 0,
+      "livenessFactor": 1,
+      "score": 0
+    },
+    "passed": false,
+    "category": "sports",
+    "top3Markets": [
+      "Madrid Open: Daniil Medvedev vs Flavio Cobolli",
+      "Madrid Open: Daniil Medvedev vs Flavio Cobolli",
+      "LoL: DN SOOPers Challengers vs Gen.G Global Academy - Game 2 Winner"
+    ],
+    "activityCount": 50,
+    "cadencePerDay": 17.48181001481098,
+    "cryptoBucketMatches": 0,
+    "botRisk": "low"
+  },
+  {
+    "wallet": "0x3b5c629f114098b0dee345fb78b7a3a013c7126e",
+    "name": "SMCAOMCRL",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 149,
+      "monthsActive": 4.930555555555555,
+      "totalPnl": -160552.39,
+      "peak": 584974,
+      "maxDd": 853979.4,
+      "maxDdPctOfPeak": 1.4598587287640135,
+      "slope": 0.0321453225493737,
+      "slopeSign": 1,
+      "r2": 0.24519233002906451,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.24519233002906451,
+      "magnitudeFactor": 0,
+      "livenessFactor": 1,
+      "score": 0
+    },
+    "passed": false,
+    "category": "crypto",
+    "top3Markets": [
+      "Madrid Open: Aryna Sabalenka vs Hailey Baptiste",
+      "Abidjan 2: Robert Strombachs vs Florent Bax",
+      "Abidjan 2: Robert Strombachs vs Florent Bax"
+    ],
+    "activityCount": 50,
+    "cadencePerDay": 514.0409328891004,
+    "cryptoBucketMatches": 16,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0x8a6c6811e8937f9e8afc1b9249fa540262c30b3f",
+    "name": "0x8a6C6811e8937F9E8aFc1b9249FA540262c30b3f-1771776258725",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 66,
+      "monthsActive": 2.1638888888888888,
+      "totalPnl": -594496.2,
+      "peak": 273783.97,
+      "maxDd": 893719.625,
+      "maxDdPctOfPeak": 8.168994242662794,
+      "slope": -0.023320744256163047,
+      "slopeSign": -1,
+      "r2": 0.019199872983099397,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0,
+      "magnitudeFactor": 0,
+      "livenessFactor": 1,
+      "score": 0
+    },
+    "passed": false,
+    "category": "crypto",
+    "top3Markets": [
+      "Bitcoin Up or Down - April 28, 6:45PM-7:00PM ET",
+      "Bitcoin Up or Down - April 28, 6:45PM-7:00PM ET",
+      "Bitcoin Up or Down - April 28, 6:30PM-6:45PM ET"
+    ],
+    "activityCount": 50,
+    "cadencePerDay": 50.533408197641776,
+    "cryptoBucketMatches": 50,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0xccc1afdec8b8a8d7770eeabc0041b610c621889d",
+    "name": "66601",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 33,
+      "monthsActive": 1.0638888888888889,
+      "totalPnl": -12069.837,
+      "peak": 41.082657,
+      "maxDd": 12110.919657,
+      "maxDdPctOfPeak": 294.79397247845975,
+      "slope": -0.0023238877052163434,
+      "slopeSign": -1,
+      "r2": 0.4705170013751897,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0,
+      "magnitudeFactor": 0,
+      "livenessFactor": 1,
+      "score": 0
+    },
+    "passed": false,
+    "category": "sports",
+    "top3Markets": [
+      "Over $15M committed to the Printr public sale?",
+      "Will Juan Branco win the 2027 French presidential election?",
+      "Over $15M committed to the Printr public sale?"
+    ],
+    "activityCount": 50,
+    "cadencePerDay": 708.8939940925501,
+    "cryptoBucketMatches": 0,
+    "botRisk": "high"
+  },
+  {
+    "wallet": "0x02e7f29f3e612a95a9ccca7131ce7dd5d56b59e5",
+    "name": "CAR-GangVersion",
+    "lbSlice": "MONTH/VOL",
+    "metrics": {
+      "n": 30,
+      "monthsActive": 0.9638888888888889,
+      "totalPnl": 62588.875,
+      "peak": 67687.09,
+      "maxDd": 5098.2149999999965,
+      "maxDdPctOfPeak": 0.0753203454307165,
+      "slope": 0.024910486372862008,
+      "slopeSign": 1,
+      "r2": 0.8847868519960185,
+      "daysSinceLastChange": 0,
+      "curveQuality": 0.8847868519960185,
+      "magnitudeFactor": 0.25017768685476327,
+      "livenessFactor": 1,
+      "score": 0.22135392799187167
+    },
+    "passed": false,
+    "category": "politics",
+    "top3Markets": [
+      "US x Iran ceasefire extended by April 22, 2026?",
+      "Will the Iranian regime fall by April 30?",
+      "Will the Iranian regime fall by April 30?"
+    ],
+    "activityCount": 50,
+    "cadencePerDay": 57.897981612029916,
+    "cryptoBucketMatches": 0,
+    "botRisk": "low"
+  }
+]
