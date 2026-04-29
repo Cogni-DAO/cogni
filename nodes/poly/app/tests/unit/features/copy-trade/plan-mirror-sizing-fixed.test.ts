@@ -165,7 +165,7 @@ describe("planMirrorFromFill() — sizing policy: kind=fixed (bug.0342)", () => 
     const d = planMirrorFromFill({
       fill,
       config: makeConfig({ mirror_usdc: 2, max_usdc_per_trade: 5 }),
-      state: { already_placed_ids: [], cumulative_filled_usdc_for_market: 2 },
+      state: { already_placed_ids: [], cumulative_intent_usdc_for_market: 2 },
       client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
       min_shares: 1,
       min_usdc_notional: 1,
@@ -179,7 +179,7 @@ describe("planMirrorFromFill() — sizing policy: kind=fixed (bug.0342)", () => 
     const d = planMirrorFromFill({
       fill,
       config: makeConfig({ mirror_usdc: 2, max_usdc_per_trade: 5 }),
-      state: { already_placed_ids: [], cumulative_filled_usdc_for_market: 4 },
+      state: { already_placed_ids: [], cumulative_intent_usdc_for_market: 4 },
       client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
       min_shares: 1,
       min_usdc_notional: 1,
@@ -193,6 +193,20 @@ describe("planMirrorFromFill() — sizing policy: kind=fixed (bug.0342)", () => 
       fill,
       config: makeConfig({ mirror_usdc: 2, max_usdc_per_trade: 5 }),
       state: { already_placed_ids: [] },
+      client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
+      min_shares: 1,
+      min_usdc_notional: 1,
+    });
+    if (d.kind !== "place") throw new Error("expected place");
+    expect(d.intent.size_usdc).toBe(2);
+  });
+
+  it("places when cumulative + intent equals max_usdc_per_trade exactly (boundary, task.0424)", () => {
+    const fill = makeFill(0.5);
+    const d = planMirrorFromFill({
+      fill,
+      config: makeConfig({ mirror_usdc: 2, max_usdc_per_trade: 5 }),
+      state: { already_placed_ids: [], cumulative_intent_usdc_for_market: 3 },
       client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
       min_shares: 1,
       min_usdc_notional: 1,

@@ -97,12 +97,14 @@ export const RuntimeStateSchema = z.object({
   /** client_order_id values that already exist in poly_copy_trade_fills — idempotency gate. */
   already_placed_ids: z.array(z.string()),
   /**
-   * Sum of `size_usdc` for committed (non-failed) rows for this tenant ×
+   * Sum of `intent` `size_usdc` for non-failed rows for this tenant ×
    * market. Drives the per-position cap check in `applySizingPolicy`.
-   * Optional: when omitted (`undefined`), the per-position cap is skipped
-   * — preserves the SELL path and any caller that hasn't opted in.
+   * Intent-based, not filled-based — see `OrderLedger.cumulativeIntentForMarket`
+   * for the v0 rationale. Optional: when omitted (`undefined`), the
+   * per-position cap is skipped — preserves the SELL path and any caller
+   * that hasn't opted in.
    */
-  cumulative_filled_usdc_for_market: z.number().optional(),
+  cumulative_intent_usdc_for_market: z.number().optional(),
 });
 export type RuntimeState = z.infer<typeof RuntimeStateSchema>;
 

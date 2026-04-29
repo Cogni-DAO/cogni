@@ -161,9 +161,16 @@ export interface OrderLedger {
   ): Promise<StateSnapshot>;
 
   /**
-   * Sum the `size_usdc` of all `poly_copy_trade_fills` rows for this tenant
-   * × market that represent committed (non-failed) exposure. Used by the
-   * mirror sizing policy to enforce a per-(tenant, market) position cap.
+   * Sum the `intent` `size_usdc` of all `poly_copy_trade_fills` rows for this
+   * tenant × market that have not failed. Used by the mirror sizing policy
+   * to enforce a per-(tenant, market) position cap.
+   *
+   * **Intent, not filled.** Reads `attributes->>'size_usdc'` (the intended
+   * notional written at `insertPending`), not `attributes->>'filled_size_usdc'`
+   * (the on-chain fill written by `markOrderId`). v0 chooses intent because
+   * the FOK-heavy mirror regime fills only ~14% of placements; a filled-based
+   * cap would let no-match attempts keep firing through the cap. Revisit
+   * once task.0427's design pass lands and the miss rate drops.
    *
    * Counts rows with `status` ∈ `pending | open | filled | partial`.
    * Excludes `canceled | error`. Cross-target by design (the cap is on the
@@ -171,7 +178,7 @@ export interface OrderLedger {
    * `Infinity` on DB error so the caller skips the placement rather than
    * mis-allowing it.
    */
-  cumulativeFilledForMarket(
+  cumulativeIntentForMarket(
     billing_account_id: string,
     market_id: string
   ): Promise<number>;

@@ -144,4 +144,20 @@ describe("planMirrorFromFill() — sizing policy: kind=min_bet (task.0404)", () 
     if (d.kind !== "place") throw new Error("expected place");
     expect(d.intent.size_usdc).toBeGreaterThanOrEqual(1);
   });
+
+  it("skips position_cap_reached on min_bet variant (task.0424)", () => {
+    const fill = makeFill(0.5);
+    const d = planMirrorFromFill({
+      fill,
+      config: makeConfig(5),
+      state: {
+        already_placed_ids: [],
+        cumulative_intent_usdc_for_market: 4.5,
+      },
+      client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
+      min_shares: 1,
+      min_usdc_notional: 1,
+    });
+    expect(d).toEqual({ kind: "skip", reason: "position_cap_reached" });
+  });
 });

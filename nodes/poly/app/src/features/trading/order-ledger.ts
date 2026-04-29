@@ -134,7 +134,7 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
       }
     },
 
-    async cumulativeFilledForMarket(
+    async cumulativeIntentForMarket(
       billing_account_id: string,
       market_id: string
     ): Promise<number> {
@@ -163,12 +163,12 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
         log.warn(
           {
             event: EVENT_NAMES.ADAPTER_ORDER_LEDGER_SNAPSHOT_ERROR,
-            errorCode: "cumulative_fill_fail_closed",
+            errorCode: "cumulative_intent_fail_closed",
             billing_account_id,
             market_id,
             err: err instanceof Error ? err.message : String(err),
           },
-          "order-ledger cumulativeFilledForMarket failed; returning Infinity (skip placement)"
+          "order-ledger cumulativeIntentForMarket failed; returning Infinity (skip placement)"
         );
         return Number.POSITIVE_INFINITY;
       }

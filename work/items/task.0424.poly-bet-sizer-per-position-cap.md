@@ -2,7 +2,7 @@
 id: task.0424
 type: task
 title: "Poly bet sizer — per-(tenant, market) position cap (reuse `max_usdc_per_trade` for v0)"
-status: needs_implement
+status: needs_review
 revision: 1
 priority: 1
 rank: 5
@@ -83,6 +83,16 @@ In `applySizingPolicy` (or directly in `plan-mirror.ts` BUY branch — pick whic
 ```
 
 Should fire once per attempted-but-capped fill, with `existing_usdc + intent_usdc > max_usdc_per_trade`.
+
+## Revision 1 — addressed
+
+- **Renamed `cumulativeFilledForMarket` → `cumulativeIntentForMarket`.** Field on `RuntimeState` renamed to `cumulative_intent_usdc_for_market`. Docstring on the port now states explicitly: "intent, not filled" and explains the v0 rationale (FOK-heavy regime, ~14% fill rate, switching to filled-based would let no-match attempts keep firing through the cap; revisit post task.0427).
+- **Gated cumulative DB read on `!already_placed_ids.includes(client_order_id)`** in `mirror-pipeline.ts`. Duplicate fills no longer trigger a redundant query.
+- **Added boundary-equality fixture** in `plan-mirror-sizing-fixed.test.ts` (cumulative + size = cap exactly → places).
+- **Added min_bet variant fixture** in `plan-mirror-sizing-min-bet.test.ts`.
+- **Added direct unit test** for `FakeOrderLedger.cumulativeIntentForMarket`: empty / sums non-failed rows / excludes failed status / excludes wrong market / excludes wrong tenant / fail-closed Infinity.
+
+Test count: 53 → 61 across copy-trade + trading. All passing.
 
 ## Review Feedback (revision 1)
 

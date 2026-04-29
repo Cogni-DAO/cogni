@@ -39,13 +39,13 @@ export function applySizingPolicy(
   price: number,
   minShares: number | undefined,
   minUsdcNotional: number | undefined,
-  cumulativeFilledForMarket?: number
+  cumulativeIntentForMarket?: number
 ): SizingResult {
   const sized = sizeFromPolicy(policy, price, minShares, minUsdcNotional);
   if (!sized.ok) return sized;
   if (
-    cumulativeFilledForMarket !== undefined &&
-    cumulativeFilledForMarket + sized.size_usdc > policy.max_usdc_per_trade
+    cumulativeIntentForMarket !== undefined &&
+    cumulativeIntentForMarket + sized.size_usdc > policy.max_usdc_per_trade
   ) {
     return { ok: false, reason: "position_cap_reached" };
   }
@@ -133,7 +133,7 @@ export function planMirrorFromFill(input: PlanMirrorInput): MirrorPlan {
     fill.price,
     min_shares,
     min_usdc_notional,
-    state.cumulative_filled_usdc_for_market
+    state.cumulative_intent_usdc_for_market
   );
   if (!sizing.ok) {
     return { kind: "skip", reason: sizing.reason };

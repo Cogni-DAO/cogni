@@ -82,7 +82,7 @@ export class FakeOrderLedger implements OrderLedger {
     };
   }
 
-  async cumulativeFilledForMarket(
+  async cumulativeIntentForMarket(
     billing_account_id: string,
     market_id: string
   ): Promise<number> {
