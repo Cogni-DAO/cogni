@@ -107,6 +107,15 @@ export interface PolyDataResolveUsernameOutput {
   count: number;
 }
 
+export interface PolyDataUserPnlOutput {
+  user: string;
+  interval: string;
+  fidelity: string | null;
+  /** Raw curve points: `t` is unix-seconds, `p` is cumulative realized PnL in USDC. */
+  points: Array<{ t: number; p: number }>;
+  count: number;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Capability interface
 // ─────────────────────────────────────────────────────────────────────────────
@@ -157,4 +166,23 @@ export interface PolyDataCapability {
     query: string;
     limit?: number;
   }): Promise<PolyDataResolveUsernameOutput>;
+
+  /**
+   * Fetch the public user-pnl time-series — `user-pnl-api.polymarket.com/user-pnl`.
+   * The same data Polymarket renders on the wallet P/L card. Drives the
+   * AI snapshot tool `core__poly_data_user_pnl_summary` and the human
+   * research-page sparkline. No auth required.
+   */
+  getUserPnl(params: {
+    user: string;
+    interval?:
+      | "6h"
+      | "12h"
+      | "1d"
+      | "1w"
+      | "1m"
+      | "all"
+      | "max";
+    fidelity?: "1h" | "3h" | "12h" | "18h" | "1d";
+  }): Promise<PolyDataUserPnlOutput>;
 }

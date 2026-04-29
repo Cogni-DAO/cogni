@@ -15,17 +15,21 @@
  * @internal
  */
 
-import type { PolymarketDataApiClient } from "@cogni/market-provider/adapters/polymarket";
+import type {
+  PolymarketDataApiClient,
+  PolymarketUserPnlClient,
+} from "@cogni/market-provider/adapters/polymarket";
 import type { PolyDataCapability } from "@cogni/poly-ai-tools";
 
 export interface CreatePolyResearchCapabilityDeps {
   dataApiClient: PolymarketDataApiClient;
+  userPnlClient: PolymarketUserPnlClient;
 }
 
 export function createPolyResearchCapability(
   deps: CreatePolyResearchCapabilityDeps
 ): PolyDataCapability {
-  const { dataApiClient } = deps;
+  const { dataApiClient, userPnlClient } = deps;
 
   return {
     getPositions: async (params) => {
@@ -151,6 +155,21 @@ export function createPolyResearchCapability(
           verified: false,
         })),
         count: profiles.length,
+      };
+    },
+
+    getUserPnl: async (params) => {
+      const interval = params.interval ?? "all";
+      const points = await userPnlClient.getUserPnl(params.user, {
+        interval,
+        ...(params.fidelity !== undefined && { fidelity: params.fidelity }),
+      });
+      return {
+        user: params.user,
+        interval,
+        fidelity: params.fidelity ?? null,
+        points: points.map((pt) => ({ t: pt.t, p: pt.p })),
+        count: points.length,
       };
     },
   };

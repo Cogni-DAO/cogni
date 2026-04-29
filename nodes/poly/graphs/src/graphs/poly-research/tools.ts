@@ -20,6 +20,7 @@ import {
   POLY_DATA_POSITIONS_NAME,
   POLY_DATA_RESOLVE_USERNAME_NAME,
   POLY_DATA_TRADES_MARKET_NAME,
+  POLY_DATA_USER_PNL_SUMMARY_NAME,
   POLY_DATA_VALUE_NAME,
   WALLET_TOP_TRADERS_NAME,
 } from "@cogni/poly-ai-tools";
@@ -27,12 +28,14 @@ import {
 /**
  * Tool bundle for the poly-research graph.
  *
- * 7 `core__poly_data_*` tools for Data-API research + the global leaderboard
- * (`core__wallet_top_traders`) + market browsing (`core__market_list`) + event
- * context (`core__web_search`).
+ * Includes the canonical AI snapshot tool (`core__poly_data_user_pnl_summary`,
+ * task.0420) — the agent's default first call when given a wallet address —
+ * plus 7 raw `core__poly_data_*` tools, the global leaderboard, market
+ * browsing, and web search.
  */
 export const POLY_RESEARCH_TOOL_IDS = [
   POLY_DATA_HELP_NAME,
+  POLY_DATA_USER_PNL_SUMMARY_NAME,
   POLY_DATA_RESOLVE_USERNAME_NAME,
   POLY_DATA_HOLDERS_NAME,
   POLY_DATA_TRADES_MARKET_NAME,
