@@ -23,7 +23,6 @@ created: 2026-04-29
 updated: 2026-04-29
 labels: [frontend, ux, observability, error-handling, oss-first]
 external_refs:
-  - work/items/spike.0424.error-feedback-widget-research.md
   - work/items/task.0426.send-to-cogni-error-intake-v0.md
   - work/items/story.0417.ui-send-to-cogni-error-button.md
   - https://github.com/Cogni-DAO/node-template/pull/1130
@@ -111,7 +110,7 @@ hook that:
   backend, doesn't write into our work-items system, requires
   a bridge.
 - **Build our own headless `<ErrorReport>` compound component
-  family** (the spike.0424 framing). Premature. shadcn primitives
+  family.** Premature abstraction. shadcn primitives
   - one wrapper component covers all three v1 variants in <100 LOC.
 - **Keep `error_reports` as a separate fire-and-forget log** while
   also creating a work item. Two stores for the same thing — drift
@@ -169,7 +168,7 @@ event="error_report.intake" workItemId="bug.5042" digest="..." build_sha="..." n
       `digest` so an agent can grep Loki for the original failing
       log line. Title/summary alone are not the audit trail.
 - [ ] ZERO_NEW_DEPS — `package.json` unchanged. (`pnpm install
-    --frozen-lockfile` is a no-op for this PR.)
+  --frozen-lockfile` is a no-op for this PR.)
 - [ ] ZERO_USER_COPY_PASTE — clicking the widget produces a
       tracking link in a Sonner toast; user never has to copy a
       UUID anywhere.

@@ -458,7 +458,6 @@
 | 1 | bug.0412 | candidate-flight verify fails when merge-queue rebuild mutates pr-{N}-{X} GHCR tag mid-flight | Reusable CI/CD Rails & Multi-Node Pipeline | proj.ci-cd-reusable |
 | 1 | story.0417 | UI standard: every error surface has a "Send to Cogni" button that captures context and opens a fix loop | Observability Hardening | proj.observability-hardening |
 | 1 | task.0422 | Poly data user-pnl-summary — agent's default wallet snapshot tool | Cogni Poly | proj.poly-prediction-bot |
-| 1 | spike.0424 | Research: top-0.1% patterns for in-app error-feedback widgets | Observability Hardening | proj.observability-hardening |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 2 | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |
