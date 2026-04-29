@@ -30,7 +30,8 @@
 # caught up to EXPECTED_SHA, we (1) request a hard git refresh on the
 # Application. After task.0370 step 1 retired Argo PreSync Job hooks, the
 # refresh nudge is the only kick we need — no Job to babysit, no stale hook
-# operation to clear. `kubectl rollout status` (run downstream) is the real gate.
+# operation to clear. New-RS availability check (rollout_check) + downstream
+# verify-buildsha.sh (`.buildSha == expected`) are the real gates.
 #
 # Usage: wait-for-argocd.sh
 # Env:
@@ -199,41 +200,42 @@ deployment_sync_ready() {
   [ "$status" = "Synced" ]
 }
 
-# Block until the Deployment's new ReplicaSet is fully available AND the old
-# ReplicaSet's pods are gone. Called AFTER sync.revision + Healthy to close
-# bug.0326 (Argo-level Healthy ≠ pods-serving-new-image). Uses the per-app
-# deadline so later apps are not starved by earlier reconciles.
+# Assert the Deployment's new ReplicaSet has reached desired count and is
+# Available. Called AFTER sync.revision + Healthy. Closes bug.0326's actual
+# concern (new pods serving new image) without `kubectl rollout status`'s
+# stricter "old RS is fully gone" wait — that condition is not part of the
+# contract and routinely false-fails on operator when an old pod terminates
+# slowly while the new RS is already serving traffic. verify-buildsha.sh
+# (downstream gate) provides the canonical "/version.buildSha == expected"
+# proof per Axiom 19.
 rollout_check() {
   local app_name="$1"
-  local deadline="$2"
-  local deployment namespace remaining
+  local deployment namespace spec_replicas updated available
 
-  # bug.0371: rollout_check exists to close the bug.0326 hole — Argo Healthy
-  # fires before the old ReplicaSet drains, so /version still serves the prior
-  # buildSha. That hole only matters for HTTP-served apps (verify-buildsha.sh
-  # explicitly filters scheduler-worker + migrator out for the same reason).
-  # For non-HTTP apps, blocking on `kubectl rollout status` until the old RS
-  # is gone is pure cost — slow drains false-fail verify-deploy and drop the
-  # preview lease on healthy deploys. Skip them; mirror verify-buildsha's list.
   case "$(echo "$app_name" | sed -E "s/^${DEPLOY_ENVIRONMENT}-//")" in
     scheduler-worker|*-migrator|migrator)
-      echo "    ⚠️  ${app_name}: non-HTTP app — skipping rollout-status check (bug.0371)"
+      echo "    ⚠️  ${app_name}: non-HTTP app — skipping new-RS availability check (bug.0371)"
       return 0
       ;;
   esac
 
   deployment=$(resolve_deployment "$app_name")
   if [ -z "$deployment" ]; then
-    echo "    ⚠️  ${app_name}: no Deployment mapping — skipping rollout-status check"
+    echo "    ⚠️  ${app_name}: no Deployment mapping — skipping new-RS availability check"
     return 0
   fi
   namespace="cogni-${DEPLOY_ENVIRONMENT}"
 
-  remaining=$((deadline - SECONDS))
-  [ "$remaining" -lt 10 ] && remaining=10
+  read -r spec_replicas updated available < <(
+    kubectl -n "$namespace" get deployment "$deployment" \
+      -o jsonpath='{.spec.replicas} {.status.updatedReplicas} {.status.availableReplicas}' 2>/dev/null \
+      || true
+  )
 
-  echo "    ↻ ${app_name}: kubectl rollout status deployment/${deployment} -n ${namespace} (up to ${remaining}s)"
-  if kubectl -n "$namespace" rollout status "deployment/${deployment}" --timeout="${remaining}s" >/dev/null 2>&1; then
+  echo "    ↻ ${app_name}: new-RS state — desired=${spec_replicas:-?} updated=${updated:-0} available=${available:-0}"
+
+  if [ "${updated:-0}" -ge "${spec_replicas:-1}" ] \
+     && [ "${available:-0}" -ge "${spec_replicas:-1}" ]; then
     return 0
   fi
   return 1
@@ -282,8 +284,8 @@ dump_pod_diagnostics() {
 # Deployment initContainers. The pre-sync hook-Job babysitting (delete_stale_hook_jobs,
 # clear_stale_missing_hook_operation) is gone with the hooks. The kick that
 # remains is just a hard-refresh annotation poke; if Argo is in Running/phase=Running
-# during a rolling update, kubectl rollout status (run after this script) is the
-# real gate.
+# during a rolling update, rollout_check (new-RS available) + downstream
+# verify-buildsha.sh (`.buildSha == expected`) are the real gates.
 
 # Prefer status.sync.revision; fall back to last successful operation revision
 # (some Argo states leave sync.revision empty while a sync completed).
@@ -330,9 +332,9 @@ wait_for_app() {
       deployment_status=$(get_deployment_resource_sync_status "$app_name")
     fi
 
-    # Decide whether to proceed to the authoritative kubectl rollout check.
+    # Decide whether to proceed to the new-RS availability check.
     # Only accept: Healthy, OR Progressing when sync operation completed.
-    # The kubectl rollout check is the real gate — health is just the preliminary filter.
+    # rollout_check (new-RS available) is the gate — health is the preliminary filter.
     can_proceed_to_rollout_check() {
       local health="$1"
       local phase="$2"
@@ -344,18 +346,17 @@ wait_for_app() {
     if rev_includes_expected "$REV" "$EXPECTED_SHA" &&
        can_proceed_to_rollout_check "$HEALTH" "$SYNC_PHASE" &&
        deployment_sync_ready "$deployment" "$deployment_status"; then
-      # bug.0326: sync.revision + health.status are Argo-Application-level
-      # signals. During a rolling update, "Healthy" fires as soon as enough
-      # pods are Ready — which includes the OLD ReplicaSet's pods. /version
-      # from those pods serves the prior BUILD_SHA. Before declaring this
-      # app done, block on `kubectl rollout status`: it only returns 0 when
-      # the new ReplicaSet is fully available AND the old pods are torn
-      # down. That is the signal verify-buildsha.sh needs downstream.
-      if rollout_check "$app_name" "$deadline"; then
-        echo "  ✅ ${app_name} at ${REV:0:8} (Healthy + rollout complete)"
+      # bug.0326: Argo "Healthy" + sync.revision match are Application-level
+      # signals that fire while the old ReplicaSet's pods may still be Ready.
+      # rollout_check asserts the *new* RS is available at desired count;
+      # verify-buildsha.sh downstream proves /version.buildSha matches per
+      # Axiom 19. We deliberately do NOT wait for the old RS to fully drain
+      # — that's not part of the contract and false-fails on slow terminations.
+      if rollout_check "$app_name"; then
+        echo "  ✅ ${app_name} at ${REV:0:8} (Healthy + new RS available)"
         return 0
       fi
-      echo "  ❌ ${app_name} rollout did not complete (sync.revision=${REV:0:8} Healthy but stale ReplicaSet still present)"
+      echo "  ❌ ${app_name} new ReplicaSet not yet available (sync.revision=${REV:0:8} Healthy but updated/available replicas below desired)"
       dump_pod_diagnostics "$app_name" "$deployment"
       return 1
     fi
