@@ -1,0 +1,1660 @@
+{
+  "generatedAt": "2026-04-28T22:13:02.208Z",
+  "universe": 87,
+  "passed": 11,
+  "results": [
+    {
+      "wallet": "0x56687bf447db6ffa42ffe2204a05edaa20f55839",
+      "name": "Theo4",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.230555555555554,
+        "totalPnl": 22053934,
+        "peak": 22053934,
+        "maxDd": 0,
+        "maxDdPctOfPeak": 0,
+        "slope": 0,
+        "r2": 0,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 4.696161624135184,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x1f2dd6d473f3e824cd2f8a89d9c69fb96f6ad0cf",
+      "name": "Fredi9999",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.230555555555554,
+        "totalPnl": 16619507,
+        "peak": 16620028,
+        "maxDd": 521,
+        "maxDdPctOfPeak": 0.0000313477209545014,
+        "slope": -2.6859567184589774e-7,
+        "r2": 0.011534663266564524,
+        "daysSinceLastChange": 0.9166666666666666,
+        "curveQuality": 0,
+        "magnitudeFactor": 4.07670295704752,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee",
+      "name": "kch123",
+      "m": {
+        "n": 308,
+        "monthsActive": 10.229166666666666,
+        "totalPnl": 12003714,
+        "peak": 12051260,
+        "maxDd": 1793365.6,
+        "maxDdPctOfPeak": 0.47063339799789855,
+        "slope": 0.5719279168016208,
+        "r2": 0.8366644557197112,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.8366644557197112,
+        "magnitudeFactor": 3.46463764339072,
+        "livenessFactor": 1,
+        "score": 2.8987391681735195
+      }
+    },
+    {
+      "wallet": "0x78b9ac44a6d7d7a076c14e0ad518b301b63c6b76",
+      "name": "Len9311238",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.229166666666668,
+        "totalPnl": 8709973,
+        "peak": 8709973,
+        "maxDd": 0,
+        "maxDdPctOfPeak": 0,
+        "slope": 0,
+        "r2": 0,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 2.9512663383707003,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0xd235973291b2b75ff4070e9c0b01728c520b0f29",
+      "name": "zxgngl",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.230555555555554,
+        "totalPnl": 7807265.5,
+        "peak": 7807265.5,
+        "maxDd": 0,
+        "maxDdPctOfPeak": 0,
+        "slope": 0,
+        "r2": 0,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 2.794148439149216,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x2005d16a84ceefa912d4e380cd32e7ff827875ea",
+      "name": "RN1",
+      "m": {
+        "n": 294,
+        "monthsActive": 9.7625,
+        "totalPnl": 7675313,
+        "peak": 7675313,
+        "maxDd": 201284.5,
+        "maxDdPctOfPeak": 0.04653782119176053,
+        "slope": 0.3272880632824966,
+        "r2": 0.906521531462244,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.906521531462244,
+        "magnitudeFactor": 2.7704355253281028,
+        "livenessFactor": 1,
+        "score": 2.5114594552378384
+      }
+    },
+    {
+      "wallet": "0x863134d00841b2e200492805a01e1e2f5defaa53",
+      "name": "RepTrump",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.230555555555554,
+        "totalPnl": 7532409.5,
+        "peak": 7532409.5,
+        "maxDd": 0,
+        "maxDdPctOfPeak": 0,
+        "slope": 0,
+        "r2": 0,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 2.7445235469931752,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x204f72f35326db932158cba6adff0b9a1da95e14",
+      "name": "swisstony",
+      "m": {
+        "n": 263,
+        "monthsActive": 8.729166666666666,
+        "totalPnl": 6564812.5,
+        "peak": 6677031.5,
+        "maxDd": 974064.2999999998,
+        "maxDdPctOfPeak": 0.18856482121837545,
+        "slope": 0.3338302937928891,
+        "r2": 0.9543076792529269,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.9543076792529269,
+        "magnitudeFactor": 2.5621890055185235,
+        "livenessFactor": 1,
+        "score": 2.445116643663747
+      }
+    },
+    {
+      "wallet": "0x8119010a6e589062aa03583bb3f39ca632d9f887",
+      "name": "PrincessCaro",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.230555555555554,
+        "totalPnl": 6083643,
+        "peak": 6083643,
+        "maxDd": 0,
+        "maxDdPctOfPeak": 0,
+        "slope": 0,
+        "r2": 0,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 2.466504206361708,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0xe9ad918c7678cd38b12603a762e638a5d1ee7091",
+      "name": "walletmobile",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.229166666666668,
+        "totalPnl": 5942685.5,
+        "peak": 5942685.5,
+        "maxDd": 0,
+        "maxDdPctOfPeak": 0,
+        "slope": 0,
+        "r2": 0,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 2.437762396132978,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x94f199fb7789f1aef7fff6b758d6b375100f4c7a",
+      "name": "KeyTransporter",
+      "m": {
+        "n": 90,
+        "monthsActive": 2.963888888888889,
+        "totalPnl": 5711460,
+        "peak": 5711460,
+        "maxDd": 650516.46,
+        "maxDdPctOfPeak": 1.8548513071338197,
+        "slope": 0.7982399778576595,
+        "r2": 0.5843575160459327,
+        "daysSinceLastChange": 64.91666666666667,
+        "curveQuality": 0.5843575160459327,
+        "magnitudeFactor": 2.3898661050360124,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x885783760858e1bd5dd09a3c3f916cfa251ac270",
+      "name": "BetTom42",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.230555555555554,
+        "totalPnl": 5642135.5,
+        "peak": 5642135.5,
+        "maxDd": 0,
+        "maxDdPctOfPeak": 0,
+        "slope": 0,
+        "r2": 0,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 2.375317978713587,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x23786fdad0073692157c6d7dc81f281843a35fcb",
+      "name": "mikatrade77",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.230555555555554,
+        "totalPnl": 5147998.5,
+        "peak": 5147998.5,
+        "maxDd": 0,
+        "maxDdPctOfPeak": 0,
+        "slope": 0,
+        "r2": 0,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 2.268920117588982,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0xe90bec87d9ef430f27f9dcfe72c34b76967d5da2",
+      "name": "gmanas",
+      "m": {
+        "n": 163,
+        "monthsActive": 5.395833333333333,
+        "totalPnl": 4955880.5,
+        "peak": 5618773,
+        "maxDd": 3176358,
+        "maxDdPctOfPeak": 0.5653116792580871,
+        "slope": 0.35416326597677183,
+        "r2": 0.7066450179082553,
+        "daysSinceLastChange": 16.875,
+        "curveQuality": 0.7066450179082553,
+        "magnitudeFactor": 2.2261806979668117,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0xd0c042c08f755ff940249f62745e82d356345565",
+      "name": "alexmulti",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.229166666666668,
+        "totalPnl": 4804855.5,
+        "peak": 4804855.5,
+        "maxDd": 0,
+        "maxDdPctOfPeak": 0,
+        "slope": 0,
+        "r2": 0,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 2.1919980611305294,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x507e52ef684ca2dd91f90a9d26d149dd3288beae",
+      "name": "GamblingIsAllYouNeed",
+      "m": {
+        "n": 169,
+        "monthsActive": 5.595833333333333,
+        "totalPnl": 4764640,
+        "peak": 5020788,
+        "maxDd": 1005866,
+        "maxDdPctOfPeak": 0.5839655825443716,
+        "slope": 0.346556148078431,
+        "r2": 0.9521182004473837,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.9521182004473837,
+        "magnitudeFactor": 2.1828055341692716,
+        "livenessFactor": 1,
+        "score": 2.078288877119837
+      }
+    },
+    {
+      "wallet": "0x006cc834cc092684f1b56626e23bedb3835c16ea",
+      "name": "0x006cc834Cc092684F1B56626E23BEdB3835c16ea-1729683673397",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.230555555555554,
+        "totalPnl": 4552433.5,
+        "peak": 5340067,
+        "maxDd": 815657.5,
+        "maxDdPctOfPeak": 0.15274293374970763,
+        "slope": 0.11008847932559256,
+        "r2": 0.5575895613888213,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.5575895613888213,
+        "magnitudeFactor": 2.133643245718459,
+        "livenessFactor": 1,
+        "score": 1.1896972015403766
+      }
+    },
+    {
+      "wallet": "0xdc876e6873772d38716fda7f2452a78d426d7ab6",
+      "name": "432614799197",
+      "m": {
+        "n": 114,
+        "monthsActive": 3.763888888888889,
+        "totalPnl": 4526176,
+        "peak": 5633392,
+        "maxDd": 3863569.5,
+        "maxDdPctOfPeak": 0.6858335972359104,
+        "slope": 0.3178206898256035,
+        "r2": 0.3878856416744457,
+        "daysSinceLastChange": 26.916666666666668,
+        "curveQuality": 0.3878856416744457,
+        "magnitudeFactor": 2.12748113975189,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x16f91db2592924cfed6e03b7e5cb5bb1e32299e3",
+      "name": "Jenzigo",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.230555555555554,
+        "totalPnl": 4049827,
+        "peak": 4049827,
+        "maxDd": 0,
+        "maxDdPctOfPeak": 0,
+        "slope": 0,
+        "r2": 0,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 2.0124181970952257,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0xefbc5fec8d7b0acdc8911bdd9a98d6964308f9a2",
+      "name": "reachingthesky",
+      "m": {
+        "n": 46,
+        "monthsActive": 1.4972222222222222,
+        "totalPnl": 3742635.2,
+        "peak": 4482131.5,
+        "maxDd": 739496.2999999998,
+        "maxDdPctOfPeak": 0.16498764036708868,
+        "slope": 0.33440094137545073,
+        "r2": 0.15175922633141886,
+        "daysSinceLastChange": 39.916666666666664,
+        "curveQuality": 0.15175922633141886,
+        "magnitudeFactor": 1.9345891553505619,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x019782cab5d844f02bafb71f512758be78579f3c",
+      "name": "majorexploiter",
+      "m": {
+        "n": 60,
+        "monthsActive": 1.9638888888888888,
+        "totalPnl": 3668541.5,
+        "peak": 3668541.5,
+        "maxDd": 0,
+        "maxDdPctOfPeak": 0,
+        "slope": 0.04586977864805429,
+        "r2": 0.049189118045430184,
+        "daysSinceLastChange": 57.916666666666664,
+        "curveQuality": 0.049189118045430184,
+        "magnitudeFactor": 1.9153437028376916,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x16b29c50f2439faf627209b2ac0c7bbddaa8a881",
+      "name": "SeriouslySirius",
+      "m": {
+        "n": 190,
+        "monthsActive": 6.295833333333333,
+        "totalPnl": 3648171.8,
+        "peak": 3860870.5,
+        "maxDd": 2578934.84,
+        "maxDdPctOfPeak": 2.873614078519773,
+        "slope": 0.3517572238681303,
+        "r2": 0.6878154958332309,
+        "daysSinceLastChange": 12.875,
+        "curveQuality": 0.6878154958332309,
+        "magnitudeFactor": 1.9100187957190369,
+        "livenessFactor": 0.0803571428571429,
+        "score": 0.1055684350469154
+      }
+    },
+    {
+      "wallet": "0xee613b3fc183ee44f9da9c05f53e2da107e3debf",
+      "name": "sovereign2013",
+      "m": {
+        "n": 265,
+        "monthsActive": 8.797222222222222,
+        "totalPnl": 3588720.2,
+        "peak": 3617645,
+        "maxDd": 544297.8999999999,
+        "maxDdPctOfPeak": 0.26997665037690477,
+        "slope": 0.15953203908913344,
+        "r2": 0.8407905948101271,
+        "daysSinceLastChange": 2.9166666666666665,
+        "curveQuality": 0.8407905948101271,
+        "magnitudeFactor": 1.894391775742283,
+        "livenessFactor": 0.7916666666666667,
+        "score": 1.2609562071110656
+      }
+    },
+    {
+      "wallet": "0x14964aefa2cd7caff7878b3820a690a03c5aa429",
+      "name": "gmpm",
+      "m": {
+        "n": 229,
+        "monthsActive": 7.597222222222222,
+        "totalPnl": 3445749.2,
+        "peak": 3698071,
+        "maxDd": 1114828,
+        "maxDdPctOfPeak": 0.329887787113974,
+        "slope": 0.18511596061360086,
+        "r2": 0.8234108824393822,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.8234108824393822,
+        "magnitudeFactor": 1.856272932518276,
+        "livenessFactor": 1,
+        "score": 1.5284753334132135
+      }
+    },
+    {
+      "wallet": "0xc2e7800b5af46e6093872b177b7a5e7f0563be51",
+      "name": "beachboy4",
+      "m": {
+        "n": 150,
+        "monthsActive": 4.963888888888889,
+        "totalPnl": 3436605.5,
+        "peak": 4736824,
+        "maxDd": 7300931.22,
+        "maxDdPctOfPeak": 14.922449785309688,
+        "slope": 0.4921176438899338,
+        "r2": 0.5237302477828757,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.5237302477828757,
+        "magnitudeFactor": 1.8538083773680603,
+        "livenessFactor": 1,
+        "score": 0.9708955208209449
+      }
+    },
+    {
+      "wallet": "0x94a428cfa4f84b264e01f70d93d02bc96cb36356",
+      "name": "GCottrell93",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.230555555555554,
+        "totalPnl": 3375258,
+        "peak": 4460260.5,
+        "maxDd": 1091054,
+        "maxDdPctOfPeak": 0.24461665411695124,
+        "slope": -0.017116124661529557,
+        "r2": 0.4813577939506174,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 1.837187524451437,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0xdb27bf2ac5d428a9c63dbc914611036855a6c56e",
+      "name": "DrPufferfish",
+      "m": {
+        "n": 335,
+        "monthsActive": 11.129166666666666,
+        "totalPnl": 3285585.8,
+        "peak": 7067211,
+        "maxDd": 3781625.2,
+        "maxDdPctOfPeak": 0.5350944240945968,
+        "slope": 0.21850776519183074,
+        "r2": 0.6410432809832279,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.6410432809832279,
+        "magnitudeFactor": 1.8126184926784785,
+        "livenessFactor": 1,
+        "score": 1.161966905717485
+      }
+    },
+    {
+      "wallet": "0x17db3fcd93ba12d38382a0cade24b200185c5f6d",
+      "name": "fengdubiying",
+      "m": {
+        "n": 207,
+        "monthsActive": 6.863888888888889,
+        "totalPnl": 3133968.2,
+        "peak": 3203233,
+        "maxDd": 69264.79999999981,
+        "maxDdPctOfPeak": 0.021623403605045218,
+        "slope": 0.12179728386717245,
+        "r2": 0.4048667485619619,
+        "daysSinceLastChange": 106.91666666666667,
+        "curveQuality": 0.4048667485619619,
+        "magnitudeFactor": 1.7703017256953686,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x033a07b3de5947eab4306676ad74eb546da30d50",
+      "name": "RandomGenius-190",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.229166666666668,
+        "totalPnl": 3115550.5,
+        "peak": 3115550.5,
+        "maxDd": 0,
+        "maxDdPctOfPeak": 0,
+        "slope": 0,
+        "r2": 0,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 1.7650922072231807,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0xed2239a9150c3920000d0094d28fa51c7db03dd0",
+      "name": "Michie",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.230555555555554,
+        "totalPnl": 3095007.8,
+        "peak": 3095021.5,
+        "maxDd": 13.700000000186265,
+        "maxDdPctOfPeak": 0.00000442646359651662,
+        "slope": -2.7775552186235774e-8,
+        "r2": 0.07726262236807846,
+        "daysSinceLastChange": 495.9166666666667,
+        "curveQuality": 0,
+        "magnitudeFactor": 1.7592634254141704,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x36a3f17401e395ef4cb1b7f42bcdb8ab8e15fafb",
+      "name": "gfjoigfsjoigsjoi",
+      "m": {
+        "n": 21,
+        "monthsActive": 0.6625,
+        "totalPnl": 2930573.2,
+        "peak": 2930573.2,
+        "maxDd": 1538166.18,
+        "maxDdPctOfPeak": 4.252375433236514,
+        "slope": 2.304223829268932,
+        "r2": 0.6480265473094811,
+        "daysSinceLastChange": 2.875,
+        "curveQuality": 0.6480265473094811,
+        "magnitudeFactor": 1.7118917021821212,
+        "livenessFactor": 0.7946428571428572,
+        "score": 0.8815380620787672
+      }
+    },
+    {
+      "wallet": "0x9d84ce0306f8551e02efef1680475fc0f1dc1344",
+      "name": "ImJustKen",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.230555555555554,
+        "totalPnl": 2927857.5,
+        "peak": 3043921.2,
+        "maxDd": 263985.4000000004,
+        "maxDdPctOfPeak": 0.08672543822750745,
+        "slope": 0.018858512944199535,
+        "r2": 0.6806046965649429,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.6806046965649429,
+        "magnitudeFactor": 1.7110983314818584,
+        "livenessFactor": 1,
+        "score": 1.1645815606909904
+      }
+    },
+    {
+      "wallet": "0xd38b71f3e8ed1af71983e5c309eac3dfa9b35029",
+      "name": "primm",
+      "m": {
+        "n": 249,
+        "monthsActive": 8.2625,
+        "totalPnl": 2673262.2,
+        "peak": 3118189.8,
+        "maxDd": 496692.2999999998,
+        "maxDdPctOfPeak": 0.15928866805991088,
+        "slope": 0.1530354046897367,
+        "r2": 0.77928079431737,
+        "daysSinceLastChange": 22.875,
+        "curveQuality": 0.77928079431737,
+        "magnitudeFactor": 1.6350113761072125,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x343d4466dc323b850e5249394894c7381d91456e",
+      "name": "tazcot",
+      "m": {
+        "n": 301,
+        "monthsActive": 9.997222222222222,
+        "totalPnl": 2604547.8,
+        "peak": 2605300.5,
+        "maxDd": 752.7000000001863,
+        "maxDdPctOfPeak": 0.00028891101045740646,
+        "slope": 0.003968841023755253,
+        "r2": 0.027121724876149417,
+        "daysSinceLastChange": 294.9166666666667,
+        "curveQuality": 0.027121724876149417,
+        "magnitudeFactor": 1.6138611464435222,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0xee00ba338c59557141789b127927a55f5cc5cea1",
+      "name": "S-Works",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.230555555555554,
+        "totalPnl": 2569472.8,
+        "peak": 2569472.8,
+        "maxDd": 686932.9999999999,
+        "maxDdPctOfPeak": 0.44215310558532456,
+        "slope": 0.0491639835865973,
+        "r2": 0.9085502219768065,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.9085502219768065,
+        "magnitudeFactor": 1.6029575165923768,
+        "livenessFactor": 1,
+        "score": 1.4563674075193944
+      }
+    },
+    {
+      "wallet": "0x63ce342161250d705dc0b16df89036c8e5f9ba9a",
+      "name": "0x8dxd",
+      "m": {
+        "n": 146,
+        "monthsActive": 4.830555555555556,
+        "totalPnl": 2384057.8,
+        "peak": 2384057.8,
+        "maxDd": 34598.19999999995,
+        "maxDdPctOfPeak": 0.020366388013297914,
+        "slope": 0.23627587112902257,
+        "r2": 0.960485928797028,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.960485928797028,
+        "magnitudeFactor": 1.544039442501389,
+        "livenessFactor": 1,
+        "score": 1.4830281580301918
+      }
+    },
+    {
+      "wallet": "0x0b9cae2b0dfe7a71c413e0604eaac1c352f87e44",
+      "name": "geniusMC",
+      "m": {
+        "n": 448,
+        "monthsActive": 14.895833333333334,
+        "totalPnl": 2375337.5,
+        "peak": 2800735.8,
+        "maxDd": 540315.2999999998,
+        "maxDdPctOfPeak": 0.1929190536286928,
+        "slope": 0.06797979757313201,
+        "r2": 0.5708830804362853,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.5708830804362853,
+        "magnitudeFactor": 1.5412129963116714,
+        "livenessFactor": 1,
+        "score": 0.8798524229428443
+      }
+    },
+    {
+      "wallet": "0xb786b8b6335e77dfad19928313e97753039cb18d",
+      "name": "0xb786b8b6335e77dfad19928313e97753039cb18d",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.229166666666668,
+        "totalPnl": 2334029.8,
+        "peak": 2400059.2,
+        "maxDd": 243856.2000000002,
+        "maxDdPctOfPeak": 0.10160424376198728,
+        "slope": 0.05885661558048831,
+        "r2": 0.8856364938813429,
+        "daysSinceLastChange": 0.875,
+        "curveQuality": 0.8856364938813429,
+        "magnitudeFactor": 1.527753186872801,
+        "livenessFactor": 1,
+        "score": 1.3530339759380754
+      }
+    },
+    {
+      "wallet": "0xac44cb78be973ec7d91b69678c4bdfa7009afbd7",
+      "name": "blackwall",
+      "m": {
+        "n": 80,
+        "monthsActive": 2.6305555555555555,
+        "totalPnl": 2310858,
+        "peak": 2880476.5,
+        "maxDd": 2041245.14,
+        "maxDdPctOfPeak": 5.310405318154977,
+        "slope": 0.21928454479824816,
+        "r2": 0.2541587147470631,
+        "daysSinceLastChange": 67.91666666666667,
+        "curveQuality": 0.2541587147470631,
+        "magnitudeFactor": 1.520150650429095,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x5bffcf561bcae83af680ad600cb99f1184d6ffbe",
+      "name": "YatSen",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.230555555555554,
+        "totalPnl": 2299235,
+        "peak": 2435219.2,
+        "maxDd": 331046.3000000003,
+        "maxDdPctOfPeak": 0.15230664913713568,
+        "slope": 0.02101976124955864,
+        "r2": 0.9079345204829715,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.9079345204829715,
+        "magnitudeFactor": 1.516322854803686,
+        "livenessFactor": 1,
+        "score": 1.376721864073555
+      }
+    },
+    {
+      "wallet": "0x7fb7ad0d194d7123e711e7db6c9d418fac14e33d",
+      "name": "0x7fB7Ad0d194D7123e711e7db6C9D418fAc14E33d-1750343282446",
+      "m": {
+        "n": 314,
+        "monthsActive": 10.429166666666667,
+        "totalPnl": 2282134,
+        "peak": 3160281.2,
+        "maxDd": 2118683.3000000003,
+        "maxDdPctOfPeak": 6.008919999648317,
+        "slope": 0.11903367965595862,
+        "r2": 0.5841693962099437,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.5841693962099437,
+        "magnitudeFactor": 1.5106733597968822,
+        "livenessFactor": 1,
+        "score": 0.8824891444629916
+      }
+    },
+    {
+      "wallet": "0xa9878e59934ab507f9039bcb917c1bae0451141d",
+      "name": "ilovecircle",
+      "m": {
+        "n": 233,
+        "monthsActive": 7.729166666666667,
+        "totalPnl": 2240457,
+        "peak": 2266242.2,
+        "maxDd": 289343.0000000001,
+        "maxDdPctOfPeak": 0.24374581216283547,
+        "slope": 0.0568982354701384,
+        "r2": 0.4719590742198581,
+        "daysSinceLastChange": 89.875,
+        "curveQuality": 0.4719590742198581,
+        "magnitudeFactor": 1.4968156199078095,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0xd25c72ac0928385610611c8148803dc717334d20",
+      "name": "FeatherLeather",
+      "m": {
+        "n": 90,
+        "monthsActive": 2.963888888888889,
+        "totalPnl": 2097480.5,
+        "peak": 2164487.2,
+        "maxDd": 67112.70000000019,
+        "maxDdPctOfPeak": 0.031006281765029692,
+        "slope": 0.0642568322072097,
+        "r2": 0.14560754850073745,
+        "daysSinceLastChange": 65.91666666666667,
+        "curveQuality": 0.14560754850073745,
+        "magnitudeFactor": 1.4482681036327494,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x2bf64b86b64c315d879571b07a3b76629e467cd0",
+      "name": "BabaTrump",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.229166666666668,
+        "totalPnl": 2093363,
+        "peak": 2093363,
+        "maxDd": 0,
+        "maxDdPctOfPeak": 0,
+        "slope": 0,
+        "r2": 0,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 1.4468458798365498,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x44c1dfe43260c94ed4f1d00de2e1f80fb113ebc1",
+      "name": "aenews2",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.229166666666668,
+        "totalPnl": 1993672.1,
+        "peak": 2015050.5,
+        "maxDd": 169618.56000000006,
+        "maxDdPctOfPeak": 0.1643131257794817,
+        "slope": 0.028556817193819008,
+        "r2": 0.9412575318774464,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.9412575318774464,
+        "magnitudeFactor": 1.4119745394305097,
+        "livenessFactor": 1,
+        "score": 1.3290316700581557
+      }
+    },
+    {
+      "wallet": "0x02227b8f5a9636e895607edd3185ed6ee5598ff7",
+      "name": "HorizonSplendidView",
+      "m": {
+        "n": 80,
+        "monthsActive": 2.629166666666667,
+        "totalPnl": 1991767.5,
+        "peak": 1991767.5,
+        "maxDd": 2886581.75,
+        "maxDdPctOfPeak": 10.313170848476783,
+        "slope": 0.6369271695288234,
+        "r2": 0.5964269645572375,
+        "daysSinceLastChange": 46.875,
+        "curveQuality": 0.5964269645572375,
+        "magnitudeFactor": 1.4112999326861742,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0xe8dd7741ccb12350957ec71e9ee332e0d1e6ec86",
+      "name": "influenz.eth",
+      "m": {
+        "n": 451,
+        "monthsActive": 14.995833333333334,
+        "totalPnl": 1928123,
+        "peak": 1928123,
+        "maxDd": 169948.86,
+        "maxDdPctOfPeak": 0.7833865620300426,
+        "slope": 0.017653962569021065,
+        "r2": 0.6865642300888705,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.6865642300888705,
+        "magnitudeFactor": 1.3885686875340377,
+        "livenessFactor": 1,
+        "score": 0.9533415918823199
+      }
+    },
+    {
+      "wallet": "0x37c1874a60d348903594a96703e0507c518fc53a",
+      "name": "CemeterySun",
+      "m": {
+        "n": 51,
+        "monthsActive": 1.6625,
+        "totalPnl": 1927132.6,
+        "peak": 2415397,
+        "maxDd": 3574332.5,
+        "maxDdPctOfPeak": 1.4798116003290556,
+        "slope": 0.019450861663797222,
+        "r2": 0.0006668658643808785,
+        "daysSinceLastChange": 1.875,
+        "curveQuality": 0.0006668658643808785,
+        "magnitudeFactor": 1.3882120155077178,
+        "livenessFactor": 0.8660714285714286,
+        "score": 0.000801766669192421
+      }
+    },
+    {
+      "wallet": "0x0562c423912e325f83fa79df55085979e1f5594f",
+      "name": "trezorisbest",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.229166666666668,
+        "totalPnl": 1900869.1,
+        "peak": 1904724.1,
+        "maxDd": 3886.2000000001863,
+        "maxDdPctOfPeak": 0.00204029549476493,
+        "slope": -0.00005306163475389351,
+        "r2": 0.3022590289303273,
+        "daysSinceLastChange": 116.875,
+        "curveQuality": 0,
+        "magnitudeFactor": 1.3787200948706013,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x2a2c53bd278c04da9962fcf96490e17f3dfb9bc1",
+      "name": "0x2a2C53bD278c04DA9962Fcf96490E17F3DfB9Bc1-1772479215461",
+      "m": {
+        "n": 58,
+        "monthsActive": 1.8958333333333333,
+        "totalPnl": 2104333.5,
+        "peak": 4418845,
+        "maxDd": 2314511.5,
+        "maxDdPctOfPeak": 0.5237820063840212,
+        "slope": 0.26953317537822175,
+        "r2": 0.33898088802019843,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.33898088802019843,
+        "magnitudeFactor": 1.4506321036017369,
+        "livenessFactor": 1,
+        "score": 0.49173655866952526
+      }
+    },
+    {
+      "wallet": "0x492442eab586f242b53bda933fd5de859c8a3782",
+      "name": "0x492442EaB586F242B53bDa933fD5dE859c8A3782-1766317541188",
+      "m": {
+        "n": 128,
+        "monthsActive": 4.230555555555555,
+        "totalPnl": -2874494,
+        "peak": 1333277.8,
+        "maxDd": 13204625.8,
+        "maxDdPctOfPeak": 9.903881846678914,
+        "slope": -0.338666503502198,
+        "r2": 0.07690492595903607,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 0,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0xead152b855effa6b5b5837f53b24c0756830c76a",
+      "name": "elkmonkey",
+      "m": {
+        "n": 452,
+        "monthsActive": 15.029166666666667,
+        "totalPnl": 478602,
+        "peak": 572617.94,
+        "maxDd": 2000712.82,
+        "maxDdPctOfPeak": 21.78286282055944,
+        "slope": -0.03233591558449635,
+        "r2": 0.46722568922982716,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 0.6918106677408206,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x777d9f00c2b4f7b829c9de0049ca3e707db05143",
+      "name": "CarlosMC",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.230555555555554,
+        "totalPnl": 1072016.5,
+        "peak": 1072016.5,
+        "maxDd": 986699.37,
+        "maxDdPctOfPeak": 8.788423838332088,
+        "slope": -0.007833792994243055,
+        "r2": 0.12163141251686212,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 1.0353822965455803,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x9f2fe025f84839ca81dd8e0338892605702d2ca8",
+      "name": "surfandturf",
+      "m": {
+        "n": 27,
+        "monthsActive": 0.8638888888888889,
+        "totalPnl": 1464634.8,
+        "peak": 2076801.9,
+        "maxDd": 807994.2,
+        "maxDdPctOfPeak": 1.3775849296582694,
+        "slope": 0.7079093724742238,
+        "r2": 0.5773523055818616,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.5773523055818616,
+        "magnitudeFactor": 1.2102209715585002,
+        "livenessFactor": 1,
+        "score": 0.6987238681928206
+      }
+    },
+    {
+      "wallet": "0x9495425feeb0c250accb89275c97587011b19a27",
+      "name": "LaBradfordSmith22",
+      "m": {
+        "n": 6,
+        "monthsActive": 0.1625,
+        "totalPnl": 1755851.8,
+        "peak": 1755851.8,
+        "maxDd": 331208.56,
+        "maxDdPctOfPeak": 0.4379921382972041,
+        "slope": 2.3646256093834777,
+        "r2": 0.6547084393534608,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.6547084393534608,
+        "magnitudeFactor": 1.3250855821417724,
+        "livenessFactor": 1,
+        "score": 0.8675447134938119
+      }
+    },
+    {
+      "wallet": "0xf195721ad850377c96cd634457c70cd9e8308057",
+      "name": "lo34567Taipe",
+      "m": {
+        "n": 99,
+        "monthsActive": 3.2625,
+        "totalPnl": 1137081.2,
+        "peak": 1458141.9,
+        "maxDd": 904578.82,
+        "maxDdPctOfPeak": 1.542514193986598,
+        "slope": 0.22015669452709707,
+        "r2": 0.6298007678138743,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.6298007678138743,
+        "magnitudeFactor": 1.0663400958418472,
+        "livenessFactor": 1,
+        "score": 0.6715818111119156
+      }
+    },
+    {
+      "wallet": "0x59a0744db1f39ff3afccd175f80e6e8dfc239a09",
+      "name": "Blessed-Sunshine",
+      "m": {
+        "n": 50,
+        "monthsActive": 1.6291666666666667,
+        "totalPnl": 1202926.5,
+        "peak": 1202926.5,
+        "maxDd": 34903.23999999999,
+        "maxDdPctOfPeak": 0.1429159066689345,
+        "slope": 0.2522010581491736,
+        "r2": 0.6903514097750396,
+        "daysSinceLastChange": 30.875,
+        "curveQuality": 0.6903514097750396,
+        "magnitudeFactor": 1.0967800599937985,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x8f037a2e4fd49d11267f4ab874ab7ba745ac64d6",
+      "name": "Anointed-Connect",
+      "m": {
+        "n": 209,
+        "monthsActive": 6.929166666666666,
+        "totalPnl": 896696.5,
+        "peak": 991024.44,
+        "maxDd": 774213.19,
+        "maxDdPctOfPeak": 2.432355896050257,
+        "slope": 0.04587951790666916,
+        "r2": 0.33226217988843115,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.33226217988843115,
+        "magnitudeFactor": 0.9469406000378271,
+        "livenessFactor": 1,
+        "score": 0.31463254799342744
+      }
+    },
+    {
+      "wallet": "0xc8075693f48668a264b9fa313b47f52712fcc12b",
+      "name": "texaskid",
+      "m": {
+        "n": 41,
+        "monthsActive": 1.3291666666666666,
+        "totalPnl": 1126178.1,
+        "peak": 1552875.5,
+        "maxDd": 597162.9,
+        "maxDdPctOfPeak": 0.38455297929550697,
+        "slope": 0.5576518860651178,
+        "r2": 0.7405739387985852,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.7405739387985852,
+        "magnitudeFactor": 1.0612153881281594,
+        "livenessFactor": 1,
+        "score": 0.7859084598997405
+      }
+    },
+    {
+      "wallet": "0xb6d6e99d3bfe055874a04279f659f009fd57be17",
+      "name": "JPMorgan101",
+      "m": {
+        "n": 54,
+        "monthsActive": 1.7625,
+        "totalPnl": 1072919.1,
+        "peak": 1354204,
+        "maxDd": 532173.56,
+        "maxDdPctOfPeak": 0.39297887172095197,
+        "slope": 0.29375691524959896,
+        "r2": 0.7569049846623715,
+        "daysSinceLastChange": 2.875,
+        "curveQuality": 0.7569049846623715,
+        "magnitudeFactor": 1.035818082483599,
+        "livenessFactor": 0.7946428571428572,
+        "score": 0.6230126108512299
+      }
+    },
+    {
+      "wallet": "0x93abbc022ce98d6f45d4444b594791cc4b7a9723",
+      "name": "gatorr",
+      "m": {
+        "n": 108,
+        "monthsActive": 3.563888888888889,
+        "totalPnl": 1787973.8,
+        "peak": 2421965.2,
+        "maxDd": 774420.3000000003,
+        "maxDdPctOfPeak": 0.3197487313195087,
+        "slope": 0.27204099937804327,
+        "r2": 0.867921723537155,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.867921723537155,
+        "magnitudeFactor": 1.3371513751254942,
+        "livenessFactor": 1,
+        "score": 1.1605427261289958
+      }
+    },
+    {
+      "wallet": "0xbaa2bcb5439e985ce4ccf815b4700027d1b92c73",
+      "name": "denizz",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.230555555555554,
+        "totalPnl": 1725187.6,
+        "peak": 1974922.9,
+        "maxDd": 321763.36,
+        "maxDdPctOfPeak": 0.6432609760255843,
+        "slope": 0.01808422485860139,
+        "r2": 0.5020426723994356,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.5020426723994356,
+        "magnitudeFactor": 1.3134639698141706,
+        "livenessFactor": 1,
+        "score": 0.6594149615058778
+      }
+    },
+    {
+      "wallet": "0xbddf61af533ff524d27154e589d2d7a81510c684",
+      "name": "Countryside",
+      "m": {
+        "n": 173,
+        "monthsActive": 5.729166666666667,
+        "totalPnl": 1182395.4,
+        "peak": 3179858.2,
+        "maxDd": 2339657.45,
+        "maxDdPctOfPeak": 0.7357741455263634,
+        "slope": 0.1256296466104693,
+        "r2": 0.5150816636719949,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.5150816636719949,
+        "magnitudeFactor": 1.087380062351706,
+        "livenessFactor": 1,
+        "score": 0.5600895315598743
+      }
+    },
+    {
+      "wallet": "0x2b3ff45c91540e46fae1e0c72f61f4b049453446",
+      "name": "Mentallyillgambld",
+      "m": {
+        "n": 137,
+        "monthsActive": 4.529166666666667,
+        "totalPnl": 940026.56,
+        "peak": 1238418,
+        "maxDd": 298391.43999999994,
+        "maxDdPctOfPeak": 0.2409456580895949,
+        "slope": 0.08661750131563134,
+        "r2": 0.6022805878414972,
+        "daysSinceLastChange": 7.875,
+        "curveQuality": 0.6022805878414972,
+        "magnitudeFactor": 0.9695496686606623,
+        "livenessFactor": 0.4375,
+        "score": 0.2554741631673317
+      }
+    },
+    {
+      "wallet": "0x54ac09857c3e76d50a2e7da064b0293d9a9e7c14",
+      "name": "jackiechann",
+      "m": {
+        "n": 52,
+        "monthsActive": 1.6958333333333333,
+        "totalPnl": 913170.2,
+        "peak": 913170.2,
+        "maxDd": 557609.52,
+        "maxDdPctOfPeak": 1.7958606376677917,
+        "slope": 0.1197812895572123,
+        "r2": 0.32975601815932787,
+        "daysSinceLastChange": 1.875,
+        "curveQuality": 0.32975601815932787,
+        "magnitudeFactor": 0.9555993930512932,
+        "livenessFactor": 0.8660714285714286,
+        "score": 0.27291179578912766
+      }
+    },
+    {
+      "wallet": "0x0eb568f307e9a48af2c3e688ad6074236712c494",
+      "name": "asdfjh",
+      "m": {
+        "n": 4,
+        "monthsActive": 0.09583333333333334,
+        "totalPnl": 892564.3,
+        "peak": 892564.3,
+        "maxDd": 0,
+        "maxDdPctOfPeak": 0,
+        "slope": 0,
+        "r2": 0,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 0.9447562119404138,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x32ed517a571c01b6e9adecf61ba81ca48ff2f960",
+      "name": "sportmaster777",
+      "m": {
+        "n": 248,
+        "monthsActive": 8.229166666666666,
+        "totalPnl": 941848.1,
+        "peak": 941848.1,
+        "maxDd": 133805.94,
+        "maxDdPctOfPeak": 0.263700754789208,
+        "slope": 0.02006245309204461,
+        "r2": 0.40964009552222047,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.40964009552222047,
+        "magnitudeFactor": 0.9704885882894244,
+        "livenessFactor": 1,
+        "score": 0.3975510380101047
+      }
+    },
+    {
+      "wallet": "0xb45a797faa52b0fd8adc56d30382022b7b12192c",
+      "name": "bcda",
+      "m": {
+        "n": 117,
+        "monthsActive": 3.863888888888889,
+        "totalPnl": -1627132.9,
+        "peak": -45.17645,
+        "maxDd": 2494888.02355,
+        "maxDdPctOfPeak": 0,
+        "slope": -0.042840493011192804,
+        "r2": 0.030439775554375017,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 0,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x5ae14dc9e0cf9df72de8d873dcea05aacb799fad",
+      "name": "ohuhusos",
+      "m": {
+        "n": 26,
+        "monthsActive": 0.8291666666666667,
+        "totalPnl": 776555.8,
+        "peak": 776555.8,
+        "maxDd": 880166.302,
+        "maxDdPctOfPeak": 104.68322561323859,
+        "slope": 0.7359316652875528,
+        "r2": 0.6002716659844496,
+        "daysSinceLastChange": 4.875,
+        "curveQuality": 0.6002716659844496,
+        "magnitudeFactor": 0.881224035078481,
+        "livenessFactor": 0.6517857142857143,
+        "score": 0.344777578873868
+      }
+    },
+    {
+      "wallet": "0x8c80d213c0cbad777d06ee3f58f6ca4bc03102c3",
+      "name": "SecondWindCapital",
+      "m": {
+        "n": 132,
+        "monthsActive": 4.3625,
+        "totalPnl": 1831067.2,
+        "peak": 2039012.5,
+        "maxDd": 320173.99,
+        "maxDdPctOfPeak": 0.7133518680264023,
+        "slope": 0.17623031091631372,
+        "r2": 0.8628468239508689,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.8628468239508689,
+        "magnitudeFactor": 1.3531693168262424,
+        "livenessFactor": 1,
+        "score": 1.1675778472912903
+      }
+    },
+    {
+      "wallet": "0xe934f2d7d6358c6c86bfdd5848f1e90412e9640b",
+      "name": "Feveey",
+      "m": {
+        "n": 32,
+        "monthsActive": 1.0291666666666666,
+        "totalPnl": 728906.6,
+        "peak": 728906.6,
+        "maxDd": 472085.11,
+        "maxDdPctOfPeak": 1.1333371024402445,
+        "slope": 0.3629746624204241,
+        "r2": 0.828159452080667,
+        "daysSinceLastChange": 7.875,
+        "curveQuality": 0.828159452080667,
+        "magnitudeFactor": 0.853760270802056,
+        "livenessFactor": 0.4375,
+        "score": 0.30933421665810673
+      }
+    },
+    {
+      "wallet": "0xde17f7144fbd0eddb2679132c10ff5e74b120988",
+      "name": "0xdE17f7144fbD0eddb2679132C10ff5e74B120988-1772205225932",
+      "m": {
+        "n": 59,
+        "monthsActive": 1.9305555555555556,
+        "totalPnl": 727450.8,
+        "peak": 727450.8,
+        "maxDd": 10203.690000000002,
+        "maxDdPctOfPeak": 0.03468594027079108,
+        "slope": 0.1412589991061644,
+        "r2": 0.8263061287588298,
+        "daysSinceLastChange": 21.916666666666668,
+        "curveQuality": 0.8263061287588298,
+        "magnitudeFactor": 0.8529072634231696,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0xb90494d9a5d8f71f1930b2aa4b599f95c344c255",
+      "name": "Airpods123",
+      "m": {
+        "n": 97,
+        "monthsActive": 3.1972222222222224,
+        "totalPnl": 1313281.8,
+        "peak": 1653414.4,
+        "maxDd": 1365176.62,
+        "maxDdPctOfPeak": 2.008206101373544,
+        "slope": 0.21914729876231687,
+        "r2": 0.6040747812465261,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.6040747812465261,
+        "magnitudeFactor": 1.145985078436888,
+        "livenessFactor": 1,
+        "score": 0.6922606855685461
+      }
+    },
+    {
+      "wallet": "0xe1d6b51521bd4365769199f392f9818661bd907c",
+      "name": "0xe1D6b51521Bd4365769199f392F9818661BD907",
+      "m": {
+        "n": 36,
+        "monthsActive": 1.163888888888889,
+        "totalPnl": 719521.5,
+        "peak": 719521.5,
+        "maxDd": 10466.75,
+        "maxDdPctOfPeak": 0.021574021923909923,
+        "slope": 0.23186835218520255,
+        "r2": 0.9945286766689525,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.9945286766689525,
+        "magnitudeFactor": 0.8482461317330012,
+        "livenessFactor": 1,
+        "score": 0.8436051028819797
+      }
+    },
+    {
+      "wallet": "0xa71093cafc0c099b4ccab24c3cb8018d817923c4",
+      "name": "Talvez10",
+      "m": {
+        "n": 83,
+        "monthsActive": 2.7291666666666665,
+        "totalPnl": 552852.2,
+        "peak": 552852.2,
+        "maxDd": 1232589.92,
+        "maxDdPctOfPeak": 2.626744483951304,
+        "slope": 0.03724719547254612,
+        "r2": 0.06729750132777254,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.06729750132777254,
+        "magnitudeFactor": 0.7435403149796249,
+        "livenessFactor": 1,
+        "score": 0.05003840533459372
+      }
+    },
+    {
+      "wallet": "0xd106952ebf30a3125affd8a23b6c1f30c35fc79c",
+      "name": "Herdonia",
+      "m": {
+        "n": 97,
+        "monthsActive": 3.1958333333333333,
+        "totalPnl": 614428.56,
+        "peak": 649711.44,
+        "maxDd": 351402.515,
+        "maxDdPctOfPeak": 37.57787166831616,
+        "slope": 0.10098383261101393,
+        "r2": 0.6330598446185491,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.6330598446185491,
+        "magnitudeFactor": 0.7838549355588699,
+        "livenessFactor": 1,
+        "score": 0.49622708370838103
+      }
+    },
+    {
+      "wallet": "0xa2b5bafa01d0f81926a2a88e5628a95b59fc4582",
+      "name": "BruceWayne77",
+      "m": {
+        "n": 173,
+        "monthsActive": 5.729166666666667,
+        "totalPnl": 654060.3,
+        "peak": 823942.2,
+        "maxDd": 276349.06999999995,
+        "maxDdPctOfPeak": 0.4384742061741691,
+        "slope": 0.021570565108481245,
+        "r2": 0.34036823541148037,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.34036823541148037,
+        "magnitudeFactor": 0.8087399458416779,
+        "livenessFactor": 1,
+        "score": 0.2752693882729081
+      }
+    },
+    {
+      "wallet": "0x84dbb7103982e3617704a2ed7d5b39691952aeeb",
+      "name": "Soarin22",
+      "m": {
+        "n": 518,
+        "monthsActive": 17.229166666666668,
+        "totalPnl": 1666994.9,
+        "peak": 1704724.6,
+        "maxDd": 303895.30000000005,
+        "maxDdPctOfPeak": 0.20221928282178186,
+        "slope": 0.024072883314598288,
+        "r2": 0.5184094973844763,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.5184094973844763,
+        "magnitudeFactor": 1.2911215667008278,
+        "livenessFactor": 1,
+        "score": 0.6693296824556337
+      }
+    },
+    {
+      "wallet": "0x57cd939930fd119067ca9dc42b22b3e15708a0fb",
+      "name": "Supah9ga",
+      "m": {
+        "n": 224,
+        "monthsActive": 7.429166666666666,
+        "totalPnl": 1145667.6,
+        "peak": 1332782.2,
+        "maxDd": 290283.1200000001,
+        "maxDdPctOfPeak": 0.3240781299897036,
+        "slope": 0.059671729143781965,
+        "r2": 0.7294013068856064,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.7294013068856064,
+        "magnitudeFactor": 1.0703586314875964,
+        "livenessFactor": 1,
+        "score": 0.780720984643342
+      }
+    },
+    {
+      "wallet": "0xd84c2b6d65dc596f49c7b6aadd6d74ca91e407b9",
+      "name": "BoneReader",
+      "m": {
+        "n": 99,
+        "monthsActive": 3.263888888888889,
+        "totalPnl": 1042625.44,
+        "peak": 1042625.44,
+        "maxDd": 48070.81693,
+        "maxDdPctOfPeak": 638.8069480337319,
+        "slope": 0.17055316467657547,
+        "r2": 0.9192775334249568,
+        "daysSinceLastChange": 22.916666666666668,
+        "curveQuality": 0.9192775334249568,
+        "magnitudeFactor": 1.0210903192176488,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x01c78f8873c0c86d6b6b92ff627e3802237ee995",
+      "name": "Lilybaeum",
+      "m": {
+        "n": 97,
+        "monthsActive": 3.1972222222222224,
+        "totalPnl": 817309.3,
+        "peak": 837353.75,
+        "maxDd": 65360.34999999998,
+        "maxDdPctOfPeak": 0.1726401986218018,
+        "slope": 0.08971652796961502,
+        "r2": 0.9039478057331888,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.9039478057331888,
+        "magnitudeFactor": 0.9040516025095028,
+        "livenessFactor": 1,
+        "score": 0.817215462358038
+      }
+    },
+    {
+      "wallet": "0xa8e089ade142c95538e06196e09c85681112ad50",
+      "name": "Wannac",
+      "m": {
+        "n": 105,
+        "monthsActive": 3.4625,
+        "totalPnl": 357336.56,
+        "peak": 375849.53,
+        "maxDd": 680766.97,
+        "maxDdPctOfPeak": 2.480583681092233,
+        "slope": -0.008076960708046959,
+        "r2": 0.014427890583913219,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0,
+        "magnitudeFactor": 0.5977763461362452,
+        "livenessFactor": 1,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x7ea571c40408f340c1c8fc8eaacebab53c1bde7b",
+      "name": "Cannae",
+      "m": {
+        "n": 112,
+        "monthsActive": 3.6958333333333333,
+        "totalPnl": 882907.8,
+        "peak": 1012920.56,
+        "maxDd": 312645.68,
+        "maxDdPctOfPeak": 19.136011085757936,
+        "slope": 0.11223031452294363,
+        "r2": 0.8109603436705961,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.8109603436705961,
+        "magnitudeFactor": 0.9396317363733517,
+        "livenessFactor": 1,
+        "score": 0.7620040758531322
+      }
+    },
+    {
+      "wallet": "0xea2b4224411e723499a803ce3f4758779fb31fc6",
+      "name": "frankfrankfrank",
+      "m": {
+        "n": 191,
+        "monthsActive": 6.329166666666667,
+        "totalPnl": 760589.75,
+        "peak": 760589.75,
+        "maxDd": 385788.26999999996,
+        "maxDdPctOfPeak": 1.4260291952315505,
+        "slope": 0.02297265090113934,
+        "r2": 0.3919648781291463,
+        "daysSinceLastChange": 0,
+        "curveQuality": 0.3919648781291463,
+        "magnitudeFactor": 0.8721179679378243,
+        "livenessFactor": 1,
+        "score": 0.341839613016988
+      }
+    },
+    {
+      "wallet": "0x036c159d5a348058a81066a76b89f35926d4178d",
+      "name": "HedgeMaster88",
+      "m": {
+        "n": 69,
+        "monthsActive": 2.2625,
+        "totalPnl": 927150.6,
+        "peak": 1031677.94,
+        "maxDd": 255728.24,
+        "maxDdPctOfPeak": 0.24787603774875713,
+        "slope": 0.14539417492351278,
+        "r2": 0.6387411510079708,
+        "daysSinceLastChange": 15.875,
+        "curveQuality": 0.6387411510079708,
+        "magnitudeFactor": 0.9628865976842755,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x0720803c7cb0d0c5a928787b3b7ea148c6831cdb",
+      "name": "pinkblanket",
+      "m": {
+        "n": 69,
+        "monthsActive": 2.263888888888889,
+        "totalPnl": 22811.764,
+        "peak": 2553820.5,
+        "maxDd": 3953464.3,
+        "maxDdPctOfPeak": 1.548058800530421,
+        "slope": 0.02787854986482584,
+        "r2": 0.008011838523830611,
+        "daysSinceLastChange": 47.916666666666664,
+        "curveQuality": 0.008011838523830611,
+        "magnitudeFactor": 0.1510356381785438,
+        "livenessFactor": 0,
+        "score": 0
+      }
+    },
+    {
+      "wallet": "0x8a3ab8120807bd64a3de48695110e390fa2ceb9a",
+      "name": "0x8a3aB8120807bD64a3De48695110e390fa2ceB9a-1771005965025",
+      "m": {
+        "n": 69,
+        "monthsActive": 2.2625,
+        "totalPnl": 649533.06,
+        "peak": 678962.56,
+        "maxDd": 149294.45,
+        "maxDdPctOfPeak": 1.6026929032846766,
+        "slope": 0.1538870787084369,
+        "r2": 0.8246411669344372,
+        "daysSinceLastChange": 1.875,
+        "curveQuality": 0.8246411669344372,
+        "magnitudeFactor": 0.8059361389092812,
+        "livenessFactor": 0.8660714285714286,
+        "score": 0.5755981022525365
+      }
+    }
+  ]
+}
