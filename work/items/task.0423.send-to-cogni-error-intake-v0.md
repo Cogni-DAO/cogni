@@ -1,5 +1,5 @@
 ---
-id: task.0419
+id: task.0423
 type: task
 title: "v0 'Send to Cogni' error intake — UI button → API → Temporal queue"
 status: needs_closeout
@@ -428,7 +428,7 @@ error report through and confirms all four signals.
 
 ## Review Checklist
 
-- [ ] **Work Item:** `task.0419` linked in PR body
+- [ ] **Work Item:** `task.0423` linked in PR body
 - [ ] **Spec:** Zod contract is single source of truth; AGENTS.md
       updates in touched dirs
 - [ ] **Tests:** unit (contract + capture util) + component

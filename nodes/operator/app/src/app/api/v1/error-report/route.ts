@@ -19,7 +19,7 @@
  *   - SERVER_STAMPS_BUILD_SHA: build_sha comes from server env, not the
  *     client.
  * Side-effects: IO (DB insert, Pino log line, rate-limiter state).
- * Links: work/items/task.0419.send-to-cogni-error-intake-v0.md, contracts/error-report.v1.contract
+ * Links: work/items/task.0423.send-to-cogni-error-intake-v0.md, contracts/error-report.v1.contract
  * @public
  */
 

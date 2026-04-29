@@ -17,7 +17,7 @@
  *   - SINGLE_SUBMIT: button disables after first successful submit so
  *     a user double-click is a no-op.
  * Side-effects: IO (fetch POST + DOM updates).
- * Links: contracts/error-report.v1.contract, work/items/task.0419
+ * Links: contracts/error-report.v1.contract, work/items/task.0423
  * @public
  */
 

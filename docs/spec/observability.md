@@ -398,7 +398,7 @@ pnpm langfuse:trace
 
 ## User-Reported Errors — "Send to Cogni" Intake
 
-**Status:** v0-of-v0 shipped (task.0419) — operator-only, inline persistence;
+**Status:** v0-of-v0 shipped (task.0423) — operator-only, inline persistence;
 **v1 (task.0420) adds Temporal worker + Loki window pull.**
 
 UI standard: any error surface (today: `(app)/error.tsx`,

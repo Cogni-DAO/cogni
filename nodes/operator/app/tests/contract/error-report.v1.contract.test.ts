@@ -7,7 +7,7 @@
  * Scope: Pure schema tests. Does not exercise the route handler or DB.
  * Invariants: BOUNDED_INTAKE caps every string; output requires uuid trackingId + literal status="received".
  * Side-effects: none
- * Links: contracts/error-report.v1.contract, work/items/task.0419
+ * Links: contracts/error-report.v1.contract, work/items/task.0423
  * @internal
  */
 

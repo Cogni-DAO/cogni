@@ -6,7 +6,7 @@ status: needs_implement
 priority: 1
 rank: 5
 estimate: 3
-summary: "Follow-up to task.0419's v0-of-v0 (which ships UI + intake API + inline DB write + inline Loki pull, single PR). v1 hardens the loop: extracts the Loki adapter to a shared package, moves the work off the request path into a Temporal workflow, and adds a stack test. No user-visible change; reliability + observability + boundary cleanup."
+summary: "Follow-up to task.0423's v0-of-v0 (which ships UI + intake API + inline DB write + inline Loki pull, single PR). v1 hardens the loop: extracts the Loki adapter to a shared package, moves the work off the request path into a Temporal workflow, and adds a stack test. No user-visible change; reliability + observability + boundary cleanup."
 outcome: "Same UX as v0-of-v0, but: (1) `LokiQueryPort` + adapter live in `packages/loki-query/`; (2) the intake API does NOT do the Loki query inline — it starts `ErrorReportIngestWorkflow`; (3) three activities own the writes (initial insert → Loki pull → update); (4) a stack test covers the full intake → workflow → DB → Loki path against dev infra. After this lands, the v0-of-v0 inline code paths are deleted (no shim, no compat — single source of truth wins)."
 spec_refs:
   - docs/spec/architecture.md
@@ -18,13 +18,13 @@ branch:
 pr:
 reviewer:
 revision: 0
-blocked_by: [task.0419]
+blocked_by: [task.0423]
 deploy_verified: false
 created: 2026-04-28
 updated: 2026-04-28
 labels: [observability, temporal, error-handling, packages, refactor]
 external_refs:
-  - work/items/task.0419.send-to-cogni-error-intake-v0.md
+  - work/items/task.0423.send-to-cogni-error-intake-v0.md
   - work/items/story.0417.ui-send-to-cogni-error-button.md
   - work/projects/proj.observability-hardening.md
 ---
@@ -33,7 +33,7 @@ external_refs:
 
 ## Problem
 
-`task.0419` ships v0-of-v0 in a single PR by collapsing the Loki query
+`task.0423` ships v0-of-v0 in a single PR by collapsing the Loki query
 and DB write into the route handler. That's the right call to prove
 the _user-visible_ loop on candidate-a fast — but it leaves three
 debts:
@@ -167,4 +167,4 @@ through the workflow path on candidate-a.
 ## Attribution
 
 - Story: derekg1729 (story.0417)
-- v0-of-v0: task.0419
+- v0-of-v0: task.0423

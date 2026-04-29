@@ -12,7 +12,7 @@
  *   - DIGEST_IS_CORRELATION_KEY: `digest` is the Next.js error.digest, the join key against Loki logs.
  *   - Contract remains stable; breaking changes require new version.
  * Side-effects: none
- * Links: work/items/task.0419.send-to-cogni-error-intake-v0.md, work/items/story.0417.ui-send-to-cogni-error-button.md
+ * Links: work/items/task.0423.send-to-cogni-error-intake-v0.md, work/items/story.0417.ui-send-to-cogni-error-button.md
  * @public
  */
 

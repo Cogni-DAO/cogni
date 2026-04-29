@@ -1,4 +1,4 @@
--- task.0419 v0-of-v0: error_reports table for "Send to Cogni" UI submissions.
+-- task.0423 v0-of-v0: error_reports table for "Send to Cogni" UI submissions.
 --
 -- v0-of-v0 (this migration): table created with loki_window/loki_status
 -- columns present but unused. The intake API inserts rows synchronously

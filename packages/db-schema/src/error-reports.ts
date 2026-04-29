@@ -11,7 +11,7 @@
  * - LOKI_WINDOW_NULLABLE_V0: v0-of-v0 leaves loki_window null; task.0420's Temporal worker fills it.
  * - SYSTEM_OWNED: No RLS — the intake API is anonymous-allowed (so `(public)/error.tsx` can submit), and reads are admin-only via direct queries. Same precedent as poly_copy_trade_* tables.
  * Side-effects: none (schema definitions only)
- * Links: work/items/task.0419.send-to-cogni-error-intake-v0.md, work/items/task.0420.error-intake-temporal-v1.md
+ * Links: work/items/task.0423.send-to-cogni-error-intake-v0.md, work/items/task.0420.error-intake-temporal-v1.md
  * @public
  */
 
@@ -40,7 +40,7 @@ export type ErrorReportLokiStatus = (typeof ERROR_REPORT_LOKI_STATUSES)[number];
 /**
  * Error reports — one row per "Send to Cogni" click in any Cogni UI.
  *
- * Per task.0419 (v0-of-v0): rows are written synchronously by the
+ * Per task.0423 (v0-of-v0): rows are written synchronously by the
  * intake API. `loki_window` and `loki_status` exist now but are filled
  * by task.0420's Temporal worker; v0-of-v0 leaves them null/'pending'.
  *
