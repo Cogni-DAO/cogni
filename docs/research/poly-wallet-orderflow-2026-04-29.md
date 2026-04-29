@@ -40,14 +40,7 @@ For the two top-ranked target wallets from the [2026-04-28 curve screen](poly-wa
 3. **Per-position lifecycle.** Group trades by `(conditionId, outcome)`. Classify each group as `closed-fully` (sells ≥ buys), `partial-close`, or `held-open / rode-to-resolution` (zero sells).
 4. **Distributions.** Six histograms per wallet — DCA depth, event clustering, trade-size USDC, entry price, DCA window (first→last trade gap), time-of-day.
 
-Reproducible:
-
-```bash
-npx tsx scripts/experiments/top-wallet-open-close-analysis.ts
-npx tsx scripts/experiments/top-wallet-distributions.ts
-```
-
-Both scripts are read-only, no PKs, ~5s runtime.
+Source code: the two read-only probes that produced this data live as ad-hoc scripts in the local research worktree. Once `summariseOrderFlow` lands (task.0429), the same six distributions are computable on-demand via `GET /api/v1/poly/wallets/<addr>?include=distributions` for any 0x address. To reproduce against fresh data, hit the live route.
 
 ## Headline finding — pure ride-to-resolution
 
@@ -294,8 +287,7 @@ This is a **right-now order-flow snapshot**, not a longitudinal portrait. The ch
 
 ## Pointers
 
-- Open/close analysis script: [`scripts/experiments/top-wallet-open-close-analysis.ts`](../../scripts/experiments/top-wallet-open-close-analysis.ts)
-- Distribution histograms script: [`scripts/experiments/top-wallet-distributions.ts`](../../scripts/experiments/top-wallet-distributions.ts)
+- Live API replacement (task.0429): `GET /api/v1/poly/wallets/<addr>?include=distributions` — same six distributions, on-demand for any 0x address.
 - Curve-shape screen (parent): [`poly-wallet-curve-screen-2026-04-28.md`](poly-wallet-curve-screen-2026-04-28.md)
 - Charter (methodology): [`work/charters/POLY_WALLET_RESEARCH.md`](../../work/charters/POLY_WALLET_RESEARCH.md)
 - Wallet deep-dive design: [`docs/design/wallet-analysis-components.md`](../design/wallet-analysis-components.md)
