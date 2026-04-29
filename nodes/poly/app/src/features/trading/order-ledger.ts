@@ -134,6 +134,46 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
       }
     },
 
+    async cumulativeFilledForMarket(
+      billing_account_id: string,
+      market_id: string
+    ): Promise<number> {
+      try {
+        const rows = await deps.db
+          .select({
+            sum: sum(
+              sql<string>`COALESCE((${polyCopyTradeFills.attributes}->>'size_usdc')::numeric, 0)`
+            ),
+          })
+          .from(polyCopyTradeFills)
+          .where(
+            and(
+              eq(polyCopyTradeFills.billingAccountId, billing_account_id),
+              sql`${polyCopyTradeFills.attributes}->>'market_id' = ${market_id}`,
+              inArray(polyCopyTradeFills.status, [
+                "pending",
+                "open",
+                "filled",
+                "partial",
+              ])
+            )
+          );
+        return Number(rows[0]?.sum ?? 0);
+      } catch (err: unknown) {
+        log.warn(
+          {
+            event: EVENT_NAMES.ADAPTER_ORDER_LEDGER_SNAPSHOT_ERROR,
+            errorCode: "cumulative_fill_fail_closed",
+            billing_account_id,
+            market_id,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "order-ledger cumulativeFilledForMarket failed; returning Infinity (skip placement)"
+        );
+        return Number.POSITIVE_INFINITY;
+      }
+    },
+
     async insertPending(input: InsertPendingInput): Promise<void> {
       // Stash placement-display fields in `attributes` so the read API +
       // dashboard don't need to re-derive from the intent blob.

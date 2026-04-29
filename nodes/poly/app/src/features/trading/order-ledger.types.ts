@@ -161,6 +161,22 @@ export interface OrderLedger {
   ): Promise<StateSnapshot>;
 
   /**
+   * Sum the `size_usdc` of all `poly_copy_trade_fills` rows for this tenant
+   * × market that represent committed (non-failed) exposure. Used by the
+   * mirror sizing policy to enforce a per-(tenant, market) position cap.
+   *
+   * Counts rows with `status` ∈ `pending | open | filled | partial`.
+   * Excludes `canceled | error`. Cross-target by design (the cap is on the
+   * tenant's exposure to a market, not per-target). Fail-closed: returns
+   * `Infinity` on DB error so the caller skips the placement rather than
+   * mis-allowing it.
+   */
+  cumulativeFilledForMarket(
+    billing_account_id: string,
+    market_id: string
+  ): Promise<number>;
+
+  /**
    * Insert a `pending` row. Idempotent by PK `(target_id, fill_id)` — a repeat
    * of the same pair is a no-op (ON CONFLICT DO NOTHING). Stores `size_usdc`
    * / `side` / `market_id` / `limit_price` / `target_wallet` in `attributes`

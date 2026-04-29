@@ -221,11 +221,18 @@ async function processFill(
     }
   }
 
+  const cumulative_filled_usdc_for_market =
+    await deps.ledger.cumulativeFilledForMarket(
+      deps.target.billing_account_id,
+      fill.market_id
+    );
+
   const plan = planMirrorFromFill({
     fill,
     config: { ...deps.target, enabled: snapshot.enabled },
     state: {
       already_placed_ids: snapshot.already_placed_ids,
+      cumulative_filled_usdc_for_market,
     },
     client_order_id,
     min_shares,

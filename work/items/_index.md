@@ -162,6 +162,7 @@
 | 1 | 5 | 2 | needs_merge | task.0404 | Poly bet sizer v0 — `min_bet` SizingPolicy variant | Poly | proj.poly-bet-sizer |
 | 1 | 5 | 2 | needs_implement | bug.0405 | Polymarket BUY GTC partial-fills land below min_order_size — produces structurally unsellable dust | Cogni Poly | proj.poly-copy-trading |
 | 1 | 5 | 1 | needs_merge | task.0421 | Poly wallet research charter + first live screen + Dolt schema proposal | Cogni Poly | proj.poly-prediction-bot |
+| 1 | 5 | 2 | needs_triage | task.0424 | Poly bet sizer — per-(tenant, market) position cap (reuse `max_usdc_per_trade` for v0) | Poly | proj.poly-bet-sizer |
 | 1 | 6 | 1 | needs_triage | bug.0036 | Chat route enqueues to closed assistant-stream controller — unhandled TypeError |  |  |
 | 1 | 6 | 1 | needs_triage | bug.0070 | OpenClaw CLI binary not executable as `openclaw` — agent CLI commands fail | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 6 | 2 | needs_design | task.0183 | Run list API: GET /api/v1/ai/runs — query graph_runs with filtering | Live Operations Dashboard | proj.live-dashboard |
@@ -256,11 +257,13 @@
 | 2 | 12 | 3 | needs_triage | bug.0386 | @cogni/node-contracts package leaks node-specific contracts (poly.*, resy.*) into the shared cross-node surface | Cogni Poly | proj.poly-copy-trading |
 | 2 | 14 | 1 | needs_design | task.0079 | Create bot-generated Discord invite link for website |  |  |
 | 2 | 15 | 3 | needs_implement | task.0192 | Walk: Per-tenant BYO-AI — Profile page OAuth + DrizzleConnectionBroker | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
+| 2 | 15 | 5 | needs_design | task.0427 | Poly mirror — design pass on FOK miss rate / CLOB pressure (limit vs market vs price-aware FOK) | Cogni Poly | proj.poly-copy-trading |
 | 2 | 16 | 3 | needs_design | task.0003 | Sweep stale doc references across the codebase | Maximize OSS Tools | proj.maximize-oss-tools |
 | 2 | 17 | 1 | needs_research | spike.0037 | Research Tailscale/Headscale mesh VPN for Cogni infrastructure |  |  |
 | 2 | 20 | 3 | needs_design | task.0211 | BYO-AI ChatGPT — auth manager + Codex CLI in Docker image | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 2 | 20 | 2 | needs_closeout | bug.0342 | poly copy-trade places sub-min orders — CLOB rejects silently (success=undefined, orderID=<missing>, errorMsg="") | Cogni Poly | proj.poly-copy-trading |
 | 2 | 20 | 3 | needs_triage | task.0351 | Poly trading wallet withdrawal — backend + UI | Cogni Poly | proj.poly-copy-trading |
+| 2 | 20 | 2 | needs_triage | bug.0426 | Mirror poll re-decisions every fill 11–12× per hour — no cursor on data-api `/trades` poll | Cogni Poly | proj.poly-copy-trading |
 | 2 | 21 | 3 | needs_design | task.0352 | Poly trading wallet one-click fund flow (RainbowKit + Polygon) | Cogni Poly | proj.poly-copy-trading |
 | 2 | 25 | 3 | needs_triage | task.0354 | Poly trading hardening — post-B3 cleanup + executor cache + cap-source robustness | Cogni Poly | proj.poly-copy-trading |
 | 2 | 30 | 1 | needs_implement | bug.0168 | App container uses seccomp=unconfined for TigerBeetle io_uring — replace with targeted profile | AI Operator Wallet | proj.ai-operator-wallet |

@@ -159,4 +159,45 @@ describe("planMirrorFromFill() — sizing policy: kind=fixed (bug.0342)", () => 
     if (d.kind !== "place") throw new Error("expected place");
     expect(d.intent.size_usdc).toBe(1);
   });
+
+  it("places when cumulative + intent fits inside max_usdc_per_trade (task.0424)", () => {
+    const fill = makeFill(0.5);
+    const d = planMirrorFromFill({
+      fill,
+      config: makeConfig({ mirror_usdc: 2, max_usdc_per_trade: 5 }),
+      state: { already_placed_ids: [], cumulative_filled_usdc_for_market: 2 },
+      client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
+      min_shares: 1,
+      min_usdc_notional: 1,
+    });
+    if (d.kind !== "place") throw new Error("expected place");
+    expect(d.intent.size_usdc).toBe(2);
+  });
+
+  it("skips position_cap_reached when cumulative + intent exceeds max_usdc_per_trade (task.0424)", () => {
+    const fill = makeFill(0.5);
+    const d = planMirrorFromFill({
+      fill,
+      config: makeConfig({ mirror_usdc: 2, max_usdc_per_trade: 5 }),
+      state: { already_placed_ids: [], cumulative_filled_usdc_for_market: 4 },
+      client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
+      min_shares: 1,
+      min_usdc_notional: 1,
+    });
+    expect(d).toEqual({ kind: "skip", reason: "position_cap_reached" });
+  });
+
+  it("position cap is opt-in: undefined cumulative skips the check (task.0424)", () => {
+    const fill = makeFill(0.5);
+    const d = planMirrorFromFill({
+      fill,
+      config: makeConfig({ mirror_usdc: 2, max_usdc_per_trade: 5 }),
+      state: { already_placed_ids: [] },
+      client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
+      min_shares: 1,
+      min_usdc_notional: 1,
+    });
+    if (d.kind !== "place") throw new Error("expected place");
+    expect(d.intent.size_usdc).toBe(2);
+  });
 });

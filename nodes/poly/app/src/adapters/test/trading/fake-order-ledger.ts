@@ -82,6 +82,25 @@ export class FakeOrderLedger implements OrderLedger {
     };
   }
 
+  async cumulativeFilledForMarket(
+    billing_account_id: string,
+    market_id: string
+  ): Promise<number> {
+    if (this.failConfigRead) return Number.POSITIVE_INFINITY;
+    return this.rows
+      .filter(
+        (r) =>
+          r.billing_account_id === billing_account_id &&
+          (r.attributes as Record<string, unknown> | null)?.market_id ===
+            market_id &&
+          ["pending", "open", "filled", "partial"].includes(r.status)
+      )
+      .reduce((sum, r) => {
+        const v = (r.attributes as Record<string, unknown> | null)?.size_usdc;
+        return sum + (typeof v === "number" ? v : 0);
+      }, 0);
+  }
+
   async insertPending(input: InsertPendingInput): Promise<void> {
     const existing = this.rows.find(
       (r) => r.target_id === input.target_id && r.fill_id === input.fill_id
