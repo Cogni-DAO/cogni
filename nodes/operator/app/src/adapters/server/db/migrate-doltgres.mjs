@@ -87,26 +87,40 @@ async function reconcileTracking(sql, folder) {
   return stamped;
 }
 
-let sql;
-try {
-  sql = postgres(url, { max: 1, onnotice: (n) => console.log(n.message) });
-  const t0 = Date.now();
+async function withConnection(fn) {
+  const sql = postgres(url, {
+    max: 1,
+    onnotice: (n) => console.log(n.message),
+  });
   try {
-    await migrate(drizzle(sql), { migrationsFolder });
+    return await fn(sql);
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}
+
+try {
+  const t0 = Date.now();
+  let migrateThrewAlreadyApplied = false;
+  try {
+    await withConnection((sql) => migrate(drizzle(sql), { migrationsFolder }));
   } catch (err) {
     if (!isAlreadyAppliedError(err)) throw err;
+    migrateThrewAlreadyApplied = true;
     console.warn(
       `⚠️  ${NODE} drizzle-migrate hit "already exists" — schema in place; reconciling __drizzle_migrations via sql.unsafe`
     );
   }
-  const stampedRows = await reconcileTracking(sql, migrationsFolder);
-  await sql`SELECT dolt_commit('-Am', 'migration: drizzle-orm batch')`;
+  const stampedRows = await withConnection((sql) =>
+    reconcileTracking(sql, migrationsFolder)
+  );
+  await withConnection(
+    (sql) => sql`SELECT dolt_commit('-Am', 'migration: drizzle-orm batch')`
+  );
   console.log(
-    `✅ ${NODE} migrations applied + ${stampedRows} tracking row(s) reconciled + dolt_commit stamped in ${Date.now() - t0}ms`
+    `✅ ${NODE} migrations ${migrateThrewAlreadyApplied ? "already-applied" : "applied"} + ${stampedRows} tracking row(s) reconciled + dolt_commit stamped in ${Date.now() - t0}ms`
   );
 } catch (err) {
   console.error(`FATAL(${NODE}): migrate failed:`, err);
   process.exitCode = 1;
-} finally {
-  if (sql) await sql.end({ timeout: 5 });
 }
