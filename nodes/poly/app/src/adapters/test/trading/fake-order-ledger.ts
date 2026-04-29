@@ -93,7 +93,7 @@ export class FakeOrderLedger implements OrderLedger {
           r.billing_account_id === billing_account_id &&
           (r.attributes as Record<string, unknown> | null)?.market_id ===
             market_id &&
-          ["pending", "open", "filled", "partial"].includes(r.status)
+          ["pending", "open", "filled", "partial", "error"].includes(r.status)
       )
       .reduce((sum, r) => {
         const v = (r.attributes as Record<string, unknown> | null)?.size_usdc;

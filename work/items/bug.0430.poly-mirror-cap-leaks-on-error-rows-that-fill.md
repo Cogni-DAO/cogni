@@ -2,7 +2,7 @@
 id: bug.0430
 type: bug
 title: "Per-position cap leaks because `error` ledger rows can actually fill on chain — `cumulativeIntentForMarket` reads $0 while wallet holds $25"
-status: needs_implement
+status: needs_review
 priority: 1
 rank: 5
 estimate: 3

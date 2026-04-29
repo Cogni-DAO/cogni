@@ -97,10 +97,11 @@ export const RuntimeStateSchema = z.object({
   /** client_order_id values that already exist in poly_copy_trade_fills — idempotency gate. */
   already_placed_ids: z.array(z.string()),
   /**
-   * Sum of `intent` `size_usdc` for non-failed rows for this tenant ×
-   * market. Drives the per-position cap check in `applySizingPolicy`.
-   * Intent-based, not filled-based — see `OrderLedger.cumulativeIntentForMarket`
-   * for the v0 rationale. Optional: when omitted (`undefined`), the
+   * Sum of `intent` `size_usdc` for non-canceled rows for this tenant ×
+   * market (includes `error` rows; bug.0430). Drives the per-position cap
+   * check in `applySizingPolicy`. Intent-based, not filled-based — see
+   * `OrderLedger.cumulativeIntentForMarket` for the rationale. Optional:
+   * when omitted (`undefined`), the
    * per-position cap is skipped — preserves the SELL path and any caller
    * that hasn't opted in.
    */
