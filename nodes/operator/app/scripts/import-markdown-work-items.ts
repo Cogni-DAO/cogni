@@ -58,7 +58,7 @@ function parseArgs(argv: ReadonlyArray<string>): CliArgs {
   }
 
   if (!root) {
-    root = resolveRepoToplevel() + "/work/items";
+    root = `${resolveRepoToplevel()}/work/items`;
   }
 
   return { root: resolve(root), dryRun, limit };
@@ -82,7 +82,7 @@ function printUsage(): void {
       "  DOLTGRES_URL       Postgres-wire URL of the target operator Doltgres",
       "  IMPORTER_AUTHOR    Author tag for dolt_log (e.g. user:derekg1729)",
       "",
-    ].join("\n"),
+    ].join("\n")
   );
 }
 
@@ -92,22 +92,22 @@ function assertHasMdFiles(root: string): void {
     entries = readdirSync(root);
   } catch (err) {
     throw new Error(
-      `Cannot read --root '${root}': ${err instanceof Error ? err.message : String(err)}`,
+      `Cannot read --root '${root}': ${err instanceof Error ? err.message : String(err)}`
     );
   }
   const mdCount = entries.filter(
-    (e) => e.endsWith(".md") && e !== "_index.md",
+    (e) => e.endsWith(".md") && e !== "_index.md"
   ).length;
   if (mdCount === 0) {
     throw new Error(`No .md files found in --root '${root}'`);
   }
 }
 
-async function captureHead(client: ReturnType<typeof buildDoltgresClient>): Promise<string | null> {
+async function captureHead(
+  client: ReturnType<typeof buildDoltgresClient>
+): Promise<string | null> {
   try {
-    const rows = await client.unsafe(
-      "SELECT dolt_hashof('HEAD') AS sha",
-    );
+    const rows = await client.unsafe("SELECT dolt_hashof('HEAD') AS sha");
     const sha = (rows as ReadonlyArray<Record<string, unknown>>)[0]?.sha;
     return sha ? String(sha) : null;
   } catch {
@@ -118,13 +118,15 @@ async function captureHead(client: ReturnType<typeof buildDoltgresClient>): Prom
 async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2));
 
+  // biome-ignore lint/style/noProcessEnv: one-shot CLI invoked locally — env-var auth is the single source of credentials, no centralized config exists for this script
   const author = process.env.IMPORTER_AUTHOR;
   if (!author || author.trim() === "") {
     throw new Error(
-      "IMPORTER_AUTHOR env var must be set (e.g. IMPORTER_AUTHOR=user:derekg1729)",
+      "IMPORTER_AUTHOR env var must be set (e.g. IMPORTER_AUTHOR=user:derekg1729)"
     );
   }
 
+  // biome-ignore lint/style/noProcessEnv: one-shot CLI invoked locally — same rationale as IMPORTER_AUTHOR above
   const doltgresUrl = process.env.DOLTGRES_URL;
   if (!doltgresUrl || doltgresUrl.trim() === "") {
     throw new Error("DOLTGRES_URL env var must be set");
@@ -133,7 +135,7 @@ async function main(): Promise<number> {
   assertHasMdFiles(args.root);
 
   process.stdout.write(
-    `[importer] root=${args.root} author=${author} dryRun=${args.dryRun}${args.limit ? ` limit=${args.limit}` : ""}\n`,
+    `[importer] root=${args.root} author=${author} dryRun=${args.dryRun}${args.limit ? ` limit=${args.limit}` : ""}\n`
   );
 
   const reader = new MarkdownWorkItemAdapter(args.root);
@@ -146,7 +148,7 @@ async function main(): Promise<number> {
 
   if (args.dryRun) {
     process.stdout.write(
-      `[importer] DRY RUN — would attempt bulkInsert of ${items.length} items\n`,
+      `[importer] DRY RUN — would attempt bulkInsert of ${items.length} items\n`
     );
     return 0;
   }
@@ -158,13 +160,15 @@ async function main(): Promise<number> {
 
   try {
     const preHead = await captureHead(client);
-    process.stdout.write(`[importer] pre-import HEAD=${preHead ?? "unknown"}\n`);
+    process.stdout.write(
+      `[importer] pre-import HEAD=${preHead ?? "unknown"}\n`
+    );
 
     const adapter = new DoltgresOperatorWorkItemAdapter(client);
     const result = await adapter.bulkInsert(items, author);
 
     process.stdout.write(
-      `[importer] result inserted=${result.inserted} skipped=${result.skipped} failed=${result.failed} doltCommit=${result.doltCommitHash ?? "(none — empty diff)"}\n`,
+      `[importer] result inserted=${result.inserted} skipped=${result.skipped} failed=${result.failed} doltCommit=${result.doltCommitHash ?? "(none — empty diff)"}\n`
     );
 
     if (result.failures.length > 0) {
@@ -175,7 +179,7 @@ async function main(): Promise<number> {
     }
 
     process.stdout.write(
-      `[importer] done. To rollback: psql "$DOLTGRES_URL" -c "CALL dolt_reset('--hard', '${preHead ?? "<sha>"}')"\n`,
+      `[importer] done. To rollback: psql "$DOLTGRES_URL" -c "CALL dolt_reset('--hard', '${preHead ?? "<sha>"}')"\n`
     );
 
     return result.failed > 0 ? 1 : 0;
@@ -188,7 +192,7 @@ main()
   .then((code) => process.exit(code))
   .catch((err) => {
     process.stderr.write(
-      `[importer] FATAL: ${err instanceof Error ? err.message : String(err)}\n`,
+      `[importer] FATAL: ${err instanceof Error ? err.message : String(err)}\n`
     );
     if (err instanceof Error && err.stack) {
       process.stderr.write(`${err.stack}\n`);
