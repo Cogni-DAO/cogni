@@ -13,7 +13,7 @@ namePrefix: operator-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:f0136ace708ddf801557853f5566f83f63412a2f6f0ef88fd4ecde90dc508f84"
+    digest: "sha256:5b9ebc1cbdce423830f957384804579cd59ebb69eb5d0333912d7c128c5729a9"
 
 patches:
   - target:
@@ -67,6 +67,39 @@ patches:
       - op: add
         path: /spec/template/metadata/labels/app.kubernetes.io~1instance
         value: "operator"
+
+  # task.0423: Doltgres knowledge-plane migrator runs as a second initContainer
+  # on the operator Deployment. DATABASE_URL maps to DOLTGRES_URL (separate from
+  # the Postgres DATABASE_URL the main container + first initContainer use).
+  - target:
+      kind: Deployment
+      name: node-app
+    patch: |
+      - op: add
+        path: /spec/template/spec/initContainers/-
+        value:
+          name: migrate-doltgres
+          image: ghcr.io/cogni-dao/cogni-template:placeholder
+          command:
+            - /bin/sh
+            - -c
+            - exec node /app/nodes/$(NODE_NAME)/app/migrate-doltgres.mjs /app/nodes/$(NODE_NAME)/app/doltgres-migrations
+          envFrom:
+            - configMapRef:
+                name: operator-node-app-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: operator-node-app-secrets
+                  key: DOLTGRES_URL
+          resources:
+            requests:
+              memory: "384Mi"
+              cpu: "200m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
   # bug.0295: VM discovery via DNS (candidate-a.vm.cognidao.org).
   # Convert base headless Services → ExternalName; delete EndpointSlices.
   - target: { kind: Service, name: postgres-external }
