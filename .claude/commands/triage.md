@@ -24,15 +24,15 @@ curl -X PATCH https://preview.cognidao.org/api/v1/work/items/<id> \
 
 ## Routing table
 
-| type | route to status | next command |
-|------|-----------------|--------------|
-| `story` | `done` (stories are intake-only) | (create `task.*` if implementation warranted) |
-| `spike` | `needs_research` | `/research` |
-| `task` clear scope | `needs_implement` (set `branch`) | `/implement` |
-| `task` design first | `needs_design` | `/design` |
-| `task` unknown approach | `needs_research` | `/research` |
-| `bug` simple fix | `needs_implement` (set `branch`) | `/implement` |
-| `bug` design first | `needs_design` | `/design` |
+| type                    | route to status                  | next command                                  |
+| ----------------------- | -------------------------------- | --------------------------------------------- |
+| `story`                 | `done` (stories are intake-only) | (create `task.*` if implementation warranted) |
+| `spike`                 | `needs_research`                 | `/research`                                   |
+| `task` clear scope      | `needs_implement` (set `branch`) | `/implement`                                  |
+| `task` design first     | `needs_design`                   | `/design`                                     |
+| `task` unknown approach | `needs_research`                 | `/research`                                   |
+| `bug` simple fix        | `needs_implement` (set `branch`) | `/implement`                                  |
+| `bug` design first      | `needs_design`                   | `/design`                                     |
 
 ## Rules
 
