@@ -267,7 +267,7 @@ export interface Container {
   /**
    * Copy-trade target source — strongly-typed seam for "which wallets is each
    * user monitoring right now?". Always DB-backed (`dbTargetSource`) against
-   * `poly_copy_trade_targets` × `poly_copy_trade_config`; component + stack
+   * `poly_copy_trade_targets`; component + stack
    * tests get the testcontainers Postgres. Unit tests that want a
    * deterministic list construct `envTargetSource(wallets)` directly instead
    * of going through the container.
@@ -761,7 +761,8 @@ function createContainer(): Container {
   // `POLY_WALLET_AEAD_*` are configured. Daily/hourly USDC caps live in
   // each tenant's `poly_wallet_grants` and are enforced by `authorizeIntent`
   // on the hot path inside `PolyTradeExecutor.placeIntent`.
-  // `poly_copy_trade_config.enabled` remains the per-tenant kill-switch.
+  // bug.0438: copy-trade has no per-tenant kill-switch; the gate is the
+  // active-target × active-connection × active-grant join inside `listAllActive`.
   if (polyTradeExecutorFactory !== undefined) {
     const executorFactory = polyTradeExecutorFactory;
     // Lazy-load the poll wiring so its transitive imports (Data-API HTTP

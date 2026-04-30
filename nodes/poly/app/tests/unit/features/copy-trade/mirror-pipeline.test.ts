@@ -47,7 +47,6 @@ const BASE_TARGET: MirrorTargetConfig = {
     mirror_usdc: 5,
     max_usdc_per_trade: 5,
   },
-  enabled: true, // runtime kill-switch comes from ledger snapshot
 };
 
 function makeFill(overrides?: Partial<Fill>): Fill {
@@ -204,55 +203,12 @@ describe("mirror-pipeline.runMirrorTick — crash resume", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Scenario C — kill-switch off.
+// (bug.0438): Scenario C "kill-switch off" was removed when the per-tenant
+// `poly_copy_trade_config` table was purged. The cross-tenant enumerator's
+// active-target × active-connection × active-grant join is the only gate now,
+// and the DB unique index on `(target_id, fill_id)` prevents double-insert on
+// snapshot read errors. No replacement test needed at the unit layer.
 // ─────────────────────────────────────────────────────────────────────────────
-
-describe("mirror-pipeline.runMirrorTick — kill-switch off", () => {
-  it("skips every fill and does not insert pending when enabled=false", async () => {
-    const fill = makeFill();
-    const ledger = new FakeOrderLedger({ enabled: false });
-    const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
-    const metrics = createRecordingMetrics();
-
-    await runMirrorTick({
-      source: makeSource([fill]),
-      ledger,
-      placeIntent,
-      target: BASE_TARGET,
-      getCursor: () => undefined,
-      setCursor: () => {},
-      logger: noopLogger,
-      metrics,
-    });
-
-    expect(placeIntent).not.toHaveBeenCalled();
-    expect(ledger.rows).toHaveLength(0);
-    const killSwitchDec = ledger.decisions.find(
-      (d) => d.outcome === "skipped" && d.reason === "kill_switch_off"
-    );
-    expect(killSwitchDec).toBeDefined();
-  });
-
-  it("also fails closed when the ledger snapshot throws", async () => {
-    const fill = makeFill();
-    const ledger = new FakeOrderLedger({ failConfigRead: true });
-    const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
-
-    await runMirrorTick({
-      source: makeSource([fill]),
-      ledger,
-      placeIntent,
-      target: BASE_TARGET,
-      getCursor: () => undefined,
-      setCursor: () => {},
-      logger: noopLogger,
-      metrics: createRecordingMetrics(),
-    });
-
-    expect(placeIntent).not.toHaveBeenCalled();
-    expect(ledger.rows).toHaveLength(0);
-  });
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scenario D — empty page.

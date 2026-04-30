@@ -52,16 +52,14 @@ export interface LedgerRow {
 }
 
 /**
- * State snapshot the mirror-coordinator hands to `decide()`. Caller translates
- * into `RuntimeState` + `TargetConfig.enabled`. The ledger owns the SELECTs;
- * `decide()` stays pure.
+ * State snapshot the mirror-coordinator hands to `decide()`. The ledger owns
+ * the SELECTs; `decide()` stays pure.
  *
- * `enabled` is the kill-switch singleton. **Fail-closed**: on DB error the
- * adapter returns `enabled: false` and empty arrays — never throws into the
- * coordinator.
+ * **Fail-closed**: on DB error the adapter returns zeroes/empty arrays and
+ * logs at `warn` — never throws into the coordinator. (bug.0438 removed the
+ * per-tenant kill-switch — active target row + active grant is the gate.)
  */
 export interface StateSnapshot {
-  enabled: boolean;
   today_spent_usdc: number;
   fills_last_hour: number;
   already_placed_ids: string[];
@@ -151,9 +149,9 @@ export interface SyncHealthSummary {
  */
 export interface OrderLedger {
   /**
-   * Read kill-switch + runtime state for a target. Fail-closed on DB error:
-   * returns `{enabled: false, ...zeroes}` plus an error log on the caller's
-   * logger — never throws.
+   * Read runtime state (cap counters + dedup keys) for a target. Fail-closed
+   * on DB error: returns zeroes/empty arrays plus an error log on the
+   * caller's logger — never throws.
    */
   snapshotState(
     target_id: string,

@@ -4,7 +4,7 @@
 /**
  * Module: `@cogni/poly-db-schema/copy-trade`
  * Purpose: Schema for the Polymarket copy-trade prototype — tracked-wallet records (tenant-scoped),
- *          fills ledger, per-tenant kill-switch config, append-only decisions log.
+ *          fills ledger, append-only decisions log.
  * Scope: Poly-local table definitions. Does not contain queries, RLS policies, or runtime logic.
  *        RLS policies live in the SQL migration alongside `ENABLE ROW LEVEL SECURITY`.
  * Invariants:
@@ -12,9 +12,10 @@
  *     `created_by_user_id NOT NULL` (RLS key, FK → users). Mirrors the `connections` pattern from migration 0025.
  *   - FILL_ID_SHAPE_DECIDED: composite `<source>:<native_id>` per task.0315 P0.2, enforced by CHECK.
  *   - IDEMPOTENT_BY_CLIENT_ID: `client_order_id = clientOrderIdFor(target_id, fill_id)` (pinned helper).
- *   - PER_TENANT_KILL_SWITCH: `poly_copy_trade_config` PK is `billing_account_id` — flipping one tenant's
- *     row has zero effect on other tenants. Default `enabled: false` (fail-closed).
  *   - NO_PER_TARGET_ENABLED: `poly_copy_trade_targets` has no per-row enable flag. Operators add/remove rows.
+ *   - NO_KILL_SWITCH (bug.0438): copy-trade has no per-tenant kill-switch table. Active target row +
+ *     active wallet connection + active grant is the gate; explicit user opt-in (POST a target) is the
+ *     only signal. Per-tenant sizing/caps live on `poly_wallet_grants`, not on a separate config table.
  * Side-effects: none (schema definitions only)
  * Links: docs/spec/poly-multi-tenant-auth.md, work/items/task.0318
  * @public
@@ -22,7 +23,6 @@
 
 import { sql } from "drizzle-orm";
 import {
-  boolean,
   check,
   index,
   jsonb,
@@ -145,25 +145,6 @@ export const polyCopyTradeFills = pgTable(
 );
 
 /**
- * Per-tenant kill-switch. PK is `billing_account_id` (replaces v0 singleton).
- * `enabled DEFAULT false` is **fail-closed** — a freshly-migrated tenant refuses
- * to place orders until an operator explicitly flips the row to true. The poll's
- * config SELECT treats any error as `enabled = false`.
- */
-export const polyCopyTradeConfig = pgTable("poly_copy_trade_config", {
-  /** Tenant PK. FK → billing_accounts.id. */
-  billingAccountId: text("billing_account_id").primaryKey(),
-  /** RLS key column — owner of this kill-switch row. */
-  createdByUserId: text("created_by_user_id").notNull(),
-  enabled: boolean("enabled").notNull().default(false),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  /** Operator identity for audit — free-form text ('system' for seed). */
-  updatedBy: text("updated_by").notNull().default("system"),
-});
-
-/**
  * Append-only log of every `decide()` outcome — `place`, `skip`, or `error`.
  * Tenant-scoped. Rows are never updated or deleted from application code.
  */
@@ -207,7 +188,6 @@ export type PolyCopyTradeTarget = typeof polyCopyTradeTargets.$inferSelect;
 export type NewPolyCopyTradeTarget = typeof polyCopyTradeTargets.$inferInsert;
 export type PolyCopyTradeFill = typeof polyCopyTradeFills.$inferSelect;
 export type NewPolyCopyTradeFill = typeof polyCopyTradeFills.$inferInsert;
-export type PolyCopyTradeConfig = typeof polyCopyTradeConfig.$inferSelect;
 export type PolyCopyTradeDecision = typeof polyCopyTradeDecisions.$inferSelect;
 export type NewPolyCopyTradeDecision =
   typeof polyCopyTradeDecisions.$inferInsert;

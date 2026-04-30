@@ -27,8 +27,6 @@ import type {
 export interface FakeOrderLedgerConfig {
   /** Seed rows — as if a prior tick had already inserted them. */
   initial?: LedgerRow[];
-  /** Initial kill-switch state. Default true (so the happy path is the default). */
-  enabled?: boolean;
   /** If set, `snapshotState` throws internally and the fake returns the fail-closed shape. */
   failConfigRead?: boolean;
 }
@@ -36,12 +34,10 @@ export interface FakeOrderLedgerConfig {
 export class FakeOrderLedger implements OrderLedger {
   readonly rows: LedgerRow[];
   readonly decisions: RecordDecisionInput[] = [];
-  enabled: boolean;
   failConfigRead: boolean;
 
   constructor(config?: FakeOrderLedgerConfig) {
     this.rows = [...(config?.initial ?? [])];
-    this.enabled = config?.enabled ?? true;
     this.failConfigRead = config?.failConfigRead ?? false;
   }
 
@@ -49,7 +45,6 @@ export class FakeOrderLedger implements OrderLedger {
     if (this.failConfigRead) {
       // Match the real adapter's FAIL_CLOSED contract — no throw into caller.
       return {
-        enabled: false,
         today_spent_usdc: 0,
         fills_last_hour: 0,
         already_placed_ids: [],
@@ -75,7 +70,6 @@ export class FakeOrderLedger implements OrderLedger {
     const already_placed_ids = myRows.map((r) => r.client_order_id);
 
     return {
-      enabled: this.enabled,
       today_spent_usdc,
       fills_last_hour,
       already_placed_ids,

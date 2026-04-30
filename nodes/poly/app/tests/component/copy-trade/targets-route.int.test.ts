@@ -14,9 +14,8 @@
  *   - target_id from POST/GET == DB row PK (DELETE accepts it).
  *   - POST is idempotent on conflict (active row already exists).
  *   - DELETE returns 404 when called with a UUIDv5-from-wallet that isn't the row PK.
- *   - CONFIG_ROW_AUTO_ENABLED_ON_FIRST_POST (bug.0338): POST upserts
- *     `poly_copy_trade_config{enabled:true}` on fresh tenant; a pre-existing
- *     disabled row is never overwritten (ON CONFLICT DO NOTHING).
+ *   - NO_KILL_SWITCH (bug.0438): POST writes only `poly_copy_trade_targets`;
+ *     no `poly_copy_trade_config` upsert (table was purged).
  * @public
  */
 
@@ -35,7 +34,6 @@ vi.mock("@/app/_lib/auth/session", () => ({
   getSessionUser: vi.fn(),
 }));
 
-import { polyCopyTradeConfig } from "@cogni/poly-db-schema";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { DELETE as deleteTarget } from "@/app/api/v1/poly/copy-trade/targets/[id]/route";
 import {
@@ -74,17 +72,13 @@ describe("poly.copy_trade.targets — HTTP round-trip (component)", () => {
       avatarColor: null,
     };
 
-    // NOTE: we do NOT pre-seed poly_copy_trade_config here — the POST route is
-    // now the opt-in act (bug.0338 / CONFIG_ROW_AUTO_ENABLED_ON_FIRST_POST).
-    // Tests that want a pre-existing disabled config seed it themselves.
-
     vi.mocked(getSessionUser).mockResolvedValue(sessionUser);
   });
 
   afterEach(async () => {
     // poly_copy_trade_targets.created_by_user_id FK to users has no CASCADE.
-    // Delete billing_account first (CASCADE → targets + fills + decisions +
-    // config), THEN users, so the FK holds at every step.
+    // Delete billing_account first (CASCADE → targets + fills + decisions),
+    // THEN users, so the FK holds at every step.
     const { billingAccounts, users } = await import("@/shared/db/schema");
     await getSeedDb()
       .delete(billingAccounts)
@@ -185,69 +179,5 @@ describe("poly.copy_trade.targets — HTTP round-trip (component)", () => {
       params: Promise.resolve({ id: wrongId }),
     });
     expect(delRes.status).toBe(404);
-  });
-
-  it("POST creates poly_copy_trade_config{enabled:true} on a fresh tenant (CONFIG_ROW_AUTO_ENABLED_ON_FIRST_POST)", async () => {
-    // No pre-seed (beforeEach no longer seeds the config row).
-    const createReq = new NextRequest(
-      "http://localhost/api/v1/poly/copy-trade/targets",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ target_wallet: TARGET_WALLET }),
-      }
-    );
-    const createRes = await createTarget(createReq);
-    expect([200, 201]).toContain(createRes.status);
-    const body = (await createRes.json()) as {
-      target: { enabled: boolean };
-    };
-    expect(body.target.enabled).toBe(true);
-
-    // DB-level assertion — the row actually lives with enabled=true.
-    const configRows = await getSeedDb()
-      .select()
-      .from(polyCopyTradeConfig)
-      .where(eq(polyCopyTradeConfig.billingAccountId, billingAccountId));
-    expect(configRows).toHaveLength(1);
-    expect(configRows[0]?.enabled).toBe(true);
-    expect(configRows[0]?.createdByUserId).toBe(userId);
-  });
-
-  it("POST does NOT overwrite a pre-existing disabled config row (onConflictDoNothing honored)", async () => {
-    // Operator or kill-switch toggle previously set the tenant to disabled.
-    await getSeedDb()
-      .insert(polyCopyTradeConfig)
-      .values({
-        billingAccountId,
-        createdByUserId: userId,
-        enabled: false,
-      })
-      .onConflictDoNothing();
-
-    const createReq = new NextRequest(
-      "http://localhost/api/v1/poly/copy-trade/targets",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ target_wallet: TARGET_WALLET }),
-      }
-    );
-    const createRes = await createTarget(createReq);
-    expect([200, 201]).toContain(createRes.status);
-
-    // Config row still disabled — POST didn't flip it.
-    const configRows = await getSeedDb()
-      .select()
-      .from(polyCopyTradeConfig)
-      .where(eq(polyCopyTradeConfig.billingAccountId, billingAccountId));
-    expect(configRows).toHaveLength(1);
-    expect(configRows[0]?.enabled).toBe(false);
-
-    // The route reflects the current state — `enabled: false` in the response.
-    const body = (await createRes.json()) as {
-      target: { enabled: boolean };
-    };
-    expect(body.target.enabled).toBe(false);
   });
 });

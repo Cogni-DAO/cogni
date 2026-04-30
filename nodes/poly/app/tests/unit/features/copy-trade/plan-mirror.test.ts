@@ -3,9 +3,9 @@
 
 /**
  * Module: `@features/copy-trade/plan-mirror.test`
- * Purpose: Unit tests for the pure copy-trade `planMirrorFromFill()` function — kill-switch fail-closed, idempotency, mode=paper routing, happy path `{kind: "place"}`.
+ * Purpose: Unit tests for the pure copy-trade `planMirrorFromFill()` function — idempotency, mode=paper routing, happy path `{kind: "place"}`.
  * Scope: Pure function tests. Does not hit the DB, does not import adapters. Daily / hourly cap enforcement moved to `authorizeIntent` (CAPS_LIVE_IN_GRANT) and lives in adapter component tests.
- * Invariants: FAIL_CLOSED; IDEMPOTENT_BY_CLIENT_ID.
+ * Invariants: IDEMPOTENT_BY_CLIENT_ID. (bug.0438 dropped the kill-switch.)
  * Side-effects: none
  * Links: work/items/task.0318 (Phase B3)
  * @internal
@@ -47,7 +47,6 @@ const CONFIG: MirrorTargetConfig = {
     mirror_usdc: 1.0,
     max_usdc_per_trade: 1.0,
   },
-  enabled: true,
 };
 
 const CLEAN_STATE: RuntimeState = {
@@ -57,16 +56,6 @@ const CLEAN_STATE: RuntimeState = {
 const COID = clientOrderIdFor(TARGET_ID, FILL.fill_id);
 
 describe("planMirrorFromFill() — skip branches", () => {
-  it("kill_switch_off when config.enabled=false (fail-closed)", () => {
-    const d = planMirrorFromFill({
-      fill: FILL,
-      config: { ...CONFIG, enabled: false },
-      state: CLEAN_STATE,
-      client_order_id: COID,
-    });
-    expect(d).toEqual({ kind: "skip", reason: "kill_switch_off" });
-  });
-
   it("already_placed when client_order_id is in already_placed_ids", () => {
     const d = planMirrorFromFill({
       fill: FILL,
@@ -75,16 +64,6 @@ describe("planMirrorFromFill() — skip branches", () => {
       client_order_id: COID,
     });
     expect(d).toEqual({ kind: "skip", reason: "already_placed" });
-  });
-
-  it("short-circuits in order: kill > already > sizing", () => {
-    const d = planMirrorFromFill({
-      fill: FILL,
-      config: { ...CONFIG, enabled: false },
-      state: { already_placed_ids: [COID] },
-      client_order_id: COID,
-    });
-    expect(d.reason).toBe("kill_switch_off");
   });
 });
 

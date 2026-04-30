@@ -4,12 +4,12 @@
 /**
  * Module: `@features/copy-trade/plan-mirror`
  * Purpose: Pure copy-trade planning function — given a normalized Fill, the target config, and a runtime-state snapshot, return either `place` with a concrete OrderIntent or `skip` with a bounded reason code.
- * Scope: Pure function. Does not perform I/O, does not read env, does not import adapters. All runtime state (kill-switch, idempotency set) is supplied by the caller.
+ * Scope: Pure function. Does not perform I/O, does not read env, does not import adapters. All runtime state (idempotency set) is supplied by the caller.
  * Invariants:
- *   - FAIL_CLOSED — kill-switch disabled OR unreadable → caller synthesizes `{enabled: false}` and `planMirrorFromFill()` returns skip/kill_switch_off.
  *   - IDEMPOTENT_BY_CLIENT_ID — repeat of the same `(target_id, fill_id)` is silently dropped via `already_placed_ids`. Matches the DB PK on `poly_copy_trade_fills`.
  *   - PLAN_IS_PURE — no side effects; same input → same output.
  *   - CAPS_LIVE_IN_GRANT — daily / hourly USDC caps are enforced downstream by `PolyTraderWalletPort.authorizeIntent` against the tenant's `poly_wallet_grants` row. `planMirrorFromFill` is intentionally unaware of caps so a single cap decision lives in one place (the authorize boundary).
+ *   - NO_KILL_SWITCH (bug.0438): there is no per-tenant kill-switch gate. The active-target / active-grant chain in the cross-tenant enumerator is the only gate; an explicit POST of a target IS the user's opt-in.
  * Side-effects: none
  * Links: docs/spec/poly-multi-tenant-auth.md, work/items/task.0318
  * @public
@@ -102,15 +102,16 @@ function sizeFromPolicy(
  * Translate an observed target fill into a concrete mirror plan.
  *
  * Order of checks (short-circuits on the first skip reason):
- *   1. kill-switch off          → skip/kill_switch_off
- *   2. already placed (PK+cid)  → skip/already_placed
- *   3. sizing below market min  → skip/below_market_min
- *   4. mode === 'paper'         → place (paper adapter)
- *   5. otherwise                → place (live)
+ *   1. already placed (PK+cid)  → skip/already_placed
+ *   2. sizing below market min  → skip/below_market_min
+ *   3. mode === 'paper'         → place (paper adapter)
+ *   4. otherwise                → place (live)
  *
  * Daily / hourly caps are NOT checked here — those live on the tenant's
  * `poly_wallet_grants` row and are enforced by `authorizeIntent` at the
- * executor boundary (CAPS_LIVE_IN_GRANT invariant).
+ * executor boundary (CAPS_LIVE_IN_GRANT invariant). The kill-switch gate
+ * was removed in bug.0438; the cross-tenant enumerator's active-target /
+ * active-grant join is now the only gate to running this function.
  */
 export function planMirrorFromFill(input: PlanMirrorInput): MirrorPlan {
   const {
@@ -121,8 +122,6 @@ export function planMirrorFromFill(input: PlanMirrorInput): MirrorPlan {
     min_shares,
     min_usdc_notional,
   } = input;
-
-  if (!config.enabled) return { kind: "skip", reason: "kill_switch_off" };
 
   if (state.already_placed_ids.includes(client_order_id)) {
     return { kind: "skip", reason: "already_placed" };

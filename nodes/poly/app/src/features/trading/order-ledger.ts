@@ -3,11 +3,11 @@
 
 /**
  * Module: `@features/trading/order-ledger`
- * Purpose: Drizzle-backed `OrderLedger` adapter. Reads + writes `poly_copy_trade_fills` + `poly_copy_trade_decisions` + `poly_copy_trade_config` (tenant-scoped per migration 0029, RLS enforced when run on `appDb`). Every placement path (agent tool, mirror-coordinator, future WS ingester) reads + writes through this adapter. Callers are responsible for opening `withTenantScope(appDb, createdByUserId, ...)` around per-tenant writes; the cross-tenant mirror-poll enumerator is the only sanctioned BYPASSRLS reader.
+ * Purpose: Drizzle-backed `OrderLedger` adapter. Reads + writes `poly_copy_trade_fills` + `poly_copy_trade_decisions` (tenant-scoped, RLS enforced when run on `appDb`). Every placement path (agent tool, mirror-coordinator, future WS ingester) reads + writes through this adapter. Callers are responsible for opening `withTenantScope(appDb, createdByUserId, ...)` around per-tenant writes; the cross-tenant mirror-poll enumerator is the only sanctioned BYPASSRLS reader.
  * Scope: Drizzle queries only. Does not build a DB client (caller injects); does not import from `adapters/server/*` (layer boundary); does not know about copy-trade or wallet-watch (TRADING_IS_GENERIC).
  * Invariants:
  *   - TRADING_IS_GENERIC — no imports from `features/copy-trade/` or `features/wallet-watch/`.
- *   - FAIL_CLOSED_ON_CONFIG_READ — `snapshotState` returns `{enabled: false, ...zeroes}` on any DB error and logs at `warn`. Never throws.
+ *   - FAIL_CLOSED_ON_SNAPSHOT_READ — `snapshotState` returns zeroes/empty arrays on any DB error and logs at `warn`. Never throws. (bug.0438 dropped the kill-switch read; only cap counters + dedup keys remain.)
  *   - INSERT_IS_IDEMPOTENT — `insertPending` uses `ON CONFLICT (target_id, fill_id) DO NOTHING`, so repeat inserts are silent no-ops. Ordering guarantee lives in the caller, not here.
  *   - STATUS_ENUM_PINNED — the `status` CHECK in migration 0027 rejects any writer that tries to store an unknown value; that + `LedgerStatus` keep the runtime + schema in sync.
  *   - CAPS_COUNT_INTENTS — `today_spent_usdc` + `fills_last_hour` count every row whose `observed_at` falls in the window, regardless of terminal status. Matches `decide.ts::INTENT_BASED_CAPS`.
@@ -19,7 +19,6 @@
 
 import { EVENT_NAMES } from "@cogni/node-shared";
 import {
-  polyCopyTradeConfig,
   polyCopyTradeDecisions,
   polyCopyTradeFills,
 } from "@cogni/poly-db-schema/copy-trade";
@@ -58,13 +57,8 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
       billing_account_id: string
     ): Promise<StateSnapshot> {
       try {
-        // Four concurrent reads — one round-trip to postgres-js, four statements.
-        const [configRows, spendRows, rateRows, cidRows] = await Promise.all([
-          deps.db
-            .select({ enabled: polyCopyTradeConfig.enabled })
-            .from(polyCopyTradeConfig)
-            .where(eq(polyCopyTradeConfig.billingAccountId, billing_account_id))
-            .limit(1),
+        // Three concurrent reads — one round-trip to postgres-js, three statements.
+        const [spendRows, rateRows, cidRows] = await Promise.all([
           // Caps are INTENT-based (CAPS_COUNT_INTENTS invariant): filter by
           // `created_at` (when we inserted the pending row) — NOT by
           // `observed_at` (the upstream fill time, which can be arbitrarily old
@@ -103,13 +97,11 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
             .where(eq(polyCopyTradeFills.targetId, target_id)),
         ]);
 
-        const enabled = configRows[0]?.enabled ?? false;
         const today_spent_usdc = Number(spendRows[0]?.spent ?? 0);
         const fills_last_hour = Number(rateRows[0]?.n ?? 0);
         const already_placed_ids = cidRows.map((r) => r.cid);
 
         return {
-          enabled,
           today_spent_usdc,
           fills_last_hour,
           already_placed_ids,
@@ -123,10 +115,9 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
             target_id,
             err: err instanceof Error ? err.message : String(err),
           },
-          "order-ledger snapshot failed; returning enabled=false"
+          "order-ledger snapshot failed; returning zeroes"
         );
         return {
-          enabled: false,
           today_spent_usdc: 0,
           fills_last_hour: 0,
           already_placed_ids: [],

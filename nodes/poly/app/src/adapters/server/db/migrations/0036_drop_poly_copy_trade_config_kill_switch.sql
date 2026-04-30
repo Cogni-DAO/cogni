@@ -1,0 +1,1 @@
+DROP TABLE "poly_copy_trade_config" CASCADE;

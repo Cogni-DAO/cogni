@@ -87,7 +87,6 @@ export function buildMirrorTargetConfig(params: {
       kind: "min_bet",
       max_usdc_per_trade: MIRROR_MAX_USDC_PER_TRADE,
     },
-    enabled: true, // overwritten per-tick by the runtime kill-switch snapshot
   };
 }
 

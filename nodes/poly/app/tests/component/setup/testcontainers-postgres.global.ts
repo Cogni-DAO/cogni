@@ -88,10 +88,10 @@ export async function setup() {
 
   // Run POLY migrations (not operator's) as app_user (DB owner, same as production).
   // Poly's migrations include every core migration 0001-0027 verbatim AND the
-  // poly-specific 0028 (`synced_at`) + 0029 (tenant scoping). Using
+  // poly-specific later migrations (e.g. 0028 `synced_at`, 0035 auto-wrap
+  // consent columns, and the bug.0438 drop of `poly_copy_trade_config`). Using
   // `db:migrate:direct` would stop at operator's 0027 and miss those — which
-  // breaks any poly component test that touches `poly_copy_trade_targets` or the
-  // per-tenant `poly_copy_trade_config` PK introduced in 0029.
+  // breaks any poly component test that touches `poly_copy_trade_targets`.
   execSync("pnpm -w db:migrate:poly:container", { stdio: "inherit" });
 
   // ── Preflight: verify service role can connect (BYPASSRLS) ─────────────

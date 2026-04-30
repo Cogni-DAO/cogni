@@ -10,8 +10,9 @@
  * Invariants:
  *   - TENANT_SCOPED: rows are RLS-clamped to `created_by_user_id = current_setting('app.current_user_id', true)`.
  *     Cross-tenant reads/writes blocked at the DB layer.
- *   - GLOBAL_KILL_SWITCH_PER_TENANT: every target row shares its tenant's
- *     `poly_copy_trade_config.enabled` row — no per-target enable flag.
+ *   - NO_KILL_SWITCH (bug.0438): there is no per-tenant kill-switch field on
+ *     the wire. The act of POSTing a target IS the user's opt-in; DELETE of
+ *     the target row is the only way to stop mirror placements.
  *   - SOURCE_REFLECTS_PORT: the `source` field reflects which `CopyTradeTargetSource` impl
  *     produced the row (`"env"` for the local-dev fallback, `"db"` for production).
  * Side-effects: none
@@ -37,8 +38,6 @@ const targetSchema = z.object({
   mode: z.enum(["paper", "live"]),
   /** Fixed mirror notional per fill (USDC). Operator-wide scaffolding in Phase A. */
   mirror_usdc: z.number().positive(),
-  /** Mirrors the per-tenant `poly_copy_trade_config.enabled` row. */
-  enabled: z.boolean(),
   /** Provenance: `"env"` for the local-dev fallback; `"db"` once `dbTargetSource` is wired. */
   source: z.enum(["env", "db"]),
 });

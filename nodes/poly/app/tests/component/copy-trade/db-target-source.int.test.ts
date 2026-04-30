@@ -22,7 +22,6 @@ import type { Database } from "@cogni/db-client";
 import { billingAccounts, users } from "@cogni/db-schema";
 import { toUserId, userActor } from "@cogni/ids";
 import {
-  polyCopyTradeConfig,
   polyCopyTradeTargets,
   polyWalletConnections,
   polyWalletGrants,
@@ -115,14 +114,8 @@ describe("dbTargetSource (component, RLS)", () => {
         ownerUserId: t.userId,
         balanceCredits: 0n,
       });
-      // Per-tenant kill-switch ENABLED — required for the enumerator to surface rows.
-      await superDb.insert(polyCopyTradeConfig).values({
-        billingAccountId: t.billingAccountId,
-        createdByUserId: t.userId,
-        enabled: true,
-      });
-      // Stage 3: listAllActive now inner-joins wallet_connections + wallet_grants.
-      // Without these rows, the enumerator filters the tenant out entirely.
+      // listAllActive inner-joins wallet_connections + wallet_grants. Without
+      // these rows, the enumerator filters the tenant out entirely.
       await seedWalletConnectionAndGrant(superDb, t);
     }
 
@@ -248,45 +241,6 @@ describe("dbTargetSource (component, RLS)", () => {
     // Attribution carries created_by_user_id alongside billing.
     for (const r of aRows) expect(r.createdByUserId).toBe(tenantA.userId);
     for (const r of bRows) expect(r.createdByUserId).toBe(tenantB.userId);
-  });
-
-  it("disabling a tenant's config drops their rows from listAllActive (per-tenant kill-switch)", async () => {
-    // Flip tenantA's kill-switch off via service role.
-    await superDb
-      .update(polyCopyTradeConfig)
-      .set({ enabled: false })
-      .where(
-        eq(polyCopyTradeConfig.billingAccountId, tenantA.billingAccountId)
-      );
-
-    const source = dbTargetSource({
-      appDb: appDb as unknown as PostgresJsDatabase<Record<string, unknown>>,
-      serviceDb: superDb as unknown as PostgresJsDatabase<
-        Record<string, unknown>
-      >,
-    });
-
-    const enumerated = await source.listAllActive();
-    const aRows = enumerated.filter(
-      (e) => e.billingAccountId === tenantA.billingAccountId
-    );
-    const bRows = enumerated.filter(
-      (e) => e.billingAccountId === tenantB.billingAccountId
-    );
-
-    expect(aRows).toHaveLength(0);
-    // tenantB unaffected.
-    expect(bRows.map((r) => r.targetWallet).sort()).toEqual(
-      [TARGET_B, TARGET_SHARED].sort()
-    );
-
-    // Restore for any later tests in the same suite.
-    await superDb
-      .update(polyCopyTradeConfig)
-      .set({ enabled: true })
-      .where(
-        eq(polyCopyTradeConfig.billingAccountId, tenantA.billingAccountId)
-      );
   });
 
   it("listAllActive drops tenants whose wallet_grant is revoked (Stage 3 join)", async () => {

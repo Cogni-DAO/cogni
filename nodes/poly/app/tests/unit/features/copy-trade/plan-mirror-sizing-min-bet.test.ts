@@ -37,7 +37,6 @@ function makeConfig(max_usdc_per_trade: number): MirrorTargetConfig {
       kind: "min_bet",
       max_usdc_per_trade,
     },
-    enabled: true,
   };
 }
 

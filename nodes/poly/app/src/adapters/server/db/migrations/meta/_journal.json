@@ -253,6 +253,13 @@
       "when": 1778000000000,
       "tag": "0035_poly_auto_wrap_consent_loop",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1778000100000,
+      "tag": "0036_drop_poly_copy_trade_config_kill_switch",
+      "breakpoints": true
     }
   ]
 }

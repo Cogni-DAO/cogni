@@ -16,8 +16,10 @@
  *     `created_by_user_id` equals `userId` under appDb's RLS clamp. The cross-tenant
  *     enumerator is a separate, explicitly-named method (`listAllActive`) that runs
  *     under serviceDb and is the ONLY place that observes more than one tenant.
- *   - NO_PER_TARGET_ENABLED — the per-tenant `poly_copy_trade_config.enabled` row is
- *     the only kill-switch. No per-row enable flag.
+ *   - NO_KILL_SWITCH (bug.0438): the active-target × active-connection × active-grant
+ *     join in `listAllActive` is the sole gate. There is no per-tenant kill-switch
+ *     table; per-target sizing/caps live on `poly_wallet_grants`, not on a separate
+ *     config row.
  *   - ENV_IMPL_LOCAL_DEV_ONLY — `envTargetSource` is wired only when APP_ENV=test;
  *     production wires `dbTargetSource`.
  * Side-effects: dbTargetSource → DB I/O. envTargetSource → none.
@@ -33,7 +35,6 @@ import {
   COGNI_SYSTEM_PRINCIPAL_USER_ID,
 } from "@cogni/node-shared";
 import {
-  polyCopyTradeConfig,
   polyCopyTradeTargets,
   polyWalletConnections,
   polyWalletGrants,
@@ -78,9 +79,10 @@ export interface CopyTradeTargetSource {
   /**
    * **The ONE sanctioned cross-tenant read path.** Returns every active
    * (target_wallet, billing_account_id, created_by_user_id) triple for tenants
-   * whose `poly_copy_trade_config.enabled = true`. Runs under serviceDb
-   * (BYPASSRLS) — used exclusively by the autonomous mirror poll. Every
-   * downstream write fans out under `withTenantScope(appDb, createdByUserId)`.
+   * with an active target × active wallet connection × active grant. Runs
+   * under serviceDb (BYPASSRLS) — used exclusively by the autonomous mirror
+   * poll. Every downstream write fans out under
+   * `withTenantScope(appDb, createdByUserId)`.
    */
   listAllActive(): Promise<readonly EnumeratedTarget[]>;
 }
@@ -140,7 +142,7 @@ export interface DbTargetSourceDeps {
 }
 
 /**
- * DB-backed target source over `poly_copy_trade_targets` × `poly_copy_trade_config`.
+ * DB-backed target source over `poly_copy_trade_targets`.
  *
  * @public
  */
@@ -166,14 +168,14 @@ export function dbTargetSource(
     },
 
     async listAllActive(): Promise<readonly EnumeratedTarget[]> {
-      // The ONE sanctioned BYPASSRLS read. Joins:
-      //   targets × config  — only tenants with kill-switch ON
-      //   × wallet_connections (status='active')  — only tenants with a live trader wallet
-      //   × wallet_grants (revoked_at IS NULL, expires_at > now or NULL) — only tenants with an active grant
-      // Net effect: `listAllActive` returns exactly the tenants for whom the
-      // per-tenant path can actually sign + `authorizeIntent` will let through.
-      // Side benefit: the system-tenant prototype drops out of the mirror fan-out
-      // until Stage 4 back-fills a grant row.
+      // The ONE sanctioned BYPASSRLS read. Joins (bug.0438 dropped the
+      // poly_copy_trade_config kill-switch join):
+      //   targets (disabled_at IS NULL)         — active tracked rows only
+      //   × wallet_connections (revoked_at IS NULL) — tenants with a live trader wallet
+      //   × wallet_grants (revoked_at IS NULL, expires_at > now or NULL) — active grant
+      // Net effect: returns exactly the tenants for whom the per-tenant path
+      // can actually sign + `authorizeIntent` will let through. The act of
+      // having an active target row IS the user's opt-in signal.
       const rows = await deps.serviceDb
         .select({
           billing_account_id: polyCopyTradeTargets.billingAccountId,
@@ -181,13 +183,6 @@ export function dbTargetSource(
           target_wallet: polyCopyTradeTargets.targetWallet,
         })
         .from(polyCopyTradeTargets)
-        .innerJoin(
-          polyCopyTradeConfig,
-          eq(
-            polyCopyTradeConfig.billingAccountId,
-            polyCopyTradeTargets.billingAccountId
-          )
-        )
         .innerJoin(
           polyWalletConnections,
           and(
@@ -209,12 +204,7 @@ export function dbTargetSource(
             )
           )
         )
-        .where(
-          and(
-            isNull(polyCopyTradeTargets.disabledAt),
-            eq(polyCopyTradeConfig.enabled, true)
-          )
-        )
+        .where(isNull(polyCopyTradeTargets.disabledAt))
         .orderBy(polyCopyTradeTargets.createdAt);
 
       return rows.map((r) => ({

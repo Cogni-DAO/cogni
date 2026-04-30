@@ -17,12 +17,11 @@
  *     `DrizzleConnectionBrokerAdapter.resolve()`). Read paths (GET / DELETE) rely on
  *     the RLS clamp alone — they project bare wallet strings or do RLS-scoped
  *     UPDATE-by-id; there is no row-shaped tenant column to defense-check.
- *   - CONFIG_ROW_AUTO_ENABLED_ON_FIRST_POST: POST upserts `poly_copy_trade_config`
- *     with `enabled: true` inside the same tenant-scoped tx as the target insert.
- *     `ON CONFLICT (billing_account_id) DO NOTHING` — pre-existing rows (enabled
- *     OR user-disabled) are never overwritten. Ref bug.0338.
- *   - GLOBAL_KILL_SWITCH_PER_TENANT: `enabled` field reflects the tenant's
- *     `poly_copy_trade_config.enabled` row. Read once per request.
+ *   - NO_KILL_SWITCH (bug.0438): copy-trade no longer has a per-tenant kill-switch
+ *     table — the act of having an active target row IS the user's opt-in. The
+ *     route writes only the `poly_copy_trade_targets` row; the cross-tenant
+ *     enumerator's active-target × active-connection × active-grant join is the
+ *     only gate to autonomous mirror placement.
  * Side-effects: IO (Postgres reads + writes via appDb).
  * Notes: DELETE lives in `[id]/route.ts`. Phase B replaces the operator-wide
  *        scaffolding caps with per-tenant grants from `poly_wallet_grants`.
@@ -32,10 +31,7 @@
 
 import { withTenantScope } from "@cogni/db-client";
 import { toUserId, userActor } from "@cogni/ids";
-import {
-  polyCopyTradeConfig,
-  polyCopyTradeTargets,
-} from "@cogni/poly-db-schema";
+import { polyCopyTradeTargets } from "@cogni/poly-db-schema";
 import {
   type PolyCopyTradeTarget,
   polyCopyTradeTargetCreateOperation,
@@ -62,7 +58,6 @@ function buildTargetView(params: {
   targetWallet: `0x${string}`;
   billingAccountId: string;
   createdByUserId: string;
-  enabled: boolean;
   source: "env" | "db";
 }): PolyCopyTradeTarget {
   const config = buildMirrorTargetConfig({
@@ -83,7 +78,6 @@ function buildTargetView(params: {
       config.sizing.kind === "fixed"
         ? config.sizing.mirror_usdc
         : config.sizing.max_usdc_per_trade,
-    enabled: params.enabled,
     source: params.source,
   };
 }
@@ -115,28 +109,12 @@ export const GET = wrapRouteHandlerWithLogging(
       );
     }
 
-    // Per-tenant kill-switch — single read for all rows in this response.
-    // `snapshotState` is called against any one of the synthetic per-wallet
-    // target_ids; the kill-switch read is keyed on `billing_account_id`.
-    const firstRow = rows[0];
-    if (!firstRow) throw new Error("unreachable"); // guarded by rows.length === 0 above
-    const firstConfig = buildMirrorTargetConfig({
-      targetWallet: firstRow.targetWallet,
-      billingAccountId: account.id,
-      createdByUserId: sessionUser.id,
-    });
-    const snapshot = await container.orderLedger.snapshotState(
-      firstConfig.target_id,
-      account.id
-    );
-
     const targets = rows.map((row) =>
       buildTargetView({
         id: row.id,
         targetWallet: row.targetWallet,
         billingAccountId: account.id,
         createdByUserId: sessionUser.id,
-        enabled: snapshot.enabled,
         source: "db",
       })
     );
@@ -184,38 +162,26 @@ export const POST = wrapRouteHandlerWithLogging(
     >;
     const actorId = userActor(toUserId(sessionUser.id));
 
-    // INSERT target + upsert tenant config under withTenantScope in a single
-    // RLS-clamped transaction. POST is the opt-in act: a fresh tenant gets
-    // config{enabled:true}; a pre-existing row (enabled OR user-disabled) is
-    // left alone via ON CONFLICT DO NOTHING. Spec: CONFIG_ROW_AUTO_ENABLED_ON_FIRST_POST.
-    const insertedRows = await withTenantScope(appDb, actorId, async (tx) => {
-      await tx
-        .insert(polyCopyTradeConfig)
+    // INSERT target under withTenantScope. Adding a target IS the opt-in act
+    // (bug.0438 dropped the per-tenant kill-switch table — there's nothing
+    // else to upsert here).
+    const insertedRows = await withTenantScope(appDb, actorId, async (tx) =>
+      tx
+        .insert(polyCopyTradeTargets)
         .values({
           billingAccountId: account.id,
           createdByUserId: sessionUser.id,
-          enabled: true,
+          targetWallet,
         })
-        .onConflictDoNothing();
-
-      return (
-        tx
-          .insert(polyCopyTradeTargets)
-          .values({
-            billingAccountId: account.id,
-            createdByUserId: sessionUser.id,
-            targetWallet,
-          })
-          // Conflict resolves against the partial unique index
-          // `poly_copy_trade_targets_billing_wallet_active_idx` (WHERE disabled_at IS NULL).
-          .onConflictDoNothing()
-          .returning({
-            id: polyCopyTradeTargets.id,
-            billing_account_id: polyCopyTradeTargets.billingAccountId,
-            created_by_user_id: polyCopyTradeTargets.createdByUserId,
-          })
-      );
-    });
+        // Conflict resolves against the partial unique index
+        // `poly_copy_trade_targets_billing_wallet_active_idx` (WHERE disabled_at IS NULL).
+        .onConflictDoNothing()
+        .returning({
+          id: polyCopyTradeTargets.id,
+          billing_account_id: polyCopyTradeTargets.billingAccountId,
+          created_by_user_id: polyCopyTradeTargets.createdByUserId,
+        })
+    );
 
     let inserted = insertedRows[0];
     if (!inserted) {
@@ -261,23 +227,11 @@ export const POST = wrapRouteHandlerWithLogging(
       return NextResponse.json({ error: "Tenant mismatch" }, { status: 500 });
     }
 
-    // Read kill-switch for the response shape.
-    const config = buildMirrorTargetConfig({
-      targetWallet,
-      billingAccountId: account.id,
-      createdByUserId: sessionUser.id,
-    });
-    const snapshot = await container.orderLedger.snapshotState(
-      config.target_id,
-      account.id
-    );
-
     const target = buildTargetView({
       id: inserted.id,
       targetWallet,
       billingAccountId: account.id,
       createdByUserId: sessionUser.id,
-      enabled: snapshot.enabled,
       source: "db",
     });
 

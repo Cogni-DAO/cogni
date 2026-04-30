@@ -231,7 +231,7 @@ async function processFill(
 
   const plan = planMirrorFromFill({
     fill,
-    config: { ...deps.target, enabled: snapshot.enabled },
+    config: deps.target,
     state: {
       already_placed_ids: snapshot.already_placed_ids,
       cumulative_intent_usdc_for_market,

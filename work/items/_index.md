@@ -181,6 +181,7 @@
 | 1 | 7 | 5 | needs_merge | task.0189 | Dashboard P0→P1 bridge: thread linking, page consolidation, public Cogni Live, streaming status | Live Operations Dashboard | proj.live-dashboard |
 | 1 | 8 | 3 | needs_triage | bug.0004 | /activity dashboard cost column broken — charge_receipts needs linked telemetry | Payments & Billing Enhancements | proj.payments-enhancements |
 | 1 | 9 | 2 | needs_design | task.0062 | Standardized LiteLLM model update workflow — REQUIRED billing validation for all new models | Reliability & Uptime | proj.reliability |
+| 1 | 9 | 1 | needs_review | bug.0438 | Purge poly_copy_trade_config kill-switch table — never had a real use, permanently locked tenants out of copy-trade with no UI path back | Cogni Poly | proj.poly-copy-trading |
 | 1 | 10 | 3 | needs_design | task.0123 | Scope-aware epoch API routing | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 10 | 2 | needs_implement | task.0138 | Manual epoch collection trigger endpoint | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 10 | 3 | needs_merge | bug.0195 | TigerBeetle unreachable in all envs — native client floods ~72M garbage log lines/day to Grafana Cloud | Financial Ledger | proj.financial-ledger |

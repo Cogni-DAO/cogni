@@ -82,8 +82,6 @@ export const MirrorTargetConfigSchema = z.object({
   mode: z.enum(["live", "paper"]),
   /** Per-target sizing policy. See SizingPolicySchema. */
   sizing: SizingPolicySchema,
-  /** Per-tenant kill-switch state (read from `poly_copy_trade_config.enabled`). */
-  enabled: z.boolean(),
 });
 export type MirrorTargetConfig = z.infer<typeof MirrorTargetConfigSchema>;
 
@@ -114,7 +112,6 @@ export type RuntimeState = z.infer<typeof RuntimeStateSchema>;
  * (`poly_mirror_decisions_total{outcome, reason}`). Keep small + stable.
  */
 export const MirrorReasonSchema = z.enum([
-  "kill_switch_off",
   "already_placed",
   "mode_paper",
   "market_unknown",
