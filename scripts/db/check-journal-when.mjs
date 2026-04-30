@@ -12,7 +12,7 @@
  * Invariants:
  *   1. Entries' `when` values are STRICTLY MONOTONIC INCREASING in idx order.
  *   2. No entry's `when` is in the future (> Date.now()).
- * Side-effects: stdout/stderr only. exit 1 on violation.
+ * Side-effects: IO (filesystem reads), process.env (CWD only).
  * Links: docs/spec/databases.md §2.6, .claude/skills/schema-update/SKILL.md
  */
 
