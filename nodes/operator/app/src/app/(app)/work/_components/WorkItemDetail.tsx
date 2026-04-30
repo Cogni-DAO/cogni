@@ -74,7 +74,7 @@ export function WorkItemDetail({
                 <StatusPill status={item.status} />
                 {item.priority != null && (
                   <span className="inline-flex rounded-md bg-muted px-2 py-0.5 font-medium text-xs">
-                    P{item.priority}
+                    {item.priority}
                   </span>
                 )}
                 {item.estimate != null && (

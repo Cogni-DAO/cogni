@@ -46,7 +46,7 @@ export const columns = [
         return <span className="text-muted-foreground">&mdash;</span>;
       return (
         <span className="inline-flex w-7 justify-center rounded-md bg-muted px-1.5 py-0.5 font-medium text-xs">
-          P{v}
+          {v}
         </span>
       );
     },
