@@ -3,12 +3,8 @@
 
 /**
  * Module: `@scripts/db/check-journal-when`
- * Purpose: Fail-loud guard against the silent-skip regression — drizzle-orm's runtime migrator
- *   sorts journal entries by `when` and stamps `__drizzle_migrations.created_at = folderMillis`.
- *   Any entry whose `when` is ≤ the prior entry's `when` (or future-dated past Date.now()) gets
- *   silently no-op'd on candidate-a / preview / prod. Two PRs hit this in April 2026.
- * Scope: Validates every per-node `meta/_journal.json` (Postgres + Doltgres) found in the repo.
- *   Run as part of `pnpm db:check` (pre-push + CI gate).
+ * Purpose: Fail-loud guard against the silent-skip migration regression — fails CI when a node's `meta/_journal.json` `when` values are non-monotonic, the failure mode that bit poly 0034 + 0035 in April 2026.
+ * Scope: Validates every per-node Postgres + Doltgres journal under `nodes/*`. Does not run drizzle-kit, does not connect to a database, does not modify journal files.
  * Invariants:
  *   1. Entries' `when` values are STRICTLY MONOTONIC INCREASING in idx order.
  *   2. No entry's `when` is in the future (> Date.now()).
