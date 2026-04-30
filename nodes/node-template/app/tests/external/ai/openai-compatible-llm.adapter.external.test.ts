@@ -65,8 +65,8 @@ describe.skipIf(!ollamaAvailable)(
       expect(res.ok).toBe(true);
       const data = (await res.json()) as { data?: Array<{ id: string }> };
       expect(data.data).toBeDefined();
-      expect(data.data!.length).toBeGreaterThan(0);
-      modelId = data.data![0]!.id;
+      expect(data.data?.length).toBeGreaterThan(0);
+      modelId = data.data?.[0]?.id;
     });
 
     it("completion() returns valid LlmCompletionResult", async () => {

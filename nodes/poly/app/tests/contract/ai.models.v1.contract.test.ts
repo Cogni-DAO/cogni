@@ -94,8 +94,8 @@ describe("ai.models.v1 contract validation", () => {
     if (fixture.defaultRef) {
       const match = fixture.models.find(
         (m) =>
-          m.ref.providerKey === fixture.defaultRef!.providerKey &&
-          m.ref.modelId === fixture.defaultRef!.modelId
+          m.ref.providerKey === fixture.defaultRef?.providerKey &&
+          m.ref.modelId === fixture.defaultRef?.modelId
       );
       expect(match).toBeDefined();
     }

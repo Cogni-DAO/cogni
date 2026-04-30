@@ -167,7 +167,7 @@ export function TradingWalletCard(): ReactElement {
             ctaLabel="Connect wallet →"
             href="/credits"
           />
-        ) : statusData && statusData.connected && !statusData.trading_ready ? (
+        ) : statusData?.connected && !statusData.trading_ready ? (
           <OnboardingCta
             message="Trading not enabled — finish approvals to copy-trade."
             ctaLabel="Enable trading →"

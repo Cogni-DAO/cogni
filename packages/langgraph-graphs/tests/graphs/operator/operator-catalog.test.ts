@@ -55,7 +55,7 @@ describe("operator catalog entries", () => {
     expect(poet.displayName).toBe("Poet");
     expect(poet.systemPrompt).toBeUndefined();
 
-    const brain = LANGGRAPH_CATALOG["brain"];
+    const brain = LANGGRAPH_CATALOG.brain;
     expect(brain).toBeDefined();
     expect(brain.systemPrompt).toBeUndefined();
 
