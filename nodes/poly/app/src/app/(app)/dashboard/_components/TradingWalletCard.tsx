@@ -46,7 +46,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components";
-import { BalanceBar, WalletProfitLossCard } from "@/features/wallet-analysis";
+import {
+  BalanceBar,
+  TimeWindowHeader,
+  WalletProfitLossCard,
+} from "@/features/wallet-analysis";
 import { cn } from "@/shared/util/cn";
 import { useTradingWalletOverview } from "../_hooks/useTradingWalletOverview";
 
@@ -199,10 +203,14 @@ export function TradingWalletCard(): ReactElement {
                 <Metric label="Total" value={formatUsd(data.usdc_total)} />
               </div>
             )}
+            <TimeWindowHeader
+              interval={interval}
+              onIntervalChange={setInterval}
+              pnlHistory={data.pnlHistory}
+            />
             <WalletProfitLossCard
               history={data.pnlHistory}
               interval={interval}
-              onIntervalChange={setInterval}
             />
           </div>
         )}

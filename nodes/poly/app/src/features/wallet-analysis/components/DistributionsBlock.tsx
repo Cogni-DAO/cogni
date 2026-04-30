@@ -18,6 +18,7 @@
 import type {
   FlatHistogram,
   Histogram,
+  PolyWalletOverviewInterval,
   WalletAnalysisDistributions,
 } from "@cogni/poly-node-contracts";
 import { type ReactElement, type ReactNode, useState } from "react";
@@ -29,12 +30,20 @@ export type DistributionsBlockProps = {
   data?: WalletAnalysisDistributions | undefined;
   isLoading?: boolean | undefined;
   isError?: boolean | undefined;
+  /**
+   * The page-level selected window. When the live data range (`data.range`)
+   * doesn't cover the selected window, we render a "missing detail" notice
+   * with a stub click-handler — the persistence layer that would fetch the
+   * older fills is D2/D3 work.
+   */
+  selectedInterval?: PolyWalletOverviewInterval | undefined;
 };
 
 export function DistributionsBlock({
   data,
   isLoading,
   isError,
+  selectedInterval,
 }: DistributionsBlockProps): ReactElement {
   const [viewMode, setViewMode] =
     useState<WalletDistributionsViewMode>("count");
@@ -71,16 +80,22 @@ export function DistributionsBlock({
 
   const pendingPct = (data.pendingShare.byCount * 100).toFixed(0);
   const pendingUsdcPct = (data.pendingShare.byUsdc * 100).toFixed(0);
+  const gap = selectedInterval
+    ? coverageGap(selectedInterval, data.range.fromTs)
+    : null;
 
   return (
     <Section
-      title="Order-flow patterns"
+      title="Trade detail"
       caption={
         <>
-          <span className="font-mono">{data.range.n}</span> fills over{" "}
-          <span className="font-mono">{fmtRange(data.range.fromTs, data.range.toTs)}</span>
+          <span className="font-mono">{data.range.n}</span> trades on{" "}
+          <span className="font-mono">
+            {fmtRange(data.range.fromTs, data.range.toTs)}
+          </span>
           {" · "}
-          <span className="font-mono">{pendingPct}%</span> on markets that haven't resolved yet
+          <span className="font-mono">{pendingPct}%</span> still waiting to
+          resolve
           {viewMode === "usdc" ? (
             <>
               {" "}
@@ -91,6 +106,7 @@ export function DistributionsBlock({
       }
       toolbar={<ViewModeToggle viewMode={viewMode} onChange={setViewMode} />}
     >
+      {gap ? <CoverageNotice gap={gap} /> : null}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <ChartCard
           title="Entries per outcome"
@@ -405,4 +421,84 @@ function fmtRange(fromTs: number, toTs: number): string {
   const to = new Date(toTs * 1000).toISOString().slice(0, 10);
   if (from === to) return from;
   return `${from} → ${to}`;
+}
+
+type CoverageGap = Readonly<{
+  windowLabel: string;
+  /** True when we have NO trade-detail data inside the selected window. */
+  fully: boolean;
+}>;
+
+const SEC_PER_DAY = 86_400;
+const INTERVAL_DAYS: Record<PolyWalletOverviewInterval, number> = {
+  "1D": 1,
+  "1W": 7,
+  "1M": 30,
+  "1Y": 365,
+  YTD: 365,
+  ALL: 365 * 5,
+};
+
+function coverageGap(
+  interval: PolyWalletOverviewInterval,
+  earliestSeenTs: number
+): CoverageGap | null {
+  if (earliestSeenTs <= 0) return null;
+  const windowDays = INTERVAL_DAYS[interval];
+  // Live mode covers the most recent ~1000 fills. If the earliest fill is
+  // already older than the selected window, we cover it — no gap.
+  const nowSec = Math.floor(Date.now() / 1000);
+  const windowStartSec = nowSec - windowDays * SEC_PER_DAY;
+  if (earliestSeenTs <= windowStartSec) return null;
+
+  // Window extends past what we have. If the gap covers the entire window,
+  // mark `fully` so the notice copy reflects "no detail at all".
+  const fully = earliestSeenTs >= nowSec - SEC_PER_DAY;
+  return { windowLabel: humanWindow(interval), fully };
+}
+
+function humanWindow(interval: PolyWalletOverviewInterval): string {
+  switch (interval) {
+    case "1D":
+      return "the last day";
+    case "1W":
+      return "the last week";
+    case "1M":
+      return "the last month";
+    case "1Y":
+      return "the last year";
+    case "YTD":
+      return "this year";
+    case "ALL":
+      return "the full history";
+  }
+}
+
+function CoverageNotice({ gap }: { gap: CoverageGap }): ReactElement {
+  const message = gap.fully
+    ? `Detailed trades for ${gap.windowLabel} aren't loaded yet.`
+    : `Some of ${gap.windowLabel} isn't loaded yet — bars below show only what we have.`;
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        // Stub for v0. The real fetch path lands with the persistence layer
+        // (Doltgres `poly_target_fills` + delta job). Until then, clicking
+        // surfaces a discreet placeholder via window.alert — toast system
+        // isn't wired yet for this surface.
+        if (typeof window !== "undefined") {
+          window.alert(
+            "Detailed trades for this period aren't loaded yet. Coming soon."
+          );
+        }
+      }}
+      className={cn(
+        "flex w-full items-center justify-between gap-3 rounded-lg border border-dashed border-muted-foreground/40 bg-muted/20 px-4 py-3 text-left text-sm transition-colors",
+        "hover:border-muted-foreground/60 hover:bg-muted/30"
+      )}
+    >
+      <span className="text-muted-foreground">{message}</span>
+      <span className="font-medium text-foreground text-xs">Load details →</span>
+    </button>
+  );
 }

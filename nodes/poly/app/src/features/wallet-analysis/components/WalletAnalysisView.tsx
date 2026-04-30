@@ -29,6 +29,7 @@ import { DistributionsBlock } from "./DistributionsBlock";
 import { EdgeHypothesis } from "./EdgeHypothesis";
 import { RecentTradesTable } from "./RecentTradesTable";
 import { StatGrid } from "./StatGrid";
+import { TimeWindowHeader } from "./TimeWindowHeader";
 import { TopMarketsList } from "./TopMarketsList";
 import { TradesPerDayChart } from "./TradesPerDayChart";
 import { WalletIdentityHeader } from "./WalletIdentityHeader";
@@ -152,11 +153,19 @@ function PageVariant({
           <BalanceBar balance={data.balance} isLoading={isLoading?.balance} />
         )}
 
+        {pnlInterval && onPnlIntervalChange ? (
+          <TimeWindowHeader
+            interval={pnlInterval}
+            onIntervalChange={onPnlIntervalChange}
+            pnlHistory={data.pnl?.history}
+            isLoading={isLoading?.pnl}
+          />
+        ) : null}
+
         {(data.pnl || isLoading?.pnl || pnlInterval) && (
           <WalletProfitLossCard
             history={data.pnl?.history}
             interval={pnlInterval ?? data.pnl?.interval ?? "ALL"}
-            onIntervalChange={onPnlIntervalChange}
             isLoading={isLoading?.pnl}
           />
         )}
@@ -190,6 +199,7 @@ function PageVariant({
           <DistributionsBlock
             data={data.distributions}
             isLoading={isLoading?.distributions}
+            selectedInterval={pnlInterval}
           />
         )}
 

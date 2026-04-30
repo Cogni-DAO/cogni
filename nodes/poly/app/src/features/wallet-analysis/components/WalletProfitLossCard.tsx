@@ -3,9 +3,8 @@
 
 /**
  * Module: `@features/wallet-analysis/components/WalletProfitLossCard`
- * Purpose: Shared Polymarket-style profit/loss panel used by the dashboard
- *          trading wallet and the reusable wallet-analysis drawer/page.
- * Scope: Presentational only. Accepts props + callback; does not fetch.
+ * Purpose: Profit/loss panel — windowed-delta number + area chart for the current `interval`. Stateless presenter; the interval is owned by the parent (page-level `TimeWindowHeader` on the wallet-research page; dashboard owns its own selector via `TimeWindowHeader` too).
+ * Scope: Presentational only. Accepts props; does not fetch and no longer renders an interval selector.
  * Invariants:
  *   - PNL_NOT_NAV: plots Polymarket P/L, not wallet balance.
  *   - ZERO_BASELINE_WHEN_EMPTY: funded or watched wallets with no P/L history
@@ -31,8 +30,6 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-  ToggleGroup,
-  ToggleGroupItem,
 } from "@/components";
 import type { WalletPnlHistoryPoint } from "../types/wallet-analysis";
 
@@ -43,37 +40,20 @@ const CHART_CONFIG = {
   },
 } satisfies ChartConfig;
 
-const INTERVALS: readonly PolyWalletOverviewInterval[] = [
-  "1D",
-  "1W",
-  "1M",
-  "1Y",
-  "YTD",
-  "ALL",
-];
-
 export type WalletProfitLossCardProps = {
   history?: readonly WalletPnlHistoryPoint[] | undefined;
   interval: PolyWalletOverviewInterval;
-  onIntervalChange?:
-    | ((interval: PolyWalletOverviewInterval) => void)
-    | undefined;
   isLoading?: boolean | undefined;
 };
 
 export function WalletProfitLossCard({
   history,
   interval,
-  onIntervalChange,
   isLoading = false,
 }: WalletProfitLossCardProps): ReactElement {
   if (isLoading) {
     return (
       <div className="space-y-4 rounded-xl border border-border/60 bg-muted/10 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="h-4 w-28 animate-pulse rounded bg-muted" />
-          <div className="h-11 w-full animate-pulse rounded bg-muted sm:w-72" />
-        </div>
         <div className="space-y-2">
           <div className="h-4 w-28 animate-pulse rounded bg-muted" />
           <div className="h-14 w-48 animate-pulse rounded bg-muted" />
@@ -95,26 +75,8 @@ export function WalletProfitLossCard({
 
   return (
     <div className="space-y-4 rounded-xl border border-border/60 bg-muted/10 p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
-          Profit/Loss
-        </div>
-        <ToggleGroup
-          type="single"
-          value={interval}
-          onValueChange={(value) => {
-            if (value && onIntervalChange) {
-              onIntervalChange(value as PolyWalletOverviewInterval);
-            }
-          }}
-          className="justify-start rounded-lg border border-border/70 p-1 sm:justify-end"
-        >
-          {INTERVALS.map((value) => (
-            <ToggleGroupItem key={value} value={value} className="px-3 text-xs">
-              {value}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+      <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
+        Profit/Loss
       </div>
 
       <div className="space-y-1">
