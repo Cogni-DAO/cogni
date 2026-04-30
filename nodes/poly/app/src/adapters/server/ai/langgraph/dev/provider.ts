@@ -18,7 +18,6 @@
  */
 
 import type { AiEvent } from "@cogni/node-core";
-// biome-ignore lint/style/noRestrictedImports: SDK allowed in langgraph dev adapter per OFFICIAL_SDK_ONLY invariant
 import type { Client } from "@langchain/langgraph-sdk";
 import type { Logger } from "pino";
 import { getExecutionScope } from "@/adapters/server/ai/execution-scope";

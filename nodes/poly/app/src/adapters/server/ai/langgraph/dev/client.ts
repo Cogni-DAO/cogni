@@ -13,7 +13,6 @@
  * @internal
  */
 
-// biome-ignore lint/style/noRestrictedImports: SDK allowed in langgraph dev adapter per OFFICIAL_SDK_ONLY invariant
 import { Client } from "@langchain/langgraph-sdk";
 
 /**
