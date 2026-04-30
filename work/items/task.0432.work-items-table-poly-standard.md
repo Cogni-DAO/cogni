@@ -13,7 +13,7 @@ assignees: []
 credit:
 project:
 branch: feat/task-0432-work-items-table-poly-standard
-pr:
+pr: 1150
 reviewer:
 revision: 1
 blocked_by:
