@@ -191,7 +191,7 @@ async function* runCodexExec(params: {
         mode: 0o600,
       });
       callLog.debug(
-        { mcpServerCount: Object.keys(mcpConfig!).length },
+        { mcpServerCount: Object.keys(mcpConfig).length },
         "Wrote Codex config.toml with MCP servers"
       );
     }
