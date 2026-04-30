@@ -42,7 +42,6 @@ function getOrCreateGauge<T extends string>(
  */
 function readNodeIdForMetrics(): string {
   try {
-    // biome-ignore lint/style/noProcessEnv: Module-level init runs before serverEnv() available
     const repoRoot = process.env.COGNI_REPO_ROOT ?? process.cwd();
     const specPath = path.join(repoRoot, ".cogni", "repo-spec.yaml");
     const content = fs.readFileSync(specPath, "utf8");
@@ -67,7 +66,6 @@ if (!globalForMetrics.metricsInitialized) {
 
   metricsRegistry.setDefaultLabels({
     app: "cogni-template",
-    // biome-ignore lint/style/noProcessEnv: Module-level init runs before serverEnv() available
     env: process.env.DEPLOY_ENVIRONMENT ?? "local",
     node_id: readNodeIdForMetrics(),
   });

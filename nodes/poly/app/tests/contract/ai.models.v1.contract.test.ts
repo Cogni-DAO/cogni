@@ -91,11 +91,12 @@ describe("ai.models.v1 contract validation", () => {
 
     // Assert - defaultRef matches a model in the array
     expect(fixture.defaultRef).not.toBeNull();
-    if (fixture.defaultRef) {
+    const defaultRef = fixture.defaultRef;
+    if (defaultRef) {
       const match = fixture.models.find(
         (m) =>
-          m.ref.providerKey === fixture.defaultRef!.providerKey &&
-          m.ref.modelId === fixture.defaultRef!.modelId
+          m.ref.providerKey === defaultRef.providerKey &&
+          m.ref.modelId === defaultRef.modelId
       );
       expect(match).toBeDefined();
     }
