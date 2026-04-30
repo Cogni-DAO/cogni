@@ -13,7 +13,7 @@ namePrefix: poly-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:baf059a5b95e12cd9175fc5f06b67735ad547c0d7ea113cdae81027964e44b88"
+    digest: "sha256:570b5c7194d95d0f0f3f1415470510c3f2ed4fabf9ff0d5b34e6f2baf0309202"
 
 patches:
   # Node-specific ConfigMap values.
