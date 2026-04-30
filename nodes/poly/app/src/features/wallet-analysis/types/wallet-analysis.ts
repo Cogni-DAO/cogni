@@ -88,6 +88,7 @@ export type WalletPosition = {
   lifecycleState?: WalletPositionLifecycleState | null | undefined;
   openedAt: string;
   closedAt?: string | null;
+  resolvesAt?: string | null;
   heldMinutes: number;
   entryPrice: number;
   currentPrice: number;

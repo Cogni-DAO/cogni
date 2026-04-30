@@ -99,6 +99,7 @@ export const WalletExecutionPositionSchema = z.object({
   lifecycleState: WalletExecutionLifecycleStateSchema.nullable().optional(),
   openedAt: z.string(),
   closedAt: z.string().nullable(),
+  resolvesAt: z.string().nullable(),
   heldMinutes: z.number().int().nonnegative(),
   entryPrice: z.number().min(0),
   currentPrice: z.number().min(0),

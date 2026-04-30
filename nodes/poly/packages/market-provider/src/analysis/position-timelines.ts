@@ -55,6 +55,7 @@ export type ExecutionPosition = {
   readonly status: ExecutionPositionStatus;
   readonly openedAt: string;
   readonly closedAt?: string;
+  readonly resolvesAt?: string;
   readonly heldMinutes: number;
   readonly entryPrice: number;
   readonly currentPrice: number;
@@ -195,6 +196,9 @@ export function mapExecutionPositions({
       status,
       openedAt: toIso(openedAtTs),
       ...(closedAtTs ? { closedAt: toIso(closedAtTs) } : {}),
+      ...(sanitizeIso(snapshot?.endDate) !== null
+        ? { resolvesAt: sanitizeIso(snapshot?.endDate) as string }
+        : {}),
       heldMinutes: minutesBetween(
         openedAtTs,
         closedAtTs ?? Math.max(asOfSec, openedAtTs)
@@ -424,6 +428,13 @@ function cleanText(value: string | null | undefined): string | null {
   if (!value) return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function sanitizeIso(value: string | null | undefined): string | null {
+  const trimmed = cleanText(value);
+  if (!trimmed) return null;
+  const parsed = Date.parse(trimmed);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
 }
 
 function minutesBetween(startSec: number, endSec: number): number {

@@ -114,6 +114,7 @@
 | 1 | 1 | 5 | needs_design | task.0411 | Split `@cogni/temporal-workflows` per-node — `nodes/<X>/packages/temporal-workflows` for node-owned workflows |  |  |
 | 1 | 1 | 1 | needs_closeout | task.0417 | Fresh-worktree bootstrap fixes — drop `.env.local` from `db:check`, detect orphan-missing dist in scoped build |  |  |
 | 1 | 1 | 2 | needs_implement | task.0423 | Port poly PositionsTable onto reui DataGrid (mirror wallets-table) | Premium Frontend UX | proj.premium-frontend-ux |
+| 1 | 1 | 2 | needs_implement | task.0426 | Add Resolves countdown column to poly PositionsTable (v0) | Premium Frontend UX | proj.premium-frontend-ux |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -230,6 +231,7 @@
 | 1 | 99 | 2 | needs_review | bug.0343 | Candidate-a poly flights inherit ancient poly-migrator digest — doltgres PreSync hook fails intermittently |  |  |
 | 1 | 99 | 5 | needs_triage | story.0417 | UI standard: every error surface has a "Send to Cogni" button that captures context and opens a fix loop |  |  |
 | 2 | 0 | 2 | needs_triage | task.0109 | Expand GitHub adapter — PR comments, review comments, issue creation | Transparent Credit Payouts | proj.transparent-credit-payouts |
+| 2 | 1 | 1 | needs_triage | bug.0422 | Redeemed positions show $0.00 P/L in History card — cost basis lost | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 2 | 3 | needs_design | task.0238 | Agent avatars — Rive/Lottie animated characters on run cards and chat | Premium Frontend UX | proj.premium-frontend-ux |
 | 2 | 2 | 1 | needs_review | bug.0367 | verify-buildsha.sh hostname convention breaks production verify | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 2 | 2 | needs_review | bug.0368 | candidate-flight verify wait is ~4min of migrator image pull, not migration work | CI/CD Pipeline | proj.cicd-services-gitops |

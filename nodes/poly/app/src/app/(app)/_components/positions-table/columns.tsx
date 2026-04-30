@@ -113,20 +113,75 @@ export function makeColumns(opts: MakeColumnsOpts): AnyCol[] {
             ) : (
               <span className="font-medium text-sm">{p.marketTitle}</span>
             )}
-            <span className="font-mono text-muted-foreground text-xs uppercase tracking-wide">
-              {p.outcome}
-            </span>
           </div>
         );
       },
       meta: {
         headerTitle: "Market",
-        skeleton: (
-          <div className="flex flex-col gap-1 py-0.5">
-            <Skeleton className="h-3.5 w-28" />
-            <Skeleton className="h-3 w-20" />
-          </div>
+        skeleton: <Skeleton className="h-3.5 w-40" />,
+      },
+    }),
+
+    col.accessor("outcome", {
+      id: "bet",
+      header: ({ column }) => (
+        <DataGridColumnHeader column={column} title="Bet" visibility />
+      ),
+      size: 100,
+      cell: (info) => (
+        <span className="font-mono text-muted-foreground text-xs uppercase tracking-wide">
+          {info.getValue()}
+        </span>
+      ),
+      meta: {
+        headerTitle: "Bet",
+        skeleton: <Skeleton className="h-3 w-12" />,
+      },
+    }),
+
+    col.accessor((row) => row.resolvesAt ?? null, {
+      id: "endsAt",
+      header: ({ column }) =>
+        rightHeader(
+          <DataGridColumnHeader column={column} title="Ends" visibility />
         ),
+      size: 130,
+      sortingFn: (a, b) => {
+        const av = a.getValue<string | null>("endsAt");
+        const bv = b.getValue<string | null>("endsAt");
+        const at = av ? Date.parse(av) : Number.POSITIVE_INFINITY;
+        const bt = bv ? Date.parse(bv) : Number.POSITIVE_INFINITY;
+        return at === bt ? 0 : at < bt ? -1 : 1;
+      },
+      cell: (info) => {
+        const v = info.getValue();
+        return (
+          <div className="text-right text-muted-foreground text-sm tabular-nums">
+            {v ? formatEndDateTime(v) : "—"}
+          </div>
+        );
+      },
+      meta: {
+        headerTitle: "Ends",
+        skeleton: <Skeleton className="ms-auto h-3.5 w-20" />,
+      },
+    }),
+
+    col.accessor("heldMinutes", {
+      id: "heldMinutes",
+      header: ({ column }) =>
+        rightHeader(
+          <DataGridColumnHeader column={column} title="Held" visibility />
+        ),
+      size: 90,
+      cell: (info) => (
+        <div className="text-right text-muted-foreground text-sm tabular-nums">
+          {formatHeldDuration(info.getValue())}
+        </div>
+      ),
+      meta: {
+        headerTitle: "Held",
+        skeleton: <Skeleton className="ms-auto h-3.5 w-12" />,
       },
     }),
 
@@ -153,24 +208,6 @@ export function makeColumns(opts: MakeColumnsOpts): AnyCol[] {
       meta: {
         headerTitle: "Trace",
         skeleton: <Skeleton className="h-3.5 w-64" />,
-      },
-    }),
-
-    col.accessor("heldMinutes", {
-      id: "heldMinutes",
-      header: ({ column }) =>
-        rightHeader(
-          <DataGridColumnHeader column={column} title="Held" visibility />
-        ),
-      size: 90,
-      cell: (info) => (
-        <div className="text-right text-muted-foreground text-sm tabular-nums">
-          {formatHeldDuration(info.getValue())}
-        </div>
-      ),
-      meta: {
-        headerTitle: "Held",
-        skeleton: <Skeleton className="ms-auto h-3.5 w-12" />,
       },
     }),
   ];
@@ -297,6 +334,17 @@ export function makeColumns(opts: MakeColumnsOpts): AnyCol[] {
   }
 
   return columns;
+}
+
+function formatEndDateTime(iso: string): string {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return iso;
+  return new Date(ms).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function actionLabel(status: WalletPosition["status"]): string {

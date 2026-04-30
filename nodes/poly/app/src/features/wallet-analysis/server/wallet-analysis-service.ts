@@ -481,6 +481,7 @@ function toExecutionContractPosition(
     lifecycleState,
     openedAt: position.openedAt,
     closedAt: position.closedAt ?? null,
+    resolvesAt: position.resolvesAt ?? null,
     heldMinutes: position.heldMinutes,
     entryPrice: position.entryPrice,
     currentPrice: position.currentPrice,

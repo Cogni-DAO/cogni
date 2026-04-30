@@ -65,8 +65,10 @@ export type PositionsTableProps = {
 
 const DEFAULT_VISIBILITY: VisibilityState = {
   market: true,
-  trace: true,
+  bet: true,
+  endsAt: true,
   heldMinutes: true,
+  trace: true,
   currentValue: true,
   pnlUsd: true,
   pnlPct: true,
@@ -75,8 +77,10 @@ const DEFAULT_VISIBILITY: VisibilityState = {
 
 const HISTORY_VISIBILITY: VisibilityState = {
   market: true,
-  trace: true,
+  bet: true,
+  endsAt: true,
   heldMinutes: true,
+  trace: true,
   closedAt: true,
   pnlUsd: true,
   pnlPct: true,
