@@ -21,7 +21,7 @@ import {
 } from "../../src/runtime/mcp/client";
 
 /** Build "${VAR}" placeholder strings without triggering biome noTemplateCurlyInString */
-const v = (name: string) => "$" + `{${name}}`;
+const v = (name: string) => `$\{${name}}`;
 
 describe("interpolateEnvVars", () => {
   it("replaces env var placeholders with env value", () => {

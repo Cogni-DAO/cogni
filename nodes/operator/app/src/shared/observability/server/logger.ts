@@ -21,13 +21,9 @@ import { REDACT_PATHS } from "./redact";
 export type { Logger } from "pino";
 
 export function makeLogger(bindings?: Record<string, unknown>): Logger {
-  // biome-ignore lint/style/noProcessEnv: Logging config only - safe direct access, no validation required
   const isVitest = process.env.VITEST === "true";
-  // biome-ignore lint/style/noProcessEnv: Logging config only - safe direct access, no validation required
   const nodeEnv = process.env.NODE_ENV ?? "development";
-  // biome-ignore lint/style/noProcessEnv: Logging config only - safe direct access, no validation required
   const pinoLogLevel = process.env.PINO_LOG_LEVEL ?? "info";
-  // biome-ignore lint/style/noProcessEnv: Logging config only - safe direct access, no validation required
   const serviceName = process.env.SERVICE_NAME ?? "app";
 
   // Silence logs in test tooling (VITEST or NODE_ENV=test)

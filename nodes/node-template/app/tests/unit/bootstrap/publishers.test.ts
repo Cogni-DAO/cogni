@@ -117,7 +117,9 @@ describe("startProcessHealthPublisher", () => {
 
     await vi.advanceTimersByTimeAsync(0); // initial publish (fails)
     expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(logger.warn.mock.calls[0]![0]).toHaveProperty("err");
+    const firstWarn = logger.warn.mock.calls[0];
+    if (!firstWarn) throw new Error("expected warn call");
+    expect(firstWarn[0]).toHaveProperty("err");
 
     // Next interval still fires
     port.publish.mockResolvedValue(undefined);
