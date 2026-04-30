@@ -63,7 +63,9 @@ describe("startProcessHealthPublisher", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(port.publish).toHaveBeenCalledTimes(1);
-    const event = port.publish.mock.calls[0]![1];
+    const firstCall = port.publish.mock.calls[0];
+    if (!firstCall) throw new Error("expected publish call");
+    const event = firstCall[1];
 
     expect(event.type).toBe("process_health");
     expect(event.source).toBe("process-metrics");

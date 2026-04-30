@@ -153,7 +153,7 @@ describe("fetchPrContextActivity — owning-node routing", () => {
         (r.params as { path: string }).path.endsWith("quality.rule.yaml")
     );
     expect(ruleFetches.length).toBe(1);
-    expect((ruleFetches[0]!.params as { path: string }).path).toBe(
+    expect((ruleFetches[0]?.params as { path: string }).path).toBe(
       "nodes/poly/.cogni/rules/quality.rule.yaml"
     );
 
@@ -193,7 +193,7 @@ describe("fetchPrContextActivity — owning-node routing", () => {
         (r.params as { path: string }).path.endsWith("quality.rule.yaml")
     );
     expect(ruleFetches.length).toBe(1);
-    expect((ruleFetches[0]!.params as { path: string }).path).toBe(
+    expect((ruleFetches[0]?.params as { path: string }).path).toBe(
       "nodes/operator/.cogni/rules/quality.rule.yaml"
     );
   });
@@ -271,7 +271,7 @@ describe("postRoutingDiagnosticActivity", () => {
       (r) => r.route === "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}"
     );
     expect(patch).toBeDefined();
-    expect((patch!.params as { conclusion: string }).conclusion).toBe(
+    expect((patch?.params as { conclusion: string }).conclusion).toBe(
       "neutral"
     );
 
@@ -280,7 +280,7 @@ describe("postRoutingDiagnosticActivity", () => {
         r.route === "POST /repos/{owner}/{repo}/issues/{issue_number}/comments"
     );
     expect(comment).toBeDefined();
-    expect((comment!.params as { body: string }).body).toContain(
+    expect((comment?.params as { body: string }).body).toContain(
       "Cross-Domain PR refused"
     );
   });
@@ -307,7 +307,7 @@ describe("postRoutingDiagnosticActivity", () => {
       (r) =>
         r.route === "POST /repos/{owner}/{repo}/issues/{issue_number}/comments"
     );
-    expect((comment!.params as { body: string }).body).toContain(
+    expect((comment?.params as { body: string }).body).toContain(
       "No recognizable scope"
     );
   });

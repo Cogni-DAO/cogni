@@ -64,9 +64,15 @@ describe.skipIf(!ollamaAvailable)(
       const res = await fetch(`${OLLAMA_URL}/v1/models`);
       expect(res.ok).toBe(true);
       const data = (await res.json()) as { data?: Array<{ id: string }> };
-      expect(data.data).toBeDefined();
-      expect(data.data!.length).toBeGreaterThan(0);
-      modelId = data.data![0]!.id;
+      const models = data.data;
+      if (!models || models.length === 0) {
+        throw new Error("expected at least one model from /v1/models");
+      }
+      const firstModel = models[0];
+      if (!firstModel) {
+        throw new Error("expected first model to be defined");
+      }
+      modelId = firstModel.id;
     });
 
     it("completion() returns valid LlmCompletionResult", async () => {
