@@ -63,6 +63,28 @@ function buildBody(item: WorkItem): Record<string, unknown> {
   return body;
 }
 
+async function fetchExistingIds(
+  api: string,
+  token: string,
+  ids: ReadonlyArray<string>
+): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const out = new Set<string>();
+  // The list endpoint accepts ?ids=a,b,c — chunk to keep URLs reasonable
+  const CHUNK = 50;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const slice = ids.slice(i, i + CHUNK);
+    const url = `${api}/api/v1/work/items?ids=${encodeURIComponent(slice.join(","))}&limit=500`;
+    const res = await fetch(url, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) continue;
+    const json = (await res.json()) as { items?: Array<{ id: string }> };
+    for (const it of json.items ?? []) out.add(it.id);
+  }
+  return out;
+}
+
 async function postOne(
   api: string,
   token: string,
@@ -103,11 +125,24 @@ async function main(): Promise<number> {
   const reader = new MarkdownWorkItemAdapter(repoRoot);
   const { items: all } = await reader.list({});
   const eligible = all.filter((it) => VALID_TYPES.has(it.type));
-  const items = limit > 0 ? eligible.slice(0, limit) : eligible;
+  const limited = limit > 0 ? eligible.slice(0, limit) : eligible;
 
   process.stdout.write(
     `[importer] api=${api} repoRoot=${repoRoot} dryRun=${dryRun}\n` +
-      `[importer] read ${all.length} items, ${eligible.length} eligible (skipped ${all.length - eligible.length} non-work types), processing ${items.length}\n`
+      `[importer] read ${all.length} items, ${eligible.length} eligible (skipped ${all.length - eligible.length} non-work types)\n`
+  );
+
+  // Pre-flight: skip IDs already in the target env (importer is idempotent).
+  const existing = dryRun
+    ? new Set<string>()
+    : await fetchExistingIds(
+        api,
+        token,
+        limited.map((it) => it.id as string)
+      );
+  const items = limited.filter((it) => !existing.has(it.id as string));
+  process.stdout.write(
+    `[importer] ${items.length} to POST (${existing.size} already present, skipping)\n`
   );
 
   let posted = 0;
@@ -125,6 +160,7 @@ async function main(): Promise<number> {
       if (posted % 25 === 0) {
         process.stdout.write(`[importer] progress ${posted}/${items.length}\n`);
       }
+    } else if (status === 409) {
     } else {
       failed += 1;
       process.stdout.write(

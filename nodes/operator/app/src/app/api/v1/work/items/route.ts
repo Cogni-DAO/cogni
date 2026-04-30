@@ -115,6 +115,12 @@ export const POST = wrapRouteHandlerWithLogging(
       if (e instanceof WorkItemsBackendNotReadyError) {
         return NextResponse.json({ error: e.message }, { status: 503 });
       }
+      if ((e as Error)?.name === "WorkItemAlreadyExistsError") {
+        return NextResponse.json(
+          { error: (e as Error).message },
+          { status: 409 }
+        );
+      }
       throw e;
     }
   }

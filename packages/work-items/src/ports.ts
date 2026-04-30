@@ -47,6 +47,10 @@ export interface WorkItemCommandPort {
     labels?: string[];
     assignees?: SubjectRef[];
     node?: string;
+    status?: WorkItemStatus;
+    priority?: number;
+    rank?: number;
+    estimate?: number;
   }): Promise<WorkItem>;
 
   patch(input: {

@@ -157,6 +157,10 @@ export async function createWorkItem(
         ...(input.labels !== undefined && { labels: input.labels }),
         ...(input.assignees !== undefined && { assignees: input.assignees }),
         ...(input.node !== undefined && { node: input.node }),
+        ...(input.status !== undefined && { status: input.status }),
+        ...(input.priority !== undefined && { priority: input.priority }),
+        ...(input.rank !== undefined && { rank: input.rank }),
+        ...(input.estimate !== undefined && { estimate: input.estimate }),
       },
       authorTagFromSession(sessionUser)
     );
