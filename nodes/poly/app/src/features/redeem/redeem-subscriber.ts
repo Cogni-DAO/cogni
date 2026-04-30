@@ -190,7 +190,6 @@ export class RedeemSubscriber {
           flavor: enqueueInput.flavor,
           already_existed: result.alreadyExisted,
           collateral_token: c.collateralToken,
-          collateral_token_inferred_from: c.collateralTokenInferredFrom,
         },
         "redeem-subscriber: job enqueued"
       );

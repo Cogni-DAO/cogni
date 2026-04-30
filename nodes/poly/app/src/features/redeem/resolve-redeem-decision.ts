@@ -34,10 +34,7 @@ import {
 } from "@cogni/poly-market-provider/policy";
 import { type PublicClient, parseAbi } from "viem";
 
-import {
-  type CollateralTokenInferredFrom,
-  inferCollateralTokenForPosition,
-} from "./infer-collateral-token";
+import { inferCollateralTokenForPosition } from "./infer-collateral-token";
 
 const ctfReadAbi = parseAbi([
   "function balanceOf(address account, uint256 id) view returns (uint256)",
@@ -53,16 +50,10 @@ export interface ResolvedRedeemCandidate {
   positionId: bigint;
   negativeRisk: boolean;
   decision: RedeemDecision;
-  /** ERC-20 address of the collateral that minted this position. Set only
-   * when `decision.kind === 'redeem'` for vanilla CTF (binary,
-   * multi-outcome); neg-risk-parent ignores it at dispatch (the adapter's
-   * `redeemPositions` takes no collateralToken arg). USDC.e is the
-   * legacy-safe default; pUSD comes from the chain probe in
-   * `inferCollateralTokenForPosition`. */
+  /** Collateral that minted this position. Probed at enqueue time for
+   * vanilla CTF redeem decisions; defaults to USDC.e otherwise (neg-risk
+   * dispatch ignores it; skip decisions never reach dispatch). bug.0428. */
   collateralToken: `0x${string}`;
-  /** Audit field — how `collateralToken` was determined. Surfaced in the
-   * subscriber's `poly.ctf.redeem.policy_decision` log. */
-  collateralTokenInferredFrom: CollateralTokenInferredFrom | "neg_risk_skip";
 }
 
 /**
@@ -170,25 +161,19 @@ export async function resolveRedeemCandidatesForCondition(deps: {
       negativeRisk: match.negativeRisk ?? false,
     });
 
-    // bug.0428: only vanilla CTF redeems pass a collateralToken into
-    // `redeemPositions`. NegRisk routes through NegRiskAdapter.redeemPositions
-    // (no collateralToken arg) and pays out in whatever the adapter holds,
-    // so probing is wasted RPC. Skip it.
-    let collateralToken: `0x${string}` = POLYGON_USDC_E;
-    let collateralTokenInferredFrom:
-      | CollateralTokenInferredFrom
-      | "neg_risk_skip" = "neg_risk_skip";
+    // bug.0428: NegRisk dispatch ignores collateralToken; only vanilla CTF
+    // redeems need vintage. Probe only when the decision will actually
+    // dispatch as vanilla CTF.
     const negativeRisk = match.negativeRisk ?? false;
-    if (decision.kind === "redeem" && !negativeRisk) {
-      const inferred = await inferCollateralTokenForPosition({
-        publicClient: deps.publicClient,
-        conditionId,
-        outcomeIndex: match.outcomeIndex,
-        expectedPositionId: positionId,
-      });
-      collateralToken = inferred.collateralToken;
-      collateralTokenInferredFrom = inferred.inferredFrom;
-    }
+    const collateralToken =
+      decision.kind === "redeem" && !negativeRisk
+        ? await inferCollateralTokenForPosition({
+            publicClient: deps.publicClient,
+            conditionId,
+            outcomeIndex: match.outcomeIndex,
+            expectedPositionId: positionId,
+          })
+        : POLYGON_USDC_E;
 
     out.push({
       conditionId,
@@ -197,7 +182,6 @@ export async function resolveRedeemCandidatesForCondition(deps: {
       negativeRisk,
       decision,
       collateralToken,
-      collateralTokenInferredFrom,
     });
   }
   return out;

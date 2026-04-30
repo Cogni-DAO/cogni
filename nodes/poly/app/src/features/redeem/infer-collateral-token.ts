@@ -3,12 +3,8 @@
 
 /**
  * Module: `features/redeem/infer-collateral-token`
- * Purpose: At redeem-job-create time, derive which ERC-20 collateralToken minted a vanilla CTF position from its on-chain `positionId`. Vanilla CTF `redeemPositions(collateralToken, parentCollectionId, conditionId, indexSets)` requires the exact collateralToken used at split time; mismatch silently zero-burns and yields no payout (bug.0428).
- * Scope: Two CTF view-call probes per inference. No DB, no writes. Independent of `decideRedeem` so the policy stays pure.
- * Invariants:
- *   - PROBE_FROM_KNOWN_POSITION_ID — caller passes the on-chain `positionId` (Data-API `asset`); we test which candidate `(collateralToken, collectionId)` keccak hashes to it.
- *   - DETERMINISTIC_FALLBACK — when neither candidate matches, return USDC.e (V1-legacy default). Worker still emits `bleed_detected` if the redeem zero-burns; the inferred-from audit field surfaces the guess.
- *   - PARENT_COLLECTION_ZERO — only inspects the standard parent-collection path used by binary, multi-outcome, and neg-risk-parent flavors.
+ * Purpose: Pick the right ERC-20 `collateralToken` for `redeemPositions(...)` on a vanilla CTF position by chain-probing both candidates (pUSD, USDC.e) and matching the one whose `(token, collectionId)` hashes to the funder's known on-chain positionId. Mismatch silently zero-burns (bug.0428).
+ * Scope: Two CTF view calls. No DB, no writes.
  * Side-effects: IO (Polygon RPC view calls).
  * Links: docs/spec/poly-collateral-currency.md, work/items/bug.0428.poly-redeem-worker-hardcodes-usdce.md
  * @public
@@ -23,52 +19,22 @@ import {
 } from "@cogni/poly-market-provider/adapters/polymarket";
 import type { PublicClient } from "viem";
 
-/** Why a particular collateralToken was selected. Surfaced in the audit log. */
-export type CollateralTokenInferredFrom =
-  /** chain probe matched the funder's positionId to this candidate */
-  | "chain_probe_pusd"
-  | "chain_probe_usdce"
-  /** neither candidate matched — used USDC.e as the legacy-safe default */
-  | "default_no_match"
-  /** chain reads failed; used USDC.e as the legacy-safe default */
-  | "default_read_failed";
-
-export interface InferredCollateralToken {
-  collateralToken: `0x${string}`;
-  inferredFrom: CollateralTokenInferredFrom;
-}
-
-const CANDIDATE_TOKENS: ReadonlyArray<{
-  address: `0x${string}`;
-  source: "chain_probe_pusd" | "chain_probe_usdce";
-}> = [
-  // pUSD first — V2 cutover (2026-04-28) means new positions are pUSD-backed;
-  // USDC.e remains the V1-legacy fallback.
-  { address: POLYGON_PUSD, source: "chain_probe_pusd" },
-  { address: POLYGON_USDC_E, source: "chain_probe_usdce" },
-];
+// pUSD first — post-V2-cutover positions are pUSD-backed; USDC.e is the
+// legacy fallback for V1 mints and the default on read failure.
+const CANDIDATES: ReadonlyArray<`0x${string}`> = [POLYGON_PUSD, POLYGON_USDC_E];
 
 /**
- * Probe CTF for `(collateralToken, collectionId) → positionId` and pick the
- * candidate that hashes to the funder's known on-chain positionId.
- *
- * Sequence (only one path executes per call):
- *   1. `getCollectionId(zero, conditionId, 1n << outcomeIndex)` — chain
- *      derives the collection id (BN254 ECC math; not replicable off-chain
- *      cheaply).
- *   2. multicall `getPositionId(token, collectionId)` for both candidates.
- *   3. compare each result to `expectedPositionId` and return the match.
- *
- * Falls through to USDC.e on any read failure or non-match. Worker's
- * `bleed_detected` audit channel still flags zero-burn redeems, so a wrong
- * inference is observable — silent corruption is impossible by design.
+ * Returns the collateral that minted the given positionId, or USDC.e on
+ * non-match / RPC failure (legacy-safe default). The worker's existing
+ * `bleed_detected` invariant flags any wrong inference — silent corruption
+ * is impossible by design.
  */
 export async function inferCollateralTokenForPosition(deps: {
   publicClient: PublicClient;
   conditionId: `0x${string}`;
   outcomeIndex: number;
   expectedPositionId: bigint;
-}): Promise<InferredCollateralToken> {
+}): Promise<`0x${string}`> {
   const indexSet = 1n << BigInt(deps.outcomeIndex);
 
   let collectionId: `0x${string}`;
@@ -80,36 +46,24 @@ export async function inferCollateralTokenForPosition(deps: {
       args: [PARENT_COLLECTION_ID_ZERO, deps.conditionId, indexSet],
     })) as `0x${string}`;
   } catch {
-    return {
-      collateralToken: POLYGON_USDC_E,
-      inferredFrom: "default_read_failed",
-    };
+    return POLYGON_USDC_E;
   }
 
-  const positionIdReads = await deps.publicClient.multicall({
-    contracts: CANDIDATE_TOKENS.map((c) => ({
+  const positionIds = await deps.publicClient.multicall({
+    contracts: CANDIDATES.map((token) => ({
       address: POLYGON_CONDITIONAL_TOKENS as `0x${string}`,
       abi: polymarketCtfPositionIdAbi,
       functionName: "getPositionId" as const,
-      args: [c.address, collectionId] as const,
+      args: [token, collectionId] as const,
     })),
     allowFailure: true,
   });
 
-  for (let i = 0; i < CANDIDATE_TOKENS.length; i++) {
-    const read = positionIdReads[i];
-    const candidate = CANDIDATE_TOKENS[i];
-    if (!read || !candidate || read.status !== "success") continue;
-    if ((read.result as bigint) === deps.expectedPositionId) {
-      return {
-        collateralToken: candidate.address,
-        inferredFrom: candidate.source,
-      };
-    }
+  for (let i = 0; i < CANDIDATES.length; i++) {
+    const read = positionIds[i];
+    const token = CANDIDATES[i];
+    if (read?.status !== "success" || !token) continue;
+    if ((read.result as bigint) === deps.expectedPositionId) return token;
   }
-
-  return {
-    collateralToken: POLYGON_USDC_E,
-    inferredFrom: "default_no_match",
-  };
+  return POLYGON_USDC_E;
 }

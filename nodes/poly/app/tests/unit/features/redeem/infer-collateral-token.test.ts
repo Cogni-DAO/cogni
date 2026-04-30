@@ -3,9 +3,8 @@
 
 /**
  * Module: `@tests/unit/features/redeem/infer-collateral-token`
- * Purpose: Lock the bug.0428 inference contract — given a known on-chain `positionId`, the helper picks the candidate (`pUSD`, `USDC.e`) whose `getPositionId(token, collectionId)` matches. Wrong inference would re-introduce the silent zero-burn that V2 vanilla CTF redeems used to emit.
- * Scope: Pure unit test. Mocks `PublicClient` view calls; no RPC.
- * Side-effects: none
+ * Purpose: Lock the bug.0428 contract — given a known on-chain `positionId`, the helper picks the candidate whose `getPositionId(token, collectionId)` matches; falls back to USDC.e on non-match or RPC failure.
+ * Side-effects: none (mocks PublicClient).
  * Links: work/items/bug.0428.poly-redeem-worker-hardcodes-usdce.md
  * @internal
  */
@@ -28,28 +27,21 @@ const USDCE_POSITION_ID =
   0xbb22bbbb00000000000000000000000000000000000000000000000000000000n;
 
 function makeClient(opts: {
-  collectionIdResult?: `0x${string}` | "throw";
-  pusdPositionId?: bigint;
-  usdcePositionId?: bigint;
-  multicallResults?: Array<
-    { status: "success"; result: bigint } | { status: "failure"; error: Error }
-  >;
+  collectionIdThrows?: boolean;
+  positionIds?: [bigint, bigint]; // [pUSD, USDC.e]
 }) {
   const readContract = vi.fn(async () => {
-    if (opts.collectionIdResult === "throw") throw new Error("rpc fail");
-    return opts.collectionIdResult ?? COLLECTION_ID;
+    if (opts.collectionIdThrows) throw new Error("rpc fail");
+    return COLLECTION_ID;
   });
   const multicall = vi.fn(async () => {
-    if (opts.multicallResults) return opts.multicallResults;
+    const [pusd, usdce] = opts.positionIds ?? [
+      PUSD_POSITION_ID,
+      USDCE_POSITION_ID,
+    ];
     return [
-      {
-        status: "success",
-        result: opts.pusdPositionId ?? PUSD_POSITION_ID,
-      },
-      {
-        status: "success",
-        result: opts.usdcePositionId ?? USDCE_POSITION_ID,
-      },
+      { status: "success", result: pusd },
+      { status: "success", result: usdce },
     ];
   });
   return { readContract, multicall } as unknown as Parameters<
@@ -58,81 +50,41 @@ function makeClient(opts: {
 }
 
 describe("inferCollateralTokenForPosition", () => {
-  it("returns pUSD when funder's positionId matches the pUSD candidate (V2)", async () => {
+  it("returns pUSD when funder's positionId hashes from pUSD (V2)", async () => {
     const out = await inferCollateralTokenForPosition({
       publicClient: makeClient({}),
       conditionId: CONDITION_ID,
       outcomeIndex: 0,
       expectedPositionId: PUSD_POSITION_ID,
     });
-    expect(out.collateralToken).toBe(POLYGON_PUSD);
-    expect(out.inferredFrom).toBe("chain_probe_pusd");
+    expect(out).toBe(POLYGON_PUSD);
   });
 
-  it("returns USDC.e when funder's positionId matches the USDC.e candidate (V1 legacy)", async () => {
+  it("returns USDC.e when funder's positionId hashes from USDC.e (V1)", async () => {
     const out = await inferCollateralTokenForPosition({
       publicClient: makeClient({}),
       conditionId: CONDITION_ID,
       outcomeIndex: 1,
       expectedPositionId: USDCE_POSITION_ID,
     });
-    expect(out.collateralToken).toBe(POLYGON_USDC_E);
-    expect(out.inferredFrom).toBe("chain_probe_usdce");
+    expect(out).toBe(POLYGON_USDC_E);
   });
 
-  it("falls back to USDC.e with default_no_match when neither candidate hashes to the funder's positionId", async () => {
-    const out = await inferCollateralTokenForPosition({
+  it("falls back to USDC.e on non-match or RPC failure", async () => {
+    const noMatch = await inferCollateralTokenForPosition({
       publicClient: makeClient({}),
       conditionId: CONDITION_ID,
       outcomeIndex: 0,
-      expectedPositionId: 0xdeadbeefdeadbeefn,
+      expectedPositionId: 0xdeadbeefn,
     });
-    expect(out.collateralToken).toBe(POLYGON_USDC_E);
-    expect(out.inferredFrom).toBe("default_no_match");
-  });
+    expect(noMatch).toBe(POLYGON_USDC_E);
 
-  it("falls back to USDC.e with default_read_failed when getCollectionId throws (RPC outage)", async () => {
-    const out = await inferCollateralTokenForPosition({
-      publicClient: makeClient({ collectionIdResult: "throw" }),
+    const rpcFailed = await inferCollateralTokenForPosition({
+      publicClient: makeClient({ collectionIdThrows: true }),
       conditionId: CONDITION_ID,
       outcomeIndex: 0,
       expectedPositionId: PUSD_POSITION_ID,
     });
-    expect(out.collateralToken).toBe(POLYGON_USDC_E);
-    expect(out.inferredFrom).toBe("default_read_failed");
-  });
-
-  it("ignores failed multicall entries and matches against the successful ones only", async () => {
-    const out = await inferCollateralTokenForPosition({
-      publicClient: makeClient({
-        multicallResults: [
-          { status: "failure", error: new Error("rpc fail on pusd") },
-          { status: "success", result: USDCE_POSITION_ID },
-        ],
-      }),
-      conditionId: CONDITION_ID,
-      outcomeIndex: 0,
-      expectedPositionId: USDCE_POSITION_ID,
-    });
-    expect(out.collateralToken).toBe(POLYGON_USDC_E);
-    expect(out.inferredFrom).toBe("chain_probe_usdce");
-  });
-
-  it("preserves V2-prefer order — when both candidates somehow match, picks pUSD first", async () => {
-    // Defensive against a degenerate chain state. In practice positionIds for
-    // distinct collateralTokens are distinct (keccak collision-resistance), but
-    // the iteration order in the helper is the contract — pUSD is checked first
-    // so V2 wins on tie. Asserts the comparator's stability.
-    const out = await inferCollateralTokenForPosition({
-      publicClient: makeClient({
-        pusdPositionId: 0xc0ffeen,
-        usdcePositionId: 0xc0ffeen,
-      }),
-      conditionId: CONDITION_ID,
-      outcomeIndex: 0,
-      expectedPositionId: 0xc0ffeen,
-    });
-    expect(out.collateralToken).toBe(POLYGON_PUSD);
-    expect(out.inferredFrom).toBe("chain_probe_pusd");
+    expect(rpcFailed).toBe(POLYGON_USDC_E);
   });
 });

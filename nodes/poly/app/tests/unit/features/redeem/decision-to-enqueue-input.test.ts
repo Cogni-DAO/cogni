@@ -39,7 +39,6 @@ function candidate(
     negativeRisk: false,
     decision,
     collateralToken: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
-    collateralTokenInferredFrom: "default_no_match",
     ...overrides,
   };
 }
