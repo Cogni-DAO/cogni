@@ -25,9 +25,23 @@
  * @public
  */
 
-import { EVENT_NAMES } from "@cogni/node-shared";
 import type { LoggerPort, MetricsPort } from "@cogni/poly-market-provider";
 import type { PolyTraderWalletPort } from "@cogni/poly-wallet";
+
+/**
+ * Poly-local typed event registry. Per the /observability skill these come
+ * from a registry, not inline strings. Kept node-local rather than added to
+ * `@cogni/node-shared`'s `EVENT_NAMES` (operator domain) to keep this PR
+ * single-domain — see bug.0434 for the proper per-node-registry split.
+ */
+const POLY_AUTO_WRAP_EVENTS = {
+  SINGLETON_CLAIM: "poly.auto_wrap.singleton_claim",
+  STOPPED: "poly.auto_wrap.stopped",
+  TICK_COMPLETED: "poly.auto_wrap.tick.completed",
+  TICK_ERROR: "poly.auto_wrap.tick.error",
+  ROW_OUTCOME: "poly.auto_wrap.row.outcome",
+  ROW_ERROR: "poly.auto_wrap.row.error",
+} as const;
 
 export const AUTO_WRAP_METRICS = {
   /** One per tick. Always increments, even when zero rows scanned. */
@@ -99,7 +113,7 @@ export async function runAutoWrapTick(
         // the adapter; this is the job's own confirmation that it counted it.
         log.info(
           {
-            event: EVENT_NAMES.POLY_AUTO_WRAP_ROW_OUTCOME,
+            event: POLY_AUTO_WRAP_EVENTS.ROW_OUTCOME,
             billing_account_id: row.billingAccountId,
             outcome: "wrapped",
             tx_hash: result.txHash,
@@ -118,7 +132,7 @@ export async function runAutoWrapTick(
         // noop adapter in some envs).
         log.info(
           {
-            event: EVENT_NAMES.POLY_AUTO_WRAP_ROW_OUTCOME,
+            event: POLY_AUTO_WRAP_EVENTS.ROW_OUTCOME,
             billing_account_id: row.billingAccountId,
             outcome: "skipped",
             reason: result.reason,
@@ -137,7 +151,7 @@ export async function runAutoWrapTick(
       });
       log.error(
         {
-          event: EVENT_NAMES.POLY_AUTO_WRAP_ROW_ERROR,
+          event: POLY_AUTO_WRAP_EVENTS.ROW_ERROR,
           billing_account_id: row.billingAccountId,
           err: err instanceof Error ? err.message : String(err),
         },
@@ -149,7 +163,7 @@ export async function runAutoWrapTick(
   deps.metrics.incr(AUTO_WRAP_METRICS.ticksTotal, {});
   log.info(
     {
-      event: EVENT_NAMES.POLY_AUTO_WRAP_TICK_COMPLETED,
+      event: POLY_AUTO_WRAP_EVENTS.TICK_COMPLETED,
       scanned: eligible.length,
       wrapped,
       skipped,
@@ -171,7 +185,7 @@ export function startAutoWrap(deps: AutoWrapJobDeps): AutoWrapJobHandle {
   const log = deps.logger.child({ component: "auto-wrap-job" });
   log.info(
     {
-      event: EVENT_NAMES.POLY_AUTO_WRAP_SINGLETON_CLAIM,
+      event: POLY_AUTO_WRAP_EVENTS.SINGLETON_CLAIM,
       poll_ms: AUTO_WRAP_POLL_MS,
     },
     "auto-wrap starting (SINGLE_WRITER — alert on duplicate pods running this)"
@@ -187,7 +201,7 @@ export function startAutoWrap(deps: AutoWrapJobDeps): AutoWrapJobHandle {
       deps.metrics.incr(AUTO_WRAP_METRICS.tickErrorsTotal, {});
       log.error(
         {
-          event: EVENT_NAMES.POLY_AUTO_WRAP_TICK_ERROR,
+          event: POLY_AUTO_WRAP_EVENTS.TICK_ERROR,
           err: err instanceof Error ? err.message : String(err),
         },
         "auto-wrap: tick threw (continuing)"
@@ -205,7 +219,7 @@ export function startAutoWrap(deps: AutoWrapJobDeps): AutoWrapJobHandle {
     stop() {
       clearInterval(intervalHandle);
       log.info(
-        { event: EVENT_NAMES.POLY_AUTO_WRAP_STOPPED },
+        { event: POLY_AUTO_WRAP_EVENTS.STOPPED },
         "auto-wrap stopped"
       );
     },

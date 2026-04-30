@@ -173,18 +173,6 @@ export const EVENT_NAMES = {
   POLY_RECONCILER_NOT_FOUND: "poly.reconciler.not_found",
   // Emitted at info when a stale row is promoted to canceled.
   POLY_RECONCILER_NOT_FOUND_UPGRADE: "poly.reconciler.not_found_upgrade",
-
-  // Poly auto-wrap consent loop (task.0429)
-  POLY_AUTO_WRAP_SINGLETON_CLAIM: "poly.auto_wrap.singleton_claim",
-  POLY_AUTO_WRAP_STOPPED: "poly.auto_wrap.stopped",
-  POLY_AUTO_WRAP_TICK_COMPLETED: "poly.auto_wrap.tick.completed",
-  POLY_AUTO_WRAP_TICK_ERROR: "poly.auto_wrap.tick.error",
-  POLY_AUTO_WRAP_ROW_OUTCOME: "poly.auto_wrap.row.outcome",
-  POLY_AUTO_WRAP_ROW_ERROR: "poly.auto_wrap.row.error",
-  POLY_AUTO_WRAP_TX_SUBMITTED: "poly.auto_wrap.tx.submitted",
-  POLY_AUTO_WRAP_TX_CONFIRMED: "poly.auto_wrap.tx.confirmed",
-  POLY_AUTO_WRAP_CONSENT_GRANTED: "poly.auto_wrap.consent.granted",
-  POLY_AUTO_WRAP_CONSENT_REVOKED: "poly.auto_wrap.consent.revoked",
 } as const;
 
 export type EventName = (typeof EVENT_NAMES)[keyof typeof EVENT_NAMES];
