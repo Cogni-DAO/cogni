@@ -19,8 +19,7 @@
 // biome-ignore-all lint/suspicious/noConsole: validator script; stdout is the only log surface
 // biome-ignore-all lint/style/noProcessEnv: script entry point
 
-import { readFileSync } from "node:fs";
-import { globSync } from "node:fs";
+import { globSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const repoRoot = process.cwd();
@@ -34,7 +33,7 @@ const journals = globSync(
 
 if (journals.length === 0) {
   console.error(
-    "✗ check-journal-when: no journals found — glob misconfigured?",
+    "✗ check-journal-when: no journals found — glob misconfigured?"
   );
   process.exit(2);
 }
@@ -80,7 +79,7 @@ for (const rel of journals) {
 
 if (violations > 0) {
   console.error(
-    `\n✗ ${violations} journal violation(s) across ${journals.length} file(s).`,
+    `\n✗ ${violations} journal violation(s) across ${journals.length} file(s).`
   );
   process.exit(1);
 }
