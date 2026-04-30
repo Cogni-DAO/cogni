@@ -42,6 +42,7 @@ const POLY_AUTO_WRAP_EVENTS = {
   TICK_COMPLETED: "poly.auto_wrap.tick.completed",
   TICK_ERROR: "poly.auto_wrap.tick.error",
   ROW_ERROR: "poly.auto_wrap.row.error",
+  ROW_OUTCOME: "poly.auto_wrap.row.outcome",
 } as const;
 
 export const AUTO_WRAP_METRICS = {
@@ -110,12 +111,40 @@ export async function runAutoWrapTick(
         deps.metrics.incr(AUTO_WRAP_METRICS.outcomesTotal, {
           outcome: "wrapped",
         });
+        // Per-row visibility — tx.submitted / tx.confirmed already emit from
+        // the adapter; this is the job's own confirmation that it counted it.
+        log.info(
+          {
+            event: POLY_AUTO_WRAP_EVENTS.ROW_OUTCOME,
+            billing_account_id: row.billingAccountId,
+            outcome: "wrapped",
+            tx_hash: result.txHash,
+            amount_atomic: result.amountAtomic.toString(),
+          },
+          "auto-wrap: row wrapped"
+        );
       } else {
         skipped += 1;
         deps.metrics.incr(AUTO_WRAP_METRICS.outcomesTotal, {
           outcome: "skipped",
           reason: result.reason,
         });
+        // Skip reason was previously only on the metric label; logging it
+        // makes the loop diagnosable from Loki alone (metrics may be a
+        // noop adapter in some envs).
+        log.info(
+          {
+            event: POLY_AUTO_WRAP_EVENTS.ROW_OUTCOME,
+            billing_account_id: row.billingAccountId,
+            outcome: "skipped",
+            reason: result.reason,
+            observed_balance_atomic:
+              result.observedBalanceAtomic === null
+                ? null
+                : result.observedBalanceAtomic.toString(),
+          },
+          "auto-wrap: row skipped"
+        );
       }
     } catch (err: unknown) {
       errored += 1;
