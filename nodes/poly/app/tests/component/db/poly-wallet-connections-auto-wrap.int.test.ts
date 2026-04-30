@@ -27,6 +27,7 @@ import { polyWalletConnections } from "@cogni/poly-db-schema";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
+import { billingAccounts, users } from "@/shared/db/schema";
 
 const TENANT = "ba_test_auto_wrap_0429";
 const ADDRESS = "0xaaaa000000000000000000000000000000000429" as const;
@@ -36,20 +37,42 @@ async function insertSeedRow(
   overrides: { suffix?: string } = {}
 ): Promise<string> {
   const billingAccountId = `${TENANT}${overrides.suffix ?? ""}`;
+  const userId = `user_${billingAccountId}`;
+  // FK chain: users → billing_accounts → poly_wallet_connections.
+  // Address suffix derived from suffix so concurrent test rows don't collide
+  // on the partial unique (chain_id, address) index.
+  const addressSuffix = (overrides.suffix ?? "").padStart(2, "0").slice(-2);
+  const address = `${ADDRESS.slice(0, 40)}${addressSuffix}` as `0x${string}`;
+  await db
+    .insert(users)
+    .values({
+      id: userId,
+      name: `auto-wrap test ${billingAccountId}`,
+      walletAddress: address,
+    })
+    .onConflictDoNothing();
+  await db
+    .insert(billingAccounts)
+    .values({
+      id: billingAccountId,
+      ownerUserId: userId,
+      balanceCredits: 0n,
+    })
+    .onConflictDoNothing();
   const [row] = await db
     .insert(polyWalletConnections)
     .values({
       billingAccountId,
-      createdByUserId: `user_${billingAccountId}`,
+      createdByUserId: userId,
       privyWalletId: `wallet_${billingAccountId}`,
-      address: ADDRESS,
+      address,
       chainId: 137,
       // Encrypted creds — bytea content doesn't matter for these tests.
       clobApiKeyCiphertext: Buffer.from("dummy"),
       encryptionKeyId: "test-key-1",
       custodialConsentAcceptedAt: new Date(),
       custodialConsentActorKind: "user",
-      custodialConsentActorId: `user_${billingAccountId}`,
+      custodialConsentActorId: userId,
     })
     .returning({ id: polyWalletConnections.id });
   if (!row) throw new Error("seed row not returned");
@@ -60,9 +83,14 @@ describe("poly_wallet_connections — auto-wrap consent loop (task.0429)", () =>
   const db = getSeedDb();
 
   afterEach(async () => {
+    // Delete in FK order: connections → billing_accounts → users.
     await db.execute(
       sql`DELETE FROM poly_wallet_connections WHERE billing_account_id LIKE ${`${TENANT}%`}`
     );
+    await db.execute(
+      sql`DELETE FROM billing_accounts WHERE id LIKE ${`${TENANT}%`}`
+    );
+    await db.execute(sql`DELETE FROM users WHERE id LIKE ${`user_${TENANT}%`}`);
   });
 
   it("materializes the default floor at 1_000_000 atomic (DEFAULT_FLOOR)", async () => {
