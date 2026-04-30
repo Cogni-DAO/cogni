@@ -129,17 +129,17 @@ export async function listWorkItems(
 
 export async function getWorkItem(id: string): Promise<WorkItemDto | null> {
   const container = getContainer();
-  if (isDoltgresId(id)) {
-    try {
-      const item = await container.doltgresWorkItems.get(toWorkItemId(id));
-      return item ? toDto(item) : null;
-    } catch (e) {
-      if ((e as Error)?.name === "DoltgresNotConfiguredError") return null;
-      throw e;
-    }
+  // Doltgres-first: legacy markdown IDs (e.g. bug.0002) can also live in Doltgres
+  // after the markdown→Doltgres import (task.5002). Fall back to markdown only when
+  // Doltgres returns null, so unimported legacy IDs still resolve during transition.
+  try {
+    const item = await container.doltgresWorkItems.get(toWorkItemId(id));
+    if (item) return toDto(item);
+  } catch (e) {
+    if ((e as Error)?.name !== "DoltgresNotConfiguredError") throw e;
   }
-  const item = await container.workItemQuery.get(id as WorkItemId);
-  return item ? toDto(item) : null;
+  const mdItem = await container.workItemQuery.get(id as WorkItemId);
+  return mdItem ? toDto(mdItem) : null;
 }
 
 export async function createWorkItem(
@@ -181,9 +181,6 @@ export async function patchWorkItem(
   input: ContractPatchInput,
   sessionUser: { id: string; displayName: string | null }
 ): Promise<WorkItemDto> {
-  if (!isDoltgresId(input.id)) {
-    throw new WorkItemNotFoundError(input.id);
-  }
   const container = getContainer();
   try {
     const patched = await container.doltgresWorkItems.patch(
