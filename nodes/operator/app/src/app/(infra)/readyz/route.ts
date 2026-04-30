@@ -91,7 +91,6 @@ export const GET = wrapRouteHandlerWithLogging(
 
       // Set build info for metrics (canonical source: APP_BUILD_SHA from serverEnv())
       setBuildInfo(
-        // biome-ignore lint/style/noProcessEnv: build-time constant from npm_package_version
         process.env.npm_package_version || "unknown",
         env.APP_BUILD_SHA || "unknown"
       );
@@ -136,7 +135,6 @@ export const GET = wrapRouteHandlerWithLogging(
       const payload = {
         status: "healthy" as const,
         timestamp: new Date().toISOString(),
-        // biome-ignore lint/style/noProcessEnv: build-time plumbing injected via Dockerfile ARG
         version: process.env.npm_package_version || undefined,
         buildSha: env.APP_BUILD_SHA || undefined,
       };

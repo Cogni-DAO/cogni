@@ -18,7 +18,6 @@ import { defineConfig } from "vitest/config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// biome-ignore lint/style/noDefaultExport: Vitest config requires default export
 export default defineConfig({
   root: __dirname,
   esbuild: {
