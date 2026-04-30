@@ -2,13 +2,15 @@
 id: task.0433
 type: task
 title: "Extract @cogni/node-ui-kit baseline UI package, vendor into node-template"
-status: needs_design
+status: needs_review
 priority: 2
 rank: 1
 estimate: 3
 summary: "Establish a shared `packages/node-ui-kit` package containing the shadcn primitives + reui data-grid kit that ship with node-template. Forks (poly, operator, …) keep their local UI free to customize, but treat the kit as a read-only baseline they can adopt or override."
-outcome: "node-template's app imports every shadcn primitive and every reui data-grid component from `@cogni/node-ui-kit/*` instead of `@/components/vendor/*` and `@/components/reui/*`. Local copies in node-template are deleted. Other nodes (poly, operator) are untouched in this PR — they continue using their local copies until they choose to switch. AGENTS.md guidance + a CODEOWNERS-style read-only contract keeps the kit a baseline that nodes don't fork."
+outcome: "node-template's app imports every shadcn primitive and every reui data-grid component from `@cogni/node-ui-kit/*` instead of `@/components/vendor/*` and `@/components/reui/*`. Local copies in node-template are deleted. operator follows the same swap (its `app/`, `components/kit/`, `components/index.ts` barrel, and `app/(app)/work/_components/HeaderFilter.tsx` route through the kit; its local `components/vendor/shadcn/`, `components/reui/`, `shared/util/cn.ts`, `shared/hooks/useIsMobile.ts` are deleted). Forks (poly, ai-only, resy) are untouched. AGENTS.md guidance + a CODEOWNERS-style read-only contract keeps the kit a baseline that nodes don't fork."
 spec_refs:
+  - docs/spec/packages-architecture.md
+  - docs/spec/ui-implementation.md
 assignees: []
 credit:
 project:

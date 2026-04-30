@@ -86,4 +86,3 @@ If you need a primitive that doesn't exist in the kit yet, **add it to the kit v
 
 - **Internal:** none
 - **External (peer):** see `package.json` `peerDependencies`. The kit assumes the consumer's app already depends on these (every Cogni node does today).
-  // trigger
