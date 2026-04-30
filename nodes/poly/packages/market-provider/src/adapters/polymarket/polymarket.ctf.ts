@@ -18,9 +18,16 @@ import { parseAbi } from "viem";
 export const POLYGON_CONDITIONAL_TOKENS =
   "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045" as const;
 
-/** Bridged USDC.e — Polymarket collateral on Polygon. */
+/** Bridged USDC.e — Polymarket collateral on Polygon (pre-V2). */
 export const POLYGON_USDC_E =
   "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174" as const;
+
+/** pUSD — Polymarket V2 protocol-internal stablecoin (post-2026-04-28
+ * cutover). Source of truth: `@polymarket/clob-client-v2`'s
+ * `getContractConfig(137).collateral`; hardcoded here to keep the redeem
+ * pipeline free of the SDK dep. See `docs/spec/poly-collateral-currency.md`. */
+export const POLYGON_PUSD =
+  "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB" as const;
 
 export const PARENT_COLLECTION_ID_ZERO =
   "0x0000000000000000000000000000000000000000000000000000000000000000" as const;
@@ -28,6 +35,17 @@ export const PARENT_COLLECTION_ID_ZERO =
 export const polymarketCtfRedeemAbi = parseAbi([
   "function redeemPositions(address collateralToken, bytes32 parentCollectionId, bytes32 conditionId, uint256[] indexSets) external",
   "function balanceOf(address account, uint256 id) view returns (uint256)",
+]);
+
+/** View functions used to derive a position's collateralToken vintage from
+ * its on-chain positionId. `getCollectionId` does BN254 ECC math on chain
+ * (we can't replicate it cheaply off-chain); `getPositionId` is a plain
+ * `keccak256(abi.encodePacked(collateralToken, collectionId))` but takes
+ * the chain-derived collectionId as input. Used by bug.0428's vintage
+ * inference at redeem-job-create time. */
+export const polymarketCtfPositionIdAbi = parseAbi([
+  "function getCollectionId(bytes32 parentCollectionId, bytes32 conditionId, uint256 indexSet) view returns (bytes32)",
+  "function getPositionId(address collateralToken, bytes32 collectionId) view returns (uint256)",
 ]);
 
 /**

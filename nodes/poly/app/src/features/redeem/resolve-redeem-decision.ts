@@ -25,6 +25,7 @@
 import {
   normalizePolygonConditionId,
   POLYGON_CONDITIONAL_TOKENS,
+  POLYGON_USDC_E,
   type PolymarketDataApiClient,
 } from "@cogni/poly-market-provider/adapters/polymarket";
 import {
@@ -32,6 +33,8 @@ import {
   type RedeemDecision,
 } from "@cogni/poly-market-provider/policy";
 import { type PublicClient, parseAbi } from "viem";
+
+import { inferCollateralTokenForPosition } from "./infer-collateral-token";
 
 const ctfReadAbi = parseAbi([
   "function balanceOf(address account, uint256 id) view returns (uint256)",
@@ -47,6 +50,8 @@ export interface ResolvedRedeemCandidate {
   positionId: bigint;
   negativeRisk: boolean;
   decision: RedeemDecision;
+  /** Collateral that minted this position; forwarded to `redeemPositions`. bug.0428. */
+  collateralToken: `0x${string}`;
 }
 
 /**
@@ -154,12 +159,25 @@ export async function resolveRedeemCandidatesForCondition(deps: {
       negativeRisk: match.negativeRisk ?? false,
     });
 
+    // bug.0428: probe only for vanilla CTF redeems; NegRiskAdapter ignores collateralToken.
+    const negativeRisk = match.negativeRisk ?? false;
+    const collateralToken =
+      decision.kind === "redeem" && !negativeRisk
+        ? await inferCollateralTokenForPosition({
+            publicClient: deps.publicClient,
+            conditionId,
+            outcomeIndex: match.outcomeIndex,
+            expectedPositionId: positionId,
+          })
+        : POLYGON_USDC_E;
+
     out.push({
       conditionId,
       outcomeIndex: match.outcomeIndex,
       positionId,
-      negativeRisk: match.negativeRisk ?? false,
+      negativeRisk,
       decision,
+      collateralToken,
     });
   }
   return out;

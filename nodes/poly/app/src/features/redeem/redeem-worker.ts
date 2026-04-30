@@ -40,7 +40,6 @@
 import {
   POLYGON_CONDITIONAL_TOKENS,
   POLYGON_NEG_RISK_ADAPTER,
-  POLYGON_USDC_E,
   polymarketCtfEventsAbi,
   polymarketCtfRedeemAbi,
   polymarketNegRiskAdapterAbi,
@@ -253,12 +252,13 @@ export class RedeemWorker {
     let txHash: `0x${string}`;
     try {
       if (args.kind === "ctf") {
+        // bug.0428: collateralToken from the job row (set at enqueue).
         txHash = await this.deps.walletClient.writeContract({
           address: POLYGON_CONDITIONAL_TOKENS,
           abi: polymarketCtfRedeemAbi,
           functionName: "redeemPositions",
           args: [
-            POLYGON_USDC_E,
+            job.collateralToken,
             "0x0000000000000000000000000000000000000000000000000000000000000000",
             job.conditionId,
             args.indexSets,
@@ -327,6 +327,7 @@ export class RedeemWorker {
         condition_id: job.conditionId,
         funder: job.funderAddress,
         tx_hash: txHash,
+        collateral_token_used: args.kind === "ctf" ? job.collateralToken : null,
         block: receipt.blockNumber.toString(),
         flavor: job.flavor,
         burn_observed: burnObserved,

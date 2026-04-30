@@ -60,6 +60,10 @@ export const polyRedeemJobs = pgTable(
     status: text("status").notNull().default("pending"),
     flavor: text("flavor").notNull(),
     indexSet: jsonb("index_set").notNull(),
+    /** Collateral that minted the position; default = USDC.e (V1 legacy). bug.0428. */
+    collateralToken: text("collateral_token")
+      .notNull()
+      .default("0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"),
     expectedShares: text("expected_shares").notNull(),
     expectedPayoutUsdc: text("expected_payout_usdc").notNull(),
     txHashes: text("tx_hashes")
@@ -98,6 +102,10 @@ export const polyRedeemJobs = pgTable(
     flavorShape: check(
       "poly_redeem_jobs_flavor_shape",
       sql`${table.flavor} IN ('binary', 'multi-outcome', 'neg-risk-parent', 'neg-risk-adapter')`,
+    ),
+    collateralTokenShape: check(
+      "poly_redeem_jobs_collateral_token_shape",
+      sql`${table.collateralToken} ~ '^0x[a-fA-F0-9]{40}$'`,
     ),
     errorClassShape: check(
       "poly_redeem_jobs_error_class_shape",

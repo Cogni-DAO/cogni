@@ -42,6 +42,9 @@ export interface EnqueueRedeemJobInput {
   flavor: RedeemFlavor;
   /** bigint[] from `decideRedeem`; stringified to preserve precision. */
   indexSet: readonly string[];
+  /** ERC-20 collateral that minted the position; worker forwards into
+   * `redeemPositions(collateralToken, …)`. (bug.0428) */
+  collateralToken: `0x${string}`;
   /** Stringified bigint. */
   expectedShares: string;
   /** Stringified bigint (USDC.e raw, 6-dp). */

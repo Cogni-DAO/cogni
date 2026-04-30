@@ -239,6 +239,13 @@
       "when": 1777908600000,
       "tag": "0033_poly_redeem_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1777908700000,
+      "tag": "0034_poly_redeem_jobs_collateral_token",
+      "breakpoints": true
     }
   ]
 }

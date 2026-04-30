@@ -90,6 +90,8 @@ export interface RedeemJob {
   flavor: RedeemFlavor;
   /** Stringified bigint[] (jsonb in DB; precision-preserved). */
   indexSet: readonly string[];
+  /** Collateral that minted the position; forwarded to `redeemPositions`. bug.0428. */
+  collateralToken: `0x${string}`;
   /** Stringified bigint. */
   expectedShares: string;
   /** Stringified bigint (USDC.e raw, 6-dp). */
