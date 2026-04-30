@@ -904,6 +904,10 @@ function createContainer(): Container {
           const { noopMetrics: noopMetricsForAutoWrap } = await import(
             "@cogni/poly-market-provider"
           );
+          // Same pino-as-LoggerPort cast as the mirror block above; that
+          // declaration is scoped to its own try/catch so we re-cast here.
+          const autoWrapLogger =
+            log as unknown as import("@cogni/poly-market-provider").LoggerPort;
           _autoWrapHandle = startAutoWrap({
             walletPort: getPolyTraderWalletAdapter(log),
             listEligible: async (limit) => {
@@ -924,7 +928,7 @@ function createContainer(): Container {
                 billingAccountId: r.billingAccountId,
               }));
             },
-            logger: mirrorLogger,
+            logger: autoWrapLogger,
             metrics: noopMetricsForAutoWrap,
           });
         } catch (err: unknown) {
