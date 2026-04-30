@@ -50,6 +50,7 @@ function mapRow(row: Row): RedeemJob {
     status: row.status as RedeemJobStatus,
     flavor: row.flavor as RedeemFlavor,
     indexSet: (row.indexSet as string[]) ?? [],
+    collateralToken: row.collateralToken as `0x${string}`,
     expectedShares: row.expectedShares,
     expectedPayoutUsdc: row.expectedPayoutUsdc,
     txHashes: (row.txHashes ?? []) as `0x${string}`[],
@@ -93,6 +94,9 @@ export class DrizzleRedeemJobsAdapter implements RedeemJobsPort {
         expectedPayoutUsdc: input.expectedPayoutUsdc,
         lifecycleState: input.lifecycleState,
         ...(input.status !== undefined ? { status: input.status } : {}),
+        ...(input.collateralToken !== undefined
+          ? { collateralToken: input.collateralToken }
+          : {}),
       })
       .onConflictDoNothing({
         target: [polyRedeemJobs.funderAddress, polyRedeemJobs.conditionId],

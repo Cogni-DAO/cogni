@@ -32,6 +32,7 @@ function makeJob(overrides: Partial<RedeemJob>): RedeemJob {
     status: "claimed",
     flavor: "binary",
     indexSet: ["1", "2"],
+    collateralToken: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
     expectedShares: "1000000",
     expectedPayoutUsdc: "1000000",
     txHashes: [],

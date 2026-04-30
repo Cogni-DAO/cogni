@@ -25,6 +25,7 @@
 import {
   normalizePolygonConditionId,
   POLYGON_CONDITIONAL_TOKENS,
+  POLYGON_USDC_E,
   type PolymarketDataApiClient,
 } from "@cogni/poly-market-provider/adapters/polymarket";
 import {
@@ -32,6 +33,11 @@ import {
   type RedeemDecision,
 } from "@cogni/poly-market-provider/policy";
 import { type PublicClient, parseAbi } from "viem";
+
+import {
+  type CollateralTokenInferredFrom,
+  inferCollateralTokenForPosition,
+} from "./infer-collateral-token";
 
 const ctfReadAbi = parseAbi([
   "function balanceOf(address account, uint256 id) view returns (uint256)",
@@ -47,6 +53,16 @@ export interface ResolvedRedeemCandidate {
   positionId: bigint;
   negativeRisk: boolean;
   decision: RedeemDecision;
+  /** ERC-20 address of the collateral that minted this position. Set only
+   * when `decision.kind === 'redeem'` for vanilla CTF (binary,
+   * multi-outcome); neg-risk-parent ignores it at dispatch (the adapter's
+   * `redeemPositions` takes no collateralToken arg). USDC.e is the
+   * legacy-safe default; pUSD comes from the chain probe in
+   * `inferCollateralTokenForPosition`. */
+  collateralToken: `0x${string}`;
+  /** Audit field — how `collateralToken` was determined. Surfaced in the
+   * subscriber's `poly.ctf.redeem.policy_decision` log. */
+  collateralTokenInferredFrom: CollateralTokenInferredFrom | "neg_risk_skip";
 }
 
 /**
@@ -154,12 +170,34 @@ export async function resolveRedeemCandidatesForCondition(deps: {
       negativeRisk: match.negativeRisk ?? false,
     });
 
+    // bug.0428: only vanilla CTF redeems pass a collateralToken into
+    // `redeemPositions`. NegRisk routes through NegRiskAdapter.redeemPositions
+    // (no collateralToken arg) and pays out in whatever the adapter holds,
+    // so probing is wasted RPC. Skip it.
+    let collateralToken: `0x${string}` = POLYGON_USDC_E;
+    let collateralTokenInferredFrom:
+      | CollateralTokenInferredFrom
+      | "neg_risk_skip" = "neg_risk_skip";
+    const negativeRisk = match.negativeRisk ?? false;
+    if (decision.kind === "redeem" && !negativeRisk) {
+      const inferred = await inferCollateralTokenForPosition({
+        publicClient: deps.publicClient,
+        conditionId,
+        outcomeIndex: match.outcomeIndex,
+        expectedPositionId: positionId,
+      });
+      collateralToken = inferred.collateralToken;
+      collateralTokenInferredFrom = inferred.inferredFrom;
+    }
+
     out.push({
       conditionId,
       outcomeIndex: match.outcomeIndex,
       positionId,
-      negativeRisk: match.negativeRisk ?? false,
+      negativeRisk,
       decision,
+      collateralToken,
+      collateralTokenInferredFrom,
     });
   }
   return out;

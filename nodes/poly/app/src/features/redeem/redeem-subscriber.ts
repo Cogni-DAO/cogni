@@ -189,6 +189,8 @@ export class RedeemSubscriber {
           lifecycle_state: enqueueInput.lifecycleState,
           flavor: enqueueInput.flavor,
           already_existed: result.alreadyExisted,
+          collateral_token: c.collateralToken,
+          collateral_token_inferred_from: c.collateralTokenInferredFrom,
         },
         "redeem-subscriber: job enqueued"
       );

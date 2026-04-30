@@ -49,6 +49,7 @@ export function decisionToEnqueueInput(
       ...base,
       flavor: c.decision.flavor,
       indexSet: c.decision.indexSet.map((b) => b.toString()),
+      collateralToken: c.collateralToken,
       expectedShares: c.decision.expectedShares.toString(),
       expectedPayoutUsdc: c.decision.expectedPayoutUsdc.toString(),
       lifecycleState: "winner",

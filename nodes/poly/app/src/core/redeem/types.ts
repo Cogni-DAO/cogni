@@ -90,6 +90,11 @@ export interface RedeemJob {
   flavor: RedeemFlavor;
   /** Stringified bigint[] (jsonb in DB; precision-preserved). */
   indexSet: readonly string[];
+  /** ERC-20 address of the collateral that minted this CTF position. The
+   * worker passes this into `redeemPositions(collateralToken, …)`; mismatch
+   * silently zero-burns. Pre-V2 mints are USDC.e; post-V2 (2026-04-28) mints
+   * are pUSD. Subscriber probes the chain at enqueue time. (bug.0428) */
+  collateralToken: `0x${string}`;
   /** Stringified bigint. */
   expectedShares: string;
   /** Stringified bigint (USDC.e raw, 6-dp). */

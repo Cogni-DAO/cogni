@@ -20,6 +20,8 @@ import {
 const CONDITION_ID =
   "0x4eaf52950000000000000000000000000000000000000000000000000000aaaa" as const;
 
+const USDCE = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174" as const;
+
 function loserCandidate(outcomeIndex: number): ResolvedRedeemCandidate {
   return {
     conditionId: CONDITION_ID,
@@ -27,6 +29,8 @@ function loserCandidate(outcomeIndex: number): ResolvedRedeemCandidate {
     positionId: 1n,
     negativeRisk: false,
     decision: { kind: "skip", reason: "losing_outcome" },
+    collateralToken: USDCE,
+    collateralTokenInferredFrom: "neg_risk_skip",
   };
 }
 
@@ -45,6 +49,8 @@ function winnerCandidate(outcomeIndex: number): ResolvedRedeemCandidate {
       expectedShares: 9_990_000n,
       expectedPayoutUsdc: 9_990_000n,
     },
+    collateralToken: USDCE,
+    collateralTokenInferredFrom: "chain_probe_usdce",
   };
 }
 

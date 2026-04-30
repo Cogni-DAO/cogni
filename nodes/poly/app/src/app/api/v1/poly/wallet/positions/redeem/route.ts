@@ -139,6 +139,7 @@ export const POST = wrapRouteHandlerWithLogging(
       outcomeIndex: candidate.outcomeIndex,
       flavor: decision.flavor,
       indexSet: decision.indexSet.map((b) => b.toString()),
+      collateralToken: candidate.collateralToken,
       expectedShares: decision.expectedShares.toString(),
       expectedPayoutUsdc: decision.expectedPayoutUsdc.toString(),
       lifecycleState: "winner",
