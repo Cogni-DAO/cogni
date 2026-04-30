@@ -8,7 +8,7 @@
  * Invariants:
  *   - Contract remains stable; breaking changes require new version
  *   - All consumers use z.infer types
- *   - ID is server-allocated, never client-supplied
+ *   - ID is server-allocated by default; client-supplied `id` is allowed for ID-preserving bulk imports (legacy markdown corpus → Doltgres). Server validates the format and rejects collisions with existing rows.
  *   - status defaults to "needs_triage" if not provided
  *   - node defaults to "shared"
  * Side-effects: none
@@ -46,6 +46,10 @@ export const workItemsCreateOperation = {
   description:
     "Creates a new work item in operator's Doltgres knowledge_operator database. Server allocates an ID in the reserved 5000+ range per type (e.g. task.5000+). Returns the full created row.",
   input: z.object({
+    id: z
+      .string()
+      .regex(/^(task|bug|story|spike|subtask)\.\d{4,}$/)
+      .optional(),
     type: WorkItemTypeSchema,
     title: z.string().min(1).max(500),
     summary: z.string().optional(),

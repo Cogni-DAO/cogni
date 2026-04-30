@@ -152,6 +152,7 @@ export async function createWorkItem(
       {
         type: input.type,
         title: input.title,
+        ...(input.id !== undefined && { id: toWorkItemId(input.id) }),
         ...(input.summary !== undefined && { summary: input.summary }),
         ...(input.outcome !== undefined && { outcome: input.outcome }),
         ...(input.specRefs !== undefined && { specRefs: input.specRefs }),

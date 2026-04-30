@@ -282,15 +282,33 @@ export class DoltgresOperatorWorkItemAdapter implements WorkItemsDoltgresPort {
     input: WorkItemsCreateInput,
     authorTag: string
   ): Promise<WorkItem> {
-    const idRows = await this.sql.unsafe(
-      `SELECT id FROM work_items WHERE type = ${escapeValue(input.type)}`
-    );
-    let maxSuffix = ID_FLOOR - 1;
-    for (const r of idRows as ReadonlyArray<Record<string, unknown>>) {
-      const suffix = parseSuffix(String(r.id), input.type);
-      if (suffix !== null && suffix > maxSuffix) maxSuffix = suffix;
+    let allocatedId: string;
+    if (input.id) {
+      const requested = String(input.id);
+      const expectedPrefix = `${input.type}.`;
+      if (!requested.startsWith(expectedPrefix)) {
+        throw new Error(
+          `Provided id '${requested}' does not match type '${input.type}'`
+        );
+      }
+      const existing = await this.sql.unsafe(
+        `SELECT id FROM work_items WHERE id = ${escapeValue(requested)} LIMIT 1`
+      );
+      if (existing.length > 0) {
+        throw new Error(`id '${requested}' already exists`);
+      }
+      allocatedId = requested;
+    } else {
+      const idRows = await this.sql.unsafe(
+        `SELECT id FROM work_items WHERE type = ${escapeValue(input.type)}`
+      );
+      let maxSuffix = ID_FLOOR - 1;
+      for (const r of idRows as ReadonlyArray<Record<string, unknown>>) {
+        const suffix = parseSuffix(String(r.id), input.type);
+        if (suffix !== null && suffix > maxSuffix) maxSuffix = suffix;
+      }
+      allocatedId = `${input.type}.${String(maxSuffix + 1).padStart(4, "0")}`;
     }
-    const allocatedId = `${input.type}.${String(maxSuffix + 1).padStart(4, "0")}`;
 
     const cols: string[] = ["id", "type", "title", "status", "node"];
     const vals: string[] = [

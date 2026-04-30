@@ -243,9 +243,22 @@ function loadSourceContext(repoRoot: string): SourceContext {
   return { sha, filenameById };
 }
 
+const API_STATUSES = new Set([
+  "needs_triage",
+  "needs_research",
+  "needs_design",
+  "needs_implement",
+  "needs_closeout",
+  "needs_merge",
+  "done",
+  "blocked",
+  "cancelled",
+]);
+
 function buildBody(item: WorkItem): Record<string, unknown> {
   const summary = (item.summary ?? "").trim();
   const body: Record<string, unknown> = {
+    id: item.id,
     type: item.type,
     title: item.title,
   };
@@ -256,6 +269,18 @@ function buildBody(item: WorkItem): Record<string, unknown> {
   if (item.parentId) body.parentId = item.parentId;
   if (item.specRefs?.length) body.specRefs = item.specRefs;
   if (item.labels?.length) body.labels = item.labels;
+  if (item.priority !== undefined && item.priority !== null) {
+    body.priority = item.priority;
+  }
+  if (item.rank !== undefined && item.rank !== null) body.rank = item.rank;
+  if (item.estimate !== undefined && item.estimate !== null) {
+    body.estimate = item.estimate;
+  }
+  if (item.status && API_STATUSES.has(item.status)) {
+    body.status = item.status;
+  } else if (item.status === "needs_review") {
+    body.status = "needs_merge";
+  }
   return body;
 }
 

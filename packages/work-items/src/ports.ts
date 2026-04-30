@@ -36,6 +36,7 @@ export interface WorkItemQueryPort {
 
 export interface WorkItemCommandPort {
   create(input: {
+    id?: WorkItemId;
     type: WorkItemType;
     title: string;
     summary?: string;
