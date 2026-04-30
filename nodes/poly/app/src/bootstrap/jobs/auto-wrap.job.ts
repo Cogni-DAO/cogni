@@ -218,10 +218,7 @@ export function startAutoWrap(deps: AutoWrapJobDeps): AutoWrapJobHandle {
   return {
     stop() {
       clearInterval(intervalHandle);
-      log.info(
-        { event: POLY_AUTO_WRAP_EVENTS.STOPPED },
-        "auto-wrap stopped"
-      );
+      log.info({ event: POLY_AUTO_WRAP_EVENTS.STOPPED }, "auto-wrap stopped");
     },
     getLastTickAt() {
       return lastTickAt;
