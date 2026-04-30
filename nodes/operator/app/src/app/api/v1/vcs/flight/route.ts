@@ -64,12 +64,22 @@ export const POST = wrapRouteHandlerWithLogging(
     const container = getContainer();
     const vcs = container.vcsCapability;
 
-    // CI gate: verify all checks are green for the exact PR head SHA
+    // CI gate: verify all checks are green for the exact PR head SHA.
+    // Cross-node-refactor escape hatch: PRs labeled `cross-node-refactor`
+    // skip the CI-green gate (single-node-scope and any non-required checks
+    // that fail on multi-domain refactors are still visible on the PR for
+    // reviewer signal). Pending checks still block to avoid racing.
     const ciStatus = await vcs.getCiStatus({ owner, repo, prNumber });
-    if (!ciStatus.allGreen || ciStatus.pending) {
+    const labelBypass = ciStatus.labels.includes("cross-node-refactor");
+    if ((!ciStatus.allGreen && !labelBypass) || ciStatus.pending) {
       logRequestWarn(
         ctx.log,
-        { prNumber, allGreen: ciStatus.allGreen, pending: ciStatus.pending },
+        {
+          prNumber,
+          allGreen: ciStatus.allGreen,
+          pending: ciStatus.pending,
+          labelBypass,
+        },
         "CI_NOT_GREEN"
       );
       return NextResponse.json(
