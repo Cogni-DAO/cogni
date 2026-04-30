@@ -195,7 +195,7 @@ export class DoltgresOperatorWorkItemAdapter implements WorkItemsDoltgresPort {
     const limit = Math.min(query.limit ?? 100, 500);
 
     const rows = await this.sql.unsafe(
-      `SELECT * FROM work_items ${where} ORDER BY priority ASC NULLS LAST, rank ASC NULLS LAST, created_at DESC LIMIT ${limit}`
+      `SELECT * FROM work_items ${where} ORDER BY COALESCE(priority, 999) ASC, COALESCE(rank, 999) ASC, created_at DESC LIMIT ${limit}`
     );
     return {
       items: rows.map((r) => rowToWorkItem(r as Record<string, unknown>)),
