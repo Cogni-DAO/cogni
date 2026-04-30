@@ -127,7 +127,7 @@ export const polyWalletConnections = pgTable(
       mode: "bigint",
     })
       .notNull()
-      .default(1_000_000n),
+      .default(sql`1000000`),
     /**
      * Revoke marker independent of `revokedAt`. Lets a tenant turn auto-wrap
      * off without killing the connection. CONSENT_REVOCABLE (task.0429): the

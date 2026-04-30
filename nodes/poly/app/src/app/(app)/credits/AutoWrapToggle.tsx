@@ -108,7 +108,7 @@ export function AutoWrapToggle({
             here — from deposits, settlements, or transfers — every minute.
           </p>
           {hasError ? (
-            <p className="mt-1.5 text-[11px] text-destructive">
+            <p className="mt-1.5 text-destructive text-xs">
               Couldn't update — try again.
             </p>
           ) : null}
@@ -161,7 +161,7 @@ function StatusPill({
 }): ReactElement {
   if (pending) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
+      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">
         <span className="h-1 w-1 animate-pulse rounded-full bg-muted-foreground/60" />
         Updating
       </span>
@@ -169,14 +169,14 @@ function StatusPill({
   }
   if (on) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-0.5 font-medium text-[10px] text-emerald-600 uppercase tracking-wider dark:text-emerald-400">
-        <span className="h-1 w-1 rounded-full bg-emerald-500" />
+      <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 font-medium text-success text-xs uppercase tracking-wider">
+        <span className="h-1 w-1 rounded-full bg-success" />
         Active
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
+    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">
       <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
       Off
     </span>
