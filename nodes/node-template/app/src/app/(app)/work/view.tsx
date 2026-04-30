@@ -3,9 +3,17 @@
 
 /**
  * Module: `@app/(app)/work/view`
- * Purpose: Client-side work dashboard with TanStack Table (ReUI data-grid), sorting, faceted filtering, detail panel.
- * Scope: Presentation + URL-driven filter state. Fetches data via React Query.
- * Invariants: KIT_IS_ONLY_API, MOBILE_FIRST, CONTRACTS_ARE_TRUTH, URL_DRIVEN_STATE
+ * Purpose: Client-side work dashboard. ReUI DataGrid with per-column header
+ *          dropdowns owning sort + filter, single top-right Columns toggle,
+ *          search input, URL-driven state, detail panel.
+ * Scope: Presentation. Fetches data via React Query.
+ * Invariants:
+ *   - HEADER_OWNS_SORT_AND_FILTER — sort + per-column facet filter live in
+ *     the column header dropdown (see `_components/columns.tsx`).
+ *   - SINGLE_COLUMNS_TOGGLE — visibility lives in one toolbar button
+ *     (`DataGridColumnVisibility`), not on every column dropdown.
+ *   - URL_DRIVEN_STATE — filters / sort / search persist in URL params.
+ *   - CONTRACTS_ARE_TRUTH — types derived from `WorkItemDto`.
  * Side-effects: IO (fetches from /api/v1/work/items)
  * Links: [WorkPage](./page.tsx), [fetchWorkItems](./_api/fetchWorkItems.ts)
  * @public
@@ -18,38 +26,40 @@ import { useQuery } from "@tanstack/react-query";
 import {
   type ColumnFiltersState,
   getCoreRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
   type SortingState,
   useReactTable,
+  type VisibilityState,
 } from "@tanstack/react-table";
+import { Settings2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Input } from "@/components";
+import { Button, Input } from "@/components";
 import {
   DataGrid,
   DataGridContainer,
 } from "@/components/reui/data-grid/data-grid";
+import { DataGridColumnVisibility } from "@/components/reui/data-grid/data-grid-column-visibility";
 import { DataGridPagination } from "@/components/reui/data-grid/data-grid-pagination";
 import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
 
 import { fetchWorkItems } from "./_api/fetchWorkItems";
 import { columns } from "./_components/columns";
-import { FacetedFilter } from "./_components/FacetedFilter";
 import { WorkItemDetail } from "./_components/WorkItemDetail";
 
-function getUniqueValues(
-  items: WorkItemDto[],
-  key: keyof WorkItemDto
-): string[] {
-  const set = new Set<string>();
-  for (const item of items) {
-    const val = item[key];
-    if (typeof val === "string" && val) set.add(val);
-  }
-  return [...set].sort();
-}
+const ACTIVE_STATUSES = [
+  "needs_triage",
+  "needs_research",
+  "needs_design",
+  "needs_implement",
+  "needs_closeout",
+  "needs_merge",
+  "blocked",
+];
 
 export function WorkDashboardView() {
   const router = useRouter();
@@ -63,18 +73,6 @@ export function WorkDashboardView() {
 
   const items = data?.items ?? [];
 
-  // --- URL-driven state ---
-  // Default: hide done/cancelled unless user explicitly sets status filter
-  const ACTIVE_STATUSES = [
-    "needs_triage",
-    "needs_research",
-    "needs_design",
-    "needs_implement",
-    "needs_closeout",
-    "needs_merge",
-    "blocked",
-  ];
-
   const initialFilters = useMemo((): ColumnFiltersState => {
     const filters: ColumnFiltersState = [];
     const typeParam = searchParams.get("type");
@@ -83,7 +81,6 @@ export function WorkDashboardView() {
     if (statusParam) {
       filters.push({ id: "status", value: statusParam.split(",") });
     } else {
-      // Default: active items only
       filters.push({ id: "status", value: ACTIVE_STATUSES });
     }
     const projectParam = searchParams.get("project");
@@ -106,8 +103,8 @@ export function WorkDashboardView() {
   const [columnFilters, setColumnFilters] =
     useState<ColumnFiltersState>(initialFilters);
   const [globalFilter, setGlobalFilter] = useState(searchParams.get("q") ?? "");
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 
-  // Sync state → URL
   const syncUrl = useCallback(
     (
       newFilters: ColumnFiltersState,
@@ -132,14 +129,12 @@ export function WorkDashboardView() {
     [router]
   );
 
-  // --- Detail panel ---
   const [selectedItem, setSelectedItem] = useState<WorkItemDto | null>(null);
 
-  // --- Table ---
   const table = useReactTable({
     data: items,
     columns,
-    state: { sorting, columnFilters, globalFilter },
+    state: { sorting, columnFilters, globalFilter, columnVisibility },
     onSortingChange: (updater) => {
       const next = typeof updater === "function" ? updater(sorting) : updater;
       setSorting(next);
@@ -152,10 +147,13 @@ export function WorkDashboardView() {
       syncUrl(next, sorting, globalFilter);
     },
     onGlobalFilterChange: setGlobalFilter,
+    onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
     globalFilterFn: (row, _columnId, filterValue: string) => {
       const q = filterValue.toLowerCase();
       const d = row.original;
@@ -169,7 +167,6 @@ export function WorkDashboardView() {
 
   const rows = table.getRowModel().rows;
 
-  // Keyboard handler
   const [focusedRowIndex, setFocusedRowIndex] = useState(-1);
 
   useEffect(() => {
@@ -217,30 +214,7 @@ export function WorkDashboardView() {
     return () => document.removeEventListener("keydown", handleKey);
   }, [rows, focusedRowIndex, selectedItem]);
 
-  // Facet options
-  const typeOptions = getUniqueValues(items, "type");
-  const statusOptions = getUniqueValues(items, "status");
-  const projectOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const item of items) {
-      if (item.projectId) set.add(item.projectId);
-    }
-    return [...set].sort();
-  }, [items]);
-
-  const activeTypeFilter =
-    (columnFilters.find((f) => f.id === "type")?.value as string[]) ?? [];
-  const activeStatusFilter =
-    (columnFilters.find((f) => f.id === "status")?.value as string[]) ?? [];
-  const activeProjectFilter =
-    (columnFilters.find((f) => f.id === "projectId")?.value as string[]) ?? [];
-
-  function setFacet(id: string, values: string[]) {
-    const next = columnFilters.filter((f) => f.id !== id);
-    if (values.length > 0) next.push({ id, value: values });
-    setColumnFilters(next);
-    syncUrl(next, sorting, globalFilter);
-  }
+  const hasActiveFilters = columnFilters.length > 0;
 
   return (
     <div className="flex flex-col gap-4 p-5 md:p-6">
@@ -248,7 +222,6 @@ export function WorkDashboardView() {
         Work Dashboard
       </h1>
 
-      {/* Toolbar: Search + Faceted Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <Input
           data-search-input
@@ -260,25 +233,7 @@ export function WorkDashboardView() {
             syncUrl(columnFilters, sorting, e.target.value);
           }}
         />
-        <FacetedFilter
-          title="Type"
-          options={typeOptions}
-          selected={activeTypeFilter}
-          onChange={(v) => setFacet("type", v)}
-        />
-        <FacetedFilter
-          title="Status"
-          options={statusOptions}
-          selected={activeStatusFilter}
-          onChange={(v) => setFacet("status", v)}
-        />
-        <FacetedFilter
-          title="Project"
-          options={projectOptions}
-          selected={activeProjectFilter}
-          onChange={(v) => setFacet("projectId", v)}
-        />
-        {columnFilters.length > 0 && (
+        {hasActiveFilters && (
           <button
             type="button"
             className="text-muted-foreground text-xs underline hover:text-foreground"
@@ -290,26 +245,31 @@ export function WorkDashboardView() {
             Clear filters
           </button>
         )}
+        <div className="ml-auto">
+          <DataGridColumnVisibility
+            table={table}
+            trigger={
+              <Button variant="outline" size="sm" className="h-9 gap-1.5">
+                <Settings2 className="size-3.5" />
+                Columns
+              </Button>
+            }
+          />
+        </div>
       </div>
 
-      {/* Loading / Error */}
-      {isLoading && (
-        <p className="py-8 text-center text-muted-foreground">
-          Loading work items...
-        </p>
-      )}
       {error && (
         <p className="py-8 text-center text-destructive">
           Failed to load work items.
         </p>
       )}
 
-      {/* Data Grid */}
-      {!isLoading && !error && (
+      {!error && (
         <DataGrid
           table={table}
           recordCount={items.length}
           isLoading={isLoading}
+          loadingMode="skeleton"
           onRowClick={(row) => setSelectedItem(row)}
           tableLayout={{
             headerSticky: true,
@@ -329,7 +289,6 @@ export function WorkDashboardView() {
         </DataGrid>
       )}
 
-      {/* Detail Panel */}
       <WorkItemDetail
         item={selectedItem}
         open={selectedItem !== null}

@@ -1,18 +1,44 @@
 // SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
+/**
+ * Module: `@app/(app)/work/_components/columns`
+ * Purpose: TanStack column definitions for the work-items DataGrid.
+ * Scope: Pure column descriptors + inline cells. No fetching, no router.
+ * Invariants:
+ *   - HEADER_OWNS_SORT_AND_FILTER: every header renders via reui
+ *     `DataGridColumnHeader` so sort lives there. Discrete-value columns
+ *     (type / status / projectId) inline a `HeaderFilter` so per-column
+ *     multi-select filtering lives in the same dropdown.
+ *   - Column visibility is NOT in the header dropdown — it lives in a single
+ *     toolbar `Columns` button at top-right of `view.tsx`.
+ *   - filterFn: "arrIncludesSome" on facet columns so HeaderFilter's
+ *     setFilterValue(string[]) works.
+ * @internal
+ */
+
 "use client";
 
 import type { WorkItemDto } from "@cogni/node-contracts";
 import { createColumnHelper } from "@tanstack/react-table";
 
+import { DataGridColumnHeader } from "@/components/reui/data-grid/data-grid-column-header";
+
+import { HeaderFilter } from "./HeaderFilter";
 import { StatusPill, TypeIcon } from "./work-item-icons";
 
 const col = createColumnHelper<WorkItemDto>();
 
+const formatStatus = (v: string) =>
+  v.replace("needs_", "").replaceAll("_", " ");
+
+const formatProject = (v: string) => v.replace("proj.", "");
+
 export const columns = [
   col.accessor("priority", {
-    header: "Pri",
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Pri" />
+    ),
     size: 60,
     cell: (info) => {
       const v = info.getValue();
@@ -33,7 +59,13 @@ export const columns = [
   }),
 
   col.accessor("type", {
-    header: "Type",
+    header: ({ column }) => (
+      <DataGridColumnHeader
+        column={column}
+        title="Type"
+        filter={<HeaderFilter column={column} />}
+      />
+    ),
     size: 55,
     cell: (info) => <TypeIcon type={info.getValue()} />,
     filterFn: "arrIncludesSome",
@@ -42,7 +74,9 @@ export const columns = [
 
   col.display({
     id: "item",
-    header: "Item",
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Item" />
+    ),
     minSize: 250,
     cell: ({ row }) => {
       const { id, title } = row.original;
@@ -57,7 +91,13 @@ export const columns = [
   }),
 
   col.accessor("status", {
-    header: "Status",
+    header: ({ column }) => (
+      <DataGridColumnHeader
+        column={column}
+        title="Status"
+        filter={<HeaderFilter column={column} formatLabel={formatStatus} />}
+      />
+    ),
     size: 150,
     cell: (info) => <StatusPill status={info.getValue()} />,
     filterFn: "arrIncludesSome",
@@ -65,14 +105,20 @@ export const columns = [
   }),
 
   col.accessor("projectId", {
-    header: "Project",
+    header: ({ column }) => (
+      <DataGridColumnHeader
+        column={column}
+        title="Project"
+        filter={<HeaderFilter column={column} formatLabel={formatProject} />}
+      />
+    ),
     size: 140,
     cell: (info) => {
       const v = info.getValue();
       if (!v) return null;
       return (
         <span className="truncate text-muted-foreground text-xs">
-          {v.replace("proj.", "")}
+          {formatProject(v)}
         </span>
       );
     },
@@ -81,7 +127,9 @@ export const columns = [
   }),
 
   col.accessor("updatedAt", {
-    header: "Updated",
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Updated" />
+    ),
     size: 110,
     cell: (info) => {
       const v = info.getValue() || info.row.original.createdAt;
@@ -99,13 +147,15 @@ export const columns = [
   }),
 
   col.accessor("estimate", {
-    header: "Est",
+    header: ({ column }) => (
+      <DataGridColumnHeader column={column} title="Est" />
+    ),
     size: 55,
     cell: (info) => {
       const v = info.getValue();
       return (
         <span className="text-center text-muted-foreground text-xs">
-          {v ?? "\u2014"}
+          {v ?? "—"}
         </span>
       );
     },
