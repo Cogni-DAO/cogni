@@ -114,10 +114,7 @@ export function DistributionsBlock({
         >
           <StackedBars histogram={data.dcaDepth} viewMode={viewMode} />
         </ChartCard>
-        <ChartCard
-          title="Trade size"
-          subtitle="USDC notional per fill"
-        >
+        <ChartCard title="Trade size" subtitle="USDC notional per fill">
           <StackedBars histogram={data.tradeSize} viewMode={viewMode} />
         </ChartCard>
         <ChartCard
@@ -132,10 +129,7 @@ export function DistributionsBlock({
         >
           <StackedBars histogram={data.dcaWindow} viewMode={viewMode} />
         </ChartCard>
-        <ChartCard
-          title="Hour of day (UTC)"
-          subtitle="when do they trade"
-        >
+        <ChartCard title="Hour of day (UTC)" subtitle="when do they trade">
           <StackedBars
             histogram={data.hourOfDay}
             viewMode={viewMode}
@@ -296,7 +290,9 @@ function StackedBars({
         const counts = viewMode === "count" ? b.values.count : b.values.usdc;
         const total = counts.won + counts.lost + counts.pending;
         const totalPx =
-          total === 0 ? 4 : Math.max(8, Math.round((total / scaleMax) * chartPx));
+          total === 0
+            ? 4
+            : Math.max(8, Math.round((total / scaleMax) * chartPx));
         const wonPx =
           total > 0 ? Math.round((counts.won / total) * totalPx) : 0;
         const lostPx =
@@ -315,16 +311,10 @@ function StackedBars({
               style={{ height: `${totalPx}px` }}
             >
               {wonPx > 0 ? (
-                <div
-                  className={COLORS.won}
-                  style={{ height: `${wonPx}px` }}
-                />
+                <div className={COLORS.won} style={{ height: `${wonPx}px` }} />
               ) : null}
               {lostPx > 0 ? (
-                <div
-                  className={COLORS.lost}
-                  style={{ height: `${lostPx}px` }}
-                />
+                <div className={COLORS.lost} style={{ height: `${lostPx}px` }} />
               ) : null}
               {pendingPx > 0 ? (
                 <div
@@ -498,7 +488,9 @@ function CoverageNotice({ gap }: { gap: CoverageGap }): ReactElement {
       )}
     >
       <span className="text-muted-foreground">{message}</span>
-      <span className="font-medium text-foreground text-xs">Load details →</span>
+      <span className="font-medium text-foreground text-xs">
+        Load details →
+      </span>
     </button>
   );
 }

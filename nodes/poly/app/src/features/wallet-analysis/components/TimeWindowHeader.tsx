@@ -44,9 +44,7 @@ export function TimeWindowHeader({
   isLoading,
 }: TimeWindowHeaderProps): ReactElement {
   const windowedPnl = computeWindowedPnl(pnlHistory);
-  const caption = isLoading
-    ? "Loading…"
-    : buildCaption(interval, windowedPnl);
+  const caption = isLoading ? "Loading…" : buildCaption(interval, windowedPnl);
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/10 p-4 sm:flex-row sm:items-center sm:justify-between">
