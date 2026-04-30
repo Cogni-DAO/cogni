@@ -49,7 +49,7 @@ export function HeaderFilter<TData, TValue>({
   }
 
   return (
-    <div className="flex max-h-64 min-w-40 flex-col gap-0.5 overflow-y-auto">
+    <div className="flex max-h-64 min-w-56 flex-col gap-0.5 overflow-y-auto pr-1">
       {values.map((v) => {
         const isSelected = selected.has(v);
         return (
@@ -74,7 +74,7 @@ export function HeaderFilter<TData, TValue>({
             <span className="flex-1 truncate capitalize">
               {formatLabel ? formatLabel(v) : v}
             </span>
-            <span className="font-mono text-muted-foreground text-xs">
+            <span className="shrink-0 pl-2 font-mono text-muted-foreground text-xs tabular-nums">
               {facets.get(v)}
             </span>
           </button>
