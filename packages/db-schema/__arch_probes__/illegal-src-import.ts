@@ -12,6 +12,6 @@
  */
 
 // @ts-expect-error - intentional violation for arch testing
-import { cn } from "@/shared/util/cn";
+import * as obs from "@/shared/observability";
 
-export const probe = cn;
+export const probe = obs;
