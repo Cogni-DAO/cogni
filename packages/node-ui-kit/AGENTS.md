@@ -53,6 +53,24 @@ This is the **baseline** for `nodes/node-template/`. Forks (poly, operator, ai-o
 - **SOURCE_EXPORTS** — `package.json` exports point to `src/*.ts(x)`. Consumer must add `"@cogni/node-ui-kit"` to `transpilePackages` in `next.config.ts`.
 - **PEER_DEPS_ONLY** — react, radix-ui, lucide-react, class-variance-authority, clsx, tailwind-merge, @tanstack/react-table, recharts, vaul, etc. are `peerDependencies`. The consumer brings them.
 - **No tsup, no `dist/`** — Next.js handles compilation via `transpilePackages`.
+- **TAILWIND_SOURCE_OWNED_BY_KIT** — Tailwind v4 only auto-scans the consuming project's tree, so the kit's classes are invisible to the compiled CSS unless declared. The kit ships `src/tailwind-source.css` that `@source`s its own files using kit-relative paths. Consumers `@import "@cogni/node-ui-kit/tailwind-source.css"` from their `tailwind.css` — no `../` traversal in consumers, no fragile coupling to the kit's filesystem location.
+
+## Consumer integration (3 lines)
+
+```ts
+// next.config.ts
+transpilePackages: ["@cogni/node-ui-kit"];
+```
+
+```jsonc
+// app/package.json
+"dependencies": { "@cogni/node-ui-kit": "workspace:*" }
+```
+
+```css
+/* src/styles/tailwind.css */
+@import "@cogni/node-ui-kit/tailwind-source.css";
+```
 
 ## Responsibilities
 

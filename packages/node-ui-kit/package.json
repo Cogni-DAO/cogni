@@ -12,7 +12,8 @@
     "./reui/data-grid/*": "./src/reui/data-grid/*.tsx",
     "./util/cn": "./src/util/cn.ts",
     "./util/use-is-mobile": "./src/util/use-is-mobile.ts",
-    "./header-filter": "./src/header-filter.tsx"
+    "./header-filter": "./src/header-filter.tsx",
+    "./tailwind-source.css": "./src/tailwind-source.css"
   },
   "peerDependencies": {
     "@dnd-kit/core": ">=6",

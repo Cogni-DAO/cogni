@@ -1,12 +1,7 @@
 @import "tailwindcss";
 @custom-variant dark (&:is(.dark *));
 @import "tw-animate-css";
-
-/* Tailwind v4 only auto-scans the project tree. The shared UI kit lives in
- * a workspace package (consumed via transpilePackages); without an explicit
- * @source it gets skipped and every shadcn class in the kit compiles to
- * nothing. */
-@source "../../../../../packages/node-ui-kit/src/**/*.{ts,tsx}";
+@import "@cogni/node-ui-kit/tailwind-source.css";
 
 @theme inline {
   /* Colors - map CSS vars to Tailwind color namespace */
