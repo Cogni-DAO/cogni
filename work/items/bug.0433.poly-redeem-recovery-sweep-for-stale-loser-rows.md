@@ -9,6 +9,8 @@ estimate: 3
 created: 2026-04-30
 updated: 2026-04-30
 summary: "bug.0431 (#1139) fixed the future enqueue order so the winner-side row claim wins the race. It does NOT recover rows the buggy classifier already wrote. On candidate-a (sha cc7e709e5), Derek's wallet (`billing_account_id=777dedd4-b49e-443f-a1e7-23c2e77468ef`, funder `0x9A9e7276b3C4d6E7c9a866EB6FEB8CFaB82C160A`) has ~50 condition rows in `poly_redeem_jobs` with `status='skipped'`, `lifecycle_state='loser'`, `collateral_token=USDC.e`, `already_existed=true`. The subscriber re-observes resolution + emits `policy_decision: skip / losing_outcome` every reboot but `onConflictDoNothing` keeps the terminal-loser row in place. Net: he holds the WINNING outcome on chain, the redeem-worker never claims, no `redeemPositions` tx ever fires, no cash returns to the funder. Wallet is at 0 USDC.e + 0 pUSD because every winner is stuck in CTF tokens."
+outcome: "On candidate-a + preview + (eventually) production, every `poly_redeem_jobs` row stamped `lifecycle_state='loser'` by the pre-bug.0431 classifier is re-decided against the on-chain payout vector + the user's actual CTF balance. Rows whose user holds the winning side flip to `pending/winner` so the worker claims and submits `redeemPositions`. Genuine losers stay terminal. Derek's 50 stranded positions on candidate-a unstick within one tick of the sweep. After the sweep, no manual SQL is ever needed — the subscriber's idempotent enqueue path detects the loser-row mismatch on re-observation and self-heals on subsequent runs without operator action."
+assignees: []
 spec_refs:
   - poly-collateral-currency
   - poly-trader-wallet-port
@@ -80,7 +82,7 @@ Per-tenant on candidate-a: ~50 stale rows for `billing_account_id=777dedd4-…`.
 - Auto-wrap loop (task.0429) — works fine when USDC.e arrives; this bug just blocks USDC.e from ever arriving
 - Recovery on prod (no per-user impact yet because prod is on `2d7c8f100`, behind both fixes; but ANY pre-fix prod row will hit the same shape on next deploy)
 
-## Validation (when fixed)
+## Validation
 
 - Pre-sweep: `SELECT count(*) FROM poly_redeem_jobs WHERE billing_account_id='777dedd4-…' AND status='skipped' AND lifecycle_state='loser'` → 50
 - Post-sweep: same query → number of actual losers; the rest flipped to `pending/winner`
