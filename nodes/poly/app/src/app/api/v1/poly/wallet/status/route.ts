@@ -58,6 +58,8 @@ export const GET = wrapRouteHandlerWithLogging(
           connection_id: null,
           funder_address: null,
           trading_ready: false,
+          auto_wrap_consent_at: null,
+          auto_wrap_floor_usdce_atomic: null,
         };
         return NextResponse.json(
           polyWalletStatusOperation.output.parse(payload)
@@ -76,6 +78,10 @@ export const GET = wrapRouteHandlerWithLogging(
           connection_id: summary.connectionId,
           funder_address: summary.funderAddress,
           trading_ready: summary.tradingApprovalsReadyAt !== null,
+          auto_wrap_consent_at:
+            summary.autoWrapConsentAt?.toISOString() ?? null,
+          auto_wrap_floor_usdce_atomic:
+            summary.autoWrapFloorUsdceAtomic.toString(),
         }
       : {
           configured: true,
@@ -83,6 +89,8 @@ export const GET = wrapRouteHandlerWithLogging(
           connection_id: null,
           funder_address: null,
           trading_ready: false,
+          auto_wrap_consent_at: null,
+          auto_wrap_floor_usdce_atomic: null,
         };
 
     return NextResponse.json(polyWalletStatusOperation.output.parse(payload));

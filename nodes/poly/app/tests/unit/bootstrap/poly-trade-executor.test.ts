@@ -96,6 +96,8 @@ function makeWalletPort(): PolyTraderWalletPort {
       connectionId: "connection-1",
       funderAddress: FUNDER,
       tradingApprovalsReadyAt: new Date("2026-04-23T00:00:00.000Z"),
+      autoWrapConsentAt: null,
+      autoWrapFloorUsdceAtomic: 1_000_000n,
     }),
     getBalances: vi.fn(),
     provision: vi.fn(),
@@ -214,6 +216,8 @@ describe("createPolyTradeExecutorFactory", () => {
       connectionId: "connection-1",
       funderAddress: FUNDER,
       tradingApprovalsReadyAt: null,
+      autoWrapConsentAt: null,
+      autoWrapFloorUsdceAtomic: 1_000_000n,
     });
     vi.mocked(walletPort.ensureTradingApprovals).mockResolvedValue({
       ready: true,

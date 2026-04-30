@@ -34,6 +34,7 @@
 
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   check,
   index,
   integer,
@@ -104,6 +105,38 @@ export const polyWalletConnections = pgTable(
     }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     revokedByUserId: text("revoked_by_user_id"),
+    /**
+     * Stamped when the tenant grants consent to the auto-wrap loop (task.0429).
+     * `null` = no consent, the auto-wrap job MUST skip this row. Independent of
+     * `custodialConsentAcceptedAt` (which gates wallet provisioning) and of
+     * `tradingApprovalsReadyAt` (which gates order placement).
+     */
+    autoWrapConsentAt: timestamp("auto_wrap_consent_at", {
+      withTimezone: true,
+    }),
+    /** 'user' or 'agent' — set IFF `autoWrapConsentAt` is non-null. */
+    autoWrapConsentActorKind: text("auto_wrap_consent_actor_kind"),
+    /** Principal id of the actor that consented. */
+    autoWrapConsentActorId: text("auto_wrap_consent_actor_id"),
+    /**
+     * Minimum USDC.e balance (6-dp base units) the job will wrap. DUST_GUARD
+     * (task.0429): below floor → skip, prevents gas-on-dust drain. Default
+     * 1_000_000 = 1.00 USDC.e.
+     */
+    autoWrapFloorUsdceE6dp: bigint("auto_wrap_floor_usdce_6dp", {
+      mode: "bigint",
+    })
+      .notNull()
+      .default(1_000_000n),
+    /**
+     * Revoke marker independent of `revokedAt`. Lets a tenant turn auto-wrap
+     * off without killing the connection. CONSENT_REVOCABLE (task.0429): the
+     * job tick re-derives consent each scan; revoke is honored on the next
+     * tick.
+     */
+    autoWrapRevokedAt: timestamp("auto_wrap_revoked_at", {
+      withTimezone: true,
+    }),
   },
   (table) => ({
     addressShape: check(
@@ -134,6 +167,26 @@ export const polyWalletConnections = pgTable(
       .on(table.billingAccountId)
       .where(
         sql`${table.revokedAt} IS NULL AND ${table.tradingApprovalsReadyAt} IS NOT NULL`,
+      ),
+    autoWrapConsentActorKindCheck: check(
+      "poly_wallet_connections_auto_wrap_consent_actor_kind",
+      sql`${table.autoWrapConsentActorKind} IS NULL OR ${table.autoWrapConsentActorKind} IN ('user', 'agent')`,
+    ),
+    autoWrapConsentTrioCheck: check(
+      "poly_wallet_connections_auto_wrap_consent_trio",
+      sql`(${table.autoWrapConsentAt} IS NULL AND ${table.autoWrapConsentActorKind} IS NULL AND ${table.autoWrapConsentActorId} IS NULL) OR (${table.autoWrapConsentAt} IS NOT NULL AND ${table.autoWrapConsentActorKind} IS NOT NULL AND ${table.autoWrapConsentActorId} IS NOT NULL)`,
+    ),
+    autoWrapFloorPositiveCheck: check(
+      "poly_wallet_connections_auto_wrap_floor_positive",
+      sql`${table.autoWrapFloorUsdceE6dp} > 0`,
+    ),
+    /** Hot path for the auto-wrap job scan (task.0429). */
+    autoWrapEligibleIdx: index(
+      "poly_wallet_connections_auto_wrap_eligible_idx",
+    )
+      .on(table.billingAccountId)
+      .where(
+        sql`${table.revokedAt} IS NULL AND ${table.autoWrapConsentAt} IS NOT NULL AND ${table.autoWrapRevokedAt} IS NULL`,
       ),
   }),
 );

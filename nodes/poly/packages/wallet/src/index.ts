@@ -27,4 +27,5 @@ export type {
   TradingApprovalStepKind,
   TradingApprovalStepState,
   TradingApprovalsState,
+  WrapIdleUsdcEResult,
 } from "./port";

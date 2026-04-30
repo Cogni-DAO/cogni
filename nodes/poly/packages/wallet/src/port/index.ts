@@ -25,4 +25,5 @@ export type {
   TradingApprovalStepKind,
   TradingApprovalStepState,
   TradingApprovalsState,
+  WrapIdleUsdcEResult,
 } from "./poly-trader-wallet.port";

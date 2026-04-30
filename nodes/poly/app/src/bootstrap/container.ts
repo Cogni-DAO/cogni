@@ -129,6 +129,10 @@ import { createWalletCapability } from "@/bootstrap/capabilities/wallet";
 import { createWebSearchCapability } from "@/bootstrap/capabilities/web-search";
 import { createWorkItemCapability } from "@/bootstrap/capabilities/work-item";
 import type { RateLimitBypassConfig } from "@/bootstrap/http/wrapPublicRoute";
+import {
+  type AutoWrapJobHandle,
+  startAutoWrap,
+} from "@/bootstrap/jobs/auto-wrap.job";
 import { startMirrorPoll } from "@/bootstrap/jobs/copy-trade-mirror.job";
 import {
   type OrderReconcilerHandle,
@@ -347,6 +351,8 @@ let _reconcilerHandle: OrderReconcilerHandle | null = null;
 // above. Starts/stops per-target mirror polls to match the active target set
 // every 30s (bug.0338 / POLL_RECONCILES_PER_TICK).
 let _targetsReconcilerStop: (() => void) | null = null;
+// Auto-wrap job handle (task.0429). Set when Privy + AEAD configured.
+let _autoWrapHandle: AutoWrapJobHandle | null = null;
 
 /**
  * Get the singleton container instance.
@@ -374,6 +380,14 @@ export function resetContainer(): void {
       // Best-effort — tests re-create the container; nothing blocks here.
     }
     _targetsReconcilerStop = null;
+  }
+  if (_autoWrapHandle) {
+    try {
+      _autoWrapHandle.stop();
+    } catch {
+      // Best-effort.
+    }
+    _autoWrapHandle = null;
   }
   if (_temporalConnection) {
     void _temporalConnection.close();
@@ -869,6 +883,48 @@ function createContainer(): Container {
             err: err instanceof Error ? err.message : String(err),
           },
           "mirror poll boot failed — continuing without autonomous mirror"
+        );
+      }
+
+      // task.0429 — auto-wrap consent loop. One job process-wide, gated on
+      // the same Privy + AEAD configuration as the executor factory.
+      try {
+        const walletPortForAutoWrap = getPolyTraderWalletAdapter(log);
+        const { polyWalletConnections } = await import(
+          "@cogni/poly-db-schema"
+        );
+        const { and, eq, isNotNull, isNull } = await import("drizzle-orm");
+        const { noopMetrics: noopMetricsForAutoWrap } = await import(
+          "@cogni/poly-market-provider"
+        );
+        _autoWrapHandle = startAutoWrap({
+          walletPort: walletPortForAutoWrap,
+          listEligible: async (limit) => {
+            const rows = await serviceDb
+              .select({
+                billingAccountId: polyWalletConnections.billingAccountId,
+              })
+              .from(polyWalletConnections)
+              .where(
+                and(
+                  isNull(polyWalletConnections.revokedAt),
+                  isNull(polyWalletConnections.autoWrapRevokedAt),
+                  isNotNull(polyWalletConnections.autoWrapConsentAt)
+                )
+              )
+              .limit(limit);
+            return rows.map((r) => ({ billingAccountId: r.billingAccountId }));
+          },
+          logger: mirrorLogger,
+          metrics: noopMetricsForAutoWrap,
+        });
+      } catch (err: unknown) {
+        log.error(
+          {
+            errorCode: "auto_wrap_boot_failed",
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "auto-wrap job boot failed — continuing without auto-wrap"
         );
       }
     })();

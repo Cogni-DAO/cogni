@@ -216,6 +216,17 @@ export interface PolyTraderWalletPort {
     readonly connectionId: string;
     readonly funderAddress: `0x${string}`;
     readonly tradingApprovalsReadyAt: Date | null;
+    /**
+     * task.0429: when the tenant most recently granted auto-wrap consent.
+     * `null` = no active consent (either never granted, or revoked since).
+     */
+    readonly autoWrapConsentAt: Date | null;
+    /**
+     * task.0429: minimum USDC.e (6-dp atomic) the auto-wrap job will wrap.
+     * Always populated (DB has NOT NULL DEFAULT 1_000_000); meaningful only
+     * when `autoWrapConsentAt` is non-null.
+     */
+    readonly autoWrapFloorUsdceAtomic: bigint;
   } | null>;
 
   /**
@@ -331,4 +342,75 @@ export interface PolyTraderWalletPort {
   ensureTradingApprovals(
     billingAccountId: string
   ): Promise<TradingApprovalsState>;
+
+  /**
+   * task.0429 — wrap idle USDC.e at the funder address into spendable pUSD.
+   *
+   * Used by both the on-demand consent grant ("wrap right now") and the
+   * recurring auto-wrap job. The adapter calls the same pinned
+   * `CollateralOnramp.wrap(USDC.e, funder, amount)` ABI as
+   * `ensureTradingApprovals` (NO_GENERIC_SIGNING / APPROVAL_TARGETS_PINNED).
+   *
+   * Skip semantics — the adapter returns a non-throwing skip when:
+   *   - `no_consent`     : `auto_wrap_consent_at IS NULL` or revoked.
+   *   - `no_balance`     : USDC.e balance reads `0`.
+   *   - `below_floor`    : balance < `auto_wrap_floor_usdce_6dp` (DUST_GUARD).
+   *   - `not_provisioned`: no active connection row.
+   *
+   * Throws only on infrastructure failure (RPC unreachable, decryption error,
+   * Privy backend down). The job's tick handler converts thrown errors to a
+   * counter increment + log line, never escapes the interval.
+   */
+  wrapIdleUsdcE(
+    billingAccountId: string
+  ): Promise<WrapIdleUsdcEResult>;
+
+  /**
+   * task.0429 — grant the tenant's consent to the auto-wrap loop.
+   * Stamps `auto_wrap_consent_at = now()`, the actor trio, and (if provided)
+   * a custom floor. Clears any prior `auto_wrap_revoked_at` so a re-grant
+   * after revoke produces a clean active row. Idempotent.
+   */
+  setAutoWrapConsent(input: {
+    billingAccountId: string;
+    actorKind: "user" | "agent";
+    actorId: string;
+    /** Optional override of the default 1.00 USDC.e floor. Atomic 6-dp. */
+    floorUsdceAtomic?: bigint;
+  }): Promise<void>;
+
+  /**
+   * task.0429 — revoke a tenant's auto-wrap consent. Stamps
+   * `auto_wrap_revoked_at = now()`. The next job tick observes the revoke and
+   * skips this row. Does NOT touch the connection's lifecycle (trading still
+   * works). Idempotent.
+   */
+  revokeAutoWrapConsent(input: {
+    billingAccountId: string;
+    actorKind: "user" | "agent";
+    actorId: string;
+  }): Promise<void>;
 }
+
+/**
+ * Outcome of `wrapIdleUsdcE`. Either the wrap submitted (`txHash` + amount in
+ * 6-dp atomic), or the adapter skipped with a structured reason. Errors from
+ * the on-chain call propagate as exceptions — the auto-wrap job's tick
+ * handler converts those to a counter + log.
+ */
+export type WrapIdleUsdcEResult =
+  | {
+      readonly outcome: "wrapped";
+      readonly txHash: `0x${string}`;
+      readonly amountAtomic: bigint;
+    }
+  | {
+      readonly outcome: "skipped";
+      readonly reason:
+        | "no_consent"
+        | "no_balance"
+        | "below_floor"
+        | "not_provisioned";
+      /** Atomic USDC.e balance observed at decision time. `null` when not provisioned. */
+      readonly observedBalanceAtomic: bigint | null;
+    };

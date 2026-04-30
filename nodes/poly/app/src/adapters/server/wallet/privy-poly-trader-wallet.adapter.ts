@@ -86,6 +86,7 @@ import type {
   PolyTraderWalletPort,
   TradingApprovalStep,
   TradingApprovalsState,
+  WrapIdleUsdcEResult,
 } from "@cogni/poly-wallet";
 import { getContractConfig as clobV2GetContractConfig } from "@polymarket/clob-client-v2";
 import type { AuthorizationContext, PrivyClient } from "@privy-io/node";
@@ -385,6 +386,8 @@ export class PrivyPolyTraderWalletAdapter implements PolyTraderWalletPort {
     connectionId: string;
     funderAddress: `0x${string}`;
     tradingApprovalsReadyAt: Date | null;
+    autoWrapConsentAt: Date | null;
+    autoWrapFloorUsdceAtomic: bigint;
   } | null> {
     const rows = await this.serviceDb
       .select({
@@ -392,6 +395,10 @@ export class PrivyPolyTraderWalletAdapter implements PolyTraderWalletPort {
         billingAccountId: polyWalletConnections.billingAccountId,
         address: polyWalletConnections.address,
         tradingApprovalsReadyAt: polyWalletConnections.tradingApprovalsReadyAt,
+        autoWrapConsentAt: polyWalletConnections.autoWrapConsentAt,
+        autoWrapRevokedAt: polyWalletConnections.autoWrapRevokedAt,
+        autoWrapFloorUsdceE6dp:
+          polyWalletConnections.autoWrapFloorUsdceE6dp,
       })
       .from(polyWalletConnections)
       .where(
@@ -414,6 +421,9 @@ export class PrivyPolyTraderWalletAdapter implements PolyTraderWalletPort {
       connectionId: row.id,
       funderAddress: getAddress(row.address),
       tradingApprovalsReadyAt: row.tradingApprovalsReadyAt,
+      autoWrapConsentAt:
+        row.autoWrapRevokedAt === null ? row.autoWrapConsentAt : null,
+      autoWrapFloorUsdceAtomic: row.autoWrapFloorUsdceE6dp,
     };
   }
 
@@ -1782,6 +1792,217 @@ export class PrivyPolyTraderWalletAdapter implements PolyTraderWalletPort {
   }): Promise<PolyTraderSigningContext> {
     throw new Error(
       "PrivyPolyTraderWalletAdapter.rotateClobCreds: not implemented (follow-up ops slice)"
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+  // task.0429 — auto-wrap consent loop
+  // ────────────────────────────────────────────────────────────────────────
+
+  async wrapIdleUsdcE(
+    billingAccountId: string
+  ): Promise<WrapIdleUsdcEResult> {
+    const rows = await this.serviceDb
+      .select({
+        id: polyWalletConnections.id,
+        billingAccountId: polyWalletConnections.billingAccountId,
+        autoWrapConsentAt: polyWalletConnections.autoWrapConsentAt,
+        autoWrapRevokedAt: polyWalletConnections.autoWrapRevokedAt,
+        autoWrapFloorUsdceE6dp:
+          polyWalletConnections.autoWrapFloorUsdceE6dp,
+      })
+      .from(polyWalletConnections)
+      .where(
+        and(
+          eq(polyWalletConnections.billingAccountId, billingAccountId),
+          isNull(polyWalletConnections.revokedAt)
+        )
+      )
+      .limit(1);
+    const row = rows[0];
+    if (!row) {
+      return {
+        outcome: "skipped",
+        reason: "not_provisioned",
+        observedBalanceAtomic: null,
+      };
+    }
+    if (row.billingAccountId !== billingAccountId) {
+      this.log.warn(
+        { billing_account_id: billingAccountId, connection_id: row.id },
+        "tenant mismatch on wrapIdleUsdcE — refusing"
+      );
+      return {
+        outcome: "skipped",
+        reason: "not_provisioned",
+        observedBalanceAtomic: null,
+      };
+    }
+    if (row.autoWrapConsentAt === null || row.autoWrapRevokedAt !== null) {
+      return {
+        outcome: "skipped",
+        reason: "no_consent",
+        observedBalanceAtomic: null,
+      };
+    }
+
+    const signingContext = await this.resolve(billingAccountId);
+    if (!signingContext) {
+      return {
+        outcome: "skipped",
+        reason: "not_provisioned",
+        observedBalanceAtomic: null,
+      };
+    }
+    if (!this.polygonRpcUrl) {
+      throw Object.assign(
+        new Error("wrapIdleUsdcE: POLYGON_RPC_URL is not configured on this pod"),
+        { code: "polygon_rpc_unconfigured" }
+      );
+    }
+
+    const publicClient = createPublicClient({
+      chain: polygon,
+      transport: http(this.polygonRpcUrl),
+    });
+    const balanceAtomic = await publicClient.readContract({
+      address: USDC_E_POLYGON,
+      abi: ERC20_BALANCEOF_ABI,
+      functionName: "balanceOf",
+      args: [signingContext.funderAddress],
+    });
+
+    if (balanceAtomic === 0n) {
+      return {
+        outcome: "skipped",
+        reason: "no_balance",
+        observedBalanceAtomic: balanceAtomic,
+      };
+    }
+    if (balanceAtomic < row.autoWrapFloorUsdceE6dp) {
+      return {
+        outcome: "skipped",
+        reason: "below_floor",
+        observedBalanceAtomic: balanceAtomic,
+      };
+    }
+
+    const walletClient: WalletClient = createWalletClient({
+      // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
+      account: signingContext.account as any,
+      chain: polygon,
+      transport: http(this.polygonRpcUrl),
+    });
+
+    // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
+    const txHash: Hex = await (walletClient.writeContract as any)({
+      address: COLLATERAL_ONRAMP_POLYGON,
+      abi: COLLATERAL_ONRAMP_WRAP_ABI,
+      functionName: "wrap",
+      args: [USDC_E_POLYGON, signingContext.funderAddress, balanceAtomic],
+    });
+    this.log.info(
+      {
+        billing_account_id: billingAccountId,
+        connection_id: signingContext.connectionId,
+        amount_atomic: balanceAtomic.toString(),
+        tx_hash: txHash,
+      },
+      "poly.auto_wrap.tx.submitted"
+    );
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash: txHash,
+      confirmations: 1,
+    });
+    if (receipt.status !== "success") {
+      throw new Error(`poly.auto_wrap.tx.reverted ${txHash}`);
+    }
+    this.log.info(
+      {
+        billing_account_id: billingAccountId,
+        connection_id: signingContext.connectionId,
+        amount_atomic: balanceAtomic.toString(),
+        tx_hash: txHash,
+        block_number: Number(receipt.blockNumber),
+      },
+      "poly.auto_wrap.tx.confirmed"
+    );
+    return {
+      outcome: "wrapped",
+      txHash,
+      amountAtomic: balanceAtomic,
+    };
+  }
+
+  async setAutoWrapConsent(input: {
+    billingAccountId: string;
+    actorKind: "user" | "agent";
+    actorId: string;
+    floorUsdceAtomic?: bigint;
+  }): Promise<void> {
+    const now = new Date();
+    const result = await this.serviceDb
+      .update(polyWalletConnections)
+      .set({
+        autoWrapConsentAt: now,
+        autoWrapConsentActorKind: input.actorKind,
+        autoWrapConsentActorId: input.actorId,
+        autoWrapRevokedAt: null,
+        ...(input.floorUsdceAtomic !== undefined
+          ? { autoWrapFloorUsdceE6dp: input.floorUsdceAtomic }
+          : {}),
+      })
+      .where(
+        and(
+          eq(polyWalletConnections.billingAccountId, input.billingAccountId),
+          isNull(polyWalletConnections.revokedAt)
+        )
+      )
+      .returning({ id: polyWalletConnections.id });
+    if (result.length === 0) {
+      throw Object.assign(
+        new Error(
+          "setAutoWrapConsent: no active connection for tenant — provision first"
+        ),
+        { code: "no_connection" }
+      );
+    }
+    this.log.info(
+      {
+        billing_account_id: input.billingAccountId,
+        connection_id: result[0]?.id,
+        actor_kind: input.actorKind,
+        actor_id: input.actorId,
+        floor_atomic: input.floorUsdceAtomic?.toString() ?? null,
+      },
+      "poly.auto_wrap.consent.granted"
+    );
+  }
+
+  async revokeAutoWrapConsent(input: {
+    billingAccountId: string;
+    actorKind: "user" | "agent";
+    actorId: string;
+  }): Promise<void> {
+    const now = new Date();
+    const result = await this.serviceDb
+      .update(polyWalletConnections)
+      .set({ autoWrapRevokedAt: now })
+      .where(
+        and(
+          eq(polyWalletConnections.billingAccountId, input.billingAccountId),
+          isNull(polyWalletConnections.revokedAt)
+        )
+      )
+      .returning({ id: polyWalletConnections.id });
+    this.log.info(
+      {
+        billing_account_id: input.billingAccountId,
+        connection_id: result[0]?.id ?? null,
+        actor_kind: input.actorKind,
+        actor_id: input.actorId,
+      },
+      "poly.auto_wrap.consent.revoked"
     );
   }
 

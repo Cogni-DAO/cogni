@@ -93,6 +93,21 @@ export const polyWalletStatusOperation = {
      * will fail-closed with `trading_not_ready` until this flips.
      */
     trading_ready: z.boolean(),
+    /**
+     * task.0429: ISO timestamp the user last granted auto-wrap consent, or
+     * `null` if no active consent (never granted, or revoked since). UI binds
+     * the toggle's checked state to `auto_wrap_consent_at !== null`.
+     */
+    auto_wrap_consent_at: z.string().datetime().nullable(),
+    /**
+     * task.0429: minimum USDC.e (atomic 6-dp string) the auto-wrap job will
+     * wrap. Always populated when `connected=true`. Meaningful only when
+     * `auto_wrap_consent_at` is non-null.
+     */
+    auto_wrap_floor_usdce_atomic: z
+      .string()
+      .regex(/^[1-9][0-9]{0,18}$/)
+      .nullable(),
   }),
 } as const;
 
