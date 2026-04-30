@@ -53,15 +53,15 @@ last_commit: 2f55e7557
 
 ## Pointers
 
-| File / Resource | Why it matters |
-| --- | --- |
-| [PR #1145](https://github.com/Cogni-DAO/node-template/pull/1145) | The bug.0428 fix — code, tests, migration, validation comments |
-| [PR #1154](https://github.com/Cogni-DAO/node-template/pull/1154) | V1/V2 spec clarification + dashboard-hang handoff |
-| `nodes/poly/app/src/features/redeem/infer-collateral-token.ts` | The chain probe (50 LOC, the heart of bug.0428) |
-| `nodes/poly/app/src/features/redeem/redeem-worker.ts:259` | Worker dispatch — reads `job.collateralToken` instead of hardcode |
-| `nodes/poly/app/src/adapters/server/db/migrations/0034_poly_redeem_jobs_collateral_token.sql` | Migration. Default = USDC.e address |
-| `docs/spec/poly-collateral-currency.md` | Updated V1/V2 spec — read this before touching redeem code |
-| `work/items/bug.0428.poly-redeem-worker-hardcodes-usdce.md` | Bug doc — symptom, root cause, fix options |
-| `work/items/bug.0431.poly-redeem-policy-misclassifies-winners-as-losers.md` | Adjacent bug whose backfill is still TODO |
-| Loki: `\| route="poly.wallet.execution"` (candidate-a) | Health check for adjacent dashboard-positions issue |
-| `nodes/poly/packages/market-provider/src/adapters/polymarket/polymarket.ctf.ts` | `POLYGON_PUSD` constant + `polymarketCtfPositionIdAbi` |
+| File / Resource                                                                               | Why it matters                                                    |
+| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [PR #1145](https://github.com/Cogni-DAO/node-template/pull/1145)                              | The bug.0428 fix — code, tests, migration, validation comments    |
+| [PR #1154](https://github.com/Cogni-DAO/node-template/pull/1154)                              | V1/V2 spec clarification + dashboard-hang handoff                 |
+| `nodes/poly/app/src/features/redeem/infer-collateral-token.ts`                                | The chain probe (50 LOC, the heart of bug.0428)                   |
+| `nodes/poly/app/src/features/redeem/redeem-worker.ts:259`                                     | Worker dispatch — reads `job.collateralToken` instead of hardcode |
+| `nodes/poly/app/src/adapters/server/db/migrations/0034_poly_redeem_jobs_collateral_token.sql` | Migration. Default = USDC.e address                               |
+| `docs/spec/poly-collateral-currency.md`                                                       | Updated V1/V2 spec — read this before touching redeem code        |
+| `work/items/bug.0428.poly-redeem-worker-hardcodes-usdce.md`                                   | Bug doc — symptom, root cause, fix options                        |
+| `work/items/bug.0431.poly-redeem-policy-misclassifies-winners-as-losers.md`                   | Adjacent bug whose backfill is still TODO                         |
+| Loki: `\| route="poly.wallet.execution"` (candidate-a)                                        | Health check for adjacent dashboard-positions issue               |
+| `nodes/poly/packages/market-provider/src/adapters/polymarket/polymarket.ctf.ts`               | `POLYGON_PUSD` constant + `polymarketCtfPositionIdAbi`            |

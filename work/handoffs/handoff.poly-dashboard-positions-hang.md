@@ -31,6 +31,7 @@ ExecutionActivityCard (client component)
 PositionsTable is a pure renderer — it does NOT fetch. It receives `WalletPosition[]` from `executionData.live_positions` (or `closed_positions`).
 
 Files (read these first):
+
 - `nodes/poly/app/src/app/(app)/dashboard/_components/ExecutionActivityCard.tsx`
 - `nodes/poly/app/src/app/(app)/dashboard/_api/fetchExecution.ts`
 - `nodes/poly/app/src/app/api/v1/poly/wallet/execution/route.ts`

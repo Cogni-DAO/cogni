@@ -71,18 +71,18 @@ Pre-V2 there was no airlock — V1 exchanges spent USDC.e directly. V2 introduce
 
 ### V1 vs V2 is a per-POSITION property, not a date
 
-**This is the easiest thing to get wrong.** The 2026-04-28 cutover was when Polymarket *introduced* V2 (pUSD-collateralized markets); it was not a hard switch that converted existing positions. The two systems coexist on Polygon CTF indefinitely. A wallet can hold a mix of V1-vintage and V2-vintage CTF positions at the same time.
+**This is the easiest thing to get wrong.** The 2026-04-28 cutover was when Polymarket _introduced_ V2 (pUSD-collateralized markets); it was not a hard switch that converted existing positions. The two systems coexist on Polygon CTF indefinitely. A wallet can hold a mix of V1-vintage and V2-vintage CTF positions at the same time.
 
-What "vintage" means concretely: the ERC-1155 `positionId` is `keccak256(abi.encodePacked(collateralToken, collectionId))`. So a CTF position is *physically distinct* depending on whether it was minted with USDC.e or pUSD — different positionIds, different balances, no fungibility between them. Vintage is pinned to the position at mint time and cannot change.
+What "vintage" means concretely: the ERC-1155 `positionId` is `keccak256(abi.encodePacked(collateralToken, collectionId))`. So a CTF position is _physically distinct_ depending on whether it was minted with USDC.e or pUSD — different positionIds, different balances, no fungibility between them. Vintage is pinned to the position at mint time and cannot change.
 
-| Property | V1-vintage position | V2-vintage position |
-| --- | --- | --- |
-| Collateral that minted it | USDC.e | pUSD |
-| `positionId` derivation | `keccak256(USDC.e, collectionId)` | `keccak256(pUSD, collectionId)` |
-| Redeem dispatch arg | `redeemPositions(USDC.e, …)` | `redeemPositions(pUSD, …)` |
-| Mismatched dispatch | silently zero-burns, no payout | silently zero-burns, no payout |
-| Payout currency | USDC.e | pUSD |
-| Required to recycle into next trade | **wrap USDC.e → pUSD** (auto-wrap loop, task.0429) | already pUSD, no extra step |
+| Property                            | V1-vintage position                                | V2-vintage position             |
+| ----------------------------------- | -------------------------------------------------- | ------------------------------- |
+| Collateral that minted it           | USDC.e                                             | pUSD                            |
+| `positionId` derivation             | `keccak256(USDC.e, collectionId)`                  | `keccak256(pUSD, collectionId)` |
+| Redeem dispatch arg                 | `redeemPositions(USDC.e, …)`                       | `redeemPositions(pUSD, …)`      |
+| Mismatched dispatch                 | silently zero-burns, no payout                     | silently zero-burns, no payout  |
+| Payout currency                     | USDC.e                                             | pUSD                            |
+| Required to recycle into next trade | **wrap USDC.e → pUSD** (auto-wrap loop, task.0429) | already pUSD, no extra step     |
 
 How we determine vintage at runtime: chain probe in `nodes/poly/app/src/features/redeem/infer-collateral-token.ts` (bug.0428). It calls `CTF.getCollectionId(zero, conditionId, indexSet)` then `CTF.getPositionId(token, collectionId)` for both candidate tokens (`pUSD`, `USDC.e`) and returns whichever hashes to the funder's known positionId. Falls back to USDC.e on RPC failure or non-match (legacy-safe default).
 
