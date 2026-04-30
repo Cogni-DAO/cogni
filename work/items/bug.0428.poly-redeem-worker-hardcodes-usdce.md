@@ -105,3 +105,8 @@ Test path: existing `nodes/poly/app/tests/component/redeem/...` integration test
 ```
 
 Should fire whenever a V2 vanilla-CTF position resolves and we redeem it.
+
+## PR / Links
+
+- PR: https://github.com/Cogni-DAO/node-template/pull/1145
+- Handoff: [handoff](../handoffs/bug.0428.handoff.md)
