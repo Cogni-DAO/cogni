@@ -794,10 +794,9 @@ function createContainer(): Container {
     // client, Drizzle queries) don't run on pods without Polymarket creds.
     void (async () => {
       try {
-        const {
-          createPolymarketActivitySource,
-          createPolymarketWsActivitySource,
-        } = await import("@/features/wallet-watch");
+        const { createPolymarketWsActivitySource } = await import(
+          "@/features/wallet-watch"
+        );
         const { PolymarketDataApiClient, createPolymarketWsClient } =
           await import("@cogni/poly-market-provider/adapters/polymarket");
         // noopMetrics for v0 — real prom-client wiring folds into a follow-up
@@ -816,24 +815,12 @@ function createContainer(): Container {
         const mirrorLogger =
           log as unknown as import("@cogni/poly-market-provider").LoggerPort;
 
-        // task.0322 — wallet-watch source mode. `polling` (default) keeps the
-        // historical Data-API page-poll. `websocket` opens a single shared
-        // Market-channel WS per pod (multiplexed across all watched wallets)
-        // and uses arriving fills as wake-up signals; the per-wallet drain
-        // still goes through the Data-API for canonical fill identity. See
-        // WS_NO_WALLET_IDENTITY in features/wallet-watch/polymarket-ws-source.
-        const walletWatchMode = env.POLY_WALLET_WATCH_SOURCE;
-        log.info(
-          {
-            event: "poly.wallet_watch.source_mode",
-            mode: walletWatchMode,
-          },
-          `wallet-watch source mode: ${walletWatchMode}`
-        );
-        const sharedWsClient =
-          walletWatchMode === "websocket"
-            ? createPolymarketWsClient({ logger: mirrorLogger })
-            : null;
+        // task.0322 — single shared Polymarket Market-channel WebSocket per
+        // pod, multiplexed across all watched wallets. See WS_NO_WALLET_IDENTITY
+        // in features/wallet-watch/polymarket-ws-source.
+        const sharedWsClient = createPolymarketWsClient({
+          logger: mirrorLogger,
+        });
 
         // Ledger reconciler — syncs open/pending rows from CLOB getOrder,
         // dispatched per tenant. Each ledger row carries its
@@ -875,21 +862,13 @@ function createContainer(): Container {
               mirrorFilterPercentile: enumeratedTarget.mirrorFilterPercentile,
               mirrorMaxUsdcPerTrade: enumeratedTarget.mirrorMaxUsdcPerTrade,
             });
-            const source =
-              sharedWsClient !== null
-                ? createPolymarketWsActivitySource({
-                    client: dataApiClient,
-                    ws: sharedWsClient,
-                    wallet: targetWallet,
-                    logger: mirrorLogger,
-                    metrics: noopMetrics,
-                  })
-                : createPolymarketActivitySource({
-                    client: dataApiClient,
-                    wallet: targetWallet,
-                    logger: mirrorLogger,
-                    metrics: noopMetrics,
-                  });
+            const source = createPolymarketWsActivitySource({
+              client: dataApiClient,
+              ws: sharedWsClient,
+              wallet: targetWallet,
+              logger: mirrorLogger,
+              metrics: noopMetrics,
+            });
 
             // Build once per (tenant × target). Executor is cached across
             // ticks inside the factory keyed on billingAccountId.

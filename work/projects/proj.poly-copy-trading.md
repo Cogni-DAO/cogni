@@ -71,11 +71,13 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 
 ### Phase 4 (P4) — Streaming + adversarial-robust ranking
 
-> **Needs design.** 30s Data-API poll bounds our latency floor and loses mid-second fills. Phase 4 swaps to CLOB WebSocket (`clob-ws:…` fill_ids alongside the frozen `data-api:…` shape) and adds a target ranker that re-weights wallets on real-time performance rather than static leaderboard position.
+> **Active.** 30s Data-API poll bounded our latency floor and lost mid-second fills, plus hit a Polymarket cache quirk that served stale pages at limit>20 (PR #1170 stop-gap). Phase 4 swaps to CLOB WebSocket (`clob-ws:…` fill_ids alongside the frozen `data-api:…` shape) and adds a target ranker that re-weights wallets on real-time performance rather than static leaderboard position.
 
-| Deliverable                                                                                        | Status       | Est | Work Item                                                             |
-| -------------------------------------------------------------------------------------------------- | ------------ | --- | --------------------------------------------------------------------- |
-| Dual-path ingestion (Data-API poll ∪ CLOB WebSocket) + hot signer + target ranker + counterfactual | Needs Design | 5   | [task.0322](../items/task.0322.poly-copy-trade-phase4-design-prep.md) |
+| Deliverable                                                                                                                                                          | Status              | Est | Work Item                                                                              |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- | --- | -------------------------------------------------------------------------------------- |
+| Dual-path ingestion (Data-API poll ∪ CLOB WebSocket) + hot signer + target ranker + counterfactual                                                                   | Needs Design        | 5   | [task.0322](../items/task.0322.poly-copy-trade-phase4-design-prep.md)                  |
+| WS wallet-watch source — replace 30s Data-API page-poll with shared Polymarket Market-channel WS as wake-up + per-wallet Data-API drain                              | In Review           | 3   | PR #1172 (task.0322 step 1)                                                            |
+| Multi-wallet shared WS manager — single `PolymarketWsActivitySourceManager` per pod with global `assetId → Set<walletId>` index + single 60s position-refresh loop   | vFuture-NeedsDesign | 3   | task.0322 step 2 — open at >10 watched wallets to bound per-wallet Data-API fan-out    |
 
 ## Open Bugs
 

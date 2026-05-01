@@ -12,12 +12,10 @@
  */
 
 export {
-  createPolymarketActivitySource,
   type NextFillsResult,
-  type PolymarketActivitySourceDeps,
   WALLET_WATCH_METRICS,
   type WalletActivitySource,
-} from "./polymarket-source";
+} from "./types";
 export {
   createPolymarketWsActivitySource,
   type PolymarketWsActivitySource,

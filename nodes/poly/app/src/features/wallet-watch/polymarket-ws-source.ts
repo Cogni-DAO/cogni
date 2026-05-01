@@ -3,7 +3,7 @@
 
 /**
  * Module: `@features/wallet-watch/polymarket-ws-source`
- * Purpose: `WalletActivitySource` implementation that uses a shared Polymarket Market-channel WebSocket as a wake-up signal, then drains fresh trades for the watched wallet via the Data-API. Drop-in replacement for `polymarket-source.ts` behind the `POLY_WALLET_WATCH_SOURCE=websocket` env flag (task.0322). Solves the polling adapter's `limit>20` stale-cache symptom by fetching only when a relevant market actually trades.
+ * Purpose: `WalletActivitySource` implementation that uses a shared Polymarket Market-channel WebSocket as a wake-up signal, then drains fresh trades for the watched wallet via the Data-API. The only wallet-watch source as of task.0322 (replaced the prior 30s Data-API page-poll). Solves the polling adapter's `limit>20` stale-cache symptom by fetching only when a relevant market actually trades.
  * Scope: Composes a shared `PolymarketWsClientHandle` (one socket per pod) + the per-wallet `PolymarketDataApiClient`. Discovers the watched wallet's open-position assets at construction + on a refresh interval; subscribes those assets on the shared socket. Emits the same `Fill[]` shape and event names as the polling source so dashboards/alerts keep working.
  * Invariants:
  *   - WS_NO_WALLET_IDENTITY — Polymarket's public Market channel does NOT carry maker/taker addresses (verified against docs.polymarket.com 2026-05-01). The WS therefore acts as a wake-up signal; canonical fields (transactionHash, proxyWallet, exact size_usdc) come from the Data-API drain. This keeps `Fill.fill_id` shape identical to the polling source so dedupe in the mirror coordinator is preserved.
@@ -32,7 +32,7 @@ import {
   type NextFillsResult,
   WALLET_WATCH_METRICS,
   type WalletActivitySource,
-} from "./polymarket-source";
+} from "./types";
 
 /** Counter name extension specific to the WS source. */
 export const WALLET_WATCH_WS_METRICS = {
