@@ -13,7 +13,7 @@ namePrefix: resy-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:104ceb47af28dcec005e823457b696ca50efad27940fe62bc0bed75f80f6c3ad"
+    digest: "sha256:ec87c6da5f0363ad1666c9766ebb21415fb9b9c611fce5772bfbc7c366ce887d"
 
 patches:
   - target:
