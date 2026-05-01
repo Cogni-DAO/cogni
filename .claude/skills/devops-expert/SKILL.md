@@ -13,6 +13,7 @@ You are a senior DevOps architect. AI agents are the primary committers in this 
 - [Candidate Flight V0 Guide](../../../docs/guides/candidate-flight-v0.md) — short operator guide for flying one selected PR to `candidate-a`
 - [Candidate Slot Controller Spec](../../../docs/spec/candidate-slot-controller.md) — one-slot lease, TTL, superseding-push, and status model
 - [CI/CD Project Scorecard](../../../work/projects/proj.cicd-services-gitops.md) — pipeline health, active blockers
+- [`promote` skill](../promote/SKILL.md) — operator playbook for preview/prod promotion, lease semantics, monitoring poll-loop, and the bug.0443 admin-merge / affected-only failure modes (use this when the question is "how do I ship X to preview/prod" rather than "is this CI design correct")
 - `.github/workflows/` — actual workflow source (verify claims against code)
 - `scripts/ci/` — CI scripts (verify what exists before writing new ones)
 - `scripts/setup/provision-test-vm.sh` — single-command VM provisioning
