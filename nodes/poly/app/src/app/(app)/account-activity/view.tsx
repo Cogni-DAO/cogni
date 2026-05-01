@@ -25,6 +25,7 @@ import { useQuery } from "@tanstack/react-query";
 import { type ReactElement, useMemo, useState } from "react";
 import { PositionsTable } from "@/app/(app)/_components/positions-table";
 import { fetchExecution } from "@/app/(app)/dashboard/_api/fetchExecution";
+import type { OpenOrderSummary } from "@/bootstrap/capabilities/poly-trade-executor";
 import {
   Card,
   CardContent,
@@ -32,7 +33,6 @@ import {
   CardTitle,
   Skeleton,
 } from "@/components";
-import type { OpenOrderSummary } from "@/bootstrap/capabilities/poly-trade-executor";
 import { fetchWalletOrders } from "./_api/fetchOrders";
 
 const PAGE_SIZE = 25;
