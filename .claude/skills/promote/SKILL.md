@@ -179,20 +179,20 @@ Only do this when you've verified the prior run reached a terminal state. Bypass
 
 ## Failure modes — first-step diagnosis
 
-| Symptom | First diagnosis |
-|---|---|
-| flight-preview red at "Hard-fail when no images found for resolved PR" | Admin-merge bypass (bug.0443). Recovery: merge-queue follow-up PR. |
-| aggregate-preview red, "no cell reported promoted=true" | Same admin-merge cause OR sha has zero images. Verify with `resolve-pr-build-images.sh` (preflight #2). |
-| aggregate-production red, "Axiom 19 contradiction: scheduler-worker" | bug.0443 fix in `verify-buildsha.sh` is missing/reverted. The `NON_INGRESS_NODES` marker-emission block must be present. |
-| verify-buildsha timeout 90s | Pod cutover incomplete; usually transient. Re-check `/version` directly in 60s. If still wrong, check Argo app revision matches deploy-branch tip. |
-| `verify-deploy` green but `/version.buildSha` still old | CDN/edge cache, OR you hit `/readyz` (which the old pod still answers) instead of `/version`. Always use `/version.buildSha` for verification, never `/readyz`. |
-| Lease stuck `dispatching` | The exit-1 + `if: always() &&` unlock should have fired. If not, manually unlock as above (cautiously). |
-| Production "succeeded" but only some nodes advanced | Affected-only — `nodes` input was scoped, or the source sha's image set didn't cover all targets. Verify per-node `current-sha` on each `deploy/production-*`. |
+| Symptom                                                                | First diagnosis                                                                                                                                                 |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| flight-preview red at "Hard-fail when no images found for resolved PR" | Admin-merge bypass (bug.0443). Recovery: merge-queue follow-up PR.                                                                                              |
+| aggregate-preview red, "no cell reported promoted=true"                | Same admin-merge cause OR sha has zero images. Verify with `resolve-pr-build-images.sh` (preflight #2).                                                         |
+| aggregate-production red, "Axiom 19 contradiction: scheduler-worker"   | bug.0443 fix in `verify-buildsha.sh` is missing/reverted. The `NON_INGRESS_NODES` marker-emission block must be present.                                        |
+| verify-buildsha timeout 90s                                            | Pod cutover incomplete; usually transient. Re-check `/version` directly in 60s. If still wrong, check Argo app revision matches deploy-branch tip.              |
+| `verify-deploy` green but `/version.buildSha` still old                | CDN/edge cache, OR you hit `/readyz` (which the old pod still answers) instead of `/version`. Always use `/version.buildSha` for verification, never `/readyz`. |
+| Lease stuck `dispatching`                                              | The exit-1 + `if: always() &&` unlock should have fired. If not, manually unlock as above (cautiously).                                                         |
+| Production "succeeded" but only some nodes advanced                    | Affected-only — `nodes` input was scoped, or the source sha's image set didn't cover all targets. Verify per-node `current-sha` on each `deploy/production-*`.  |
 
 ## Discipline
 
 - **`/version.buildSha` is the only deploy verification that matters.** CI conclusions can lie. `/readyz` can lie (old pod answers during rolling cutover).
-- **Per-node truth, not per-workflow.** Every promotion advances *some* nodes, not necessarily all. Check each `deploy/<env>-<node>:.promote-state/current-sha` independently.
+- **Per-node truth, not per-workflow.** Every promotion advances _some_ nodes, not necessarily all. Check each `deploy/<env>-<node>:.promote-state/current-sha` independently.
 - **Admin-merge breaks the pipeline.** If you see a CD-affecting PR getting admin-merged, file a bug AND propose a merge-queue follow-up; don't pretend the resulting silent-skip will heal itself.
 - **Don't dispatch without arming a Monitor.** Fire-and-forget is how outages survive shift changes.
 - **Catalog-as-SSOT for target lists.** Source `scripts/ci/lib/image-tags.sh`; never inline `(operator poly resy scheduler-worker)`.
