@@ -10,11 +10,13 @@
  *   - INSERT_BEFORE_PLACE — `order-ledger.insertPending` runs BEFORE the placeIntent executor. `markOrderId` / `markError` run AFTER. Crash between insert and place leaves a pending row whose `client_order_id` will be in the next tick's `already_placed_ids`, so `planMirrorFromFill()` returns `skip/already_placed`.
  *   - IDEMPOTENT_BY_CLIENT_ID — `client_order_id = clientOrderIdFor(target.target_id, fill.fill_id)`, pinned helper. Deterministic from the PK pair so re-runs dedupe.
  *   - RECORD_EVERY_DECISION — `order-ledger.recordDecision` fires for EVERY planMirrorFromFill() outcome (placed, skipped, or error). Supports divergence analysis without the fills ledger.
- *   - DECISIONS_TOTAL_HAS_SOURCE — `poly_mirror_decisions_total{outcome, reason, source}` always carries `source` (v0 = `"data-api"`).
+ *   - DECISIONS_TOTAL_HAS_SOURCE — `poly_mirror_decisions_total{outcome, reason, source, placement}` always carries `source` (v0 = `"data-api"`) AND `placement` (`"limit"` | `"market_fok"`).
  *   - TENANT_INHERITED_FROM_TARGET — every `insertPending` and `recordDecision` writes `(billing_account_id, created_by_user_id)` taken from `deps.target` (`MirrorTargetConfig`). The pipeline never reads tenant from anywhere else.
  *   - CAPS_LIVE_IN_GRANT — daily / hourly caps are enforced by `authorizeIntent` inside the per-tenant `placeIntent` executor, not here.
- * Side-effects: delegated — DB I/O via `OrderLedger`, HTTP via `WalletActivitySource`, Polymarket CLOB via `placeIntent`. Pipeline itself is pure sequencing + logger/metrics calls.
- * Links: work/items/task.0318 (Phase B3), docs/spec/poly-multi-tenant-auth.md
+ *   - ALREADY_RESTING_BEFORE_INSERT — BUY path runs `ledger.hasOpenForMarket` BEFORE `insertPending`. The DB partial unique index is the correctness backstop: a 23505 throws `AlreadyRestingError` which converts to the same `skip/already_resting` outcome. task.5001.
+ *   - MIRROR_BUY_CANCELED_ON_TARGET_SELL — every SELL fill cancels open mirror orders on `(target, market)` BEFORE the position-close path. `cancelOrder` is optional in tests; production wiring always sets it. Pending rows (no `order_id`) are silently skipped — race with in-flight placement is acceptable for v0. task.5001.
+ * Side-effects: delegated — DB I/O via `OrderLedger`, HTTP via `WalletActivitySource`, Polymarket CLOB via `placeIntent`/`cancelOrder`. Pipeline itself is pure sequencing + logger/metrics calls.
+ * Links: work/items/task.0318 (Phase B3), work/items/task.5001, docs/spec/poly-copy-trade-phase1.md, docs/spec/poly-multi-tenant-auth.md
  * @public
  */
 
@@ -27,28 +29,20 @@ import {
   type OrderReceipt,
 } from "@cogni/poly-market-provider";
 
-import type { OrderLedger } from "@/features/trading";
+import { AlreadyRestingError, type OrderLedger } from "@/features/trading";
 import type { WalletActivitySource } from "@/features/wallet-watch";
 
 import { planMirrorFromFill } from "./plan-mirror";
 import type { MirrorReason, MirrorTargetConfig, SizingPolicy } from "./types";
 
+type PlacementWire = "limit" | "market_fok";
+
 /**
- * Extract a representative USDC notional from a sizing policy for uses that
- * predate per-fill sizing math — SELL-close caps and audit-log skip blobs.
+ * Representative per-intent USDC ceiling for a sizing policy. Used by SELL-close
+ * caps and audit-log skip blobs. Per-fill size is computed in `plan-mirror`.
  */
 function nominalSizeUsdc(sizing: SizingPolicy): number {
-  switch (sizing.kind) {
-    case "fixed":
-      return sizing.mirror_usdc;
-    case "min_bet":
-      // The actual bet size is per-fill (market `minUsdcNotional` clamped to
-      // the share-floor and to `max_usdc_per_trade`). The policy's configured
-      // `max_usdc_per_trade` is the right scalar for this fn's two callers:
-      // (a) SELL-close `max_size_usdc` ceiling, (b) audit-blob projection of
-      // "the most this policy will spend on a single intent".
-      return sizing.max_usdc_per_trade;
-  }
+  return sizing.max_usdc_per_trade;
 }
 
 /** Minimal position shape needed by the pipeline — subset of PolymarketUserPosition. */
@@ -59,7 +53,7 @@ export interface OperatorPosition {
 
 /** Metric names emitted by the pipeline. */
 export const MIRROR_PIPELINE_METRICS = {
-  /** `poly_mirror_decisions_total{outcome, reason, source}` — always fired, bounded labels. */
+  /** `poly_mirror_decisions_total{outcome, reason, source, placement}` — always fired, bounded labels. */
   decisionsTotal: "poly_mirror_decisions_total",
   /** `poly_mirror_placement_errors_total` — `placeIntent` throw after pending insert. */
   placementErrorsTotal: "poly_mirror_placement_errors_total",
@@ -80,6 +74,18 @@ export interface MirrorPipelineDeps {
    * `deps.target.billing_account_id` by the caller.
    */
   placeIntent: (intent: OrderIntent) => Promise<OrderReceipt>;
+  /**
+   * Tenant-scoped cancel seam (task.5001). Delegates to
+   * `PolyTradeExecutor.cancelOrder` → `PolymarketClobAdapter.cancelOrder`,
+   * which is 404-idempotent (CANCEL_404_SWALLOWED_IN_ADAPTER). Used by the
+   * SELL cancel pre-step when the target exits a market we still have a
+   * resting BUY on. CANCEL_GOES_THROUGH_TENANT_EXECUTOR.
+   *
+   * Optional with a no-op fallback for tests that don't exercise the SELL
+   * cancel pre-step. Production bootstrap (`copy-trade-mirror.job` →
+   * `container.ts`) always wires it.
+   */
+  cancelOrder?: (order_id: string) => Promise<void>;
   /**
    * Market-constraint fetch seam — returns `{ minShares }` for a token id so
    * the sizing policy can avoid sub-min submissions (bug.0342). Optional.
@@ -170,6 +176,8 @@ async function processFill(
   log: LoggerPort
 ): Promise<void> {
   const client_order_id = clientOrderIdFor(deps.target.target_id, fill.fill_id);
+  const placement: PlacementWire =
+    deps.target.placement.kind === "mirror_limit" ? "limit" : "market_fok";
 
   const snapshot = await deps.ledger.snapshotState(
     deps.target.target_id,
@@ -190,6 +198,7 @@ async function processFill(
       fill,
       deps,
       client_order_id,
+      placement,
       source,
       decisionBase,
       log,
@@ -242,7 +251,7 @@ async function processFill(
   });
 
   if (plan.kind === "skip") {
-    emitDecisionMetric(deps.metrics, "skipped", plan.reason, source);
+    emitDecisionMetric(deps.metrics, "skipped", plan.reason, source, placement);
     await deps.ledger.recordDecision({
       ...decisionBase,
       outcome: "skipped",
@@ -264,12 +273,49 @@ async function processFill(
     return;
   }
 
+  // Fast-path dedupe; the DB partial unique index is the backstop. task.5001.
+  const alreadyResting = await deps.ledger.hasOpenForMarket({
+    billing_account_id: deps.target.billing_account_id,
+    target_id: deps.target.target_id,
+    market_id: fill.market_id,
+  });
+  if (alreadyResting) {
+    emitDecisionMetric(
+      deps.metrics,
+      "skipped",
+      "already_resting",
+      source,
+      placement
+    );
+    await deps.ledger.recordDecision({
+      ...decisionBase,
+      outcome: "skipped",
+      reason: "already_resting",
+      intent: buildDecisionIntentBlob(fill, deps.target, client_order_id),
+      receipt: null,
+    });
+    log.info(
+      {
+        event: EVENT_NAMES.POLY_MIRROR_DECISION,
+        outcome: "skipped",
+        reason: "already_resting",
+        source,
+        fill_id: fill.fill_id,
+        client_order_id,
+        market_id: fill.market_id,
+      },
+      "mirror pipeline: skip (already resting on market)"
+    );
+    return;
+  }
+
   await executeMirrorOrder(
     deps,
     fill,
     client_order_id,
     decisionBase,
     source,
+    placement,
     plan.intent,
     plan.reason,
     log
@@ -281,6 +327,7 @@ async function processSellFill(args: {
   fill: import("@cogni/poly-market-provider").Fill;
   deps: MirrorPipelineDeps;
   client_order_id: `0x${string}`;
+  placement: PlacementWire;
   source: DecisionSource;
   decisionBase: {
     target_id: string;
@@ -291,15 +338,25 @@ async function processSellFill(args: {
   };
   log: LoggerPort;
 }): Promise<void> {
-  const { fill, deps, client_order_id, source, decisionBase, log } = args;
+  const { fill, deps, client_order_id, placement, source, decisionBase, log } =
+    args;
   const { closePosition, getOperatorPositions } = deps;
+
+  // Cancel resting mirror BUYs before position-close. task.5001.
+  await cancelOpenMirrorOrdersForMarket({
+    deps,
+    fill,
+    log,
+    reason: "target_exited_market",
+  });
 
   if (!closePosition || !getOperatorPositions) {
     emitDecisionMetric(
       deps.metrics,
       "skipped",
       "sell_without_position",
-      source
+      source,
+      placement
     );
     await deps.ledger.recordDecision({
       ...decisionBase,
@@ -336,7 +393,8 @@ async function processSellFill(args: {
       deps.metrics,
       "skipped",
       "sell_without_position",
-      source
+      source,
+      placement
     );
     await deps.ledger.recordDecision({
       ...decisionBase,
@@ -370,7 +428,8 @@ async function processSellFill(args: {
       deps.metrics,
       "skipped",
       "sell_without_position",
-      source
+      source,
+      placement
     );
     await deps.ledger.recordDecision({
       ...decisionBase,
@@ -427,11 +486,65 @@ async function processSellFill(args: {
     client_order_id,
     decisionBase,
     source,
+    placement,
     closeIntent,
     "sell_closed_position",
     log,
     closeExecutor
   );
+}
+
+/**
+ * Cancel any open mirror orders for this (target, market). SELL-fill
+ * pre-step. Idempotent: pending rows (no `order_id` yet) are skipped; the
+ * adapter swallows CLOB 404 so concurrent cancels from the TTL sweeper are
+ * harmless. `cancelOrder` is optional; tests omit it and the loop no-ops.
+ */
+async function cancelOpenMirrorOrdersForMarket(args: {
+  deps: MirrorPipelineDeps;
+  fill: import("@cogni/poly-market-provider").Fill;
+  log: LoggerPort;
+  reason: "target_exited_market";
+}): Promise<void> {
+  const { deps, fill, log, reason } = args;
+  const cancelOrder = deps.cancelOrder;
+  if (!cancelOrder) return;
+  const open = await deps.ledger.findOpenForMarket({
+    billing_account_id: deps.target.billing_account_id,
+    target_id: deps.target.target_id,
+    market_id: fill.market_id,
+  });
+  for (const row of open) {
+    if (row.order_id === null) continue;
+    try {
+      await cancelOrder(row.order_id);
+      await deps.ledger.markCanceled({
+        client_order_id: row.client_order_id,
+        reason,
+      });
+      log.info(
+        {
+          event: EVENT_NAMES.POLY_MIRROR_DECISION,
+          phase: "buy_canceled_on_target_sell",
+          client_order_id: row.client_order_id,
+          order_id: row.order_id,
+          market_id: row.market_id,
+        },
+        "mirror pipeline: canceled resting BUY on target SELL"
+      );
+    } catch (err: unknown) {
+      log.error(
+        {
+          event: EVENT_NAMES.POLY_MIRROR_DECISION,
+          phase: "cancel_failed",
+          client_order_id: row.client_order_id,
+          order_id: row.order_id,
+          err: err instanceof Error ? err.message : String(err),
+        },
+        "mirror pipeline: cancel failed; row stays open for sweeper"
+      );
+    }
+  }
 }
 
 /**
@@ -450,6 +563,7 @@ async function executeMirrorOrder(
     decided_at: Date;
   },
   source: DecisionSource,
+  placement: PlacementWire,
   intent: OrderIntent,
   reason: MirrorReason,
   log: LoggerPort,
@@ -466,8 +580,45 @@ async function executeMirrorOrder(
       observed_at: new Date(fill.observed_at),
       intent,
     });
-  } catch {
-    emitDecisionMetric(deps.metrics, "error", "pending_insert_failed", source);
+  } catch (err: unknown) {
+    // DB partial unique index races past the app-level gate → same skip outcome.
+    if (err instanceof AlreadyRestingError) {
+      emitDecisionMetric(
+        deps.metrics,
+        "skipped",
+        "already_resting",
+        source,
+        placement
+      );
+      await deps.ledger.recordDecision({
+        ...decisionBase,
+        outcome: "skipped",
+        reason: "already_resting",
+        intent: buildDecisionIntentBlob(fill, deps.target, client_order_id),
+        receipt: null,
+      });
+      log.info(
+        {
+          event: EVENT_NAMES.POLY_MIRROR_DECISION,
+          outcome: "skipped",
+          reason: "already_resting",
+          source,
+          fill_id: fill.fill_id,
+          client_order_id,
+          market_id: fill.market_id,
+          detail: "DB unique-index backstop fired (race past app-level gate)",
+        },
+        "mirror pipeline: skip (already resting; DB index backstop)"
+      );
+      return;
+    }
+    emitDecisionMetric(
+      deps.metrics,
+      "error",
+      "pending_insert_failed",
+      source,
+      placement
+    );
     await deps.ledger.recordDecision({
       ...decisionBase,
       outcome: "error",
@@ -495,7 +646,7 @@ async function executeMirrorOrder(
       client_order_id,
       receipt,
     });
-    emitDecisionMetric(deps.metrics, "placed", reason, source);
+    emitDecisionMetric(deps.metrics, "placed", reason, source, placement);
     await deps.ledger.recordDecision({
       ...decisionBase,
       outcome: "placed",
@@ -533,7 +684,13 @@ async function executeMirrorOrder(
         : undefined;
     deps.metrics.incr(MIRROR_PIPELINE_METRICS.placementErrorsTotal, {});
     await deps.ledger.markError({ client_order_id, error: msg });
-    emitDecisionMetric(deps.metrics, "error", "placement_failed", source);
+    emitDecisionMetric(
+      deps.metrics,
+      "error",
+      "placement_failed",
+      source,
+      placement
+    );
     await deps.ledger.recordDecision({
       ...decisionBase,
       outcome: "error",
@@ -564,12 +721,14 @@ function emitDecisionMetric(
   metrics: MetricsPort,
   outcome: "placed" | "skipped" | "error",
   reason: MirrorReason | "pending_insert_failed" | "placement_failed",
-  source: DecisionSource
+  source: DecisionSource,
+  placement: PlacementWire
 ): void {
   metrics.incr(MIRROR_PIPELINE_METRICS.decisionsTotal, {
     outcome,
     reason,
     source,
+    placement,
   });
 }
 

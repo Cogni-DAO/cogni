@@ -87,6 +87,9 @@ export function buildMirrorTargetConfig(params: {
       kind: "min_bet",
       max_usdc_per_trade: MIRROR_MAX_USDC_PER_TRADE,
     },
+    // task.5001 — default to mirror_limit (resting GTC at target's entry).
+    // Persistence to a per-target column is deferred to task.0347.
+    placement: { kind: "mirror_limit" },
   };
 }
 
@@ -103,6 +106,13 @@ export interface MirrorJobDeps {
    * `placeOrder`. Must be constructed against `params.billingAccountId`.
    */
   placeIntent: MirrorPipelineDeps["placeIntent"];
+  /**
+   * Tenant-scoped cancel seam (task.5001). Delegates to
+   * `PolyTradeExecutor.cancelOrder` → 404-idempotent
+   * `PolymarketClobAdapter.cancelOrder`. Optional in tests; production wiring
+   * always sets it so SELL fills cancel resting mirror BUYs.
+   */
+  cancelOrder?: MirrorPipelineDeps["cancelOrder"];
   /** Optional market-constraints fetch; pipes into the pipeline. bug.0342. */
   getMarketConstraints?: MirrorPipelineDeps["getMarketConstraints"];
   /** Structured log sink. */
@@ -162,6 +172,9 @@ export function startMirrorPoll(deps: MirrorJobDeps): MirrorJobStopFn {
     source: deps.source,
     ledger: deps.ledger,
     placeIntent: deps.placeIntent,
+    ...(deps.cancelOrder !== undefined
+      ? { cancelOrder: deps.cancelOrder }
+      : {}),
     getMarketConstraints: deps.getMarketConstraints,
     target: deps.target,
     getCursor: () => cursor,

@@ -11,17 +11,20 @@
  * @public
  */
 
-import type {
-  InsertPendingInput,
-  LedgerRow,
-  LedgerStatus,
-  ListOpenOrPendingOptions,
-  ListRecentOptions,
-  OrderLedger,
-  RecordDecisionInput,
-  StateSnapshot,
-  SyncHealthSummary,
-  UpdateStatusInput,
+import {
+  AlreadyRestingError,
+  type InsertPendingInput,
+  type LedgerCancelReason,
+  type LedgerRow,
+  type LedgerStatus,
+  type ListOpenOrPendingOptions,
+  type ListRecentOptions,
+  type OpenOrderRow,
+  type OrderLedger,
+  type RecordDecisionInput,
+  type StateSnapshot,
+  type SyncHealthSummary,
+  type UpdateStatusInput,
 } from "@/features/trading/order-ledger.types";
 
 export interface FakeOrderLedgerConfig {
@@ -100,6 +103,23 @@ export class FakeOrderLedger implements OrderLedger {
       (r) => r.target_id === input.target_id && r.fill_id === input.fill_id
     );
     if (existing) return; // ON CONFLICT DO NOTHING parity
+    // Partial unique index parity (DEDUPE_AT_DB) — reject second open row for
+    // the same (billing_account_id, target_id, market_id) tuple.
+    const conflictsOnMarket = this.rows.find(
+      (r) =>
+        r.billing_account_id === input.billing_account_id &&
+        r.target_id === input.target_id &&
+        ((r.attributes as Record<string, unknown> | null)?.market_id ??
+          null) === input.intent.market_id &&
+        ["pending", "open", "partial"].includes(r.status)
+    );
+    if (conflictsOnMarket) {
+      throw new AlreadyRestingError(
+        input.billing_account_id,
+        input.target_id,
+        input.intent.market_id
+      );
+    }
     const attrs: Record<string, unknown> = {
       size_usdc: input.intent.size_usdc,
       limit_price: input.intent.limit_price,
@@ -161,6 +181,86 @@ export class FakeOrderLedger implements OrderLedger {
     row.status = "error";
     row.updated_at = new Date();
     row.attributes = { ...(row.attributes ?? {}), error: params.error };
+  }
+
+  async markCanceled(params: {
+    client_order_id: string;
+    reason: LedgerCancelReason;
+  }): Promise<void> {
+    const row = this.rows.find(
+      (r) => r.client_order_id === params.client_order_id
+    );
+    if (!row) return;
+    row.status = "canceled";
+    row.updated_at = new Date();
+    row.attributes = { ...(row.attributes ?? {}), reason: params.reason };
+  }
+
+  async hasOpenForMarket(args: {
+    billing_account_id: string;
+    target_id: string;
+    market_id: string;
+  }): Promise<boolean> {
+    return this.rows.some(
+      (r) =>
+        r.billing_account_id === args.billing_account_id &&
+        r.target_id === args.target_id &&
+        ((r.attributes as Record<string, unknown> | null)?.market_id ??
+          null) === args.market_id &&
+        ["pending", "open", "partial"].includes(r.status)
+    );
+  }
+
+  async findOpenForMarket(args: {
+    billing_account_id: string;
+    target_id: string;
+    market_id: string;
+  }): Promise<OpenOrderRow[]> {
+    return this.rows
+      .filter(
+        (r) =>
+          r.billing_account_id === args.billing_account_id &&
+          r.target_id === args.target_id &&
+          ((r.attributes as Record<string, unknown> | null)?.market_id ??
+            null) === args.market_id &&
+          ["pending", "open", "partial"].includes(r.status)
+      )
+      .map((r) => ({
+        client_order_id: r.client_order_id,
+        order_id: r.order_id,
+        status: r.status,
+        billing_account_id: r.billing_account_id,
+        target_id: r.target_id,
+        market_id: args.market_id,
+        created_at: r.created_at,
+      }));
+  }
+
+  async findStaleOpen(args: {
+    max_age_minutes: number;
+  }): Promise<OpenOrderRow[]> {
+    const cutoff = new Date(Date.now() - args.max_age_minutes * 60_000);
+    return this.rows
+      .filter(
+        (r) =>
+          ["pending", "open", "partial"].includes(r.status) &&
+          r.created_at < cutoff
+      )
+      .map((r) => {
+        const market_id =
+          ((r.attributes as Record<string, unknown> | null)?.market_id as
+            | string
+            | undefined) ?? "";
+        return {
+          client_order_id: r.client_order_id,
+          order_id: r.order_id,
+          status: r.status,
+          billing_account_id: r.billing_account_id,
+          target_id: r.target_id,
+          market_id,
+          created_at: r.created_at,
+        };
+      });
   }
 
   async recordDecision(input: RecordDecisionInput): Promise<void> {

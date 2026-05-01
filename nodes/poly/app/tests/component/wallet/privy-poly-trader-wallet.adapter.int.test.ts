@@ -626,6 +626,7 @@ describe("PrivyPolyTraderWalletAdapter.authorizeIntent + provisionWithGrant (com
     status: "pending" | "open" | "filled" | "partial" | "canceled" | "error";
     sizeUsdc: number;
     createdAt?: Date;
+    marketId?: string;
   }) {
     const now = opts.createdAt ?? new Date();
     await seedDb.insert(polyCopyTradeFills).values({
@@ -633,11 +634,19 @@ describe("PrivyPolyTraderWalletAdapter.authorizeIntent + provisionWithGrant (com
       createdByUserId: tenant.userId,
       targetId: randomUUID(),
       fillId: `data-api:${opts.fillId}`,
+      // task.5001 — market_id is now NOT NULL. Seeded value distinct per row
+      // so the partial unique index doesn't reject duplicate test rows.
+      marketId:
+        opts.marketId ?? `prediction-market:polymarket:test-${opts.fillId}`,
       observedAt: now,
       clientOrderId: `cid-${opts.fillId}`,
       orderId: null,
       status: opts.status,
-      attributes: { size_usdc: opts.sizeUsdc },
+      attributes: {
+        size_usdc: opts.sizeUsdc,
+        market_id:
+          opts.marketId ?? `prediction-market:polymarket:test-${opts.fillId}`,
+      },
       createdAt: now,
       updatedAt: now,
     });

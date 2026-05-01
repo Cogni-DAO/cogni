@@ -30,9 +30,13 @@ Job modules that wire business logic to the application container for ops-trigge
 
 - **Exports:** `runGovernanceSchedulesSyncJob()`
 - **CLI (if any):** `pnpm governance:schedules:sync` (calls internal ops route)
-- **Files considered API:** `syncGovernanceSchedules.job.ts`, `order-reconciler.job.ts`
+- **Files considered API:** `syncGovernanceSchedules.job.ts`, `order-reconciler.job.ts`, `copy-trade-mirror.job.ts`, `poly-mirror-resting-sweep.job.ts`
 
 **order-reconciler.job.ts** — 60s interval reconciler for `poly_copy_trade_fills`. Resolves typed `GetOrderResult` per row (no null skips); promotes not_found rows older than `notFoundGraceMs` to `canceled`; writes `synced_at` via `markSynced`; stamps `reconcilerLastTickAt` for the sync-health endpoint. Pure `runReconcileOnce` export for unit tests. Scaffolding — deleted in phase 4.
+
+**copy-trade-mirror.job.ts** — 30s mirror poll per `(target, tenant)`. `buildMirrorTargetConfig` defaults `placement: {kind: "mirror_limit"}` and `sizing: {kind: "min_bet"}`. Wires `MirrorPipelineDeps.cancelOrder` from the per-tenant `PolyTradeExecutor`. task.5001.
+
+**poly-mirror-resting-sweep.job.ts** — `setInterval` (default 60s) TTL sweeper. Cancels mirror orders with `created_at < now() - MIRROR_RESTING_TTL_MINUTES` (default 20) AND `status IN ('pending','open','partial')`. Single global `findStaleOpen` query; app-side groupBy on `billing_account_id`; per-tenant `executor.cancelOrder` dispatch. Emits `poly_mirror_resting_swept_total{reason}`. task.5001.
 
 ## Ports (optional)
 

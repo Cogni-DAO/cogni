@@ -189,6 +189,14 @@ export interface PolyTradeExecutor {
   /** Per-tenant getOrder for the reconciler path (optional, deferred). */
   getOrder: (orderId: string) => Promise<GetOrderResult>;
   /**
+   * Per-tenant cancel seam (task.5001). Wraps
+   * `PolymarketClobAdapter.cancelOrder` with an audit log so the cancel
+   * boundary is tenant-attributed in Loki the same way placement is. The
+   * adapter swallows CLOB 404 (`CANCEL_404_SWALLOWED_IN_ADAPTER`); callers
+   * see only success / non-404 error.
+   */
+  cancelOrder: (orderId: string) => Promise<void>;
+  /**
    * Market-constraints fetch — returns `{ minShares }` for a token id. Used
    * by the mirror pipeline to pre-flight sizing against the market's share
    * minimum. Raw passthrough to `PolymarketClobAdapter.getMarketConstraints`.
@@ -548,6 +556,18 @@ async function buildExecutor(
     );
   }
 
+  async function cancelOrder(orderId: string): Promise<void> {
+    deps.logger.info(
+      {
+        event: "poly.mirror.cancel.tenant",
+        billing_account_id: billingAccountId,
+        order_id: orderId,
+      },
+      "poly-trade-executor: cancelOrder (tenant-scoped)"
+    );
+    await adapter.cancelOrder(orderId);
+  }
+
   const executor: PolyTradeExecutor = {
     billingAccountId,
     placeIntent: authorizedPlace,
@@ -555,6 +575,7 @@ async function buildExecutor(
     exitPosition,
     listPositions: () => dataApiClient.listUserPositions(funderAddress),
     getOrder: adapter.getOrder.bind(adapter),
+    cancelOrder,
     getMarketConstraints: adapter.getMarketConstraints.bind(adapter),
     listOpenOrders: async () =>
       (await adapter.listOpenOrders()).map(mapOpenOrderSummary),

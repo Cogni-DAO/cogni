@@ -21,35 +21,22 @@ import { z } from "zod";
 
 /**
  * Sizing policy — how the pipeline derives `OrderIntent.size_usdc` from a
- * target's fill. Discriminated union: `"fixed"` (legacy desired-notional with
- * scaling ceiling) and `"min_bet"` (always bet the market's min, clamped to a
- * configured ceiling). Future variants (proportional, percentile, allocation)
- * plug in by adding a new `kind` without touching the adapter or the port.
- */
-export const FixedSizingPolicySchema = z.object({
-  kind: z.literal("fixed"),
-  /** Desired notional USDC per mirrored fill, before market-min adjustment. */
-  mirror_usdc: z.number().positive(),
-  /**
-   * Hard ceiling on notional USDC per mirrored intent. When a market's
-   * share-min forces the notional above this value, the pipeline skips with
-   * `reason: "below_market_min"` rather than overspending. Default equals
-   * `mirror_usdc` (opt-out of scaling); callers opt in by setting it higher.
-   */
-  max_usdc_per_trade: z.number().positive(),
-});
-export type FixedSizingPolicy = z.infer<typeof FixedSizingPolicySchema>;
-
-/**
- * Always-min-bet policy. Bet size is the market's `minUsdcNotional` (clamped to
- * `minShares × price` per SHARE_SPACE_MATH). When the floor exceeds
- * `max_usdc_per_trade`, the pipeline skips with `below_market_min` BEFORE the
- * `INSERT_BEFORE_PLACE` row lands — so cap-exceed cases are not duplicated at
- * the `authorizeIntent` boundary as `placement_failed` decisions.
+ * target's fill. Always-min-bet semantics: bet size is the market's
+ * `minUsdcNotional` (clamped to `minShares × price` per SHARE_SPACE_MATH).
+ * When the floor exceeds `max_usdc_per_trade`, the pipeline skips with
+ * `below_market_min` BEFORE the `INSERT_BEFORE_PLACE` row lands — so
+ * cap-exceed cases are not duplicated at the `authorizeIntent` boundary as
+ * `placement_failed` decisions.
  *
  * FCFS budget gating across multi-target copy-trading is handled downstream by
  * `authorizeIntent` against the tenant's `poly_wallet_grants` row
  * (`CAPS_LIVE_IN_GRANT`); this policy intentionally does not read grant state.
+ *
+ * Discriminated union retained (single `kind: "min_bet"` variant today) so
+ * future policies (proportional, percentile, allocation) plug in by adding a
+ * new `kind` without touching the adapter or the port. Legacy `kind: "fixed"`
+ * was deleted in task.5001 — no persisted rows existed (sizing config is
+ * default-in-code; persistence deferred to task.0347).
  */
 export const MinBetSizingPolicySchema = z.object({
   kind: z.literal("min_bet"),
@@ -59,10 +46,26 @@ export const MinBetSizingPolicySchema = z.object({
 export type MinBetSizingPolicy = z.infer<typeof MinBetSizingPolicySchema>;
 
 export const SizingPolicySchema = z.discriminatedUnion("kind", [
-  FixedSizingPolicySchema,
   MinBetSizingPolicySchema,
 ]);
 export type SizingPolicy = z.infer<typeof SizingPolicySchema>;
+
+/**
+ * Placement policy — how the pipeline lands a mirrored intent on the CLOB.
+ * - `mirror_limit` (default): GTC limit at the target's entry price; one
+ *   resting order per (target, market). Exits via fill, cancel-on-SELL, or
+ *   TTL sweep. Relaxes `FILL_NEVER_BELOW_FLOOR` for the `limit` wire value.
+ * - `market_fok` (legacy): `createAndPostMarketOrder(FOK)` per fill. Used by
+ *   parity testing + agent-tool path.
+ *
+ * Wire value (`"limit"` | `"market_fok"`) lands on
+ * `OrderIntent.attributes.placement` and is read by the adapter.
+ */
+export const PlacementPolicySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("mirror_limit") }),
+  z.object({ kind: z.literal("market_fok") }),
+]);
+export type PlacementPolicy = z.infer<typeof PlacementPolicySchema>;
 
 /**
  * Per-target configuration. Populated from `poly_copy_trade_targets` rows +
@@ -82,6 +85,12 @@ export const MirrorTargetConfigSchema = z.object({
   mode: z.enum(["live", "paper"]),
   /** Per-target sizing policy. See SizingPolicySchema. */
   sizing: SizingPolicySchema,
+  /**
+   * Per-target placement policy. Default `mirror_limit` (task.5001). Bootstrap
+   * sets it when hydrating from `poly_copy_trade_targets`; persistence to a
+   * DB column is deferred to task.0347.
+   */
+  placement: PlacementPolicySchema,
 });
 export type MirrorTargetConfig = z.infer<typeof MirrorTargetConfigSchema>;
 
@@ -120,6 +129,12 @@ export const MirrorReasonSchema = z.enum([
   "sell_without_position",
   /** SELL fill routed through closePosition — recorded as the reason on the `placed` row. */
   "sell_closed_position",
+  /**
+   * task.5001 — a resting mirror order already exists for this
+   * (tenant, target, market). Fill arrived from a subsequent target trade on
+   * the same market while our prior limit is still pending/open/partial.
+   */
+  "already_resting",
   /**
    * Target fill × current limit_price × market share-min exceeds the user's
    * `max_usdc_per_trade` ceiling — skip rather than scale past the ceiling.
