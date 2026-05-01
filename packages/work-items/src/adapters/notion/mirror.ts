@@ -150,6 +150,7 @@ export interface NotionWorkItemPage {
   syncHash?: string;
   syncState?: string;
   syncError?: string;
+  validationErrors: string[];
   editable: Partial<WorkItemNotionEditable>;
 }
 
@@ -258,6 +259,10 @@ function asStatus(value: string): WorkItemStatus | undefined {
     default:
       return undefined;
   }
+}
+
+function invalidStatusMessage(value: string): string {
+  return `Invalid Notion Status "${value}". Use exact Cogni lifecycle status: needs_triage, needs_research, needs_design, needs_implement, needs_closeout, needs_merge, done, blocked, cancelled.`;
 }
 
 function notionStatusName(status: WorkItemStatus): string {
@@ -529,10 +534,13 @@ export class NotionWorkItemMirror {
     const prop = (key: PropertyKey) => page.properties[this.propertyNames[key]];
     const rawId = textFromProperty(prop("id")).trim();
     const rawStatus = textFromProperty(prop("status")).trim();
+    const status = asStatus(rawStatus);
+    const validationErrors =
+      rawStatus && !status ? [invalidStatusMessage(rawStatus)] : [];
 
     const editable = normalizeEditable({
       title: textFromProperty(prop("title")).trim() || undefined,
-      status: asStatus(rawStatus),
+      status,
       node: textFromProperty(prop("node")).trim() || undefined,
       priority: numberFromProperty(prop("priority")),
       rank: numberFromProperty(prop("rank")),
@@ -554,6 +562,7 @@ export class NotionWorkItemMirror {
       syncHash: textFromProperty(prop("syncHash")).trim() || undefined,
       syncState: textFromProperty(prop("syncState")).trim() || undefined,
       syncError: textFromProperty(prop("syncError")).trim() || undefined,
+      validationErrors,
       editable,
     };
   }
@@ -570,7 +579,7 @@ export class NotionWorkItemMirror {
     await this.addProperty(properties, "title", item.title);
     await this.addProperty(properties, "id", String(item.id));
     await this.addProperty(properties, "type", item.type);
-    await this.addProperty(properties, "status", notionStatusName(item.status));
+    await this.addStatusProperty(properties, item.status);
     await this.addProperty(properties, "node", item.node);
     await this.addProperty(properties, "priority", item.priority);
     await this.addProperty(properties, "rank", item.rank);
@@ -602,6 +611,23 @@ export class NotionWorkItemMirror {
     if (!propertyType) return;
 
     target[name] = propertyPayload(propertyType, value);
+  }
+
+  private async addStatusProperty(
+    target: Record<string, unknown>,
+    status: WorkItemStatus
+  ): Promise<void> {
+    const schema = await this.ensureSchema();
+    const name = this.propertyNames.status;
+    const propertyType = schema.properties[name]?.type as
+      | PropertyType
+      | undefined;
+    if (!propertyType) return;
+
+    target[name] = propertyPayload(
+      propertyType,
+      propertyType === "status" ? notionStatusName(status) : status
+    );
   }
 
   private async ensureSchema(): Promise<NotionDataSource> {

@@ -36,19 +36,23 @@ Humans should not call the Notion API. Humans click through Notion permissions a
 WORK_ITEMS_NOTION_TOKEN=secret_...
 ```
 
-3. Open the Notion table/database that should mirror Cogni work items.
-4. Press the top-right `...` menu.
-5. Press `Add connections` or `Connections`.
-6. Select the new connection.
-7. Copy the browser URL into `.env.cogni` as the next handoff value:
+3. Open the Notion page that should contain the controlled Cogni work-item view, for example a `Domains` page.
+4. Inside that page, create a database/table for the work-item mirror.
+5. Open that database/table as a full page.
+6. Press the top-right `...` menu.
+7. Press `Add connections` or `Connections`.
+8. Select the new connection.
+9. Copy the browser URL into `.env.cogni` as the next handoff value:
 
 ```bash
 WORK_ITEMS_NOTION_ROOT_URL=https://www.notion.so/Cogni-Dev-353fbc99d0a780db9176e8f6e8cd55a0
 ```
 
-8. Tell the assistant to resolve and verify the Notion IDs.
+10. Tell the assistant to resolve and verify the Notion IDs.
 
 Important: add the connection to the database/table itself, not only to one row/page inside the table. If the assistant can read one row but gets `Could not find database`, the connection was added at the wrong level.
+
+Treat the copied URL as the whole Notion surface being controlled. The assistant will resolve whether it is a database URL, data-source view URL, or a page inside the database, then store the exact machine IDs in `.env.cogni`.
 
 For the current `Cogni-Dev` URL:
 
@@ -82,7 +86,7 @@ Recommended mirror properties:
 | Property         | Notion type             |
 | ---------------- | ----------------------- |
 | `Type`           | Select                  |
-| `Status`         | Status or Select        |
+| `Status`         | Select preferred        |
 | `Node`           | Text or Select          |
 | `Priority`       | Number                  |
 | `Rank`           | Number                  |
@@ -98,6 +102,26 @@ Recommended mirror properties:
 | `Sync State`     | Status, Select, or Text |
 | `Sync Error`     | Text                    |
 | `Last Synced At` | Date                    |
+
+## Editing From Notion
+
+Editable fields flow back to Cogni on the next sync pass. The prototype is not continuous yet; it syncs when the internal candidate-a endpoint is called.
+
+`Status` must use exact Cogni lifecycle values. Prefer a Notion `Select` property with exactly these options:
+
+- `needs_triage`
+- `needs_research`
+- `needs_design`
+- `needs_implement`
+- `needs_closeout`
+- `needs_merge`
+- `done`
+- `blocked`
+- `cancelled`
+
+Notion's default `Not started` and `In progress` labels are UI defaults, not Cogni lifecycle statuses. In the current prototype they are rejected for write-back: sync marks the row `Sync State = error` and leaves Cogni unchanged.
+
+`Done` is the only display exception when using Notion's special `Status` property, because Notion treats `done` and `Done` as the same status label. For exact string matching including lowercase `done`, use a plain Notion `Select` property instead of the special `Status` property.
 
 ## Assistant Steps
 

@@ -125,6 +125,14 @@ async function syncOneItem(
   page: NotionWorkItemPage | undefined,
   summary: WorkItemsNotionSyncSummary
 ): Promise<void> {
+  if (page?.validationErrors.length) {
+    const error = page.validationErrors.join(" ");
+    await mirror.markError(page, error);
+    summary.errors.push({ id: String(item.id), error });
+    summary.skipped += 1;
+    return;
+  }
+
   if (page && hasConcurrentEdit(mirror, page, item)) {
     await mirror.markConflict(
       page,
