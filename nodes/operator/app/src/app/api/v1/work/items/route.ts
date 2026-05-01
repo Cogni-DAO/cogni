@@ -19,6 +19,7 @@ import { NextResponse } from "next/server";
 
 import {
   createWorkItem,
+  InvalidCursorError,
   listWorkItems,
   WorkItemsBackendNotReadyError,
 } from "@/app/_facades/work/items.server";
@@ -64,7 +65,15 @@ export const GET = wrapRouteHandlerWithLogging(
       cursor: cursorParam ?? undefined,
     });
 
-    const result = await listWorkItems(input);
+    let result: Awaited<ReturnType<typeof listWorkItems>>;
+    try {
+      result = await listWorkItems(input);
+    } catch (e) {
+      if (e instanceof InvalidCursorError) {
+        return NextResponse.json({ error: "invalid cursor" }, { status: 400 });
+      }
+      throw e;
+    }
 
     ctx.log.info({ count: result.items.length }, "work.items.list_success");
 

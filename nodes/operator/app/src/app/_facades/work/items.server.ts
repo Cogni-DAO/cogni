@@ -21,7 +21,10 @@ import type {
 import type { WorkItem, WorkItemId } from "@cogni/work-items";
 import { toWorkItemId } from "@cogni/work-items";
 
+import { InvalidCursorError } from "@/adapters/server/db/doltgres/work-items-cursor";
 import { getContainer } from "@/bootstrap/container";
+
+export { InvalidCursorError };
 
 export class WorkItemNotFoundError extends Error {
   constructor(id: string) {
@@ -115,25 +118,42 @@ export async function listWorkItems(
     ...(input.cursor && { cursor: input.cursor }),
   };
 
-  // Cursor-paginate Doltgres only — markdown rows are appended once on the
-  // first page (no cursor provided). Markdown is being deprecated; once the
-  // importer back-fill is complete it returns ~0 rows in practice.
-  const merged: WorkItem[] = [];
+  // Pagination strategy:
+  //   - Doltgres is the cursor-paginated source of truth (post-#1144 importer
+  //     back-fills markdown items into Doltgres at their original IDs).
+  //   - On the first page (no cursor) we ALSO query the markdown adapter so
+  //     any items that haven't been imported yet still appear. Doltgres rows
+  //     win on id conflict (single-source dedup).
+  //   - Merged page is truncated to `limit` so the response never overflows.
+  //   - hasMore tracks Doltgres only — markdown is finite/small and only
+  //     contributes to page 1; once Doltgres exhausts pagination ends.
+  //   - Markdown-only items that overflow page 1 are dropped from the response;
+  //     this is acceptable because markdown is being deprecated and the
+  //     importer back-fill closes the gap.
+  let dgItems: WorkItem[] = [];
   let endCursor: string | null = null;
   let hasMore = false;
 
-  if (!input.cursor) {
-    const mdResult = await container.workItemQuery.list(queryShared);
-    merged.push(...mdResult.items);
-  }
-
   try {
     const dgResult = await container.doltgresWorkItems.list(queryShared);
-    merged.push(...dgResult.items);
+    dgItems = [...dgResult.items];
     endCursor = dgResult.pageInfo.endCursor;
     hasMore = dgResult.pageInfo.hasMore;
   } catch (e) {
     if ((e as Error)?.name !== "DoltgresNotConfiguredError") throw e;
+  }
+
+  let merged: WorkItem[] = dgItems;
+  if (!input.cursor) {
+    const mdResult = await container.workItemQuery.list(queryShared);
+    const dgIds = new Set(dgItems.map((i) => i.id as string));
+    const mdOnly = mdResult.items.filter((i) => !dgIds.has(i.id as string));
+    merged = [...dgItems, ...mdOnly];
+  }
+
+  const requestedLimit = input.limit ?? 100;
+  if (merged.length > requestedLimit) {
+    merged = merged.slice(0, requestedLimit);
   }
 
   return {

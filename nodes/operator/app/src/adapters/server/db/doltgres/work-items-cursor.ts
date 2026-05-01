@@ -15,6 +15,13 @@
  * @internal
  */
 
+export class InvalidCursorError extends Error {
+  constructor(message = "invalid cursor") {
+    super(message);
+    this.name = "InvalidCursorError";
+  }
+}
+
 export type WorkItemCursor = {
   /** priority (null becomes 999 in sort key — encoded as null here) */
   p: number | null;
@@ -49,7 +56,7 @@ export function decodeCursor(raw: string): WorkItemCursor {
   try {
     parsed = JSON.parse(base64UrlDecode(raw));
   } catch {
-    throw new Error("invalid cursor");
+    throw new InvalidCursorError();
   }
   if (
     !parsed ||
@@ -59,13 +66,13 @@ export function decodeCursor(raw: string): WorkItemCursor {
     !("p" in parsed) ||
     !("r" in parsed)
   ) {
-    throw new Error("invalid cursor");
+    throw new InvalidCursorError();
   }
   const obj = parsed as Record<string, unknown>;
   const p = obj.p === null ? null : Number(obj.p);
   const r = obj.r === null ? null : Number(obj.r);
-  if (p !== null && !Number.isFinite(p)) throw new Error("invalid cursor");
-  if (r !== null && !Number.isFinite(r)) throw new Error("invalid cursor");
+  if (p !== null && !Number.isFinite(p)) throw new InvalidCursorError();
+  if (r !== null && !Number.isFinite(r)) throw new InvalidCursorError();
   return {
     p,
     r,
