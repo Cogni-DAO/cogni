@@ -23,6 +23,21 @@ import { toWorkItemId } from "@cogni/work-items";
 
 import { getContainer } from "@/bootstrap/container";
 
+/**
+ * Thrown when the opaque pagination cursor cannot be decoded — translated
+ * to HTTP 400 in the route layer instead of the wrapper's generic 500.
+ * The adapter's cursor codec throws a structurally identical error
+ * (`name === "InvalidCursorError"`); the facade detects by name and
+ * rethrows its own copy so the app layer doesn't have to import from
+ * `@/adapters/**` (forbidden by `no-restricted-imports`).
+ */
+export class InvalidCursorError extends Error {
+  constructor(message = "invalid cursor") {
+    super(message);
+    this.name = "InvalidCursorError";
+  }
+}
+
 export class WorkItemNotFoundError extends Error {
   constructor(id: string) {
     super(`Work item not found: ${id}`);
@@ -104,19 +119,56 @@ export async function listWorkItems(
     ...(input.projectId && { projectId: toWorkItemId(input.projectId) }),
     ...(input.node && { node: input.node }),
     ...(input.limit && { limit: input.limit }),
+    ...(input.cursor && { cursor: input.cursor }),
   };
 
-  const mdResult = await container.workItemQuery.list(queryShared);
-  const merged: WorkItem[] = [...mdResult.items];
+  // Pagination strategy:
+  //   - Doltgres is the cursor-paginated source of truth (post-#1144 importer
+  //     back-fills markdown items into Doltgres at their original IDs).
+  //   - On the first page (no cursor) we ALSO query the markdown adapter so
+  //     any items that haven't been imported yet still appear. Doltgres rows
+  //     win on id conflict (single-source dedup).
+  //   - Merged page is truncated to `limit` so the response never overflows.
+  //   - hasMore tracks Doltgres only — markdown is finite/small and only
+  //     contributes to page 1; once Doltgres exhausts pagination ends.
+  //   - Markdown-only items that overflow page 1 are dropped from the response;
+  //     this is acceptable because markdown is being deprecated and the
+  //     importer back-fill closes the gap.
+  let dgItems: WorkItem[] = [];
+  let endCursor: string | null = null;
+  let hasMore = false;
 
   try {
     const dgResult = await container.doltgresWorkItems.list(queryShared);
-    merged.push(...dgResult.items);
+    dgItems = [...dgResult.items];
+    endCursor = dgResult.pageInfo.endCursor;
+    hasMore = dgResult.pageInfo.hasMore;
   } catch (e) {
-    if ((e as Error)?.name !== "DoltgresNotConfiguredError") throw e;
+    const name = (e as Error)?.name;
+    if (name === "InvalidCursorError") {
+      throw new InvalidCursorError((e as Error).message);
+    }
+    if (name !== "DoltgresNotConfiguredError") throw e;
   }
 
-  return { items: merged.map(toDto) };
+  let merged: WorkItem[] = dgItems;
+  if (!input.cursor) {
+    const mdResult = await container.workItemQuery.list(queryShared);
+    const dgIds = new Set(dgItems.map((i) => i.id as string));
+    const mdOnly = mdResult.items.filter((i) => !dgIds.has(i.id as string));
+    merged = [...dgItems, ...mdOnly];
+  }
+
+  const requestedLimit = input.limit ?? 100;
+  if (merged.length > requestedLimit) {
+    merged = merged.slice(0, requestedLimit);
+  }
+
+  return {
+    items: merged.map(toDto),
+    pageInfo: { endCursor, hasMore },
+    ...(endCursor !== null && { nextCursor: endCursor }),
+  };
 }
 
 export async function getWorkItem(id: string): Promise<WorkItemDto | null> {

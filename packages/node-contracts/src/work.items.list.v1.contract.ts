@@ -73,10 +73,18 @@ export const workItemsListOperation = {
     projectId: z.string().optional(),
     node: z.union([z.string(), z.array(z.string())]).optional(),
     limit: z.number().int().positive().max(500).optional(),
+    cursor: z.string().optional(),
   }),
   output: z.object({
     items: z.array(WorkItemDtoSchema),
+    /** @deprecated Use pageInfo.endCursor — kept for backwards compat. */
     nextCursor: z.string().optional(),
+    pageInfo: z
+      .object({
+        endCursor: z.string().nullable(),
+        hasMore: z.boolean(),
+      })
+      .optional(),
   }),
 } as const;
 

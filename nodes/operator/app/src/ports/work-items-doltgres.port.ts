@@ -31,7 +31,11 @@ export interface WorkItemsPatchInput {
 
 export interface WorkItemsDoltgresPort {
   get(id: WorkItemId): Promise<WorkItem | null>;
-  list(query?: WorkQuery): Promise<{ items: WorkItem[]; nextCursor?: string }>;
+  list(query?: WorkQuery): Promise<{
+    items: WorkItem[];
+    nextCursor?: string;
+    pageInfo: { endCursor: string | null; hasMore: boolean };
+  }>;
   create(input: WorkItemsCreateInput, authorTag: string): Promise<WorkItem>;
   patch(
     input: WorkItemsPatchInput,
