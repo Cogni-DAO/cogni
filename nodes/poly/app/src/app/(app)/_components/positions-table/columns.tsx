@@ -103,7 +103,9 @@ function prettifyEventSlug(
   const label = stripped
     .split("-")
     .filter(Boolean)
-    .map((w) => (w.length <= 3 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1)))
+    .map((w) =>
+      w.length <= 3 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1)
+    )
     .join(" ");
   if (!label) return null;
   if (marketTitle.toLowerCase().includes(label.toLowerCase())) return null;
