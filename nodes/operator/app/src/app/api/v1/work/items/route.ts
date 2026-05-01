@@ -47,6 +47,7 @@ export const GET = wrapRouteHandlerWithLogging(
     const projectIdParam = url.searchParams.get("projectId");
     const nodeParam = url.searchParams.get("node");
     const limitParam = url.searchParams.get("limit");
+    const cursorParam = url.searchParams.get("cursor");
 
     const input = workItemsListOperation.input.parse({
       types: typesParam ? typesParam.split(",") : undefined,
@@ -60,6 +61,7 @@ export const GET = wrapRouteHandlerWithLogging(
           : nodeParam
         : undefined,
       limit: limitParam ? Number(limitParam) : undefined,
+      cursor: cursorParam ?? undefined,
     });
 
     const result = await listWorkItems(input);

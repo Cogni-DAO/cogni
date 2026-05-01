@@ -12,6 +12,9 @@
  *   - ID_RANGE_RESERVED: Allocator floor is 5000 per type.
  *   - PATCH_ALLOWLIST: Only fields enumerated in `WorkItemsPatchSet` are mutable.
  *   - OPERATOR_LOCAL_ADAPTER_V0: Lives here, NOT in packages/work-items/.
+ *   - KEYSET_PAGINATION: list() uses (priority,rank,createdAt,id) keyset cursor —
+ *     OFFSET would scan all skipped rows and breaks under concurrent writes
+ *     (bug.5162). Sort order is priority ASC, rank ASC, created_at DESC, id ASC.
  * Side-effects: IO (database reads/writes; dolt_commit calls).
  * Links: docs/spec/work-items-port.md, work/items/task.0424.doltgres-work-items-source-of-truth.md
  * @public
@@ -35,6 +38,12 @@ import type {
   WorkItemsPatchInput,
   WorkItemsPatchSet,
 } from "@/ports/server";
+
+import {
+  decodeCursor,
+  encodeCursor,
+  type WorkItemCursor,
+} from "./work-items-cursor";
 
 const ID_FLOOR = 5000;
 
@@ -161,9 +170,11 @@ export class DoltgresOperatorWorkItemAdapter implements WorkItemsDoltgresPort {
       : null;
   }
 
-  async list(
-    query: WorkQuery = {}
-  ): Promise<{ items: WorkItem[]; nextCursor?: string }> {
+  async list(query: WorkQuery = {}): Promise<{
+    items: WorkItem[];
+    nextCursor?: string;
+    pageInfo: { endCursor: string | null; hasMore: boolean };
+  }> {
     const conds: string[] = [];
 
     if (query.ids?.length) {
@@ -191,14 +202,63 @@ export class DoltgresOperatorWorkItemAdapter implements WorkItemsDoltgresPort {
       );
     }
 
-    const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
-    const limit = Math.min(query.limit ?? 100, 500);
+    if (query.cursor) {
+      const c = decodeCursor(query.cursor);
+      const pEff = c.p ?? 999;
+      const rEff = c.r ?? 999;
+      const ts = escapeValue(c.ts);
+      const id = escapeValue(c.id);
+      // Keyset progression for ORDER BY
+      //   COALESCE(priority,999) ASC, COALESCE(rank,999) ASC, created_at DESC, id ASC.
+      // Mixed directions → expressed as OR-chain rather than tuple compare.
+      conds.push(
+        `(` +
+          `COALESCE(priority,999) > ${pEff}` +
+          ` OR (COALESCE(priority,999) = ${pEff} AND COALESCE(rank,999) > ${rEff})` +
+          ` OR (COALESCE(priority,999) = ${pEff} AND COALESCE(rank,999) = ${rEff} AND created_at < ${ts})` +
+          ` OR (COALESCE(priority,999) = ${pEff} AND COALESCE(rank,999) = ${rEff} AND created_at = ${ts} AND id > ${id})` +
+          `)`
+      );
+    }
 
-    const rows = await this.sql.unsafe(
-      `SELECT * FROM work_items ${where} ORDER BY COALESCE(priority, 999) ASC, COALESCE(rank, 999) ASC, created_at DESC LIMIT ${limit}`
-    );
+    const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
+    const requestedLimit = Math.min(Math.max(query.limit ?? 100, 1), 500);
+    // Fetch limit+1 to detect hasMore without a separate COUNT query.
+    const fetchLimit = requestedLimit + 1;
+
+    const rows = (await this.sql.unsafe(
+      `SELECT * FROM work_items ${where} ORDER BY COALESCE(priority, 999) ASC, COALESCE(rank, 999) ASC, created_at DESC, id ASC LIMIT ${fetchLimit}`
+    )) as ReadonlyArray<Record<string, unknown>>;
+
+    const hasMore = rows.length > requestedLimit;
+    const pageRows = hasMore ? rows.slice(0, requestedLimit) : rows;
+    const items = pageRows.map((r) => rowToWorkItem(r));
+
+    let endCursor: string | null = null;
+    if (hasMore && pageRows.length > 0) {
+      const last = pageRows[pageRows.length - 1] as Record<string, unknown>;
+      const cursor: WorkItemCursor = {
+        p:
+          last.priority === null || last.priority === undefined
+            ? null
+            : Number(last.priority),
+        r:
+          last.rank === null || last.rank === undefined
+            ? null
+            : Number(last.rank),
+        ts:
+          last.created_at instanceof Date
+            ? last.created_at.toISOString()
+            : String(last.created_at ?? ""),
+        id: String(last.id),
+      };
+      endCursor = encodeCursor(cursor);
+    }
+
     return {
-      items: rows.map((r) => rowToWorkItem(r as Record<string, unknown>)),
+      items,
+      pageInfo: { endCursor, hasMore },
+      ...(endCursor !== null && { nextCursor: endCursor }),
     };
   }
 

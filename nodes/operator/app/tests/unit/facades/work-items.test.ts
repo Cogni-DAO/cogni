@@ -65,14 +65,38 @@ function createMockPort(): WorkItemQueryPort {
   };
 }
 
+type DoltgresMock = {
+  list: ReturnType<typeof vi.fn>;
+  get: ReturnType<typeof vi.fn>;
+  create: ReturnType<typeof vi.fn>;
+  patch: ReturnType<typeof vi.fn>;
+};
+
+function createDoltgresMock(): DoltgresMock {
+  // Default behavior: doltgres returns empty so the facade tests focus on
+  // markdown path + DTO mapping.
+  return {
+    list: vi.fn().mockResolvedValue({
+      items: [],
+      pageInfo: { endCursor: null, hasMore: false },
+    }),
+    get: vi.fn(),
+    create: vi.fn(),
+    patch: vi.fn(),
+  };
+}
+
 describe("app/_facades/work/items.server", () => {
   let mockPort: ReturnType<typeof createMockPort>;
+  let mockDoltgres: DoltgresMock;
 
   beforeEach(() => {
     vi.resetAllMocks();
     mockPort = createMockPort();
+    mockDoltgres = createDoltgresMock();
     mockGetContainer.mockReturnValue({
       workItemQuery: mockPort,
+      doltgresWorkItems: mockDoltgres,
     } as never);
   });
 
@@ -172,14 +196,36 @@ describe("app/_facades/work/items.server", () => {
       expect(result.items).toEqual([]);
     });
 
-    it("passes through nextCursor", async () => {
+    it("passes through nextCursor and pageInfo from doltgres", async () => {
       vi.mocked(mockPort.list).mockResolvedValue({
         items: [],
-        nextCursor: "cursor-xyz",
+        nextCursor: undefined,
+      });
+      mockDoltgres.list.mockResolvedValue({
+        items: [],
+        pageInfo: { endCursor: "cursor-xyz", hasMore: true },
       });
 
       const result = await listWorkItems({});
+      expect(result.pageInfo).toEqual({
+        endCursor: "cursor-xyz",
+        hasMore: true,
+      });
       expect(result.nextCursor).toBe("cursor-xyz");
+    });
+
+    it("forwards cursor to doltgres and skips markdown source", async () => {
+      mockDoltgres.list.mockResolvedValue({
+        items: [],
+        pageInfo: { endCursor: null, hasMore: false },
+      });
+
+      await listWorkItems({ cursor: "encoded-cursor" });
+
+      expect(mockPort.list).not.toHaveBeenCalled();
+      expect(mockDoltgres.list).toHaveBeenCalledWith(
+        expect.objectContaining({ cursor: "encoded-cursor" })
+      );
     });
   });
 

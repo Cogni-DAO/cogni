@@ -112,19 +112,35 @@ export async function listWorkItems(
     ...(input.projectId && { projectId: toWorkItemId(input.projectId) }),
     ...(input.node && { node: input.node }),
     ...(input.limit && { limit: input.limit }),
+    ...(input.cursor && { cursor: input.cursor }),
   };
 
-  const mdResult = await container.workItemQuery.list(queryShared);
-  const merged: WorkItem[] = [...mdResult.items];
+  // Cursor-paginate Doltgres only — markdown rows are appended once on the
+  // first page (no cursor provided). Markdown is being deprecated; once the
+  // importer back-fill is complete it returns ~0 rows in practice.
+  const merged: WorkItem[] = [];
+  let endCursor: string | null = null;
+  let hasMore = false;
+
+  if (!input.cursor) {
+    const mdResult = await container.workItemQuery.list(queryShared);
+    merged.push(...mdResult.items);
+  }
 
   try {
     const dgResult = await container.doltgresWorkItems.list(queryShared);
     merged.push(...dgResult.items);
+    endCursor = dgResult.pageInfo.endCursor;
+    hasMore = dgResult.pageInfo.hasMore;
   } catch (e) {
     if ((e as Error)?.name !== "DoltgresNotConfiguredError") throw e;
   }
 
-  return { items: merged.map(toDto) };
+  return {
+    items: merged.map(toDto),
+    pageInfo: { endCursor, hasMore },
+    ...(endCursor !== null && { nextCursor: endCursor }),
+  };
 }
 
 export async function getWorkItem(id: string): Promise<WorkItemDto | null> {
