@@ -104,7 +104,7 @@ export interface ListUserActivityParams {
 }
 
 export interface ListUserTradesParams {
-  /** Rows per page (Polymarket supports up to 10k for `/trades`). Default: 1000. */
+  /** Rows per page. Default: 20. Polymarket's `/trades` cache appears to serve a stale page at limits >20 (verified 2026-05-01: limit=1000 was 2min behind limit=20 for an active trader). Callers needing deeper history should paginate or accept staleness. */
   limit?: number;
   /** Only return trades at or after this unix-seconds timestamp. */
   sinceTs?: number;
@@ -218,7 +218,7 @@ export class PolymarketDataApiClient {
     assertWallet(wallet);
     const url = new URL("/trades", this.baseUrl);
     url.searchParams.set("user", wallet);
-    url.searchParams.set("limit", String(params?.limit ?? 1000));
+    url.searchParams.set("limit", String(params?.limit ?? 20));
     url.searchParams.set(
       "takerOnly",
       params?.takerOnly === true ? "true" : "false"
