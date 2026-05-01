@@ -25,7 +25,7 @@ import { useQuery } from "@tanstack/react-query";
 import { type ReactElement, useMemo, useState } from "react";
 import { PositionsTable } from "@/app/(app)/_components/positions-table";
 import { fetchExecution } from "@/app/(app)/dashboard/_api/fetchExecution";
-import type { OpenOrderSummary } from "@/bootstrap/capabilities/poly-trade-executor";
+import type { PolyWalletOpenOrder } from "@cogni/poly-node-contracts";
 import {
   Card,
   CardContent,
@@ -59,7 +59,7 @@ export function AccountActivityView(): ReactElement {
   const closedPositions = execution.data?.closed_positions ?? [];
   const dailyTradeCounts = execution.data?.dailyTradeCounts ?? [];
   const totalTrades14d = useMemo(
-    () => dailyTradeCounts.reduce((acc, d) => acc + d.count, 0),
+    () => dailyTradeCounts.reduce((acc, d) => acc + d.n, 0),
     [dailyTradeCounts]
   );
 
@@ -184,7 +184,7 @@ function OrdersTable({
   orders,
   isLoading,
 }: {
-  orders: readonly OpenOrderSummary[];
+  orders: readonly PolyWalletOpenOrder[];
   isLoading: boolean;
 }): ReactElement {
   const [page, setPage] = useState(0);

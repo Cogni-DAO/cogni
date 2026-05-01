@@ -9,9 +9,9 @@
  * @public
  */
 
-import type { WalletOrdersResponse } from "@/app/api/v1/poly/wallet/orders/route";
+import type { PolyWalletOrdersOutput } from "@cogni/poly-node-contracts";
 
-export async function fetchWalletOrders(): Promise<WalletOrdersResponse> {
+export async function fetchWalletOrders(): Promise<PolyWalletOrdersOutput> {
   const response = await fetch("/api/v1/poly/wallet/orders", {
     credentials: "include",
   });
@@ -20,5 +20,5 @@ export async function fetchWalletOrders(): Promise<WalletOrdersResponse> {
       `Failed to fetch wallet orders: ${response.status} ${response.statusText}`
     );
   }
-  return (await response.json()) as WalletOrdersResponse;
+  return (await response.json()) as PolyWalletOrdersOutput;
 }
