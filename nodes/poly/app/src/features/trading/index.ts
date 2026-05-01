@@ -21,15 +21,18 @@ export {
   createClobExecutor,
 } from "./clob-executor";
 export { createOrderLedger, type OrderLedgerDeps } from "./order-ledger";
-export type {
-  InsertPendingInput,
-  LedgerRow,
-  LedgerStatus,
-  ListOpenOrPendingOptions,
-  ListRecentOptions,
-  OrderLedger,
-  RecordDecisionInput,
-  StateSnapshot,
-  SyncHealthSummary,
-  UpdateStatusInput,
+export {
+  AlreadyRestingError,
+  type InsertPendingInput,
+  type LedgerCancelReason,
+  type LedgerRow,
+  type LedgerStatus,
+  type ListOpenOrPendingOptions,
+  type ListRecentOptions,
+  type OpenOrderRow,
+  type OrderLedger,
+  type RecordDecisionInput,
+  type StateSnapshot,
+  type SyncHealthSummary,
+  type UpdateStatusInput,
 } from "./order-ledger.types";

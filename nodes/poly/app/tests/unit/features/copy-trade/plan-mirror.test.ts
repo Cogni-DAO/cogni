@@ -43,10 +43,10 @@ const CONFIG: MirrorTargetConfig = {
   created_by_user_id: "00000000-0000-4000-a000-000000000001",
   mode: "live",
   sizing: {
-    kind: "fixed",
-    mirror_usdc: 1.0,
+    kind: "min_bet",
     max_usdc_per_trade: 1.0,
   },
+  placement: { kind: "mirror_limit" },
 };
 
 const CLEAN_STATE: RuntimeState = {
@@ -74,6 +74,7 @@ describe("planMirrorFromFill() — place branches", () => {
       config: CONFIG,
       state: CLEAN_STATE,
       client_order_id: COID,
+      min_usdc_notional: 1.0,
     });
     if (d.kind !== "place") throw new Error("expected place");
     expect(d.reason).toBe("ok");
@@ -81,9 +82,7 @@ describe("planMirrorFromFill() — place branches", () => {
     expect(d.intent.market_id).toBe(FILL.market_id);
     expect(d.intent.outcome).toBe("YES");
     expect(d.intent.side).toBe("BUY");
-    expect(d.intent.size_usdc).toBe(
-      CONFIG.sizing.kind === "fixed" ? CONFIG.sizing.mirror_usdc : 0
-    );
+    expect(d.intent.size_usdc).toBe(1.0);
     expect(d.intent.limit_price).toBe(FILL.price);
     expect(d.intent.client_order_id).toBe(COID);
     expect(d.intent.attributes?.token_id).toBe("0xasset");
@@ -97,6 +96,7 @@ describe("planMirrorFromFill() — place branches", () => {
       config: { ...CONFIG, mode: "paper" },
       state: CLEAN_STATE,
       client_order_id: COID,
+      min_usdc_notional: 1.0,
     });
     if (d.kind !== "place") throw new Error("expected place");
     expect(d.reason).toBe("mode_paper");
@@ -110,6 +110,7 @@ describe("planMirrorFromFill() — place branches", () => {
       config: CONFIG,
       state: CLEAN_STATE,
       client_order_id: COID,
+      min_usdc_notional: 1.0,
     });
     if (d.kind !== "place") throw new Error("expected place");
     expect(d.intent.attributes?.token_id).toBe("");
@@ -124,6 +125,7 @@ describe("planMirrorFromFill() — idempotency round-trip", () => {
       config: CONFIG,
       state: CLEAN_STATE,
       client_order_id: coid,
+      min_usdc_notional: 1.0,
     });
     expect(first.kind).toBe("place");
     const second = planMirrorFromFill({
@@ -131,6 +133,7 @@ describe("planMirrorFromFill() — idempotency round-trip", () => {
       config: CONFIG,
       state: { already_placed_ids: [coid] },
       client_order_id: coid,
+      min_usdc_notional: 1.0,
     });
     expect(second).toEqual({ kind: "skip", reason: "already_placed" });
   });

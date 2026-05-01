@@ -260,6 +260,13 @@
       "when": 1778000100000,
       "tag": "0036_drop_poly_copy_trade_config_kill_switch",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1778000200000,
+      "tag": "0037_poly_copy_trade_market_id",
+      "breakpoints": true
     }
   ]
 }

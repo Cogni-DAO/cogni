@@ -353,6 +353,8 @@ let _reconcilerHandle: OrderReconcilerHandle | null = null;
 let _targetsReconcilerStop: (() => void) | null = null;
 // Auto-wrap job handle (task.0429). Set when Privy + AEAD configured.
 let _autoWrapHandle: AutoWrapJobHandle | null = null;
+// Resting-sweep job stop fn (task.5001). Set after the mirror reconciler boots.
+let _restingSweepStop: (() => void) | null = null;
 
 /**
  * Get the singleton container instance.
@@ -388,6 +390,14 @@ export function resetContainer(): void {
       // Best-effort.
     }
     _autoWrapHandle = null;
+  }
+  if (_restingSweepStop) {
+    try {
+      _restingSweepStop();
+    } catch {
+      // Best-effort.
+    }
+    _restingSweepStop = null;
   }
   if (_temporalConnection) {
     void _temporalConnection.close();
@@ -854,6 +864,10 @@ function createContainer(): Container {
                 const executor = await getExecutor();
                 return executor.placeIntent(intent);
               },
+              cancelOrder: async (orderId) => {
+                const executor = await getExecutor();
+                return executor.cancelOrder(orderId);
+              },
               getMarketConstraints: async (tokenId) => {
                 const executor = await getExecutor();
                 return executor.getMarketConstraints(tokenId);
@@ -884,6 +898,40 @@ function createContainer(): Container {
             err: err instanceof Error ? err.message : String(err),
           },
           "mirror poll boot failed — continuing without autonomous mirror"
+        );
+      }
+
+      // task.5001 — TTL sweep for resting `mirror_limit` orders. One job
+      // process-wide. Cancels rows whose `created_at < now() - 20m` and whose
+      // `status IN ('pending','open','partial')`. Independent of the mirror
+      // tick — covers the case the target never sends a SELL signal.
+      try {
+        const { startRestingSweep } = await import(
+          "@/bootstrap/jobs/poly-mirror-resting-sweep.job"
+        );
+        const { noopMetrics: noopMetricsForSweep } = await import(
+          "@cogni/poly-market-provider"
+        );
+        const sweepLogger =
+          log as unknown as import("@cogni/poly-market-provider").LoggerPort;
+        _restingSweepStop = startRestingSweep({
+          ledger: orderLedger,
+          cancelOrderFor: async (billing_account_id) => {
+            const exec =
+              await executorFactory.getPolyTradeExecutorFor(billing_account_id);
+            return exec.cancelOrder.bind(exec);
+          },
+          logger: sweepLogger,
+          metrics: noopMetricsForSweep,
+        });
+      } catch (err: unknown) {
+        log.error(
+          {
+            event: EVENT_NAMES.POLY_MIRROR_POLL_BOOT_FAILED,
+            errorCode: "resting_sweep_boot_failed",
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "mirror resting-sweep boot failed — continuing without TTL cleanup"
         );
       }
 

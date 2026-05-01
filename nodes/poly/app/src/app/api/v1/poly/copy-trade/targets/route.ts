@@ -69,15 +69,7 @@ function buildTargetView(params: {
     target_id: params.id,
     target_wallet: params.targetWallet,
     mode: config.mode,
-    // Response shape keeps a flat `mirror_usdc` field for contract stability;
-    // the internal sizing policy is a discriminated union (bug.0342). For
-    // `kind: "fixed"`, project `mirror_usdc`. For `kind: "min_bet"`, project
-    // the per-intent ceiling (closest stable scalar — the actual size is
-    // market-dependent and computed at decision time).
-    mirror_usdc:
-      config.sizing.kind === "fixed"
-        ? config.sizing.mirror_usdc
-        : config.sizing.max_usdc_per_trade,
+    mirror_usdc: config.sizing.max_usdc_per_trade,
     source: params.source,
   };
 }

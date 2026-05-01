@@ -41,9 +41,9 @@ Thin copy-trade slice — the pure `planMirrorFromFill()` policy that, given a n
 
 ## Public Surface
 
-- **Exports (pure):** `planMirrorFromFill()` — the stable-boundary planner function (renamed from `decide`). No cap checks; emits a typed `MirrorIntent | null` or a skip reason.
-- **Exports (types):** `TargetConfig` (carries `billing_account_id` + `created_by_user_id`), `RuntimeState`, `MirrorDecision`, `MirrorReason`, `PlanMirrorInput`.
-- **Exports (pipeline):** `mirror-pipeline.runOnce(deps)` (renamed from `mirror-coordinator`) — orchestrates wallet-watch → `planMirrorFromFill` → `PolyTradeExecutorFactory.getFor(tenant).placeOrder`.
+- **Exports (pure):** `planMirrorFromFill()` — the stable-boundary planner function. No cap checks; emits `{kind: "place", intent}` or `{kind: "skip", reason}`. Threads `MirrorTargetConfig.placement` into `intent.attributes.placement`.
+- **Exports (types):** `MirrorTargetConfig` (carries `billing_account_id` + `created_by_user_id` + `sizing` + `placement`), `RuntimeState`, `MirrorPlan`, `MirrorReason`, `PlanMirrorInput`, `SizingPolicy` (only `min_bet`), `PlacementPolicy` (`mirror_limit` | `market_fok`).
+- **Exports (pipeline):** `runMirrorTick(deps)` — orchestrates wallet-watch → `planMirrorFromFill` → `PolyTradeExecutorFactory.getFor(tenant).placeIntent`. BUY path runs the `hasOpenForMarket` dedupe gate; SELL path runs a cancel pre-step over `findOpenForMarket` before the position-close. `MirrorPipelineDeps.cancelOrder` is optional in tests, required in production.
 - **Exports (target source):** `CopyTradeTargetSource` port + `EnumeratedTarget` shape, `envTargetSource(wallets)` (local-dev), `dbTargetSource({appDb, serviceDb})` (production). Two methods: `listForActor(actorId)` (RLS-clamped) + `listAllActive()` (the ONE sanctioned BYPASSRLS read; grant-aware join against `poly_wallet_connections` + `poly_wallet_grants`).
 
 ## Invariants
@@ -53,7 +53,10 @@ Thin copy-trade slice — the pure `planMirrorFromFill()` policy that, given a n
 - **INTENT_BASED_CAPS** — caps count against intent submissions, not partial fills. **Enforced downstream** inside `PolyTraderWalletPort.authorizeIntent`, not here.
 - **IDEMPOTENT_BY_CLIENT_ID** — repeat decisions with the same `(target_id, fill_id)` are silently dropped via `already_placed_ids`.
 - **PLANNER_IS_PURE** — `planMirrorFromFill` has no I/O, no env reads, no clock reads, no grant reads. All runtime state handed in explicitly.
-- **MIRROR_REASON_BOUNDED** — `MirrorReason` is an enum; used verbatim as a Prom label.
+- **MIRROR_REASON_BOUNDED** — `MirrorReason` is an enum; used verbatim as a Prom label. Includes `already_resting` (task.5001).
+- **PLACEMENT_DISCRIMINATOR_IN_ATTRIBUTES** — `intent.attributes.placement ∈ {"limit","market_fok"}` is the only source of truth for adapter order-type. Shared `OrderIntent` port stays clean.
+- **DEDUPE_AT_DB** — `hasOpenForMarket` is a fast-path gate; `poly_copy_trade_fills_one_open_per_market` partial unique index is the correctness backstop. `AlreadyRestingError` from `insertPending` converts to `skip/already_resting`.
+- **MIRROR_BUY_CANCELED_ON_TARGET_SELL** — every SELL fill cancels any open mirror order on `(target, market)` BEFORE position-close. Cancel routes through `executor.cancelOrder` (404-idempotent).
 - **TARGET_SOURCE_TENANT_SCOPED** — `listForActor` returns only the actor's own targets under appDb RLS. `listAllActive` is the only cross-tenant path; it runs under serviceDb and returns `(billing_account_id, created_by_user_id, target_wallet)` triples, filtered to tenants with an active `poly_wallet_connections` + at least one active `poly_wallet_grants` row so ungranted tenants never enter the pipeline.
 - **TENANT_INHERITED_FROM_TARGET** — every fills/decisions write inherits `(billing_account_id, created_by_user_id)` from `TargetConfig`. The pipeline never reads tenant from anywhere else.
 

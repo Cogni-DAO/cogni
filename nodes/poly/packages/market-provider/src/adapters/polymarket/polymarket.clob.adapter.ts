@@ -111,6 +111,18 @@ export function extractClobPlacedOrderId(
 /** Default Polymarket CLOB host. */
 const DEFAULT_CLOB_HOST = "https://clob.polymarket.com";
 
+/**
+ * Order-placement strategy. Caller sets `intent.attributes.placement`;
+ * absent or unrecognized falls back to `"market_fok"` (legacy default —
+ * agent-tool path keeps FOK semantics without changes). task.5001.
+ */
+export type PolyPlacement = "limit" | "market_fok";
+
+export function readPolyPlacement(intent: OrderIntent): PolyPlacement {
+  const v = intent.attributes?.placement;
+  return v === "limit" || v === "market_fok" ? v : "market_fok";
+}
+
 export interface PolymarketClobAdapterConfig {
   /** viem `WalletClient` (or ethers v5 `Signer`) — holds the Polymarket EOA. */
   signer: ClobSigner;
@@ -210,6 +222,7 @@ export class PolymarketClobAdapter implements MarketProviderPort {
   async placeOrder(intent: OrderIntent): Promise<OrderReceipt> {
     const start = Date.now();
     const tokenId = readStringAttribute(intent, "token_id");
+    const placement = readPolyPlacement(intent);
     const baseFields = {
       event: "poly.clob.place",
       market_id: intent.market_id,
@@ -219,17 +232,20 @@ export class PolymarketClobAdapter implements MarketProviderPort {
       limit_price: intent.limit_price,
       client_order_id: intent.client_order_id,
       token_id: tokenId,
-      post_only: intent.attributes?.post_only === true,
+      placement,
     };
     this.log.info({ ...baseFields, phase: "start" }, "placeOrder: start");
 
     if (!tokenId) {
       const duration_ms = Date.now() - start;
-      this.metrics.incr(POLY_CLOB_METRICS.placeTotal, { result: "error" });
+      this.metrics.incr(POLY_CLOB_METRICS.placeTotal, {
+        result: "error",
+        placement,
+      });
       this.metrics.observeDurationMs(
         POLY_CLOB_METRICS.placeDurationMs,
         duration_ms,
-        { result: "error" }
+        { result: "error", placement }
       );
       this.log.error(
         {
@@ -289,9 +305,13 @@ export class PolymarketClobAdapter implements MarketProviderPort {
       const FLOOR_EPSILON = 1e-6;
       const belowShareMin =
         Number.isFinite(minShares) && shareSize < minShares - FLOOR_EPSILON;
+      // Marketable-BUY USDC floor only applies when we're crossing the spread
+      // (FOK takes liquidity). A resting `mirror_limit` BUY at the target's
+      // price posts as a maker — Polymarket doesn't enforce the marketable-BUY
+      // $1 floor on rest-only orders.
       const belowUsdcMin =
         intent.side === "BUY" &&
-        intent.attributes?.post_only !== true &&
+        placement === "market_fok" &&
         effectiveUsdc < POLY_MARKETABLE_BUY_MIN_USDC - FLOOR_EPSILON;
       if (belowShareMin || belowUsdcMin) {
         throw makeBelowMarketMinError(
@@ -299,10 +319,8 @@ export class PolymarketClobAdapter implements MarketProviderPort {
         );
       }
 
-      const postOnly = intent.attributes?.post_only === true;
-
       let response: unknown;
-      if (postOnly) {
+      if (placement === "limit") {
         orderTypeUsed = OrderType.GTC;
         response = await this.client.createAndPostOrder(
           {
@@ -314,7 +332,7 @@ export class PolymarketClobAdapter implements MarketProviderPort {
           },
           { tickSize, negRisk },
           OrderType.GTC,
-          true,
+          false,
           false
         );
       } else {
@@ -352,11 +370,14 @@ export class PolymarketClobAdapter implements MarketProviderPort {
         );
       }
       const duration_ms = Date.now() - start;
-      this.metrics.incr(POLY_CLOB_METRICS.placeTotal, { result: "ok" });
+      this.metrics.incr(POLY_CLOB_METRICS.placeTotal, {
+        result: "ok",
+        placement,
+      });
       this.metrics.observeDurationMs(
         POLY_CLOB_METRICS.placeDurationMs,
         duration_ms,
-        { result: "ok" }
+        { result: "ok", placement }
       );
       this.log.info(
         {
@@ -391,11 +412,12 @@ export class PolymarketClobAdapter implements MarketProviderPort {
       this.metrics.incr(POLY_CLOB_METRICS.placeTotal, {
         result,
         error_code: details.error_code,
+        placement,
       });
       this.metrics.observeDurationMs(
         POLY_CLOB_METRICS.placeDurationMs,
         duration_ms,
-        { result, error_code: details.error_code }
+        { result, error_code: details.error_code, placement }
       );
       this.log.error(
         {
@@ -560,6 +582,35 @@ export class PolymarketClobAdapter implements MarketProviderPort {
       );
     } catch (err) {
       const duration_ms = Date.now() - start;
+      // CLOB 404 → already canceled (or never live); idempotent success.
+      // Mirrors the existing `getOrder` 404 handling. task.5001.
+      const errMsg =
+        err instanceof Error ? err.message.toLowerCase() : String(err);
+      if (
+        errMsg.includes("not found") ||
+        errMsg.includes("404") ||
+        errMsg.includes("order does not exist")
+      ) {
+        this.metrics.incr(POLY_CLOB_METRICS.cancelTotal, {
+          result: "not_found",
+        });
+        this.metrics.observeDurationMs(
+          POLY_CLOB_METRICS.cancelDurationMs,
+          duration_ms,
+          { result: "not_found" }
+        );
+        this.log.info(
+          {
+            event: "poly.clob.cancel",
+            phase: "not_found",
+            duration_ms,
+            order_id: orderId,
+            error: truncErr(err),
+          },
+          "cancelOrder: not_found (idempotent)"
+        );
+        return;
+      }
       this.metrics.incr(POLY_CLOB_METRICS.cancelTotal, { result: "error" });
       this.metrics.observeDurationMs(
         POLY_CLOB_METRICS.cancelDurationMs,

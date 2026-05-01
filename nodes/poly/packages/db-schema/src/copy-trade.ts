@@ -91,6 +91,15 @@ export const polyCopyTradeFills = pgTable(
     targetId: uuid("target_id").notNull(),
     /** Composite `"<source>:<native_id>"` per FILL_ID_SHAPE_DECIDED. */
     fillId: text("fill_id").notNull(),
+    /**
+     * Polymarket conditionId of the market this fill belongs to. Promoted from
+     * `attributes->>'market_id'` to a real column in task.5001 so the partial
+     * unique index `(billing_account_id, target_id, market_id) WHERE status IN
+     * (pending,open,partial)` can enforce DEDUPE_AT_DB — exactly one resting
+     * mirror order per (tenant, target, market). Backfilled from the existing
+     * `attributes` JSONB at migration time.
+     */
+    marketId: text("market_id").notNull(),
     /** ISO timestamp the fill was observed (match-time for WS, settlement-time for DA). */
     observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
     /** Deterministic from `(target_id, fill_id)` — see IDEMPOTENT_BY_CLIENT_ID. */
@@ -133,6 +142,14 @@ export const polyCopyTradeFills = pgTable(
     uniqueIndex("poly_copy_trade_fills_order_id_unique")
       .on(table.orderId)
       .where(sql`${table.orderId} IS NOT NULL`),
+    // DEDUPE_AT_DB (task.5001) — exactly one resting mirror order per
+    // (tenant, target, market) at any point in time. The mirror pipeline's
+    // application-level `hasOpenForMarket` gate is fast-path optimization;
+    // this partial unique index is the correctness backstop. Insert path
+    // catches PG 23505 and converts to skip/already_resting.
+    uniqueIndex("poly_copy_trade_fills_one_open_per_market")
+      .on(table.billingAccountId, table.targetId, table.marketId)
+      .where(sql`${table.status} IN ('pending','open','partial')`),
     check(
       "poly_copy_trade_fills_fill_id_shape",
       sql`${table.fillId} ~ '^(data-api|clob-ws):.+'`

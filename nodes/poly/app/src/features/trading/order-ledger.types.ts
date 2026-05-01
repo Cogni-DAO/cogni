@@ -52,17 +52,51 @@ export interface LedgerRow {
 }
 
 /**
- * State snapshot the mirror-coordinator hands to `decide()`. The ledger owns
- * the SELECTs; `decide()` stays pure.
+ * State snapshot the mirror-coordinator hands to `decide()`. Caller translates
+ * into `RuntimeState`. The ledger owns the SELECTs; `decide()` stays pure.
  *
- * **Fail-closed**: on DB error the adapter returns zeroes/empty arrays and
- * logs at `warn` — never throws into the coordinator. (bug.0438 removed the
- * per-tenant kill-switch — active target row + active grant is the gate.)
+ * **Fail-closed**: on DB error the adapter returns zeroes/empty arrays —
+ * never throws into the coordinator.
  */
 export interface StateSnapshot {
   today_spent_usdc: number;
   fills_last_hour: number;
   already_placed_ids: string[];
+}
+
+/** Bounded enum of cancel reasons. Stored on `attributes.reason`. */
+export type LedgerCancelReason = "target_exited_market" | "ttl_expired";
+
+/**
+ * Thrown by `insertPending` when the partial unique index
+ * `poly_copy_trade_fills_one_open_per_market` rejects a second open row for
+ * the same `(billing_account_id, target_id, market_id)`. Pipeline converts
+ * to `skip/already_resting`. task.5001.
+ */
+export class AlreadyRestingError extends Error {
+  readonly code = "already_resting" as const;
+  constructor(
+    readonly billing_account_id: string,
+    readonly target_id: string,
+    readonly market_id: string
+  ) {
+    super(
+      `AlreadyRestingError: open mirror order exists for (${billing_account_id}, ${target_id}, ${market_id})`
+    );
+    this.name = "AlreadyRestingError";
+  }
+}
+
+/** Subset of `LedgerRow` returned by `findOpenForMarket` / `findStaleOpen`. */
+export interface OpenOrderRow {
+  client_order_id: string;
+  /** Null until placement returns and `markOrderId` runs. */
+  order_id: string | null;
+  status: LedgerStatus;
+  billing_account_id: string;
+  target_id: string;
+  market_id: string;
+  created_at: Date;
 }
 
 /** Tenant attribution required by every write into `poly_copy_trade_*`. */
@@ -149,9 +183,8 @@ export interface SyncHealthSummary {
  */
 export interface OrderLedger {
   /**
-   * Read runtime state (cap counters + dedup keys) for a target. Fail-closed
-   * on DB error: returns zeroes/empty arrays plus an error log on the
-   * caller's logger — never throws.
+   * Read runtime state for a target. Fail-closed on DB error: returns
+   * zeroes/empty arrays plus an error log on the caller's logger — never throws.
    */
   snapshotState(
     target_id: string,
@@ -197,6 +230,36 @@ export interface OrderLedger {
 
   /** Transition pending → error. `error` is stored in `attributes.error`. */
   markError(params: { client_order_id: string; error: string }): Promise<void>;
+
+  /** Transition any → canceled. Writes `attributes.reason`. task.5001. */
+  markCanceled(params: {
+    client_order_id: string;
+    reason: LedgerCancelReason;
+  }): Promise<void>;
+
+  /**
+   * Existence check on the partial unique index slot. True iff any row for
+   * `(billing_account_id, target_id, market_id)` has `status IN
+   * ('pending','open','partial')`. Fail-closed: returns `true` on DB error.
+   */
+  hasOpenForMarket(args: {
+    billing_account_id: string;
+    target_id: string;
+    market_id: string;
+  }): Promise<boolean>;
+
+  /** All open rows for `(billing_account_id, target_id, market_id)`. */
+  findOpenForMarket(args: {
+    billing_account_id: string;
+    target_id: string;
+    market_id: string;
+  }): Promise<OpenOrderRow[]>;
+
+  /**
+   * All rows across all tenants whose `created_at < now() - max_age_minutes`
+   * AND `status IN ('pending','open','partial')`. Used by the TTL sweeper.
+   */
+  findStaleOpen(args: { max_age_minutes: number }): Promise<OpenOrderRow[]>;
 
   /**
    * Append-only `poly_copy_trade_decisions` insert. Called for EVERY decide()

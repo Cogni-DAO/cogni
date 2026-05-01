@@ -22,20 +22,23 @@ import {
   polyCopyTradeDecisions,
   polyCopyTradeFills,
 } from "@cogni/poly-db-schema/copy-trade";
-import { and, count, desc, eq, gte, inArray, sql, sum } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, lt, sql, sum } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { Logger } from "pino";
 
-import type {
-  InsertPendingInput,
-  LedgerRow,
-  ListOpenOrPendingOptions,
-  ListRecentOptions,
-  OrderLedger,
-  RecordDecisionInput,
-  StateSnapshot,
-  SyncHealthSummary,
-  UpdateStatusInput,
+import {
+  AlreadyRestingError,
+  type InsertPendingInput,
+  type LedgerCancelReason,
+  type LedgerRow,
+  type ListOpenOrPendingOptions,
+  type ListRecentOptions,
+  type OpenOrderRow,
+  type OrderLedger,
+  type RecordDecisionInput,
+  type StateSnapshot,
+  type SyncHealthSummary,
+  type UpdateStatusInput,
 } from "./order-ledger.types";
 
 /** Dependencies injected at the `bootstrap/container.ts` boundary. */
@@ -45,6 +48,9 @@ export interface OrderLedgerDeps {
   /** Pino logger. Bind `component: "order-ledger"` at the caller if desired. */
   logger: Logger;
 }
+
+/** Postgres unique-violation SQLSTATE — partial unique index rejection. */
+const PG_UNIQUE_VIOLATION = "23505";
 
 const DEFAULT_LIST_LIMIT = 50;
 
@@ -202,22 +208,40 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
             : undefined,
       };
 
-      await deps.db
-        .insert(polyCopyTradeFills)
-        .values({
-          billingAccountId: input.billing_account_id,
-          createdByUserId: input.created_by_user_id,
-          targetId: input.target_id,
-          fillId: input.fill_id,
-          observedAt: input.observed_at,
-          clientOrderId: input.intent.client_order_id,
-          orderId: null,
-          status: "pending",
-          attributes: attrs,
-        })
-        .onConflictDoNothing({
-          target: [polyCopyTradeFills.targetId, polyCopyTradeFills.fillId],
-        });
+      try {
+        await deps.db
+          .insert(polyCopyTradeFills)
+          .values({
+            billingAccountId: input.billing_account_id,
+            createdByUserId: input.created_by_user_id,
+            targetId: input.target_id,
+            fillId: input.fill_id,
+            marketId: input.intent.market_id,
+            observedAt: input.observed_at,
+            clientOrderId: input.intent.client_order_id,
+            orderId: null,
+            status: "pending",
+            attributes: attrs,
+          })
+          .onConflictDoNothing({
+            target: [polyCopyTradeFills.targetId, polyCopyTradeFills.fillId],
+          });
+      } catch (err: unknown) {
+        // Partial unique index rejection → typed AlreadyRestingError. task.5001.
+        if (
+          typeof err === "object" &&
+          err !== null &&
+          "code" in err &&
+          (err as { code: unknown }).code === PG_UNIQUE_VIOLATION
+        ) {
+          throw new AlreadyRestingError(
+            input.billing_account_id,
+            input.target_id,
+            input.intent.market_id
+          );
+        }
+        throw err;
+      }
     },
 
     async markOrderId(params: {
@@ -375,6 +399,127 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
         .update(polyCopyTradeFills)
         .set({ syncedAt: sql`now()` })
         .where(inArray(polyCopyTradeFills.clientOrderId, client_order_ids));
+    },
+
+    async markCanceled(params: {
+      client_order_id: string;
+      reason: LedgerCancelReason;
+    }): Promise<void> {
+      await deps.db
+        .update(polyCopyTradeFills)
+        .set({
+          status: "canceled",
+          updatedAt: new Date(),
+          attributes: sql`COALESCE(${polyCopyTradeFills.attributes}, '{}'::jsonb) || ${JSON.stringify(
+            { reason: params.reason }
+          )}::jsonb`,
+        })
+        .where(eq(polyCopyTradeFills.clientOrderId, params.client_order_id));
+    },
+
+    async hasOpenForMarket(args: {
+      billing_account_id: string;
+      target_id: string;
+      market_id: string;
+    }): Promise<boolean> {
+      try {
+        const rows = await deps.db
+          .select({ cid: polyCopyTradeFills.clientOrderId })
+          .from(polyCopyTradeFills)
+          .where(
+            and(
+              eq(polyCopyTradeFills.billingAccountId, args.billing_account_id),
+              eq(polyCopyTradeFills.targetId, args.target_id),
+              eq(polyCopyTradeFills.marketId, args.market_id),
+              inArray(polyCopyTradeFills.status, ["pending", "open", "partial"])
+            )
+          )
+          .limit(1);
+        return rows.length > 0;
+      } catch (err: unknown) {
+        // Fail-closed: prefer skip over double-bet on DB error.
+        log.warn(
+          {
+            event: EVENT_NAMES.ADAPTER_ORDER_LEDGER_SNAPSHOT_ERROR,
+            errorCode: "has_open_for_market_fail_closed",
+            billing_account_id: args.billing_account_id,
+            target_id: args.target_id,
+            market_id: args.market_id,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "order-ledger hasOpenForMarket failed; returning true (skip placement)"
+        );
+        return true;
+      }
+    },
+
+    async findOpenForMarket(args: {
+      billing_account_id: string;
+      target_id: string;
+      market_id: string;
+    }): Promise<OpenOrderRow[]> {
+      const rows = await deps.db
+        .select({
+          clientOrderId: polyCopyTradeFills.clientOrderId,
+          orderId: polyCopyTradeFills.orderId,
+          status: polyCopyTradeFills.status,
+          billingAccountId: polyCopyTradeFills.billingAccountId,
+          targetId: polyCopyTradeFills.targetId,
+          marketId: polyCopyTradeFills.marketId,
+          createdAt: polyCopyTradeFills.createdAt,
+        })
+        .from(polyCopyTradeFills)
+        .where(
+          and(
+            eq(polyCopyTradeFills.billingAccountId, args.billing_account_id),
+            eq(polyCopyTradeFills.targetId, args.target_id),
+            eq(polyCopyTradeFills.marketId, args.market_id),
+            inArray(polyCopyTradeFills.status, ["pending", "open", "partial"])
+          )
+        );
+      return rows.map((r) => ({
+        client_order_id: r.clientOrderId,
+        order_id: r.orderId,
+        status: r.status as LedgerRow["status"],
+        billing_account_id: r.billingAccountId,
+        target_id: r.targetId,
+        market_id: r.marketId,
+        created_at: r.createdAt,
+      }));
+    },
+
+    async findStaleOpen(args: {
+      max_age_minutes: number;
+    }): Promise<OpenOrderRow[]> {
+      const rows = await deps.db
+        .select({
+          clientOrderId: polyCopyTradeFills.clientOrderId,
+          orderId: polyCopyTradeFills.orderId,
+          status: polyCopyTradeFills.status,
+          billingAccountId: polyCopyTradeFills.billingAccountId,
+          targetId: polyCopyTradeFills.targetId,
+          marketId: polyCopyTradeFills.marketId,
+          createdAt: polyCopyTradeFills.createdAt,
+        })
+        .from(polyCopyTradeFills)
+        .where(
+          and(
+            inArray(polyCopyTradeFills.status, ["pending", "open", "partial"]),
+            lt(
+              polyCopyTradeFills.createdAt,
+              sql`now() - make_interval(mins => ${args.max_age_minutes})`
+            )
+          )
+        );
+      return rows.map((r) => ({
+        client_order_id: r.clientOrderId,
+        order_id: r.orderId,
+        status: r.status as LedgerRow["status"],
+        billing_account_id: r.billingAccountId,
+        target_id: r.targetId,
+        market_id: r.marketId,
+        created_at: r.createdAt,
+      }));
     },
 
     async syncHealthSummary(): Promise<SyncHealthSummary> {

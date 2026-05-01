@@ -43,10 +43,10 @@ const BASE_TARGET: MirrorTargetConfig = {
   created_by_user_id: TEST_USER_ID_1,
   mode: "live",
   sizing: {
-    kind: "fixed",
-    mirror_usdc: 5,
+    kind: "min_bet",
     max_usdc_per_trade: 5,
   },
+  placement: { kind: "mirror_limit" },
 };
 
 function makeFill(overrides?: Partial<Fill>): Fill {
@@ -201,14 +201,6 @@ describe("mirror-pipeline.runMirrorTick — crash resume", () => {
     expect(skipDec).toBeDefined();
   });
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// (bug.0438): Scenario C "kill-switch off" was removed when the per-tenant
-// `poly_copy_trade_config` table was purged. The cross-tenant enumerator's
-// active-target × active-connection × active-grant join is the only gate now,
-// and the DB unique index on `(target_id, fill_id)` prevents double-insert on
-// snapshot read errors. No replacement test needed at the unit layer.
-// ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scenario D — empty page.

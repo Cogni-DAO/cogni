@@ -19,6 +19,7 @@ import type { OrderIntent } from "@cogni/poly-market-provider";
 
 import type {
   MirrorPlan,
+  PlacementPolicy,
   PlanMirrorInput,
   SizingPolicy,
   SizingResult,
@@ -59,26 +60,6 @@ function sizeFromPolicy(
   minUsdcNotional: number | undefined
 ): SizingResult {
   switch (policy.kind) {
-    case "fixed": {
-      const desiredShares = policy.mirror_usdc / price;
-      const sharesForUsdcFloor =
-        minUsdcNotional === undefined ? 0 : minUsdcNotional / price;
-      const floorShares = Math.max(minShares ?? 0, sharesForUsdcFloor);
-      const targetShares = Math.max(desiredShares, floorShares);
-      // The share×price round-trip (e.g. `1/0.09 * 0.09 = 0.9999…`) can leave
-      // targetShares×price a hair below minUsdcNotional even though targetShares
-      // itself clears the share floor. Clamp up so the adapter's own USDC-floor
-      // re-check doesn't bounce the intent. bug.0342.
-      const rawUsdc = targetShares * price;
-      const size_usdc =
-        minUsdcNotional !== undefined && rawUsdc < minUsdcNotional
-          ? minUsdcNotional
-          : rawUsdc;
-      if (size_usdc > policy.max_usdc_per_trade) {
-        return { ok: false, reason: "below_market_min" };
-      }
-      return { ok: true, size_usdc };
-    }
     case "min_bet": {
       // Fail closed when market constraints are unknown — without
       // minUsdcNotional we have no defensible "min" to bet.
@@ -88,7 +69,9 @@ function sizeFromPolicy(
       const sharesForUsdcFloor = minUsdcNotional / price;
       const floorShares = Math.max(minShares ?? 0, sharesForUsdcFloor);
       const rawUsdc = floorShares * price;
-      // Same bug.0342 ε-clamp as the fixed branch.
+      // The share×price round-trip (e.g. `1/0.09 * 0.09 = 0.9999…`) can leave
+      // floorShares×price a hair below minUsdcNotional. Clamp up so the
+      // adapter's own USDC-floor re-check doesn't bounce. bug.0342.
       const size_usdc = rawUsdc < minUsdcNotional ? minUsdcNotional : rawUsdc;
       if (size_usdc > policy.max_usdc_per_trade) {
         return { ok: false, reason: "below_market_min" };
@@ -109,9 +92,7 @@ function sizeFromPolicy(
  *
  * Daily / hourly caps are NOT checked here — those live on the tenant's
  * `poly_wallet_grants` row and are enforced by `authorizeIntent` at the
- * executor boundary (CAPS_LIVE_IN_GRANT invariant). The kill-switch gate
- * was removed in bug.0438; the cross-tenant enumerator's active-target /
- * active-grant join is now the only gate to running this function.
+ * executor boundary (CAPS_LIVE_IN_GRANT invariant).
  */
 export function planMirrorFromFill(input: PlanMirrorInput): MirrorPlan {
   const {
@@ -138,7 +119,12 @@ export function planMirrorFromFill(input: PlanMirrorInput): MirrorPlan {
     return { kind: "skip", reason: sizing.reason };
   }
 
-  const intent = buildIntent(fill, sizing.size_usdc, client_order_id);
+  const intent = buildIntent(
+    fill,
+    sizing.size_usdc,
+    client_order_id,
+    config.placement
+  );
 
   return {
     kind: "place",
@@ -155,8 +141,11 @@ export function planMirrorFromFill(input: PlanMirrorInput): MirrorPlan {
 function buildIntent(
   fill: PlanMirrorInput["fill"],
   size_usdc: number,
-  client_order_id: `0x${string}`
+  client_order_id: `0x${string}`,
+  policy: PlacementPolicy
 ): OrderIntent {
+  const placement: "limit" | "market_fok" =
+    policy.kind === "mirror_limit" ? "limit" : "market_fok";
   const tokenId =
     typeof fill.attributes?.asset === "string" ? fill.attributes.asset : "";
 
@@ -172,6 +161,7 @@ function buildIntent(
       token_id: tokenId,
       source_fill_id: fill.fill_id,
       target_wallet: fill.target_wallet,
+      placement,
       title:
         typeof fill.attributes?.title === "string"
           ? fill.attributes.title
