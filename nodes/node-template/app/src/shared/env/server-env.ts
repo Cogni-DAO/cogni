@@ -193,12 +193,12 @@ export const serverSchema = z.object({
 
   // Tavily Web Search - Optional
   // Required for research graph web search capability
-  TAVILY_API_KEY: z.string().min(1).optional(),
+  TAVILY_API_KEY: optionalString,
 
   // Market Provider: Kalshi - Optional
   // Required for Kalshi market data in poly-brain. Polymarket works without credentials.
-  KALSHI_API_KEY: z.string().min(1).optional(),
-  KALSHI_API_SECRET: z.string().min(1).optional(),
+  KALSHI_API_KEY: optionalString,
+  KALSHI_API_SECRET: optionalString,
 
   // Redis (stream plane — ephemeral only)
   // Per unified-graph-launch spec: REDIS_IS_STREAM_PLANE
