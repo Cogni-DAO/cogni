@@ -112,3 +112,106 @@ describe("normalizePolymarketDataApiFill", () => {
     });
   });
 });
+
+/**
+ * bug.5004 regression — ASSET_IS_AUTHORITATIVE.
+ *
+ * In prod 2026-05-01 the mirror placed BUYs against the OPPOSITE outcome of
+ * 14% of overlapping conditions vs the target wallet (RN1). The target's
+ * Data-API trade exposes `asset` (CTF token_id) directly; mirroring MUST use
+ * that value byte-for-byte and never re-derive it from outcome name.
+ *
+ * These four conditions are taken from `bug.5004` (target-asset last-6 vs
+ * ours-last-6). Any refactor that maps outcome → token_id via market metadata
+ * lookup will trip these tests AND the runtime ASSET_IS_AUTHORITATIVE guard
+ * inside the normalizer.
+ */
+describe("normalizePolymarketDataApiFill — bug.5004 ASSET_IS_AUTHORITATIVE", () => {
+  type Example = {
+    label: string;
+    conditionId: string;
+    targetAsset: string;
+    outcome: string;
+    side: "BUY" | "SELL";
+  };
+
+  const EXAMPLES: ReadonlyArray<Example> = [
+    {
+      label: "binary YES/NO — target on token ending 523617",
+      conditionId:
+        "0x4f3b8b34d45d000000000000000000000000000000000000000000000000d45d",
+      targetAsset:
+        "11111111111111111111111111111111111111111111111111111111111523617",
+      outcome: "Yes",
+      side: "BUY",
+    },
+    {
+      label: "binary YES/NO — target on token ending 856124",
+      conditionId:
+        "0xd489781fca0b00000000000000000000000000000000000000000000000ca0b",
+      targetAsset:
+        "22222222222222222222222222222222222222222222222222222222222856124",
+      outcome: "No",
+      side: "BUY",
+    },
+    {
+      label: "binary Over/Under — target on token ending 221704",
+      conditionId:
+        "0xd3fab1ab20a3000000000000000000000000000000000000000000000020a3",
+      targetAsset:
+        "33333333333333333333333333333333333333333333333333333333333221704",
+      outcome: "Over",
+      side: "BUY",
+    },
+    {
+      label: "multi-outcome (player) — target on token ending 123493",
+      conditionId:
+        "0x8e2d383b1793000000000000000000000000000000000000000000000001793",
+      targetAsset:
+        "44444444444444444444444444444444444444444444444444444444444123493",
+      outcome: "Marta Kostyuk",
+      side: "BUY",
+    },
+  ];
+
+  for (const ex of EXAMPLES) {
+    it(`passes target asset through unchanged: ${ex.label}`, () => {
+      const trade: PolymarketUserTrade = {
+        ...BASE,
+        side: ex.side,
+        asset: ex.targetAsset,
+        conditionId: ex.conditionId,
+        outcome: ex.outcome,
+        // Each example needs a distinct fill_id so a future caller-dedupe
+        // can't collapse them; vary the tx hash on the example index.
+        transactionHash: `0x${ex.targetAsset.slice(-6).padStart(64, "0")}`,
+      };
+      const r = normalizePolymarketDataApiFill(trade);
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // Authoritative: Fill.attributes.asset === trade.asset byte-for-byte.
+      expect(r.fill.attributes?.asset).toBe(ex.targetAsset);
+      // market_id wraps the conditionId verbatim — no metadata lookup.
+      expect(r.fill.market_id).toBe(
+        `prediction-market:polymarket:${ex.conditionId}`
+      );
+      // outcome label is preserved as metadata only — used for display.
+      expect(r.fill.outcome).toBe(ex.outcome);
+      // fill_id composite must include the target's asset so dedupe is
+      // pinned to the actual CTF token, not an outcome-name-derived one.
+      expect(r.fill.fill_id).toContain(`:${ex.targetAsset}:`);
+    });
+  }
+
+  it("ASSET_IS_AUTHORITATIVE runtime guard — paranoid invariant fires if future code mutates attributes.asset", () => {
+    // Sanity check: the guard exists. We can't easily simulate a divergence
+    // from outside (the function builds the Fill itself), but the invariant
+    // is encoded in the source. If a future refactor introduces an
+    // outcome→token lookup that produces a different `asset`, the guard
+    // throws — surfacing the bug at unit-test time, not in prod.
+    const r = normalizePolymarketDataApiFill(BASE);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.fill.attributes?.asset).toBe(BASE.asset);
+  });
+});

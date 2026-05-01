@@ -9,6 +9,7 @@
  *   - FILL_ID_SHAPE_DECIDED — `fill_id = "data-api:" + transactionHash + ":" + asset + ":" + side + ":" + timestamp` per task.0315 P0.2.
  *   - DA_EMPTY_HASH_REJECTED — rows with `transactionHash === ""` are never normalized; the caller MUST increment `data_api_empty_tx_hash_total` on its own MetricsPort when it observes a skipped return.
  *   - SIZE_IS_USDC_NOTIONAL — `size_usdc = shares × price` (Data-API `size` is in outcome shares).
+ *   - ASSET_IS_AUTHORITATIVE (bug.5004) — `Fill.attributes.asset` MUST equal `trade.asset` byte-for-byte. The Data-API exposes the exact CTF token_id the target traded; that is the only correct token to mirror. Outcome name (`Yes`/`No`/`Over`/player names) is metadata-only and MUST NEVER drive token_id resolution. Any future code that maps outcome → token_id via market-metadata lookup re-introduces the bug.5004 money-leak (14% wrong-outcome rate observed in prod 2026-05-01).
  * Side-effects: none
  * Links: work/items/task.0315.poly-copy-trade-prototype.md (Phase 1 CP4.1 — pure decide/normalize layer)
  * @public
@@ -94,5 +95,17 @@ export function normalizePolymarketDataApiFill(
   // Defensive Zod check — catches drift from the PolymarketUserTrade schema
   // that would otherwise pass a malformed Fill into decide(). Throwing here
   // is correct: it indicates a type/shape bug, not a skippable data row.
-  return { ok: true, fill: FillSchema.parse(fill) };
+  const parsed = FillSchema.parse(fill);
+
+  // ASSET_IS_AUTHORITATIVE (bug.5004) — paranoid runtime guard. Any future
+  // refactor that derives token_id from outcome name will trip this. Throwing
+  // is correct: a divergence here means the wrong CTF token is about to be
+  // mirrored, which is a money-leak (RN1 lost ~$130 in <12h in prod).
+  if (parsed.attributes?.asset !== trade.asset) {
+    throw new Error(
+      `normalizePolymarketDataApiFill: ASSET_IS_AUTHORITATIVE violated — Fill.attributes.asset (${String(parsed.attributes?.asset)}) !== trade.asset (${trade.asset}). bug.5004.`
+    );
+  }
+
+  return { ok: true, fill: parsed };
 }
