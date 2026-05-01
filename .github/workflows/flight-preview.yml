@@ -180,7 +180,7 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
         run: |
-          echo "::error::flight-preview resolved PR #${PR_NUMBER} (sha ${HEAD_SHA:0:8}) but no \`mq-${PR_NUMBER}-${HEAD_SHA}\` images exist in GHCR. Most likely cause: the PR was admin-merged (bypassed merge_group), so pr-build never rebuilt against the queue commit. Recovery: dispatch build-multi-node.yml for sha ${HEAD_SHA}, then re-dispatch this workflow with the same sha."
+          echo "::error::flight-preview resolved PR #${PR_NUMBER} (sha ${HEAD_SHA:0:8}) but no \`mq-${PR_NUMBER}-${HEAD_SHA}\` images exist in GHCR. Most likely cause: the PR was admin-merged (bypassed merge_group), so pr-build never rebuilt against the queue commit. Recovery: open a follow-up PR that touches the affected node's paths (e.g. nodes/<node>/app/) and merge via the GH merge queue — NOT admin-merge. The merge_group rebuild produces the mq-{N}-{queue-sha} images, and the auto-flight on the resulting push:main heals preview."
           exit 1
 
       # Re-tag only the images that were actually built (affected-only CI may skip services).

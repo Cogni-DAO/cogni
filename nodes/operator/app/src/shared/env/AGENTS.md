@@ -172,3 +172,4 @@ Bump Last reviewed date. Ensure pnpm lint && pnpm typecheck pass.
 - Production-only memoization in assertRuntimeSecrets() prevents test false-passes while optimizing runtime
 - AUTH_SECRET rotation can be added later via AUTH_SECRETS CSV when session management is implemented
 - LITELLM_BASE_URL automatically detects deployment context (local dev vs Docker network)
+- Empty-string secrets from k8s Secret manifests must use the `optionalString` helper, not `z.string().optional()` — the latter rejects `""` and breaks `/readyz` (PR #1166).
