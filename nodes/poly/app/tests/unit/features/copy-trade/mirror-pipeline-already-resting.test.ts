@@ -51,6 +51,10 @@ const TARGET: MirrorTargetConfig = {
   sizing: { kind: "min_bet", max_usdc_per_trade: 5 },
   placement: { kind: "mirror_limit" },
 };
+const GET_MARKET_CONSTRAINTS = async () => ({
+  minShares: 1,
+  minUsdcNotional: 1,
+});
 
 function makeFill(fill_id: string, overrides?: Partial<Fill>): Fill {
   return {
@@ -114,6 +118,7 @@ describe("runMirrorTick — already_resting", () => {
       },
       logger: noopLogger,
       metrics,
+      getMarketConstraints: GET_MARKET_CONSTRAINTS,
     });
 
     expect(placeIntent).not.toHaveBeenCalled();
@@ -168,6 +173,7 @@ describe("runMirrorTick — already_resting", () => {
       },
       logger: noopLogger,
       metrics,
+      getMarketConstraints: GET_MARKET_CONSTRAINTS,
     });
 
     expect(placeIntent).not.toHaveBeenCalled();

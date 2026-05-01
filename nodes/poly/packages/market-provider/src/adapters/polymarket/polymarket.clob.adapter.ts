@@ -23,6 +23,7 @@ import {
   SignatureTypeV2,
   type TickSize,
 } from "@polymarket/clob-client-v2";
+import { z } from "zod";
 
 type ClobSigner = NonNullable<
   ConstructorParameters<typeof ClobClient>[0]["signer"]
@@ -59,6 +60,8 @@ export const POLY_CLOB_METRICS = {
   getOrderDurationMs: "poly_clob_get_order_duration_ms",
   listOpenOrdersTotal: "poly_clob_list_open_orders_total",
   listOpenOrdersDurationMs: "poly_clob_list_open_orders_duration_ms",
+  listOpenOrdersUnavailableTotal:
+    "poly_clob_list_open_orders_unavailable_total",
 } as const;
 
 /**
@@ -77,6 +80,47 @@ function makeBelowMarketMinError(message: string): Error {
   (err as unknown as { code: string }).code = BELOW_MARKET_MIN_CODE;
   err.name = "BelowMarketMinError";
   return err;
+}
+
+const ClobListOpenOrdersErrorShapeSchema = z
+  .object({
+    error: z.unknown().optional(),
+    message: z.unknown().optional(),
+    reason: z.unknown().optional(),
+    status: z.unknown().optional(),
+    code: z.unknown().optional(),
+  })
+  .passthrough();
+
+const ClobListOpenOrdersResponseSchema = z.union([
+  z.array(z.unknown()),
+  ClobListOpenOrdersErrorShapeSchema,
+  z.null(),
+]);
+
+const CLOB_SERVICE_UNAVAILABLE_CODE = "CLOB_SERVICE_UNAVAILABLE" as const;
+
+export class ClobServiceUnavailableError extends Error {
+  readonly code = CLOB_SERVICE_UNAVAILABLE_CODE;
+  constructor(readonly reason: string) {
+    super(`Polymarket CLOB service unavailable: ${reason}`);
+    this.name = "ClobServiceUnavailableError";
+  }
+}
+
+function listOpenOrdersUnavailableReason(value: unknown): string {
+  if (value instanceof Error) return truncErr(value, 128);
+  if (value === null) return "null_response";
+  if (value === undefined) return "undefined_response";
+  if (typeof value !== "object") return `non_object:${typeof value}`;
+  const r = value as Record<string, unknown>;
+  for (const key of ["error", "message", "reason", "code", "status"]) {
+    const candidate = r[key];
+    if (typeof candidate === "string" && candidate.length > 0) {
+      return candidate.slice(0, 128);
+    }
+  }
+  return `unexpected_shape:[${Object.keys(r).join(",")}]`;
 }
 
 /**
@@ -754,9 +798,18 @@ export class PolymarketClobAdapter implements MarketProviderPort {
     );
     try {
       const open = await this.client.getOpenOrders(apiParams);
-      const rows: OrderReceipt[] = Array.isArray(open)
-        ? open.map(mapOpenOrderToReceipt)
-        : [];
+      const parsed = ClobListOpenOrdersResponseSchema.safeParse(open);
+      if (!parsed.success || !Array.isArray(parsed.data)) {
+        return this.handleListOpenOrdersUnavailable(start, {
+          source: "response",
+          reason: listOpenOrdersUnavailableReason(open),
+          response_keys:
+            open && typeof open === "object" ? Object.keys(open) : [],
+        });
+      }
+      const rows: OrderReceipt[] = parsed.data.map((order) =>
+        mapOpenOrderToReceipt(order as ClobOpenOrderLike)
+      );
       const duration_ms = Date.now() - start;
       this.metrics.incr(POLY_CLOB_METRICS.listOpenOrdersTotal, {
         result: "ok",
@@ -777,26 +830,56 @@ export class PolymarketClobAdapter implements MarketProviderPort {
       );
       return rows;
     } catch (err) {
-      const duration_ms = Date.now() - start;
-      this.metrics.incr(POLY_CLOB_METRICS.listOpenOrdersTotal, {
-        result: "error",
+      return this.handleListOpenOrdersUnavailable(start, {
+        source: "throw",
+        reason: listOpenOrdersUnavailableReason(
+          err instanceof Error
+            ? new ClobServiceUnavailableError(truncErr(err, 128))
+            : err
+        ),
+        error_class:
+          err && typeof err === "object" && err.constructor?.name
+            ? err.constructor.name
+            : undefined,
       });
-      this.metrics.observeDurationMs(
-        POLY_CLOB_METRICS.listOpenOrdersDurationMs,
-        duration_ms,
-        { result: "error" }
-      );
-      this.log.error(
-        {
-          event: "poly.clob.list_open_orders",
-          phase: "error",
-          duration_ms,
-          error: truncErr(err),
-        },
-        "listOpenOrders: error"
-      );
-      throw err;
     }
+  }
+
+  private handleListOpenOrdersUnavailable(
+    start: number,
+    details: {
+      source: "response" | "throw";
+      reason: string;
+      response_keys?: string[];
+      error_class?: string;
+    }
+  ): OrderReceipt[] {
+    const duration_ms = Date.now() - start;
+    this.metrics.incr(POLY_CLOB_METRICS.listOpenOrdersTotal, {
+      result: "degraded",
+    });
+    this.metrics.incr(POLY_CLOB_METRICS.listOpenOrdersUnavailableTotal, {
+      reason: details.reason,
+    });
+    this.metrics.observeDurationMs(
+      POLY_CLOB_METRICS.listOpenOrdersDurationMs,
+      duration_ms,
+      { result: "degraded" }
+    );
+    this.log.warn(
+      {
+        event: "poly.clob.list_open_orders",
+        phase: "unavailable",
+        degraded: true,
+        duration_ms,
+        reason: details.reason,
+        source: details.source,
+        response_keys: details.response_keys ?? [],
+        ...(details.error_class ? { error_class: details.error_class } : {}),
+      },
+      "listOpenOrders: unavailable"
+    );
+    return [];
   }
 
   /**

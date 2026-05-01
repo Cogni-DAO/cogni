@@ -107,6 +107,9 @@ export const WalletExecutionPositionSchema = z.object({
   currentValue: z.number().nonnegative(),
   pnlUsd: z.number(),
   pnlPct: z.number(),
+  syncedAt: z.string().nullable().optional(),
+  syncAgeMs: z.number().int().nonnegative().nullable().optional(),
+  syncStale: z.boolean().optional(),
   timeline: z.array(WalletExecutionTimelinePointSchema),
   events: z.array(WalletExecutionEventSchema),
 });

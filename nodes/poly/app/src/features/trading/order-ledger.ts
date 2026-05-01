@@ -44,6 +44,7 @@ import {
   type LedgerRow,
   type ListOpenOrPendingOptions,
   type ListRecentOptions,
+  type ListTenantPositionsOptions,
   type OpenOrderRow,
   type OrderLedger,
   type RecordDecisionInput,
@@ -346,20 +347,28 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
         .orderBy(desc(polyCopyTradeFills.observedAt))
         .limit(limit);
 
-      return rows.map((r) => ({
-        target_id: r.targetId,
-        fill_id: r.fillId,
-        observed_at: r.observedAt,
-        client_order_id: r.clientOrderId,
-        order_id: r.orderId,
-        // Schema CHECK enforces the set; cast is safe at the type boundary.
-        status: r.status as LedgerRow["status"],
-        attributes: (r.attributes as Record<string, unknown> | null) ?? null,
-        synced_at: r.syncedAt,
-        created_at: r.createdAt,
-        updated_at: r.updatedAt,
-        billing_account_id: r.billingAccountId,
-      }));
+      return rows.map(mapLedgerRow);
+    },
+
+    async listTenantPositions(
+      opts: ListTenantPositionsOptions
+    ): Promise<LedgerRow[]> {
+      const limit = opts.limit ?? DEFAULT_LIST_LIMIT;
+      const statuses = opts.statuses ?? ["open", "filled", "partial"];
+
+      const rows = await deps.db
+        .select()
+        .from(polyCopyTradeFills)
+        .where(
+          and(
+            eq(polyCopyTradeFills.billingAccountId, opts.billing_account_id),
+            inArray(polyCopyTradeFills.status, statuses)
+          )
+        )
+        .orderBy(desc(polyCopyTradeFills.observedAt))
+        .limit(limit);
+
+      return rows.map(mapLedgerRow);
     },
 
     async listOpenOrPending(
@@ -591,6 +600,23 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
         rows_never_synced: Number(row?.never_synced ?? 0),
       };
     },
+  };
+}
+
+function mapLedgerRow(r: typeof polyCopyTradeFills.$inferSelect): LedgerRow {
+  return {
+    target_id: r.targetId,
+    fill_id: r.fillId,
+    observed_at: r.observedAt,
+    client_order_id: r.clientOrderId,
+    order_id: r.orderId,
+    // Schema CHECK enforces the set; cast is safe at the type boundary.
+    status: r.status as LedgerRow["status"],
+    attributes: (r.attributes as Record<string, unknown> | null) ?? null,
+    synced_at: r.syncedAt,
+    created_at: r.createdAt,
+    updated_at: r.updatedAt,
+    billing_account_id: r.billingAccountId,
   };
 }
 

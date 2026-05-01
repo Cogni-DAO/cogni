@@ -7,12 +7,9 @@
  *          counts) for the caller's own Polymarket trading wallet. Powers the dashboard's
  *          `OperatorWalletChartsRow` + `ExecutionActivityCard`.
  * Scope: Session-auth, tenant-scoped. Resolves the caller's billing account,
- *   asks `PolyTraderWalletPort` for its `funder_address`, queries the redeem
- *   pipeline's `RedeemJobsPort.listForFunder` for a `(conditionId →
- *   lifecycle_state)` map, then delegates to `getExecutionSlice(addr,
- *   { lifecycleByConditionId })` in the shared wallet-analysis service
- *   (Polymarket Data API for trades + positions, public CLOB for price
- *   history). No writes, no operator capability.
+ *   asks `PolyTraderWalletPort` for its `funder_address`, then reads live
+ *   positions from `poly_copy_trade_fills`. CLOB stays on the background
+ *   reconciler path; page-load never calls it.
  * Invariants:
  *   - TENANT_SCOPED: the caller's own wallet is the only thing this route
  *     ever reads. There is no `?addr=` override.
@@ -24,7 +21,7 @@
  *   - EXECUTION_ONLY: current wallet totals live on
  *     `/api/v1/poly/wallet/overview`; this route stays focused on positions
  *     and trade cadence only.
- * Side-effects: IO (DB read, Polymarket Data API, public CLOB).
+ * Side-effects: IO (DB read).
  * Links: nodes/poly/packages/node-contracts/src/poly.wallet.execution.v1.contract.ts,
  *        docs/spec/poly-trader-wallet-port.md,
  *        work/items/task.0354.poly-trading-hardening-followups.md
@@ -35,7 +32,6 @@ import { toUserId } from "@cogni/ids";
 import {
   PolyWalletExecutionOutputSchema,
   polyWalletExecutionOperation,
-  type WalletExecutionLifecycleState,
 } from "@cogni/poly-node-contracts";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
@@ -45,7 +41,7 @@ import {
   getPolyTraderWalletAdapter,
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
-import { getExecutionSlice } from "@/features/wallet-analysis/server/wallet-analysis-service";
+import { toWalletExecutionPosition } from "../_lib/ledger-positions";
 
 export const dynamic = "force-dynamic";
 
@@ -110,37 +106,34 @@ export const GET = wrapRouteHandlerWithLogging(
       "poly.wallet.execution"
     );
 
-    const lifecycleByConditionId = new Map<
-      string,
-      WalletExecutionLifecycleState
-    >();
-    const tenantPipeline = container.redeemPipelineFor(account.id);
-    if (
-      tenantPipeline &&
-      tenantPipeline.funderAddress.toLowerCase() === address.toLowerCase()
-    ) {
-      try {
-        const jobs = await tenantPipeline.redeemJobs.listForFunder(
-          tenantPipeline.funderAddress
-        );
-        for (const job of jobs) {
-          lifecycleByConditionId.set(
-            job.conditionId,
-            job.lifecycleState as WalletExecutionLifecycleState
-          );
-        }
-      } catch (err) {
-        ctx.log.warn(
-          { err: err instanceof Error ? err.message : String(err) },
-          "poly.wallet.execution.lifecycle_lookup_failed"
-        );
-      }
+    const capturedAt = new Date();
+    const warnings: Array<{ code: string; message: string }> = [];
+    let livePositions: ReturnType<typeof toWalletExecutionPosition>[] = [];
+    try {
+      const rows = await container.orderLedger.listTenantPositions({
+        billing_account_id: account.id,
+        statuses: ["open", "filled", "partial"],
+        limit: 100,
+      });
+      livePositions = rows.map((row) =>
+        toWalletExecutionPosition(row, capturedAt)
+      );
+    } catch (err) {
+      warnings.push({
+        code: "positions_read_model_unavailable",
+        message: err instanceof Error ? err.message : String(err),
+      });
     }
 
     return NextResponse.json(
-      PolyWalletExecutionOutputSchema.parse(
-        await getExecutionSlice(address, { lifecycleByConditionId })
-      )
+      PolyWalletExecutionOutputSchema.parse({
+        address: address.toLowerCase(),
+        capturedAt: capturedAt.toISOString(),
+        dailyTradeCounts: [],
+        live_positions: livePositions,
+        closed_positions: [],
+        warnings,
+      })
     );
   }
 );

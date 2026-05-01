@@ -312,6 +312,7 @@ describe("PolymarketClobAdapter", () => {
       getNegRisk?: ReturnType<typeof vi.fn>;
       getFeeRateBps?: ReturnType<typeof vi.fn>;
       getOrderBook?: ReturnType<typeof vi.fn>;
+      getOpenOrders?: ReturnType<typeof vi.fn>;
     },
     observability?: { logger?: LoggerPort; metrics?: MetricsPort }
   ) {
@@ -569,6 +570,62 @@ describe("PolymarketClobAdapter", () => {
     expect(result).toEqual({ status: "not_found" });
   });
 
+  it("listOpenOrders maps array responses", async () => {
+    const getOpenOrders = vi.fn().mockResolvedValue([
+      {
+        id: "0xopen",
+        status: "live",
+        side: "BUY",
+        original_size: "2",
+        size_matched: "1",
+        price: "0.5",
+      },
+    ]);
+    const adapter = makeAdapter({ getOpenOrders });
+
+    const orders = await adapter.listOpenOrders({ tokenId: "asset-1" });
+
+    expect(getOpenOrders).toHaveBeenCalledWith({ asset_id: "asset-1" });
+    expect(orders).toEqual([
+      expect.objectContaining({
+        order_id: "0xopen",
+        status: "open",
+        filled_size_usdc: 0.5,
+      }),
+    ]);
+  });
+
+  it("listOpenOrders returns [] when CLOB returns an error object", async () => {
+    const metrics = createRecordingMetrics();
+    const getOpenOrders = vi
+      .fn()
+      .mockResolvedValue({ error: "service not ready", status: 503 });
+    const adapter = makeAdapter({ getOpenOrders }, { metrics });
+
+    await expect(adapter.listOpenOrders()).resolves.toEqual([]);
+    expect(metrics.emissions).toContainEqual({
+      kind: "counter",
+      name: POLY_CLOB_METRICS.listOpenOrdersUnavailableTotal,
+      labels: { reason: "service not ready" },
+    });
+  });
+
+  it("listOpenOrders returns [] when CLOB returns null", async () => {
+    const getOpenOrders = vi.fn().mockResolvedValue(null);
+    const adapter = makeAdapter({ getOpenOrders });
+
+    await expect(adapter.listOpenOrders()).resolves.toEqual([]);
+  });
+
+  it("listOpenOrders returns [] when the SDK throws during degraded CLOB reads", async () => {
+    const getOpenOrders = vi
+      .fn()
+      .mockRejectedValue(new TypeError("n.data is not iterable"));
+    const adapter = makeAdapter({ getOpenOrders });
+
+    await expect(adapter.listOpenOrders()).resolves.toEqual([]);
+  });
+
   it("listMarkets rejects — CLOB adapter is trade-only", async () => {
     const adapter = makeAdapter({});
     await expect(adapter.listMarkets()).rejects.toThrow(/listMarkets/);
@@ -744,6 +801,7 @@ describe("PolymarketClobAdapter — observability", () => {
       getNegRisk?: ReturnType<typeof vi.fn>;
       getFeeRateBps?: ReturnType<typeof vi.fn>;
       getOrderBook?: ReturnType<typeof vi.fn>;
+      getOpenOrders?: ReturnType<typeof vi.fn>;
     },
     observability: { logger?: LoggerPort; metrics?: MetricsPort } = {}
   ) {

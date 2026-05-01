@@ -132,6 +132,13 @@ export interface ListRecentOptions {
   target_id?: string;
 }
 
+/** Options for the tenant-scoped dashboard position read model. */
+export interface ListTenantPositionsOptions {
+  billing_account_id: string;
+  statuses?: LedgerStatus[];
+  limit?: number;
+}
+
 /** Options for `listOpenOrPending` — used by the reconciler tick. */
 export interface ListOpenOrPendingOptions {
   /** Only return rows older than this many milliseconds. Default 30000. */
@@ -273,6 +280,12 @@ export interface OrderLedger {
    * Default limit 50. Ordered by `observed_at DESC` to match the dashboard card.
    */
   listRecent(opts?: ListRecentOptions): Promise<LedgerRow[]>;
+
+  /**
+   * Tenant-scoped position read model for dashboard page-loads. Reads
+   * `poly_copy_trade_fills` only; CLOB is background reconciliation input.
+   */
+  listTenantPositions(opts: ListTenantPositionsOptions): Promise<LedgerRow[]>;
 
   /**
    * Return all rows with `status IN ('pending', 'open')` that are older than

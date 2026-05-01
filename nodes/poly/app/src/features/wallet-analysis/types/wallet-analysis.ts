@@ -96,6 +96,9 @@ export type WalletPosition = {
   currentValue: number;
   pnlUsd: number;
   pnlPct: number;
+  syncedAt?: string | null | undefined;
+  syncAgeMs?: number | null | undefined;
+  syncStale?: boolean | undefined;
   timeline: readonly WalletPositionTimelinePoint[];
   events: readonly WalletPositionEvent[];
 };

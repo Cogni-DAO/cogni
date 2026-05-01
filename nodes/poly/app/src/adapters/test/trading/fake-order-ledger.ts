@@ -285,6 +285,23 @@ export class FakeOrderLedger implements OrderLedger {
       .slice(0, limit);
   }
 
+  async listTenantPositions(opts: {
+    billing_account_id: string;
+    statuses?: LedgerStatus[];
+    limit?: number;
+  }): Promise<LedgerRow[]> {
+    const statuses = opts.statuses ?? ["open", "filled", "partial"];
+    const limit = opts.limit ?? 50;
+    return this.rows
+      .filter(
+        (r) =>
+          r.billing_account_id === opts.billing_account_id &&
+          statuses.includes(r.status)
+      )
+      .sort((a, b) => b.observed_at.getTime() - a.observed_at.getTime())
+      .slice(0, limit);
+  }
+
   async listOpenOrPending(
     opts?: ListOpenOrPendingOptions
   ): Promise<LedgerRow[]> {
