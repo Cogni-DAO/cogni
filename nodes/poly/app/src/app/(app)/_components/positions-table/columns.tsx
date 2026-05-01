@@ -20,7 +20,7 @@
 
 import { type ColumnDef, createColumnHelper } from "@tanstack/react-table";
 import { LoaderCircle } from "lucide-react";
-import type { ReactElement, ReactNode } from "react";
+import { type ReactElement, type ReactNode, useEffect, useState } from "react";
 
 import { Button, Skeleton } from "@/components";
 import { DataGridColumnHeader } from "@/components/reui/data-grid/data-grid-column-header";
@@ -143,7 +143,7 @@ export function makeColumns(opts: MakeColumnsOpts): AnyCol[] {
       id: "endsAt",
       header: ({ column }) =>
         rightHeader(
-          <DataGridColumnHeader column={column} title="Ends" visibility />
+          <DataGridColumnHeader column={column} title="Resolves" visibility />
         ),
       size: 130,
       sortingFn: (a, b) => {
@@ -157,12 +157,12 @@ export function makeColumns(opts: MakeColumnsOpts): AnyCol[] {
         const v = info.getValue();
         return (
           <div className="text-right text-muted-foreground text-sm tabular-nums">
-            {v ? formatEndDateTime(v) : "—"}
+            {v ? <LocalDateTime iso={v} /> : "—"}
           </div>
         );
       },
       meta: {
-        headerTitle: "Ends",
+        headerTitle: "Resolves",
         skeleton: <Skeleton className="ms-auto h-3.5 w-20" />,
       },
     }),
@@ -345,6 +345,19 @@ function formatEndDateTime(iso: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+// Render only after mount so SSR (likely UTC) doesn't bake in a server-TZ
+// string that then sticks through hydration. Pre-mount we emit the raw ISO
+// inside <time> so the markup is stable + machine-readable.
+function LocalDateTime({ iso }: { iso: string }): ReactElement {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return (
+    <time dateTime={iso} suppressHydrationWarning>
+      {mounted ? formatEndDateTime(iso) : ""}
+    </time>
+  );
 }
 
 function actionLabel(status: WalletPosition["status"]): string {
