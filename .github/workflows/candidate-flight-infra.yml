@@ -90,6 +90,9 @@ jobs:
       SCHEDULER_API_TOKEN: ${{ secrets.SCHEDULER_API_TOKEN }}
       BILLING_INGEST_TOKEN: ${{ secrets.BILLING_INGEST_TOKEN }}
       INTERNAL_OPS_TOKEN: ${{ secrets.INTERNAL_OPS_TOKEN }}
+      WORK_ITEMS_NOTION_TOKEN: ${{ secrets.WORK_ITEMS_NOTION_TOKEN }}
+      WORK_ITEMS_NOTION_DATA_SOURCE_ID: ${{ secrets.WORK_ITEMS_NOTION_DATA_SOURCE_ID }}
+      WORK_ITEMS_NOTION_VERSION: ${{ secrets.WORK_ITEMS_NOTION_VERSION }}
       OPENCLAW_GATEWAY_TOKEN: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
       OPENCLAW_GITHUB_RW_TOKEN: ${{ secrets.OPENCLAW_GITHUB_RW_TOKEN }}
       DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
@@ -175,3 +178,15 @@ jobs:
       - name: Deploy Compose infra to candidate-a VM
         if: env.VM_HOST != ''
         run: bash scripts/ci/deploy-infra.sh --ref "$COGNI_REPO_REF"
+
+      - name: Trigger work-items Notion sync
+        if: env.VM_HOST != '' && env.WORK_ITEMS_NOTION_TOKEN != ''
+        env:
+          DOMAIN: ${{ vars.DOMAIN }}
+          INTERNAL_OPS_TOKEN: ${{ secrets.INTERNAL_OPS_TOKEN }}
+        run: |
+          set -euo pipefail
+          curl -fsS -X POST "https://${DOMAIN}/api/internal/work/notion/sync" \
+            -H "Authorization: Bearer ${INTERNAL_OPS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"limit":500}' | jq .
