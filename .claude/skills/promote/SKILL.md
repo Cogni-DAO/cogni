@@ -58,11 +58,35 @@ jq '.resolved_targets, .has_images' /tmp/resolved.json
 git fetch origin deploy/preview && git show origin/deploy/preview:.promote-state/review-state
 # unlocked → safe to dispatch. dispatching/reviewing → wait or you double-fly.
 
-# 4. Production source-sha — pick the merge-base of per-node preview tips.
-#    aggregate-rollup.sh writes this to deploy/preview:.promote-state/current-sha after every preview success.
-git show origin/deploy/preview:.promote-state/current-sha
-# Use THIS as production source_sha. Per-node tips can disagree under affected-only;
-# current-sha is the one ancestor common to all preview-{node} branches.
+# 4. Production source-sha — pick the NEWEST sha that's verified-green on
+#    any preview node. NOT the merge-base of per-node tips. Reason: when a
+#    node hasn't been touched in months under affected-only, its preview tip
+#    stays at an ancient sha, and merge-base of all four tips lands so far
+#    back that the workflow scripts (e.g. resolve-cell-state.sh, added in
+#    task.0376) don't even exist in the checkout — every verify-deploy leg
+#    exits 127 and prod-pd hard-fails before doing real work.
+#    `source_sha` only labels Argo's expected-sha + the deploy-branch tip
+#    commit. Per-app digests + BUILD_SHAs are forwarded independently from
+#    each preview-{node} overlay via preview_forward=true and recorded in
+#    .promote-state/source-sha-by-app.json. So source_sha just needs to be
+#    a main sha new enough that the workflow tree contains every script
+#    verify-deploy invokes.
+#    Pick: the newest preview-{node} promotion sha, e.g. the latest
+#    "promote preview <node>: <sha>" commit on any deploy/preview-* branch.
+NEWEST=""
+for n in operator poly resy scheduler-worker; do
+  src=$(git log -1 --format=%s "origin/deploy/preview-$n" \
+    | sed -nE 's/.*: ([0-9a-f]{8,40}).*/\1/p')
+  [ -z "$src" ] && continue
+  if [ -z "$NEWEST" ] || git merge-base --is-ancestor "$NEWEST" "$src" 2>/dev/null; then
+    NEWEST="$src"
+  fi
+done
+echo "production source_sha = $NEWEST"
+# Sanity: NEWEST must be on main and must contain scripts/ci/resolve-cell-state.sh.
+git fetch origin main && git merge-base --is-ancestor "$NEWEST" origin/main
+git show "$NEWEST:scripts/ci/resolve-cell-state.sh" >/dev/null \
+  || echo "❌ chosen source_sha pre-dates verify-deploy infra; pick a newer sha"
 ```
 
 ## Preview promotion
@@ -90,7 +114,10 @@ Admin-merging bypasses `merge_group` → no `mq-*` images → `flight-preview.ym
 Manual only. There is no production auto-trigger today (`promote-to-production.yml` was removed in bug.0361).
 
 ```bash
-SOURCE_SHA=$(git show origin/deploy/preview:.promote-state/current-sha)
+# SOURCE_SHA must be (a) on main, (b) new enough to contain all current
+# verify-deploy scripts. The newest per-node preview promotion sha is the
+# safe default. See preflight #4 for the picker.
+SOURCE_SHA=<newest-preview-node-promotion-sha>
 gh workflow run promote-and-deploy.yml --ref main \
   -f environment=production \
   -f source_sha=$SOURCE_SHA \
@@ -99,7 +126,7 @@ gh workflow run promote-and-deploy.yml --ref main \
   -f skip_infra=false
 ```
 
-- `source_sha` = `deploy/preview:.promote-state/current-sha` (merge-base of per-node preview tips). Don't hand-pick a per-node tip — under affected-only the tips disagree, and only the merge-base has all nodes verified.
+- `source_sha` = newest sha that's currently green on any preview node (preflight #4). Do NOT use `deploy/preview:.promote-state/current-sha` — `aggregate-rollup.sh` writes the merge-base of per-node tips there, which under prolonged affected-only divergence lands behind the workflow scripts and hard-fails verify-deploy at exit 127. The per-app digest + BUILD_SHA forwarding (via `preview_forward=true` and `source-sha-by-app.json`) is what actually carries each node's content; `source_sha` is only the Argo / deploy-branch label.
 - `build_sha` = same as `source_sha` for normal merge-queue merges (pr-build merge_group bakes BUILD_SHA = queue commit = main HEAD). Differs only in unusual squash-merge scenarios.
 - `nodes` = empty for all-nodes; CSV like `operator,poly` to scope.
 - `skip_infra` = false unless infra didn't change and you want a faster run.
@@ -179,15 +206,16 @@ Only do this when you've verified the prior run reached a terminal state. Bypass
 
 ## Failure modes — first-step diagnosis
 
-| Symptom                                                                | First diagnosis                                                                                                                                                 |
-| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| flight-preview red at "Hard-fail when no images found for resolved PR" | Admin-merge bypass (bug.0443). Recovery: merge-queue follow-up PR.                                                                                              |
-| aggregate-preview red, "no cell reported promoted=true"                | Same admin-merge cause OR sha has zero images. Verify with `resolve-pr-build-images.sh` (preflight #2).                                                         |
-| aggregate-production red, "Axiom 19 contradiction: scheduler-worker"   | bug.0443 fix in `verify-buildsha.sh` is missing/reverted. The `NON_INGRESS_NODES` marker-emission block must be present.                                        |
-| verify-buildsha timeout 90s                                            | Pod cutover incomplete; usually transient. Re-check `/version` directly in 60s. If still wrong, check Argo app revision matches deploy-branch tip.              |
-| `verify-deploy` green but `/version.buildSha` still old                | CDN/edge cache, OR you hit `/readyz` (which the old pod still answers) instead of `/version`. Always use `/version.buildSha` for verification, never `/readyz`. |
-| Lease stuck `dispatching`                                              | The exit-1 + `if: always() &&` unlock should have fired. If not, manually unlock as above (cautiously).                                                         |
-| Production "succeeded" but only some nodes advanced                    | Affected-only — `nodes` input was scoped, or the source sha's image set didn't cover all targets. Verify per-node `current-sha` on each `deploy/production-*`.  |
+| Symptom                                                                                                                                          | First diagnosis                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| flight-preview red at "Hard-fail when no images found for resolved PR"                                                                           | Admin-merge bypass (bug.0443). Recovery: merge-queue follow-up PR.                                                                                                                                                                                                                                                                |
+| aggregate-preview red, "no cell reported promoted=true"                                                                                          | Same admin-merge cause OR sha has zero images. Verify with `resolve-pr-build-images.sh` (preflight #2).                                                                                                                                                                                                                           |
+| aggregate-production red, "Axiom 19 contradiction: scheduler-worker"                                                                             | bug.0443 fix in `verify-buildsha.sh` is missing/reverted. The `NON_INGRESS_NODES` marker-emission block must be present.                                                                                                                                                                                                          |
+| verify-buildsha timeout 90s                                                                                                                      | Pod cutover incomplete; usually transient. Re-check `/version` directly in 60s. If still wrong, check Argo app revision matches deploy-branch tip.                                                                                                                                                                                |
+| `verify-deploy` green but `/version.buildSha` still old                                                                                          | CDN/edge cache, OR you hit `/readyz` (which the old pod still answers) instead of `/version`. Always use `/version.buildSha` for verification, never `/readyz`.                                                                                                                                                                   |
+| Lease stuck `dispatching`                                                                                                                        | The exit-1 + `if: always() &&` unlock should have fired. If not, manually unlock as above (cautiously).                                                                                                                                                                                                                           |
+| Production "succeeded" but only some nodes advanced                                                                                              | Affected-only — `nodes` input was scoped, or the source sha's image set didn't cover all targets. Verify per-node `current-sha` on each `deploy/production-*`.                                                                                                                                                                    |
+| prod-pd: every `verify-deploy (<node>)` red at `Resolve cell state` with `bash: app-src/scripts/ci/<script>: No such file or directory` exit 127 | `source_sha` predates the verify-deploy script tree. Don't use `deploy/preview:.promote-state/current-sha` — `aggregate-rollup.sh` writes the merge-base of per-node tips, which under affected-only divergence regresses behind script additions. Re-dispatch using preflight #4's picker (newest preview-{node} promotion sha). |
 
 ## Discipline
 
