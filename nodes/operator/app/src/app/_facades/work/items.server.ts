@@ -21,10 +21,22 @@ import type {
 import type { WorkItem, WorkItemId } from "@cogni/work-items";
 import { toWorkItemId } from "@cogni/work-items";
 
-import { InvalidCursorError } from "@/adapters/server/db/doltgres/work-items-cursor";
 import { getContainer } from "@/bootstrap/container";
 
-export { InvalidCursorError };
+/**
+ * Thrown when the opaque pagination cursor cannot be decoded — translated
+ * to HTTP 400 in the route layer instead of the wrapper's generic 500.
+ * The adapter's cursor codec throws a structurally identical error
+ * (`name === "InvalidCursorError"`); the facade detects by name and
+ * rethrows its own copy so the app layer doesn't have to import from
+ * `@/adapters/**` (forbidden by `no-restricted-imports`).
+ */
+export class InvalidCursorError extends Error {
+  constructor(message = "invalid cursor") {
+    super(message);
+    this.name = "InvalidCursorError";
+  }
+}
 
 export class WorkItemNotFoundError extends Error {
   constructor(id: string) {
@@ -140,7 +152,11 @@ export async function listWorkItems(
     endCursor = dgResult.pageInfo.endCursor;
     hasMore = dgResult.pageInfo.hasMore;
   } catch (e) {
-    if ((e as Error)?.name !== "DoltgresNotConfiguredError") throw e;
+    const name = (e as Error)?.name;
+    if (name === "InvalidCursorError") {
+      throw new InvalidCursorError((e as Error).message);
+    }
+    if (name !== "DoltgresNotConfiguredError") throw e;
   }
 
   let merged: WorkItem[] = dgItems;
