@@ -41,11 +41,28 @@ import {
   getPolyTraderWalletAdapter,
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
-import { toWalletExecutionPosition } from "../_lib/ledger-positions";
+import type { LedgerStatus } from "@/features/trading";
+import {
+  summarizeDailyTradeCounts,
+  toWalletExecutionPosition,
+} from "../_lib/ledger-positions";
 
 export const dynamic = "force-dynamic";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
+const TRADE_HISTORY_STATUSES = [
+  "pending",
+  "open",
+  "filled",
+  "partial",
+  "canceled",
+  "error",
+] satisfies LedgerStatus[];
+const LIVE_POSITION_STATUSES = new Set<LedgerStatus>([
+  "open",
+  "filled",
+  "partial",
+]);
 
 function emptyPayload(warning: { code: string; message: string }) {
   return polyWalletExecutionOperation.output.parse({
@@ -109,15 +126,18 @@ export const GET = wrapRouteHandlerWithLogging(
     const capturedAt = new Date();
     const warnings: Array<{ code: string; message: string }> = [];
     let livePositions: ReturnType<typeof toWalletExecutionPosition>[] = [];
+    let dailyTradeCounts: ReturnType<typeof summarizeDailyTradeCounts> = [];
     try {
       const rows = await container.orderLedger.listTenantPositions({
         billing_account_id: account.id,
-        statuses: ["open", "filled", "partial"],
-        limit: 100,
+        statuses: TRADE_HISTORY_STATUSES,
+        limit: 500,
       });
-      livePositions = rows.map((row) =>
-        toWalletExecutionPosition(row, capturedAt)
-      );
+      dailyTradeCounts = summarizeDailyTradeCounts(rows);
+      livePositions = rows
+        .filter((row) => LIVE_POSITION_STATUSES.has(row.status))
+        .slice(0, 100)
+        .map((row) => toWalletExecutionPosition(row, capturedAt));
     } catch (err) {
       warnings.push({
         code: "positions_read_model_unavailable",
@@ -129,7 +149,7 @@ export const GET = wrapRouteHandlerWithLogging(
       PolyWalletExecutionOutputSchema.parse({
         address: address.toLowerCase(),
         capturedAt: capturedAt.toISOString(),
-        dailyTradeCounts: [],
+        dailyTradeCounts,
         live_positions: livePositions,
         closed_positions: [],
         warnings,

@@ -8,7 +8,8 @@
  *   reconciler is responsible for keeping `synced_at` fresh.
  * Invariants:
  *   - CLOB_NOT_ON_PAGE_LOAD: dashboard live positions come from DB only.
- *   - STALENESS_VISIBLE: every row exposes `syncedAt`, `syncAgeMs`, and `syncStale`.
+ *   - SYNC_METADATA_AVAILABLE: every row exposes sync metadata for diagnostics;
+ *     UI decides how much of that state should be foregrounded.
  * Side-effects: none
  * Links: bug.5001, work/items/task.0328.poly-sync-truth-ledger-cache.md
  * @internal
@@ -116,6 +117,19 @@ export function toWalletExecutionPosition(
     ],
     events: [{ ts: observed, kind: "entry", price, shares: size }],
   };
+}
+
+export function summarizeDailyTradeCounts(
+  rows: readonly LedgerRow[]
+): Array<{ day: string; n: number }> {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const day = row.observed_at.toISOString().slice(0, 10);
+    counts.set(day, (counts.get(day) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([day, n]) => ({ day, n }));
 }
 
 function rowCurrentValue(row: LedgerRow): number {

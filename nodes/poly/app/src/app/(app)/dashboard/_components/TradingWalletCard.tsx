@@ -118,28 +118,10 @@ export function TradingWalletCard(): ReactElement {
           <div className="flex flex-wrap items-center gap-2 text-xs">
             {data?.warnings?.length ? (
               <span
-                className="rounded bg-warning/15 px-1.5 py-0.5 text-warning"
+                className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground"
                 title="Some wallet reads are partial. Values may be incomplete."
               >
-                stale
-              </span>
-            ) : null}
-            {data?.positions_sync_age_ms !== null &&
-            data?.positions_sync_age_ms !== undefined ? (
-              <span
-                className={cn(
-                  "rounded px-1.5 py-0.5",
-                  data.positions_stale
-                    ? "bg-warning/15 text-warning"
-                    : "bg-muted text-muted-foreground"
-                )}
-                title={
-                  data.positions_stale
-                    ? "Position cache is older than 5 minutes."
-                    : "Position cache freshness."
-                }
-              >
-                synced {formatAge(data.positions_sync_age_ms)} ago
+                partial
               </span>
             ) : null}
             {lowGas ? (
@@ -234,15 +216,6 @@ export function TradingWalletCard(): ReactElement {
       </CardContent>
     </Card>
   );
-}
-
-function formatAge(ms: number): string {
-  const seconds = Math.max(0, Math.round(ms / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.round(minutes / 60);
-  return `${hours}h`;
 }
 
 function hasOverviewBreakdown(

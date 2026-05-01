@@ -73,15 +73,6 @@ function formatHeldDuration(heldMinutes: number): string {
   return `${minutes}m`;
 }
 
-function formatAge(ms: number): string {
-  const seconds = Math.max(0, Math.round(ms / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.round(minutes / 60);
-  return `${hours}h`;
-}
-
 function formatClosedAt(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
     month: "short",
@@ -135,7 +126,8 @@ export function makeColumns(opts: MakeColumnsOpts): AnyCol[] {
       minSize: 240,
       cell: ({ row }) => {
         const p = row.original;
-        const eventLabel = prettifyEventSlug(p.eventSlug, p.marketTitle);
+        const eventLabel =
+          p.eventTitle ?? prettifyEventSlug(p.eventSlug, p.marketTitle);
         return (
           <div className="flex flex-col gap-0.5">
             {eventLabel ? (
@@ -156,17 +148,6 @@ export function makeColumns(opts: MakeColumnsOpts): AnyCol[] {
             ) : (
               <span className="font-medium text-sm">{p.marketTitle}</span>
             )}
-            {p.syncAgeMs !== null && p.syncAgeMs !== undefined ? (
-              <span
-                className={
-                  p.syncStale
-                    ? "text-warning text-xs"
-                    : "text-muted-foreground text-xs"
-                }
-              >
-                synced {formatAge(p.syncAgeMs)} ago
-              </span>
-            ) : null}
           </div>
         );
       },

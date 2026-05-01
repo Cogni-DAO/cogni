@@ -168,11 +168,14 @@ describe("poly wallet dashboard DB read routes", () => {
       syncedAt: syncedAt.toISOString(),
       syncStale: false,
     });
+    expect(json.dailyTradeCounts).toEqual([
+      { day: row.observed_at.toISOString().slice(0, 10), n: 1 },
+    ]);
     expect(json.closed_positions).toEqual([]);
     expect(mockListTenantPositions).toHaveBeenCalledWith({
       billing_account_id: ACCOUNT.id,
-      statuses: ["open", "filled", "partial"],
-      limit: 100,
+      statuses: ["pending", "open", "filled", "partial", "canceled", "error"],
+      limit: 500,
     });
   });
 });
