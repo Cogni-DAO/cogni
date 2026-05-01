@@ -3,7 +3,7 @@
 
 /**
  * Module: `@tests/unit/features/trading/order-ledger-cumulative-intent`
- * Purpose: Unit tests for `FakeOrderLedger.cumulativeIntentForMarket` — sum intent size_usdc by (billing_account_id, market_id) over non-canceled rows (error rows included; bug.0430).
+ * Purpose: Unit tests for `FakeOrderLedger.cumulativeIntentForMarket` — sum intent size_usdc by (billing_account_id, market_id) over non-canceled rows. Error rows are scoped to FOK only (bug.0430 broadcast race); limit-order errors don't count (CLOB rejected at API boundary, no on-chain effect).
  * Scope: In-memory FakeOrderLedger only. No DB.
  * Side-effects: none
  * Links: src/adapters/test/trading/fake-order-ledger.ts (task.0424)
@@ -67,7 +67,7 @@ describe("FakeOrderLedger.cumulativeIntentForMarket", () => {
     expect(result).toBe(5);
   });
 
-  it("excludes canceled rows but includes error rows (bug.0430: errors can fill on chain silently)", async () => {
+  it("excludes canceled rows; FOK errors count (bug.0430 broadcast race), limit errors don't", async () => {
     const ledger = new FakeOrderLedger({
       initial: [
         makeRow({
@@ -80,10 +80,25 @@ describe("FakeOrderLedger.cumulativeIntentForMarket", () => {
           status: "canceled",
           attributes: { market_id: MARKET_X, size_usdc: 5 },
         }),
+        // FOK error: counts (CLOB error doesn't preclude on-chain CTF mint)
         makeRow({
           fill_id: "fill-3",
           status: "error",
-          attributes: { market_id: MARKET_X, size_usdc: 5 },
+          attributes: {
+            market_id: MARKET_X,
+            size_usdc: 5,
+            placement: "market_fok",
+          },
+        }),
+        // Limit error: doesn't count (CLOB-rejected at API boundary)
+        makeRow({
+          fill_id: "fill-4",
+          status: "error",
+          attributes: {
+            market_id: MARKET_X,
+            size_usdc: 100,
+            placement: "limit",
+          },
         }),
       ],
     });
@@ -127,18 +142,52 @@ describe("FakeOrderLedger.cumulativeIntentForMarket", () => {
     expect(result).toBe(1);
   });
 
-  it("regression: 5 error rows × $1 reach the $5 cap (bug.0430 prod scenario)", async () => {
+  it("regression: 5 FOK error rows × $1 reach the $5 cap (bug.0430 broadcast race)", async () => {
     const ledger = new FakeOrderLedger({
       initial: Array.from({ length: 5 }, (_, i) =>
         makeRow({
           fill_id: `err-${i}`,
           status: "error",
-          attributes: { market_id: MARKET_X, size_usdc: 1 },
+          attributes: {
+            market_id: MARKET_X,
+            size_usdc: 1,
+            placement: "market_fok",
+          },
         })
       ),
     });
     const result = await ledger.cumulativeIntentForMarket(TENANT_A, MARKET_X);
     expect(result).toBe(5);
+  });
+
+  it("regression: limit-order errors do NOT block new placements (task.5001 prod incident)", async () => {
+    // Mirrors the prod scenario where 43,688 historical FOK errors with no
+    // placement attribute were pessimistically counting against the cap.
+    // After this fix, errors without `placement: 'market_fok'` are ignored.
+    const ledger = new FakeOrderLedger({
+      initial: [
+        ...Array.from({ length: 100 }, (_, i) =>
+          makeRow({
+            fill_id: `legacy-err-${i}`,
+            status: "error",
+            attributes: { market_id: MARKET_X, size_usdc: 5 }, // no placement key
+          })
+        ),
+        ...Array.from({ length: 50 }, (_, i) =>
+          makeRow({
+            fill_id: `limit-err-${i}`,
+            status: "error",
+            attributes: {
+              market_id: MARKET_X,
+              size_usdc: 5,
+              placement: "limit",
+            },
+          })
+        ),
+      ],
+    });
+    const result = await ledger.cumulativeIntentForMarket(TENANT_A, MARKET_X);
+    expect(result).toBe(0);
   });
 
   it("returns Infinity when failConfigRead is set (fail-closed)", async () => {

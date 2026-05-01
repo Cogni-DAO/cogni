@@ -108,6 +108,8 @@ export interface ListUserTradesParams {
   limit?: number;
   /** Only return trades at or after this unix-seconds timestamp. */
   sinceTs?: number;
+  /** When true, only include fills where the user was the TAKER. Default: false (includes maker fills — required for position tracking). */
+  takerOnly?: boolean;
 }
 
 export interface ListUserPositionsParams {
@@ -170,6 +172,12 @@ export interface ResolveUsernameParams {
  *
  * All endpoints are public — no auth required.
  * Verified against live data 2026-04-17 (see research doc).
+ *
+ * Note: `/trades` defaults `takerOnly=true` server-side, hiding maker-side
+ * fills. `listUserTrades` always sends the param explicitly and defaults to
+ * `false` so position-tracking callers (mirror, audit) see every CTF-balance
+ * change.
+
  */
 export class PolymarketDataApiClient {
   private readonly baseUrl: string;
@@ -211,6 +219,10 @@ export class PolymarketDataApiClient {
     const url = new URL("/trades", this.baseUrl);
     url.searchParams.set("user", wallet);
     url.searchParams.set("limit", String(params?.limit ?? 1000));
+    url.searchParams.set(
+      "takerOnly",
+      params?.takerOnly === true ? "true" : "false"
+    );
 
     const json = await this.fetchJson(url);
     const trades = PolymarketUserTradesResponseSchema.parse(json);

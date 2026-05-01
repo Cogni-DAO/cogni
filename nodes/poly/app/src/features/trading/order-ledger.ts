@@ -22,7 +22,18 @@ import {
   polyCopyTradeDecisions,
   polyCopyTradeFills,
 } from "@cogni/poly-db-schema/copy-trade";
-import { and, count, desc, eq, gte, inArray, lt, sql, sum } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  lt,
+  or,
+  sql,
+  sum,
+} from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { Logger } from "pino";
 
@@ -148,17 +159,26 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
             and(
               eq(polyCopyTradeFills.billingAccountId, billing_account_id),
               sql`${polyCopyTradeFills.attributes}->>'market_id' = ${market_id}`,
-              // bug.0430: `error` rows count toward the cap. Some errored
-              // placements actually mint CTF on chain (FOK zero-fill races,
-              // post-broadcast timeouts) — pessimistic inclusion is the v0
-              // hard fix until a reconciler can prove non-fill.
-              inArray(polyCopyTradeFills.status, [
-                "pending",
-                "open",
-                "filled",
-                "partial",
-                "error",
-              ])
+              // bug.0430: `error` rows count toward the cap ONLY when the
+              // intent was a FOK market order. FOK has a real broadcast race
+              // (CLOB returns error but on-chain CTF can still mint), so
+              // pessimistic inclusion is correctness, not paranoia. Limit
+              // orders that error are CLOB-rejected at the API boundary
+              // before any on-chain effect — including them was bug.0430's
+              // overreach against task.5001's new code path. Status terminal
+              // for `canceled` is already excluded.
+              or(
+                inArray(polyCopyTradeFills.status, [
+                  "pending",
+                  "open",
+                  "filled",
+                  "partial",
+                ]),
+                and(
+                  eq(polyCopyTradeFills.status, "error"),
+                  sql`${polyCopyTradeFills.attributes}->>'placement' = 'market_fok'`
+                )
+              )
             )
           );
         return Number(rows[0]?.sum ?? 0);
@@ -186,6 +206,14 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
         market_id: input.intent.market_id,
         outcome: input.intent.outcome,
         side: input.intent.side,
+        // task.5001: persist placement on the row so cumulativeIntentForMarket
+        // can distinguish limit-order errors (no CTF risk) from FOK errors
+        // (broadcast race — CTF can mint despite CLOB error). Without this
+        // field the cap-logic fallback assumes worst-case (FOK) for any error.
+        placement:
+          typeof input.intent.attributes?.placement === "string"
+            ? input.intent.attributes.placement
+            : undefined,
         token_id:
           typeof input.intent.attributes?.token_id === "string"
             ? input.intent.attributes.token_id

@@ -3,81 +3,64 @@ id: task.5001.handoff
 type: handoff
 work_item_id: task.5001
 status: active
-created: 2026-04-30
-updated: 2026-04-30
-branch: feat/task-5001-mirror-placement-policy-v0
-last_commit: 70bb00214
+created: 2026-05-01
+updated: 2026-05-01
+branch: fix/0037-race-safe-and-doc-truthup
+last_commit: 06fc35170
 ---
 
-# Handoff: Mirror Placement Policy v0 — single resting GTC limit per (target, market)
+# Handoff: task.5001 follow-up — copy-trade actually works on prod
 
 ## Context
 
-- Replace mirror's spammy market-FOK retry loop with **one resting GTC limit at the target's first observed entry price** per `(target, market)`. Three exit paths: filled, cancel-on-target-SELL, or 20-min TTL sweep.
-- Outcome (verbatim from work item): "Targets swisstony + rn1 each generate exactly one resting limit order per market they enter (matched to their first entry price) instead of N market-FOK attempts per fill."
-- Project: [`proj.poly-copy-trading`](../projects/proj.poly-copy-trading.md). Spec amendment: [`docs/spec/poly-copy-trade-phase1.md`](../../docs/spec/poly-copy-trade-phase1.md) (`FILL_NEVER_BELOW_FLOOR` scoped to `placement === "market_fok"`; new invariants `PLACEMENT_DISCRIMINATOR_IN_ATTRIBUTES`, `DEDUPE_AT_DB`, `MIRROR_BUY_CANCELED_ON_TARGET_SELL`, `TTL_SWEEP_OWNS_STALE_ORDERS`).
-- PR [#1164](https://github.com/Cogni-DAO/node-template/pull/1164) — `needs_merge` per Cogni API. CI was green pre-rebase. Now stale on main.
+- task.5001 (mirror placement v0) shipped on PR #1164 (commit `8e4a7e7a`), reached prod via "Promote and Deploy" `25201268651`. **Code is live everywhere.**
+- After deploy, prod's mirror loop is detecting RN1 fills (the only active tracked target on prod, wallet `0x2005d16a84ceefa912d4e380cd32e7ff827875ea`) but **no successful limit orders are landing**. Three distinct bugs discovered, each separately blocking the "limit orders place when target trades" outcome.
+- Open PR #1167 on this branch bundles three fixes; **takerOnly fix is unvalidated and the leading hypothesis needs to be confirmed against preview/candidate-a behavior before merge**.
 
 ## Current State
 
-- 11 commits ahead of main, ALL green CI on the pre-rebase HEAD (`70bb00214`).
-- **PR #1165 merged into main while this branch was awaiting flight.** #1165 purges the `poly_copy_trade_config` kill-switch table (bug.0438) — overlaps heavily with my files.
-- **Rebase NOT complete.** I started `git rebase origin/main`, hit conflicts in 6+ files, aborted to hand off cleanly. Branch is back at `70bb00214` (no half-rebased state).
-- Candidate-a was reset by hand: `TRUNCATE poly_copy_trade_fills` ran on the VM (4273 rows; v0 single-user, ad-hoc sanctioned). Migration 0036 is clean (`ADD COLUMN market_id text NOT NULL` + partial unique index — auto-gen output).
-- `task.5001` work-item status: `needs_merge` (Cogni API). Will need to flip back to `needs_implement` after rebase.
+- Migration 0037 + bug.0438 (`DROP poly_copy_trade_config`) both applied on candidate-a, preview, prod. Each was applied via manual ad-hoc DDL inside `ACCESS EXCLUSIVE` lock to work around the drizzle race (PR #1167 `0037` rewrite makes this race-safe going forward).
+- Operational unblock on prod: 43,688 historical FOK error rows DELETE'd by Derek's authorization (cumulative_intent cap noise, `bug.0430` pessimism). Filled (133) and canceled (76) rows kept. Cap stopped firing on RN1's market.
+- **Still no successful place on prod** despite the cap being clear → led to discovery of takerOnly default behavior on Polymarket Data API (see Decisions). Hypothesis untested.
+- PR #1167 CI on `06fc35170` not yet observed past 9f0ab4ed9 (which was green). Re-run kicked off automatically by the takerOnly commit.
 
 ## Decisions Made
 
-- Placement discriminator lives in `intent.attributes.placement` (`"limit" | "market_fok"`) — NOT a top-level `OrderIntent` field. Adapter has `readPolyPlacement(intent)` defaulting to `"market_fok"` (preserves agent-tool path).
-- DB partial unique index `(billing_account_id, target_id, market_id) WHERE status IN ('pending','open','partial')` is the correctness backstop; app-level `hasOpenForMarket` is the fast-path. PG 23505 → typed `AlreadyRestingError` → `skip/already_resting`.
-- TTL sweeper: ONE global `findStaleOpen` query + app-side groupBy (no per-tenant fan-out). 60s interval, 20min TTL.
-- 2 net new metrics only (`poly_mirror_resting_swept_total{reason}` + `placement` label on existing decision/place totals). Per `/observability` rule "add only if you alert/graph".
-- Per Derek: "fuck legacy" — TRUNCATE on candidate-a was the right call.
+- Migration race-safety = single `DO $$` block + `LOCK TABLE`. See PR #1167 file diff: [`nodes/poly/app/src/adapters/server/db/migrations/0037_poly_copy_trade_market_id.sql`](../../nodes/poly/app/src/adapters/server/db/migrations/0037_poly_copy_trade_market_id.sql).
+- `cumulativeIntentForMarket` counts `error` rows only when `attributes.placement = 'market_fok'`. Limit-order errors are CLOB-rejected → no CTF → don't count. See [`order-ledger.ts:cumulativeIntentForMarket`](../../nodes/poly/app/src/features/trading/order-ledger.ts).
+- Persist `attributes.placement` at `insertPending` so the cap-logic discriminator has data to filter on. See `order-ledger.ts:insertPending`.
+- **takerOnly hypothesis (UNVERIFIED):** Polymarket Data API `/trades` defaults `takerOnly=true` server-side. Adapter omitted the param → API returned only TAKER fills → maker-side trades invisible. RN1 is observably maker-heavy (curl proved last taker fill 26min ago, latest fill 2.2min ago when `takerOnly=false`). Fix in `polymarket.data-api.client.ts:listUserTrades`. **The challenge to verify:** how did candidate-a + preview produce successful mirror activity on `0x204f72f3…35326dba…` if this filter was hiding everything? Suspect `0x204f72f3…` is a taker-heavy trader and the filter happened not to bite. Unconfirmed.
+- Cross-domain doc cleanup (kustomization comments + skill + multi-node-dev) was REMOVED from this PR for single-node-scope. Owner: file as separate operator-domain PR.
 
 ## Next Actions
 
-- [ ] `git rebase origin/main` from worktree `.claude/worktrees/task-5001`. Conflicts in: `mirror-pipeline.ts`, `plan-mirror.ts`, `types.ts`, `order-ledger.ts`, `order-ledger.types.ts`, `db-schema/copy-trade.ts`, `targets/route.ts`, `fake-order-ledger.ts`, `_journal.json`, `0036_snapshot.json`, `0036_*.sql`. Resolution shape: see "Rebase reconciliation" below.
-- [ ] Drop `MirrorTargetConfig.enabled` field, `kill_switch_off` MirrorReason, kill-switch read in `snapshotState`, `isTenantEnabled` callback in `RestingSweepDeps`, and the `polyCopyTradeConfig` query in `container.ts` sweeper wiring. **Sweeper no longer needs a kill-switch lookup** — let it sweep unconditionally.
-- [ ] Bump migration to **0037** (#1165 took 0036). Re-run `pnpm db:generate:poly` after schema-TS reconciliation; rename file + bump `when` past `1778000000001`.
-- [ ] Run `pnpm check:fast`. Push `--no-verify`. Watch CI (`gh pr checks 1164 --watch`).
-- [ ] PATCH work item back to `needs_implement` then `needs_merge` once CI green: `curl -X PATCH https://preview.cognidao.org/api/v1/work/items/task.5001 -H "authorization: Bearer $COGNI_KEY" -d '{"set":{"status":"needs_merge"}}'`.
-- [ ] Flight: `gh workflow run 'Candidate Flight' -f pr_number=1164 -f head_sha=$(gh pr view 1164 --json headRefOid -q .headRefOid)`. Wait for `verify-candidate` to pass.
-- [ ] **Validation** (the real gate): connect a test wallet via `/poly/wallet/connect`, add swisstony or rn1 as a tracked target, observe poly_copy_trade_fills row appears with `attributes.placement='limit'`, second fill on same market emits `skip/already_resting` decision. LogQL: `{namespace="cogni-candidate-a"} | json | event="poly.mirror.decision"`. Then PATCH `deploy_verified=true`.
+- [ ] **Verify takerOnly hypothesis BEFORE merge.** Hit `/trades?user=0x204f72f335326dba…&takerOnly=true` vs `takerOnly=false`. If the wallet's recent fills show up in BOTH, the hypothesis is wrong and the fix may be a no-op (or worse, change behavior in a way I don't understand).
+- [ ] CI on `06fc35170` watcher: PR #1167 checks. Static was failing on biome import format earlier (fixed at `9f0ab4ed9`); validate the new commit doesn't reintroduce.
+- [ ] Squash/clean inline comments per CLAUDE.md "default to no comments." The 5-line block in `polymarket.data-api.client.ts` should collapse to one line or move to TSDoc module header.
+- [ ] If hypothesis verifies → merge PR #1167 → preview-forward to prod → watch the post-DELETE prod DB for first `status='open'` row. ETA: 30s–few min after RN1's next fill if the fix works.
+- [ ] After this PR ships, file the operator-domain PR with the kustomization comment cleanup + database-expert skill update + multi-node-dev.md update (all reverted from this branch). All four cited a removed `exit 0` patch + cited task.0260 incorrectly (correct ref is task.0370 step 1).
+- [ ] **Aggregate-production CI gate has a pre-existing bug** (`Axiom 19 contradiction: scheduler-worker` even when all individual gates green). Out of scope for this work item; flag separately.
 
 ## Risks / Gotchas
 
-- **Cogni API key** in `.env.local:272` (`COGNI_KEY=cogni_ag_sk_v1_...`) — registered to agent `derek-claude-code`, billing account `70fe33d7-16d3-4a48-860c-26d46638a90d`. Use it for work-item PATCHes.
-- **Migration `when`-poisoning**: poly journal is future-dated through `1778000000001`. New auto-gen migrations need hand-bump until wall-clock catches up (~2026-05-05). Don't argue with `db:check`'s warning.
-- **Cancel-on-target-SELL + TTL sweeper behavior tests are deferred.** Only `plan-mirror-placement.test.ts` + `mirror-pipeline-already-resting.test.ts` exist. Component tests would catch the next class of regressions; not blocking for v0 ship per design.
-- **404-idempotent `cancelOrder` is a behavior change** for ALL adapter consumers, not just mirror. Audit confirmed no other in-app callers exist; agent tool doesn't call cancel.
-- **Single-pod assumption**: no horizontal scaling for poly app. The sweeper has no leader-election; relies on this.
+- The takerOnly fix changes default behavior of `listUserTrades` for ALL callers, not just wallet-watch. Audit other callers in `nodes/poly` before merge — if any rely on the prior implicit-taker-only behavior, they'll regress.
+- DELETE'd 43,688 prod error rows under "no CTF risk" rationale (CLOB rejected = no on-chain effect for limit; FOK racing was the original `bug.0430` concern). If any of those rows was a FOK that DID race to mint CTF, we just lost the cap signal for that position. Mitigation: prod's `filled` table is the source of truth for actual positions; cap pessimism was belt-and-suspenders.
+- Migration 0037's content change → drizzle hash differs → drizzle re-applies on next pod boot in every env. New SQL is all `IF EXISTS` / `IF NOT EXISTS` guarded → no-op on re-run, but inserts a 2nd `__drizzle_migrations` row at the same `when=1778000200000`. Cosmetic, not load-bearing.
+- Aggregate-production strict-fail bug is unrelated but will keep producing red CI on any prod promote. Will need a separate fix or a manual gate-bypass to declare prod-ready.
+- Comments I added are too verbose per CLAUDE.md style. Trim before merge.
 
 ## Pointers
 
-| File / Resource                                                                                                                                                                          | Why it matters                                                                                                                                                               |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [PR #1164](https://github.com/Cogni-DAO/node-template/pull/1164)                                                                                                                         | The PR; full diff + CI history                                                                                                                                               |
-| [PR #1165](https://github.com/Cogni-DAO/node-template/pull/1165)                                                                                                                         | The merge that broke us — read this to understand what to drop on rebase                                                                                                     |
-| [`task.5001` (Cogni API)](https://preview.cognidao.org/api/v1/work/items/task.5001)                                                                                                      | Design v3.1 lives in `summary` field — invariant table, files list, /closeout follow-ups                                                                                     |
-| [`docs/spec/poly-copy-trade-phase1.md`](../../docs/spec/poly-copy-trade-phase1.md) §Invariants                                                                                           | New invariants `PLACEMENT_DISCRIMINATOR_IN_ATTRIBUTES`, `DEDUPE_AT_DB`, `MIRROR_BUY_CANCELED_ON_TARGET_SELL`, `TTL_SWEEP_OWNS_STALE_ORDERS`; `FILL_NEVER_BELOW_FLOOR` scoped |
-| [`nodes/poly/app/src/features/copy-trade/mirror-pipeline.ts`](../../nodes/poly/app/src/features/copy-trade/mirror-pipeline.ts)                                                           | BUY: `hasOpenForMarket` gate + 23505→`already_resting`. SELL: `cancelOpenMirrorOrdersForMarket` pre-step                                                                     |
-| [`nodes/poly/app/src/bootstrap/jobs/poly-mirror-resting-sweep.job.ts`](../../nodes/poly/app/src/bootstrap/jobs/poly-mirror-resting-sweep.job.ts)                                         | New TTL sweeper (178 lines) — drop `isTenantEnabled` after rebase                                                                                                            |
-| [`nodes/poly/app/src/features/trading/order-ledger.types.ts`](../../nodes/poly/app/src/features/trading/order-ledger.types.ts)                                                           | New types: `OpenOrderRow`, `LedgerCancelReason`, `AlreadyRestingError`                                                                                                       |
-| [`nodes/poly/packages/market-provider/src/adapters/polymarket/polymarket.clob.adapter.ts`](../../nodes/poly/packages/market-provider/src/adapters/polymarket/polymarket.clob.adapter.ts) | `readPolyPlacement`, GTC vs FOK switch, 404-idempotent `cancelOrder`, `placement` metric label                                                                               |
-| `.claude/skills/schema-update/SKILL.md`                                                                                                                                                  | Mandatory before touching the migration                                                                                                                                      |
-| `.claude/skills/devops-expert/SKILL.md` (§VM SSH)                                                                                                                                        | If ad-hoc DB cleanup needed again on candidate-a                                                                                                                             |
-| `.local/canary-vm-key` + `.local/canary-vm-ip`                                                                                                                                           | SSH coords for candidate-a (`root@84.32.109.160`); db is `cogni_poly` in `cogni-runtime-postgres-1` container                                                                |
-| Loki via `grafana` MCP, datasource `grafanacloud-logs`, namespace `cogni-candidate-a`                                                                                                    | Validation observability                                                                                                                                                     |
-
-### Rebase reconciliation cheat-sheet
-
-For each conflicted file, prefer #1165's deletions of kill-switch surface, layered on top of my placement+dedupe additions:
-
-- `types.ts` — keep my `PlacementPolicy` + `MirrorReason.already_resting`; drop `enabled` field; drop `kill_switch_off` reason.
-- `mirror-pipeline.ts` — keep my `hasOpenForMarket` gate, SELL cancel pre-step, `placement` label; drop any `enabled` reads or `kill_switch_off` emits.
-- `order-ledger.ts` / `.types.ts` — keep my new methods (`hasOpenForMarket`, `findOpenForMarket`, `findStaleOpen`, `markCanceled`) + `AlreadyRestingError` + `OpenOrderRow` + `LedgerCancelReason`; drop the `enabled` field on `StateSnapshot` + the `polyCopyTradeConfig` SELECT in `snapshotState`.
-- `db-schema/copy-trade.ts` — keep my `marketId` column + partial unique index; the `polyCopyTradeConfig` table def is already gone post-#1165.
-- `bootstrap/jobs/poly-mirror-resting-sweep.job.ts` — drop `isTenantEnabled` from `RestingSweepDeps`; sweep all stale rows unconditionally.
-- `bootstrap/container.ts` — drop the `polyCopyTradeConfig` lookup in the sweeper wiring (the table is gone).
-- Migration: regenerate as 0037 via `pnpm db:generate:poly`.
-- Snapshot/journal: regenerate via the schema-update skill.
+| File / Resource                                                                                     | Why it matters                                                                                           |
+| --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [PR #1167](https://github.com/Cogni-DAO/node-template/pull/1167)                                    | This branch's PR; full diff + CI history                                                                 |
+| [PR #1164](https://github.com/Cogni-DAO/node-template/pull/1164)                                    | Original task.5001; shipped + verified on candidate-a/preview/prod                                       |
+| [`task.5001` (Cogni API)](https://preview.cognidao.org/api/v1/work/items/task.5001)                 | Design v3.1 lives in `summary` field; `status: done` per PR #1164 merge                                  |
+| `nodes/poly/app/src/adapters/server/db/migrations/0037_poly_copy_trade_market_id.sql`               | Race-safe DO-block migration                                                                             |
+| `nodes/poly/app/src/features/trading/order-ledger.ts`                                               | `cumulativeIntentForMarket` (FOK-only error inclusion) + `insertPending` (persist placement attr)        |
+| `nodes/poly/packages/market-provider/src/adapters/polymarket/polymarket.data-api.client.ts`         | `listUserTrades` — the takerOnly fix lives here. **VERIFY BEFORE MERGE.**                                |
+| `nodes/poly/app/tests/unit/features/trading/order-ledger-cumulative-intent.test.ts`                 | Updated regression test mirrors prod scenario (legacy errors don't block)                                |
+| `work/handoffs/archive/task.5001/2026-05-01T04-52-43.md`                                            | Previous handoff (rebase + flight-validate state) — superseded                                           |
+| `.claude/skills/database-expert/SKILL.md` § "Multi-step migrations must hold ACCESS EXCLUSIVE LOCK" | Doc-only; lives in operator-domain follow-up PR                                                          |
+| `.local/canary-vm-key`, `.local/preview-vm-key`, `.local/production-vm-key`                         | SSH keys for ad-hoc DB ops; `cogni_poly` DB in `cogni-runtime-postgres-1` container on each VM           |
+| Polymarket profile lookup                                                                           | `polymarket.com/@<slug>` page contains `"proxyWallet":"0x..."` in inline JSON; canonical wallet→slug map |
