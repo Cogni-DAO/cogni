@@ -90,7 +90,7 @@ export function createPolymarketWsActivitySource(
     deps.metrics.incr(WALLET_WATCH_WS_METRICS.wakeupTotal, {});
     log.debug(
       {
-        event: EVENT_NAMES.POLY_WALLET_WATCH_WS_MESSAGE,
+        event: "poly.wallet_watch.ws.message",
         asset_id: event.asset_id,
         side: event.side,
         ws_timestamp: event.timestamp,
@@ -127,7 +127,7 @@ export function createPolymarketWsActivitySource(
       deps.metrics.incr(WALLET_WATCH_WS_METRICS.subscriptionsTotal, {});
       log.info(
         {
-          event: EVENT_NAMES.POLY_WALLET_WATCH_WS_SUBSCRIBE,
+          event: "poly.wallet_watch.ws.subscribe",
           assets_count: ownedAssets.size,
         },
         "ws assets reconciled"
@@ -138,7 +138,7 @@ export function createPolymarketWsActivitySource(
     } catch (err) {
       log.warn(
         {
-          event: EVENT_NAMES.POLY_WALLET_WATCH_WS_SUBSCRIBE,
+          event: "poly.wallet_watch.ws.subscribe",
           phase: "refresh_failed",
           err: err instanceof Error ? err.message : String(err),
         },

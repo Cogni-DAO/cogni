@@ -162,13 +162,6 @@ export const EVENT_NAMES = {
   POLY_MIRROR_DECISION: "poly.mirror.decision",
   POLY_WALLET_WATCH_FETCH: "poly.wallet_watch.fetch",
   POLY_WALLET_WATCH_NORMALIZE_ERROR: "poly.wallet_watch.normalize_error",
-  // task.0322 — WS-driven wallet-watch source (env: POLY_WALLET_WATCH_SOURCE=websocket).
-  POLY_WALLET_WATCH_WS_CONNECT: "poly.wallet_watch.ws.connect",
-  POLY_WALLET_WATCH_WS_DISCONNECT: "poly.wallet_watch.ws.disconnect",
-  POLY_WALLET_WATCH_WS_RECONNECT: "poly.wallet_watch.ws.reconnect",
-  POLY_WALLET_WATCH_WS_MESSAGE: "poly.wallet_watch.ws.message",
-  POLY_WALLET_WATCH_WS_SUBSCRIBE: "poly.wallet_watch.ws.subscribe",
-  POLY_WALLET_WATCH_SOURCE_MODE: "poly.wallet_watch.source_mode",
   POLY_WALLET_BALANCE_POLYGON_READ_FAILED:
     "poly.wallet.balance.polygon_read_failed",
   POLY_WALLET_BALANCE_OPEN_ORDERS_FAILED:

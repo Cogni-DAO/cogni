@@ -14,7 +14,6 @@
  * @public
  */
 
-import WebSocket from "ws";
 import { z } from "zod";
 import type { LoggerPort } from "../../port/observability.js";
 
@@ -148,8 +147,10 @@ export function createPolymarketWsClient(
   function handleMessage(raw: unknown) {
     let text: string;
     if (typeof raw === "string") text = raw;
-    else if (raw instanceof Buffer) text = raw.toString("utf8");
-    else if (Array.isArray(raw)) text = Buffer.concat(raw).toString("utf8");
+    else if (raw instanceof ArrayBuffer)
+      text = new TextDecoder().decode(raw);
+    else if (raw instanceof Uint8Array)
+      text = new TextDecoder().decode(raw);
     else return;
 
     if (text === "PONG" || text === "pong") return;
@@ -218,7 +219,7 @@ export function createPolymarketWsClient(
     clearTimers();
     log.info({ event: "poly.wallet_watch.ws.connect", endpoint }, "ws connecting");
     socket = new Ctor(endpoint);
-    socket.on("open", () => {
+    socket.addEventListener("open", () => {
       reconnectAttempts = 0;
       emitState({ phase: "connect" });
       log.info(
@@ -234,28 +235,36 @@ export function createPolymarketWsClient(
         }
       }, heartbeatMs);
     });
-    socket.on("message", handleMessage);
-    socket.on("close", (code: number, reason: Buffer) => {
-      const reasonText = reason?.toString?.("utf8") ?? "";
-      emitState({ phase: "disconnect", reason: `code=${code} ${reasonText}` });
-      log.warn(
-        {
-          event: "poly.wallet_watch.ws.disconnect",
-          code,
-          reason: reasonText,
-        },
-        "ws closed"
-      );
-      clearTimers();
-      socket = null;
-      scheduleReconnect();
-    });
-    socket.on("error", (err: Error) => {
+    socket.addEventListener("message", (ev: { data: unknown }) =>
+      handleMessage(ev.data)
+    );
+    socket.addEventListener(
+      "close",
+      (ev: { code: number; reason: string }) => {
+        const reasonText = ev?.reason ?? "";
+        emitState({
+          phase: "disconnect",
+          reason: `code=${ev?.code} ${reasonText}`,
+        });
+        log.warn(
+          {
+            event: "poly.wallet_watch.ws.disconnect",
+            code: ev?.code,
+            reason: reasonText,
+          },
+          "ws closed"
+        );
+        clearTimers();
+        socket = null;
+        scheduleReconnect();
+      }
+    );
+    socket.addEventListener("error", (ev: { message?: string }) => {
       log.warn(
         {
           event: "poly.wallet_watch.ws.disconnect",
           phase: "error",
-          err: err?.message ?? String(err),
+          err: ev?.message ?? "ws error",
         },
         "ws error"
       );
