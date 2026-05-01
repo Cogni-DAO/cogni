@@ -40,6 +40,7 @@ Preview operator pod `operator-node-app-85b7b88499-smrdh`:
   ```
 
 k8s secret check:
+
 ```
 kubectl -n cogni-preview get secret operator-node-app-secrets \
   -o jsonpath='{.data.TAVILY_API_KEY}' | base64 -d | wc -c
@@ -61,7 +62,7 @@ Each `server-env.ts` already defines:
 ```ts
 const optionalString = z.preprocess(
   (v) => (typeof v === "string" && v === "" ? undefined : v),
-  z.string().min(1).optional(),
+  z.string().min(1).optional()
 );
 ```
 

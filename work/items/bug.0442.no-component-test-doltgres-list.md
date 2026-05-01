@@ -53,7 +53,7 @@ Add `nodes/operator/app/src/adapters/server/db/doltgres/__tests__/work-items-ada
 1. Spin up Doltgres testcontainer (use existing helper if one exists in `@cogni/knowledge-store/testing`)
 2. Apply the operator-doltgres-schema migration (work_items table)
 3. Insert ~5 rows with mixed `priority: null | 0 | 1 | 2` and `rank: null | 1 | 2`
-4. Call `adapter.list({})` 
+4. Call `adapter.list({})`
 5. Assert returned order: priority ASC nulls last, then rank ASC nulls last, then created_at DESC
 
 Same pattern for `get`, `create`, `patch` while you're in there — adapter has 4 methods and 0 tests.

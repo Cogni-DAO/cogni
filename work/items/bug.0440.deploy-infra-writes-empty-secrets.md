@@ -45,7 +45,7 @@ In `setup-secrets.ts`, when assembling the Secret data block:
 const data = Object.fromEntries(
   Object.entries(envs)
     .filter(([_, v]) => v !== undefined && v !== "")
-    .map(([k, v]) => [k, base64(v)]),
+    .map(([k, v]) => [k, base64(v)])
 );
 ```
 
