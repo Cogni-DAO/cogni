@@ -85,13 +85,21 @@ export class FakeOrderLedger implements OrderLedger {
   ): Promise<number> {
     if (this.failConfigRead) return Number.POSITIVE_INFINITY;
     return this.rows
-      .filter(
-        (r) =>
-          r.billing_account_id === billing_account_id &&
-          (r.attributes as Record<string, unknown> | null)?.market_id ===
-            market_id &&
-          ["pending", "open", "filled", "partial", "error"].includes(r.status)
-      )
+      .filter((r) => {
+        if (r.billing_account_id !== billing_account_id) return false;
+        const attrs = r.attributes as Record<string, unknown> | null;
+        if (attrs?.market_id !== market_id) return false;
+        if (
+          r.status === "pending" ||
+          r.status === "open" ||
+          r.status === "filled" ||
+          r.status === "partial"
+        ) {
+          return true;
+        }
+        // Mirrors order-ledger.ts: only FOK errors count (broadcast race).
+        return r.status === "error" && attrs?.placement === "market_fok";
+      })
       .reduce((sum, r) => {
         const v = (r.attributes as Record<string, unknown> | null)?.size_usdc;
         return sum + (typeof v === "number" ? v : 0);
