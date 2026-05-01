@@ -163,6 +163,10 @@ const PATCH_COLUMNS: Record<keyof WorkItemsPatchSet, string> = {
   pr: "pr",
   reviewer: "reviewer",
   node: "node",
+  deployVerified: "deploy_verified",
+  projectId: "project_id",
+  parentId: "parent_id",
+  blockedBy: "blocked_by",
 };
 
 export class DoltgresOperatorWorkItemAdapter implements WorkItemsDoltgresPort {

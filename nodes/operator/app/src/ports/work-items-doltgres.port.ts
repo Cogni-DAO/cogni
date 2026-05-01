@@ -22,7 +22,12 @@ export type WorkItemsCreateInput = Parameters<WorkItemCommandPort["create"]>[0];
 
 export type WorkItemsPatchSet = NonNullable<
   Parameters<WorkItemCommandPort["patch"]>[0]["set"]
->;
+> & {
+  readonly deployVerified?: boolean;
+  readonly projectId?: WorkItemId | null;
+  readonly parentId?: WorkItemId | null;
+  readonly blockedBy?: WorkItemId | null;
+};
 
 export interface WorkItemsPatchInput {
   readonly id: WorkItemId;

@@ -39,7 +39,7 @@ export const workItemsPatchOperation = {
   input: z.object({
     id: z.string(),
     set: z
-      .object({
+      .strictObject({
         title: z.string().min(1).max(500).optional(),
         summary: z.string().optional(),
         outcome: z.string().optional(),
@@ -53,6 +53,10 @@ export const workItemsPatchOperation = {
         pr: z.string().optional(),
         reviewer: z.string().optional(),
         node: z.string().optional(),
+        deployVerified: z.boolean().optional(),
+        projectId: z.string().nullable().optional(),
+        parentId: z.string().nullable().optional(),
+        blockedBy: z.string().nullable().optional(),
       })
       .refine((v) => Object.keys(v).length > 0, {
         message: "set must contain at least one field",
