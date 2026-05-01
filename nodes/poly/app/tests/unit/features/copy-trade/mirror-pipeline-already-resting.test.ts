@@ -41,6 +41,7 @@ const MARKET_ID =
 const MARKET_CONSTRAINTS = async () => ({
   minShares: 1,
   minUsdcNotional: 1,
+  tickSize: 0.01,
 });
 
 const TARGET: MirrorTargetConfig = {

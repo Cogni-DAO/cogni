@@ -103,9 +103,11 @@ export interface MirrorPipelineDeps {
    * the sizing policy can avoid sub-min submissions (bug.0342). Optional.
    */
   getMarketConstraints?:
-    | ((
-        tokenId: string
-      ) => Promise<{ minShares: number; minUsdcNotional?: number }>)
+    | ((tokenId: string) => Promise<{
+        minShares: number;
+        minUsdcNotional?: number;
+        tickSize?: number;
+      }>)
     | undefined;
   /**
    * Optional target-position read seam. v0 production wiring uses Polymarket
@@ -232,6 +234,7 @@ async function processFill(
 
   let min_shares: number | undefined;
   let min_usdc_notional: number | undefined;
+  let tick_size: number | undefined;
   if (deps.getMarketConstraints) {
     const tokenId =
       typeof fill.attributes?.asset === "string" ? fill.attributes.asset : "";
@@ -240,6 +243,7 @@ async function processFill(
         const constraints = await deps.getMarketConstraints(tokenId);
         min_shares = constraints.minShares;
         min_usdc_notional = constraints.minUsdcNotional;
+        tick_size = constraints.tickSize;
       } catch (err) {
         log.warn(
           {
@@ -286,6 +290,7 @@ async function processFill(
     client_order_id,
     min_shares,
     min_usdc_notional,
+    tick_size,
   });
 
   const decisionLogFields = buildDecisionLogFields({

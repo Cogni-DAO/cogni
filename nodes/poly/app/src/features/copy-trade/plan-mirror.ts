@@ -15,7 +15,10 @@
  * @public
  */
 
-import type { OrderIntent } from "@cogni/poly-market-provider";
+import {
+  normalizeLimitPriceToTick,
+  type OrderIntent,
+} from "@cogni/poly-market-provider";
 
 import type {
   MirrorPlan,
@@ -181,6 +184,7 @@ export function planMirrorFromFill(input: PlanMirrorInput): MirrorPlan {
     client_order_id,
     min_shares,
     min_usdc_notional,
+    tick_size,
   } = input;
 
   if (state.already_placed_ids.includes(client_order_id)) {
@@ -191,8 +195,27 @@ export function planMirrorFromFill(input: PlanMirrorInput): MirrorPlan {
     };
   }
 
+  const normalizedPrice = tick_size
+    ? normalizeLimitPriceToTick(fill.price, tick_size)
+    : ({ ok: true, price: fill.price } as const);
+  if (!normalizedPrice.ok) {
+    return {
+      kind: "skip",
+      reason: "price_outside_clob_bounds",
+      position_branch: "new_entry",
+    };
+  }
+
+  const planningInput =
+    normalizedPrice.price === fill.price
+      ? input
+      : ({
+          ...input,
+          fill: { ...fill, price: normalizedPrice.price },
+        } as const);
+
   const followup = applyPositionFollowupPolicy(
-    input,
+    planningInput,
     min_shares,
     min_usdc_notional
   );
@@ -209,7 +232,8 @@ export function planMirrorFromFill(input: PlanMirrorInput): MirrorPlan {
       followup.sizing.size_usdc,
       client_order_id,
       config.placement,
-      followup.position_branch
+      followup.position_branch,
+      normalizedPrice.price
     );
     return {
       kind: "place",
@@ -221,7 +245,7 @@ export function planMirrorFromFill(input: PlanMirrorInput): MirrorPlan {
 
   const sizing = applySizingPolicy(
     config.sizing,
-    fill.price,
+    normalizedPrice.price,
     targetSizingUsdcForFill(fill, state, config.sizing),
     min_shares,
     min_usdc_notional,
@@ -240,7 +264,8 @@ export function planMirrorFromFill(input: PlanMirrorInput): MirrorPlan {
     sizing.size_usdc,
     client_order_id,
     config.placement,
-    "new_entry"
+    "new_entry",
+    normalizedPrice.price
   );
 
   return {
@@ -461,7 +486,8 @@ function buildIntent(
   size_usdc: number,
   client_order_id: `0x${string}`,
   policy: PlacementPolicy,
-  position_branch: PositionBranch
+  position_branch: PositionBranch,
+  limit_price: number
 ): OrderIntent {
   const placement: "limit" | "market_fok" =
     policy.kind === "mirror_limit" ? "limit" : "market_fok";
@@ -474,7 +500,7 @@ function buildIntent(
     outcome: fill.outcome,
     side: fill.side,
     size_usdc,
-    limit_price: fill.price,
+    limit_price,
     client_order_id,
     attributes: {
       token_id: tokenId,

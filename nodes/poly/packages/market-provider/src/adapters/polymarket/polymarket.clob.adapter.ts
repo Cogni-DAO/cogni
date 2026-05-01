@@ -31,9 +31,11 @@ type ClobSigner = NonNullable<
 
 import type {
   GetOrderResult,
+  LimitPriceTickNormalization,
   OrderIntent,
   OrderReceipt,
 } from "../../domain/order.js";
+import { normalizeLimitPriceToTick } from "../../domain/order.js";
 import type {
   ListMarketsParams,
   NormalizedMarket,
@@ -223,6 +225,23 @@ function listOpenOrdersUnavailableReason(value: unknown): string {
   return "unexpected_shape";
 }
 
+function makeInvalidPriceOrTickError(
+  price: number,
+  tickSize: TickSize | undefined,
+  normalization: LimitPriceTickNormalization
+): ClobRejectionError {
+  return new ClobRejectionError(
+    `PolymarketClobAdapter.placeOrder: limit_price ${price} is not representable for tickSize=${tickSize}.`,
+    {
+      error_code: POLY_CLOB_ERROR_CODES.invalidPriceOrTick,
+      response_keys: [],
+      reason: normalization.ok
+        ? "unexpected_valid_normalization"
+        : normalization.reason,
+    }
+  );
+}
+
 /**
  * `/neg-risk` and tick-size helpers sometimes return `"0"`/`"1"` or numbers —
  * `createAndPostOrder` needs a real boolean or EIP-712 targets the wrong exchange (bug.0329).
@@ -264,7 +283,8 @@ export type PolyPlacement = "limit" | "market_fok";
 
 export function readPolyPlacement(intent: OrderIntent): PolyPlacement {
   const v = intent.attributes?.placement;
-  return v === "limit" || v === "market_fok" ? v : "market_fok";
+  if (v === "limit" || v === "market_fok") return v;
+  return intent.attributes?.post_only === true ? "limit" : "market_fok";
 }
 
 export interface PolymarketClobAdapterConfig {
@@ -407,7 +427,6 @@ export class PolymarketClobAdapter implements MarketProviderPort {
       );
     }
 
-    const shareSize = intent.size_usdc / intent.limit_price;
     const side = intent.side === "BUY" ? Side.BUY : Side.SELL;
 
     // Hoisted so the error path can include market context (bug.0335 — a
@@ -439,9 +458,22 @@ export class PolymarketClobAdapter implements MarketProviderPort {
       [tickSize, negRisk, feeRateBps] = preflight;
       negRisk = coerceNegRiskApiValue(negRisk);
       const orderBook = preflight[3];
+      const normalizedPrice = normalizeLimitPriceToTick(
+        intent.limit_price,
+        Number(tickSize)
+      );
+      if (!normalizedPrice.ok) {
+        throw makeInvalidPriceOrTickError(
+          intent.limit_price,
+          tickSize,
+          normalizedPrice
+        );
+      }
+      const limitPrice = normalizedPrice.price;
+      const shareSize = intent.size_usdc / limitPrice;
 
       const minShares = Number(orderBook.min_order_size);
-      const effectiveUsdc = shareSize * intent.limit_price;
+      const effectiveUsdc = shareSize * limitPrice;
       // Polymarket marketable-BUY $1 USDC notional floor is platform-level,
       // not exposed per-market. Hardcoded here; kept in lock-step with
       // getMarketConstraints.minUsdcNotional. bug.0342.
@@ -474,7 +506,7 @@ export class PolymarketClobAdapter implements MarketProviderPort {
           this.client.createAndPostOrder(
             {
               tokenID: tokenId,
-              price: intent.limit_price,
+              price: limitPrice,
               size: shareSize,
               side,
               feeRateBps,
@@ -492,7 +524,7 @@ export class PolymarketClobAdapter implements MarketProviderPort {
           this.client.createAndPostMarketOrder(
             {
               tokenID: tokenId,
-              price: intent.limit_price,
+              price: limitPrice,
               amount: marketAmount,
               side,
               feeRateBps,
@@ -543,6 +575,7 @@ export class PolymarketClobAdapter implements MarketProviderPort {
           tick_size: tickSize,
           neg_risk: negRisk,
           fee_rate_bps: feeRateBps,
+          normalized_limit_price: limitPrice,
         },
         "placeOrder: ok"
       );
@@ -1005,13 +1038,22 @@ export class PolymarketClobAdapter implements MarketProviderPort {
   async getMarketConstraints(tokenId: string): Promise<MarketConstraints> {
     const start = Date.now();
     try {
-      const book = await withSuppressedClobSdkDiagnostics(() =>
-        this.client.getOrderBook(tokenId)
+      const [book, rawTickSize] = await withSuppressedClobSdkDiagnostics(() =>
+        Promise.all([
+          this.client.getOrderBook(tokenId),
+          this.client.getTickSize(tokenId),
+        ])
       );
       const minShares = Number(book.min_order_size);
+      const tickSize = Number(rawTickSize);
       if (!Number.isFinite(minShares) || minShares <= 0) {
         throw new Error(
           `PolymarketClobAdapter.getMarketConstraints: unexpected min_order_size=${book.min_order_size} for token ${tokenId}`
+        );
+      }
+      if (!Number.isFinite(tickSize) || tickSize <= 0 || tickSize >= 1) {
+        throw new Error(
+          `PolymarketClobAdapter.getMarketConstraints: unexpected tickSize=${rawTickSize} for token ${tokenId}`
         );
       }
       // Polymarket platform rule: marketable BUY orders must be ≥ $1 USDC
@@ -1028,12 +1070,14 @@ export class PolymarketClobAdapter implements MarketProviderPort {
           duration_ms,
           token_id: tokenId,
           min_shares: minShares,
+          tick_size: tickSize,
           min_usdc_notional: POLY_MARKETABLE_BUY_MIN_USDC,
         },
         "getMarketConstraints: ok"
       );
       return {
         minShares,
+        tickSize,
         minUsdcNotional: POLY_MARKETABLE_BUY_MIN_USDC,
       };
     } catch (err) {

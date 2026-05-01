@@ -20,6 +20,8 @@ export {
   type FillSource,
   FillSourceSchema,
   type GetOrderResult,
+  type LimitPriceTickNormalization,
+  normalizeLimitPriceToTick,
   type OrderIntent,
   OrderIntentSchema,
   type OrderReceipt,

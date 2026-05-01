@@ -64,6 +64,8 @@ export interface MarketProviderConfig {
 export interface MarketConstraints {
   /** Minimum share count the platform accepts for an order on this token. */
   minShares: number;
+  /** Minimum price increment for this token's CLOB market. */
+  tickSize?: number;
   /**
    * Minimum USDC notional (`shareSize × price`) for a marketable BUY. Optional
    * because not all providers expose/enforce this; Polymarket returns 1.

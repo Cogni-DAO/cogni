@@ -768,17 +768,70 @@ describe("PolymarketClobAdapter", () => {
 
   // bug.0342 ----------------------------------------------------------------
 
-  it("getMarketConstraints returns minShares + Polymarket $1 USDC-notional floor", async () => {
+  it("getMarketConstraints returns minShares + tickSize + Polymarket $1 USDC-notional floor", async () => {
     const getOrderBook = vi.fn().mockResolvedValue({
       min_order_size: "5",
       tick_size: "0.01",
     });
-    const adapter = makeAdapter({ getOrderBook });
+    const getTickSize = vi.fn().mockResolvedValue("0.001");
+    const adapter = makeAdapter({ getOrderBook, getTickSize });
 
     const constraints = await adapter.getMarketConstraints("0xtoken");
 
     expect(getOrderBook).toHaveBeenCalledWith("0xtoken");
-    expect(constraints).toEqual({ minShares: 5, minUsdcNotional: 1 });
+    expect(getTickSize).toHaveBeenCalledWith("0xtoken");
+    expect(constraints).toEqual({
+      minShares: 5,
+      tickSize: 0.001,
+      minUsdcNotional: 1,
+    });
+  });
+
+  it("placeOrder rounds limit_price to market tick before submission (bug.5160)", async () => {
+    const createAndPostOrder = vi.fn().mockResolvedValue({
+      orderID: "0xrounded",
+      status: "live",
+      makingAmount: "0",
+    });
+    const adapter = makeAdapter({
+      createAndPostOrder,
+      getTickSize: vi.fn().mockResolvedValue("0.01"),
+    });
+
+    await adapter.placeOrder({
+      ...BASE_INTENT,
+      attributes: { ...BASE_INTENT.attributes, placement: "limit" },
+      size_usdc: 1,
+      limit_price: 0.991000089100001,
+      side: "BUY",
+    });
+
+    const [userOrder] = createAndPostOrder.mock.calls[0] as [
+      { price: number; size: number },
+      unknown,
+      string,
+    ];
+    expect(userOrder.price).toBe(0.99);
+    expect(userOrder.size).toBeCloseTo(1 / 0.99);
+  });
+
+  it("placeOrder rejects prices too far outside the market tick grid before hitting CLOB", async () => {
+    const createAndPostOrder = vi.fn();
+    const adapter = makeAdapter({
+      createAndPostOrder,
+      getTickSize: vi.fn().mockResolvedValue("0.01"),
+    });
+
+    await expect(
+      adapter.placeOrder({
+        ...BASE_INTENT,
+        attributes: { ...BASE_INTENT.attributes, placement: "limit" },
+        limit_price: 0.002,
+      })
+    ).rejects.toMatchObject({
+      details: { error_code: POLY_CLOB_ERROR_CODES.invalidPriceOrTick },
+    });
+    expect(createAndPostOrder).not.toHaveBeenCalled();
   });
 
   it("placeOrder throws BELOW_MARKET_MIN on sub-$1 USDC-notional BUY (1-share-min cheap market)", async () => {

@@ -311,13 +311,16 @@ export interface PolyTradeExecutor {
    */
   cancelOrder: (orderId: string) => Promise<void>;
   /**
-   * Market-constraints fetch — returns `{ minShares }` for a token id. Used
+   * Market-constraints fetch — returns market floors + tick for a token id. Used
    * by the mirror pipeline to pre-flight sizing against the market's share
-   * minimum. Raw passthrough to `PolymarketClobAdapter.getMarketConstraints`.
+   * minimum and normalize limit prices. Raw passthrough to
+   * `PolymarketClobAdapter.getMarketConstraints`.
    */
-  getMarketConstraints: (
-    tokenId: string
-  ) => Promise<{ minShares: number; minUsdcNotional?: number }>;
+  getMarketConstraints: (tokenId: string) => Promise<{
+    minShares: number;
+    minUsdcNotional?: number;
+    tickSize?: number;
+  }>;
   /** Per-tenant live open orders from the CLOB. */
   listOpenOrders: () => Promise<OpenOrderSummary[]>;
   /** The tenant's current EOA address (used for profile URLs + position queries). */

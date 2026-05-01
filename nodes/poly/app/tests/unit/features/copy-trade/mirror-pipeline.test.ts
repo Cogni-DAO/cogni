@@ -51,6 +51,7 @@ const BASE_TARGET: MirrorTargetConfig = {
 const MARKET_CONSTRAINTS = async () => ({
   minShares: 1,
   minUsdcNotional: 1,
+  tickSize: 0.01,
 });
 
 function makeFill(overrides?: Partial<Fill>): Fill {

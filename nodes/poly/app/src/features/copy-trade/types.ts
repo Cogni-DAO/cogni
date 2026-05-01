@@ -386,6 +386,12 @@ export const MirrorReasonSchema = z.enum([
   "target_position_below_threshold",
   /** Target position ratio says no additional mirror follow-up is needed. */
   "followup_not_needed",
+  /**
+   * Target fill price cannot be represented on the market's tick grid within
+   * half a tick. Skip before ledger insert instead of submitting a CLOB reject.
+   * bug.5160.
+   */
+  "price_outside_clob_bounds",
 ]);
 export type MirrorReason = z.infer<typeof MirrorReasonSchema>;
 
@@ -424,6 +430,11 @@ export interface PlanMirrorInput {
    * Polymarket = $1). Applies orthogonally to `min_shares`.
    */
   min_usdc_notional?: number | undefined;
+  /**
+   * Market-specific CLOB price tick. When present, `planMirrorFromFill` rounds
+   * limit_price to the nearest representable tick or skips if too far out.
+   */
+  tick_size?: number | undefined;
 }
 
 /**

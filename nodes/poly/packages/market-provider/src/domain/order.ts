@@ -3,7 +3,7 @@
 
 /**
  * Module: `@cogni/poly-market-provider/domain/order`
- * Purpose: Zod schemas for Run-phase order types — OrderIntent, OrderReceipt, OrderStatus, Fill, GetOrderResult.
+ * Purpose: Zod schemas and pure helpers for Run-phase order types — OrderIntent, OrderReceipt, OrderStatus, Fill, GetOrderResult, and limit-price tick normalization.
  * Scope: Pure type definitions used by the MarketProviderPort Run methods and by node-level copy-trade decision logic. Does not contain I/O or adapter dependencies.
  * Invariants:
  *   - IDEMPOTENT_BY_CLIENT_ID: every OrderIntent carries a caller-provided client_order_id.
@@ -74,6 +74,57 @@ export const OrderIntentSchema = z.object({
   attributes: z.record(z.string(), z.unknown()).optional(),
 });
 export type OrderIntent = z.infer<typeof OrderIntentSchema>;
+
+export type LimitPriceTickNormalization =
+  | {
+      ok: true;
+      price: number;
+    }
+  | {
+      ok: false;
+      reason: "price_outside_clob_bounds" | "invalid_tick_size";
+      nearestValidPrice: number | null;
+    };
+
+/**
+ * Normalize a binary-outcome limit price to the venue's tick grid. Prices are
+ * valid from one tick through `1 - tick`; a target price may round to the
+ * nearest representable tick, but only when it is no farther than half a tick.
+ */
+export function normalizeLimitPriceToTick(
+  price: number,
+  tickSize: number
+): LimitPriceTickNormalization {
+  if (
+    !Number.isFinite(price) ||
+    !Number.isFinite(tickSize) ||
+    tickSize <= 0 ||
+    tickSize >= 1
+  ) {
+    return { ok: false, reason: "invalid_tick_size", nearestValidPrice: null };
+  }
+
+  const scale = Math.round(1 / tickSize);
+  if (scale <= 1 || Math.abs(1 / scale - tickSize) > 1e-12) {
+    return { ok: false, reason: "invalid_tick_size", nearestValidPrice: null };
+  }
+
+  const roundedTicks = Math.round(price * scale);
+  const validTicks = Math.min(Math.max(roundedTicks, 1), scale - 1);
+  const normalized = validTicks / scale;
+  const distance = Math.abs(price - normalized);
+  const epsilon = 1e-12;
+
+  if (distance > tickSize / 2 + epsilon) {
+    return {
+      ok: false,
+      reason: "price_outside_clob_bounds",
+      nearestValidPrice: normalized,
+    };
+  }
+
+  return { ok: true, price: normalized };
+}
 
 /**
  * Platform receipt after order submission. `order_id` is the platform-assigned

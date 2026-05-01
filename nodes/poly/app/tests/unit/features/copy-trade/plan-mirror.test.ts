@@ -95,6 +95,61 @@ describe("planMirrorFromFill() — place branches", () => {
     expect(d.intent.attributes?.target_wallet).toBe(FILL.target_wallet);
   });
 
+  it("rounds limit_price to nearest market tick when representable", () => {
+    const d = planMirrorFromFill({
+      fill: { ...FILL, price: 0.991000089100001 },
+      config: CONFIG,
+      state: CLEAN_STATE,
+      client_order_id: COID,
+      min_usdc_notional: 1.0,
+      tick_size: 0.01,
+    });
+    if (d.kind !== "place") throw new Error("expected place");
+    expect(d.intent.limit_price).toBe(0.99);
+  });
+
+  it("preserves finer tick markets instead of applying a hardcoded penny tick", () => {
+    const d = planMirrorFromFill({
+      fill: { ...FILL, price: 0.0023 },
+      config: CONFIG,
+      state: CLEAN_STATE,
+      client_order_id: COID,
+      min_usdc_notional: 1.0,
+      tick_size: 0.001,
+    });
+    if (d.kind !== "place") throw new Error("expected place");
+    expect(d.intent.limit_price).toBe(0.002);
+  });
+
+  it("rounds top-edge float bleed to the highest valid tick", () => {
+    const d = planMirrorFromFill({
+      fill: { ...FILL, price: 0.99995 },
+      config: CONFIG,
+      state: CLEAN_STATE,
+      client_order_id: COID,
+      min_usdc_notional: 1.0,
+      tick_size: 0.0001,
+    });
+    if (d.kind !== "place") throw new Error("expected place");
+    expect(d.intent.limit_price).toBe(0.9999);
+  });
+
+  it("skips when target price is too far outside the market tick grid", () => {
+    const d = planMirrorFromFill({
+      fill: { ...FILL, price: 0.002 },
+      config: CONFIG,
+      state: CLEAN_STATE,
+      client_order_id: COID,
+      min_usdc_notional: 1.0,
+      tick_size: 0.01,
+    });
+    expect(d).toEqual({
+      kind: "skip",
+      reason: "price_outside_clob_bounds",
+      position_branch: "new_entry",
+    });
+  });
+
   it("kind=place + reason=mode_paper when config.mode='paper'", () => {
     const d = planMirrorFromFill({
       fill: FILL,
