@@ -17,11 +17,11 @@
  * @internal
  */
 
+import { toWorkItemId } from "@cogni/work-items";
 import type { Sql } from "postgres";
 import { describe, expect, it } from "vitest";
 
 import { DoltgresOperatorWorkItemAdapter } from "@/adapters/server/db/doltgres/work-items-adapter";
-import { toWorkItemId } from "@cogni/work-items";
 
 function makeFakeSql(): { sql: Sql; queries: string[] } {
   const queries: string[] = [];
