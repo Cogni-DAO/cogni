@@ -85,6 +85,31 @@ function pnlClass(value: number): string {
   return value >= 0 ? "text-success" : "text-destructive";
 }
 
+// Slug-derived event label for the Market column sub-line. Trims trailing
+// ISO date / bare year so it doesn't duplicate the date that's already in
+// most marketTitle strings. Returns null when the slug is missing or its
+// prettified form is fully contained in the title (avoids "Event: X" /
+// "Market: ...X..." double-render). Will be replaced when the contract
+// hydrates a real eventTitle (vNext, bug.5001 — DB-owned positions).
+function prettifyEventSlug(
+  slug: string | null | undefined,
+  marketTitle: string
+): string | null {
+  if (!slug) return null;
+  const stripped = slug
+    .replace(/-\d{4}-\d{2}-\d{2}$/, "")
+    .replace(/-\d{4}$/, "");
+  if (!stripped) return null;
+  const label = stripped
+    .split("-")
+    .filter(Boolean)
+    .map((w) => (w.length <= 3 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1)))
+    .join(" ");
+  if (!label) return null;
+  if (marketTitle.toLowerCase().includes(label.toLowerCase())) return null;
+  return label;
+}
+
 export function makeColumns(opts: MakeColumnsOpts): AnyCol[] {
   const { variant, onPositionAction, pendingActionPositionId = null } = opts;
   const isHistory = variant === "history";
@@ -98,8 +123,14 @@ export function makeColumns(opts: MakeColumnsOpts): AnyCol[] {
       minSize: 240,
       cell: ({ row }) => {
         const p = row.original;
+        const eventLabel = prettifyEventSlug(p.eventSlug, p.marketTitle);
         return (
           <div className="flex flex-col gap-0.5">
+            {eventLabel ? (
+              <span className="text-muted-foreground text-xs">
+                {eventLabel}
+              </span>
+            ) : null}
             {p.marketUrl ? (
               <a
                 href={p.marketUrl}
