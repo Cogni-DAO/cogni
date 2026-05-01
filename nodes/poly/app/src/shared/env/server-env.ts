@@ -284,6 +284,12 @@ export const serverSchema = z.object({
     .nonnegative()
     .default(900_000),
 
+  // task.0322 — wallet-watch source selector. `polling` (default) keeps the
+  // Data-API page-poll behavior; `websocket` opts into the shared Market-channel
+  // WS source that uses fills as wake-up signals + drains via Data-API. Default
+  // is `polling` so the flag must be set explicitly on candidate-a to A/B.
+  POLY_WALLET_WATCH_SOURCE: z.enum(["polling", "websocket"]).default("polling"),
+
   // Operator wallet top-up cap (USD)
   // Per operator-wallet.md: MAX_TOPUP_CAP — per-tx ceiling for OpenRouter top-ups.
   OPERATOR_MAX_TOPUP_USD: z.coerce.number().positive().default(500),

@@ -113,6 +113,15 @@ export {
   type PolymarketNormalizeSkipReason,
   polymarketDataApiFillId,
 } from "./polymarket.normalize-fill.js";
+export {
+  createPolymarketWsClient,
+  type PolymarketWsClientConfig,
+  type PolymarketWsClientHandle,
+  type WsConnectionState,
+  type WsLastTradePrice,
+  WsLastTradePriceSchema,
+  type WsTradeEvent,
+} from "./polymarket.ws.client.js";
 export { normalizePolymarketMarket } from "./polymarket.normalizer.js";
 export {
   type PolymarketRawMarket,

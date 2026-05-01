@@ -42,6 +42,9 @@ Generic Polymarket wallet observation primitive. Emits normalized `Fill[]` for a
 - **Exports (adapter):** `createPolymarketActivitySource({ client, wallet, logger, metrics, limit? })` — package-owned Data-API implementation re-exported for compatibility.
 - **Exports (metrics):** `WALLET_WATCH_METRICS` — bounded Prom label set alias for the package-owned metric constants.
 - **Exports (types):** `NextFillsResult`, `PolymarketActivitySourceDeps`.
+- **Exports (adapter — websocket, task.0322):** `createPolymarketWsActivitySource({ client, ws, wallet, logger, metrics, limit?, refreshAssetsIntervalMs? })` — shared Market-channel WS as wake-up signal + per-wallet Data-API drain. Selected by `POLY_WALLET_WATCH_SOURCE=websocket`.
+- **Exports (metrics):** `WALLET_WATCH_METRICS` (polling) + `WALLET_WATCH_WS_METRICS` (ws-only counters).
+ - **Exports (types):** `NextFillsResult`, `PolymarketActivitySourceDeps`, `PolymarketWsActivitySourceDeps`.
 
 ## Invariants
 
@@ -57,6 +60,6 @@ Generic Polymarket wallet observation primitive. Emits normalized `Fill[]` for a
 
 ## Notes
 
-- **Swap target:** P4 adds a `createPolymarketWsSource` sibling that implements the same `WalletActivitySource` port from a WebSocket user-channel stream. The mirror-coordinator doesn't notice the swap; its `source` argument is the port, not the Data-API adapter directly.
+- **WS source (task.0322):** `createPolymarketWsActivitySource` is the WS-driven sibling. The mirror-coordinator doesn't notice the swap — `source` argument is the port. **WS_NO_WALLET_IDENTITY:** Polymarket's public Market channel does NOT carry maker/taker addresses, so the WS only acts as a wake-up; canonical fills still come from the Data-API. This eliminates the polling-source `limit>20` stale-cache symptom because we only fetch when a watched market actually trades.
 - **Not in this slice:** scheduler tick + cadence (lives in `bootstrap/jobs/copy-trade-mirror.job.ts`); the DB cursor persistence (kept on the coordinator's `runOnce` deps, since the coordinator owns the overall loop state); the decision / policy (lives in `features/copy-trade/`).
 - **Data-API pagination:** v0 uses the client default limit (100) with a client-side `sinceTs` filter. Bursty targets can raise via `limit` ctor arg. When activity exceeds one page between polls, v0 loses the tail — acceptable for P1 single-target prototype; P4 WS eliminates the issue.

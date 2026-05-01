@@ -42,7 +42,14 @@
   },
   "dependencies": {
     "@polymarket/clob-client-v2": "^1.0.2",
+    "ws": "^8.19.0",
     "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13",
+    "tsup": "^8.5.1",
+    "typescript": "^5",
+    "viem": "^2.0.0"
   },
   "peerDependencies": {
     "viem": "^2.0.0"
@@ -51,10 +58,5 @@
     "viem": {
       "optional": true
     }
-  },
-  "devDependencies": {
-    "tsup": "^8.5.1",
-    "typescript": "^5",
-    "viem": "^2.0.0"
   }
 }

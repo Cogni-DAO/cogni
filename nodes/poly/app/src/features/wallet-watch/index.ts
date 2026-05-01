@@ -18,3 +18,9 @@ export {
   WALLET_WATCH_METRICS,
   type WalletActivitySource,
 } from "./polymarket-source";
+export {
+  createPolymarketWsActivitySource,
+  type PolymarketWsActivitySource,
+  type PolymarketWsActivitySourceDeps,
+  WALLET_WATCH_WS_METRICS,
+} from "./polymarket-ws-source";
