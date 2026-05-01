@@ -38,6 +38,13 @@ import type {
 
 const ID_FLOOR = 5000;
 
+export class WorkItemAlreadyExistsError extends Error {
+  constructor(public readonly id: string) {
+    super(`work item id '${id}' already exists`);
+    this.name = "WorkItemAlreadyExistsError";
+  }
+}
+
 function escapeValue(val: unknown): string {
   if (val === null || val === undefined) return "NULL";
   if (typeof val === "number") {
@@ -206,22 +213,40 @@ export class DoltgresOperatorWorkItemAdapter implements WorkItemsDoltgresPort {
     input: WorkItemsCreateInput,
     authorTag: string
   ): Promise<WorkItem> {
-    const idRows = await this.sql.unsafe(
-      `SELECT id FROM work_items WHERE type = ${escapeValue(input.type)}`
-    );
-    let maxSuffix = ID_FLOOR - 1;
-    for (const r of idRows as ReadonlyArray<Record<string, unknown>>) {
-      const suffix = parseSuffix(String(r.id), input.type);
-      if (suffix !== null && suffix > maxSuffix) maxSuffix = suffix;
+    let allocatedId: string;
+    if (input.id) {
+      const requested = String(input.id);
+      const expectedPrefix = `${input.type}.`;
+      if (!requested.startsWith(expectedPrefix)) {
+        throw new Error(
+          `Provided id '${requested}' does not match type '${input.type}'`
+        );
+      }
+      const existing = await this.sql.unsafe(
+        `SELECT id FROM work_items WHERE id = ${escapeValue(requested)} LIMIT 1`
+      );
+      if (existing.length > 0) {
+        throw new WorkItemAlreadyExistsError(requested);
+      }
+      allocatedId = requested;
+    } else {
+      const idRows = await this.sql.unsafe(
+        `SELECT id FROM work_items WHERE type = ${escapeValue(input.type)}`
+      );
+      let maxSuffix = ID_FLOOR - 1;
+      for (const r of idRows as ReadonlyArray<Record<string, unknown>>) {
+        const suffix = parseSuffix(String(r.id), input.type);
+        if (suffix !== null && suffix > maxSuffix) maxSuffix = suffix;
+      }
+      allocatedId = `${input.type}.${String(maxSuffix + 1).padStart(4, "0")}`;
     }
-    const allocatedId = `${input.type}.${String(maxSuffix + 1).padStart(4, "0")}`;
 
     const cols: string[] = ["id", "type", "title", "status", "node"];
     const vals: string[] = [
       escapeValue(allocatedId),
       escapeValue(input.type),
       escapeValue(input.title),
-      escapeValue("needs_triage"),
+      escapeValue(input.status ?? "needs_triage"),
       escapeValue(input.node ?? "shared"),
     ];
     const addCol = (name: string, value: unknown) => {
@@ -234,6 +259,9 @@ export class DoltgresOperatorWorkItemAdapter implements WorkItemsDoltgresPort {
     addCol("outcome", input.outcome);
     addCol("project_id", input.projectId);
     addCol("parent_id", input.parentId);
+    addCol("priority", input.priority);
+    addCol("rank", input.rank);
+    addCol("estimate", input.estimate);
     if (input.assignees) addCol("assignees", input.assignees);
     if (input.labels) addCol("labels", input.labels);
     if (input.specRefs) addCol("spec_refs", input.specRefs);

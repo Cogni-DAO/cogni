@@ -36,6 +36,7 @@ export interface WorkItemQueryPort {
 
 export interface WorkItemCommandPort {
   create(input: {
+    id?: WorkItemId;
     type: WorkItemType;
     title: string;
     summary?: string;
@@ -46,6 +47,10 @@ export interface WorkItemCommandPort {
     labels?: string[];
     assignees?: SubjectRef[];
     node?: string;
+    status?: WorkItemStatus;
+    priority?: number;
+    rank?: number;
+    estimate?: number;
   }): Promise<WorkItem>;
 
   patch(input: {
