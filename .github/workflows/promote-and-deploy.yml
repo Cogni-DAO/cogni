@@ -736,7 +736,7 @@ jobs:
         run: bash scripts/ci/set-preview-review-state.sh reviewing "$(cat /tmp/preview-current-sha)"
 
       - name: Unlock preview on failure
-        if: steps.outcome.outputs.outcome == 'failed'
+        if: always() && steps.outcome.outputs.outcome == 'failed'
         env:
           GH_TOKEN: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}

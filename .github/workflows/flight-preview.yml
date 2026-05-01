@@ -174,6 +174,15 @@ jobs:
           OUTPUT_FILE: ${{ runner.temp }}/resolved-pr-images.json
         run: bash scripts/ci/resolve-pr-build-images.sh
 
+      - name: Hard-fail when no images found for resolved PR
+        if: steps.pr.outputs.skip != 'true' && steps.images.outputs.has_images != 'true'
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: |
+          echo "::error::flight-preview resolved PR #${PR_NUMBER} (sha ${HEAD_SHA:0:8}) but no \`mq-${PR_NUMBER}-${HEAD_SHA}\` images exist in GHCR. Most likely cause: the PR was admin-merged (bypassed merge_group), so pr-build never rebuilt against the queue commit. Recovery: dispatch build-multi-node.yml for sha ${HEAD_SHA}, then re-dispatch this workflow with the same sha."
+          exit 1
+
       # Re-tag only the images that were actually built (affected-only CI may skip services).
       # promote-and-deploy resolves preview-{sha} tags — this creates them without rebuilding.
       # Source tag is mq-{N}-{HEAD_SHA} (pr-build merge_group output, bug.0412);

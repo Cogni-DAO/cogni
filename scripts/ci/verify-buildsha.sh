@@ -67,7 +67,10 @@ SOURCE_SHA_MAP="${SOURCE_SHA_MAP:-}"
 # When set, write verified-<node>.txt = "true" for each node whose /version
 # contract holds. The verify-deploy matrix uploads this dir as the
 # cell-verify-<node> artifact; aggregate-decide-outcome.sh asserts every
-# promoted cell has a matching marker (Axiom 19).
+# promoted cell has a matching marker (Axiom 19). Markers are also emitted
+# for non-Ingress nodes (scheduler-worker, migrators) since rollout-status
+# upstream is the verifying primitive there — without the markers, Axiom 19
+# false-fails every production aggregate (bug.0443).
 MARKER_DIR="${MARKER_DIR:-}"
 
 # Cutover polling (task.0341): Argo "Healthy" fires before ingress endpoints
@@ -161,14 +164,26 @@ fi
 # Filter down to Ingress-probeable node-apps. Entries for scheduler-worker /
 # migrator are upstream-covered (kubectl rollout status); skip them here.
 NODE_ARR=()
+NON_INGRESS_NODES=()
 for app in "${!EXPECTED_BY_NODE[@]}"; do
+  matched=0
   for p in $NODE_APPS; do
     if [ "$app" = "$p" ]; then
       NODE_ARR+=("$app")
+      matched=1
       break
     fi
   done
+  [ "$matched" = "0" ] && NON_INGRESS_NODES+=("$app")
 done
+
+if [ -n "$MARKER_DIR" ] && [ "${#NON_INGRESS_NODES[@]}" -gt 0 ]; then
+  mkdir -p "$MARKER_DIR"
+  for n in "${NON_INGRESS_NODES[@]}"; do
+    printf 'true' > "${MARKER_DIR}/verified-${n}.txt"
+    echo "  ✅ ${n}: non-Ingress (rollout-status verified upstream) — marker written"
+  done
+fi
 
 if [ "${#NODE_ARR[@]}" -eq 0 ]; then
   echo "ℹ️  No Ingress-probeable apps to verify — skipping buildSha check."

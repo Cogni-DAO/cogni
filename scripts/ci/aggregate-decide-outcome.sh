@@ -8,6 +8,20 @@
 # Axiom 14 (no advance when no cell promoted), emits outcome to
 # $GITHUB_OUTPUT.
 #
+# Exit semantics:
+#   no cell promoted=true  → exit 1 unconditionally. This is the silent-success
+#                            seam an admin-merged PR slips through (bug.0443):
+#                            promote-k8s legs write PROMOTED=false and every
+#                            verify-deploy step-skips green. The aggregator
+#                            must be the loud-fail backstop. The downstream
+#                            "Unlock preview on failure" step is gated
+#                            `if: always()` so the lease still releases.
+#   STRICT_FAIL set         → exit 1 if outcome != dispatched. Used by
+#                            aggregate-production whose job-level `if:`
+#                            already requires all upstream results success;
+#                            preview routinely skips e2e so it can't gate
+#                            on full-success without a separate change.
+#
 # Required env:
 #   ENV                     preview | production
 #   CELLS_DIR               merged dir containing promoted-*.txt + verified-*.txt
@@ -19,13 +33,11 @@
 # Optional env:
 #   DEPLOY_INFRA_RESULT     preview only; treated as success when unset.
 #                           Only failure | cancelled disqualify.
-#   STRICT_FAIL             when set, exit 1 if outcome != dispatched.
-#                           Used by aggregate-production whose job-level
-#                           if: already requires all upstream results
-#                           success — a non-dispatched outcome there means
-#                           an unverified-but-promoted cell slipped past
-#                           and the rollup write must not run.
+#   STRICT_FAIL             see Exit semantics above.
 #   GITHUB_OUTPUT           when set, outcome= is appended.
+#
+# Links:
+#   work/items/bug.0443.merge-queue-preview-promote-silent-skip.md
 
 set -euo pipefail
 
@@ -54,8 +66,10 @@ if [ -d "$CELLS_DIR" ]; then
 fi
 
 outcome=failed
+no_promotion=0
 if [ "$any_promoted" != "true" ]; then
   echo "::error::aggregate-${ENV}: no cell reported promoted=true — refusing to advance"
+  no_promotion=1
 elif [ ${#unverified[@]} -gt 0 ]; then
   echo "::error::aggregate-${ENV}: cells promoted but did not verify — Axiom 19 contradiction: ${unverified[*]}"
 elif [ "$PROMOTE_RESULT" = "success" ] \
@@ -72,6 +86,10 @@ echo "promote=${PROMOTE_RESULT} verify=${VERIFY_RESULT} verify-deploy=${VERIFY_D
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
   echo "outcome=${outcome}" >> "$GITHUB_OUTPUT"
+fi
+
+if [ "$no_promotion" = "1" ]; then
+  exit 1
 fi
 
 if [ -n "${STRICT_FAIL:-}" ] && [ "$outcome" != "dispatched" ]; then
