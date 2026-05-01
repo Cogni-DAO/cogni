@@ -15,7 +15,7 @@
  */
 
 import { z } from "zod";
-import type { LoggerPort } from "../../port/observability.js";
+import type { LoggerPort } from "../../port/observability.port.js";
 
 /**
  * Loose schema for the only event we care about — `last_trade_price`.
