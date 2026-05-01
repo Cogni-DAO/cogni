@@ -20,7 +20,7 @@
 
 import { type ColumnDef, createColumnHelper } from "@tanstack/react-table";
 import { LoaderCircle } from "lucide-react";
-import type { ReactElement, ReactNode } from "react";
+import { type ReactElement, type ReactNode, useEffect, useState } from "react";
 
 import { Button, Skeleton } from "@/components";
 import { DataGridColumnHeader } from "@/components/reui/data-grid/data-grid-column-header";
@@ -85,6 +85,34 @@ function pnlClass(value: number): string {
   return value >= 0 ? "text-success" : "text-destructive";
 }
 
+// Slug-derived event label for the Market column sub-line. Trims trailing
+// ISO date / bare year so it doesn't duplicate the date that's already in
+// most marketTitle strings. Returns null when the slug is missing or its
+// prettified form is fully contained in the title (avoids "Event: X" /
+// "Market: ...X..." double-render). Will be replaced when the contract
+// hydrates a real eventTitle (vNext, bug.5001 — DB-owned positions).
+function prettifyEventSlug(
+  slug: string | null | undefined,
+  marketTitle: string
+): string | null {
+  if (!slug) return null;
+  const stripped = slug
+    .replace(/-more-markets$/, "")
+    .replace(/-\d{4}-\d{2}-\d{2}(?=-|$)/, "")
+    .replace(/-\d{4}$/, "");
+  if (!stripped) return null;
+  const label = stripped
+    .split("-")
+    .filter(Boolean)
+    .map((w) =>
+      w.length <= 3 ? w.toUpperCase() : (w[0] ?? "").toUpperCase() + w.slice(1)
+    )
+    .join(" ");
+  if (!label) return null;
+  if (marketTitle.toLowerCase().includes(label.toLowerCase())) return null;
+  return label;
+}
+
 export function makeColumns(opts: MakeColumnsOpts): AnyCol[] {
   const { variant, onPositionAction, pendingActionPositionId = null } = opts;
   const isHistory = variant === "history";
@@ -98,8 +126,14 @@ export function makeColumns(opts: MakeColumnsOpts): AnyCol[] {
       minSize: 240,
       cell: ({ row }) => {
         const p = row.original;
+        const eventLabel = prettifyEventSlug(p.eventSlug, p.marketTitle);
         return (
           <div className="flex flex-col gap-0.5">
+            {eventLabel ? (
+              <span className="text-muted-foreground text-xs">
+                {eventLabel}
+              </span>
+            ) : null}
             {p.marketUrl ? (
               <a
                 href={p.marketUrl}
@@ -143,7 +177,7 @@ export function makeColumns(opts: MakeColumnsOpts): AnyCol[] {
       id: "endsAt",
       header: ({ column }) =>
         rightHeader(
-          <DataGridColumnHeader column={column} title="Ends" visibility />
+          <DataGridColumnHeader column={column} title="Resolves" visibility />
         ),
       size: 130,
       sortingFn: (a, b) => {
@@ -157,12 +191,12 @@ export function makeColumns(opts: MakeColumnsOpts): AnyCol[] {
         const v = info.getValue();
         return (
           <div className="text-right text-muted-foreground text-sm tabular-nums">
-            {v ? formatEndDateTime(v) : "—"}
+            {v ? <ResolvesCountdown iso={v} /> : "—"}
           </div>
         );
       },
       meta: {
-        headerTitle: "Ends",
+        headerTitle: "Resolves",
         skeleton: <Skeleton className="ms-auto h-3.5 w-20" />,
       },
     }),
@@ -336,15 +370,38 @@ export function makeColumns(opts: MakeColumnsOpts): AnyCol[] {
   return columns;
 }
 
-function formatEndDateTime(iso: string): string {
-  const ms = Date.parse(iso);
-  if (!Number.isFinite(ms)) return iso;
-  return new Date(ms).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+function formatTimeUntil(targetMs: number, nowMs: number): string {
+  const deltaMs = targetMs - nowMs;
+  if (deltaMs <= 0) return "now";
+  const totalMinutes = Math.floor(deltaMs / 60_000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  if (days >= 7) return `${days}d`;
+  if (days >= 1) return `${days}d ${hours}h`;
+  if (hours >= 1) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+// Countdown to resolution. TZ-agnostic by design — `targetMs - nowMs` is the
+// same delta in any timezone, so SSR/client mismatch collapses to a few-second
+// drift that's invisible at minute resolution. Ticks every 60s post-mount.
+function ResolvesCountdown({ iso }: { iso: string }): ReactElement {
+  const targetMs = Date.parse(iso);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    setNowMs(Date.now());
+    const id = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  if (!Number.isFinite(targetMs)) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  return (
+    <time dateTime={iso} suppressHydrationWarning>
+      {formatTimeUntil(targetMs, nowMs)}
+    </time>
+  );
 }
 
 function actionLabel(status: WalletPosition["status"]): string {
