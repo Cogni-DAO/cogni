@@ -16,6 +16,8 @@ tags: [notion, work-items, candidate-a]
 
 This prototype treats Notion as a view/edit mirror of Cogni work items. Cogni/Dolt remains the source of truth. Notion pages are keyed by the exact Cogni work item ID in the `Cogni ID` property.
 
+Design reference: [Notion Work Items Bridge](../spec/notion-work-items-bridge.md).
+
 ## Preferred Interaction Style
 
 Keep the human loop simple:

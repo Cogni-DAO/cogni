@@ -26,6 +26,7 @@ tags: [work-system, ports, adapters]
 | **Spec**    | [Development Lifecycle](./development-lifecycle.md)                                       | Status enum and transition rules  |
 | **Spec**    | [Identity Model](./identity-model.md)                                                     | Actor kinds for SubjectRef        |
 | **Spec**    | [Docs + Work System](./docs-work-system.md)                                               | Frontmatter schema and ID formats |
+| **Spec**    | [Notion Work Items Bridge](./notion-work-items-bridge.md)                                 | Notion projection and sync policy |
 | **Package** | [`packages/work-items/`](../../packages/work-items/AGENTS.md)                             | Implementation                    |
 
 ## Design
@@ -144,6 +145,7 @@ The `NotionWorkItemMirror` in `@cogni/work-items/notion` is not a storage adapte
 
 - **Source of truth:** Cogni/Dolt work items own identity, lifecycle state, and persistence.
 - **Exact IDs:** Notion pages are keyed by the exact `WorkItem.id` in `Cogni ID`; the mirror never allocates a separate ID range.
+- **Exact statuses:** Notion `Status` must be a Cogni lifecycle value; invalid Notion defaults are sync errors, not implicit mappings.
 - **Editable mirror fields:** `Name`, `Status`, `Node`, `Priority`, `Rank`, `Estimate`, `Summary`, `Outcome`, `Labels`, `Branch`, `PR`, and `Reviewer`.
 - **Sync metadata:** `Cogni Revision`, `Sync Hash`, `Sync State`, `Sync Error`, and `Last Synced At` let the operator sync job detect Notion edits and make conflicts visible.
 - **API shape:** official Notion data-source endpoints (`/v1/data_sources/{id}/query`, `/v1/pages`, `/v1/pages/{id}`) and API version header `2025-09-03`.
