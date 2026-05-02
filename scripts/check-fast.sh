@@ -14,8 +14,8 @@
 #        Direct: bash scripts/check-fast.sh [--fix] [--verbose]
 # Exit: 0 if all checks pass and no drift; 1 otherwise
 # Side-effects:
-#   strict mode — check:docs may regenerate work/items/_index.md (caught by final drift check).
-#   --fix mode — ESLint/Biome and Prettier may rewrite files; work:index may rewrite _index.md.
+#   strict mode — check tasks should not mutate files; drift check catches surprise writes.
+#   --fix mode — ESLint/Biome and Prettier may rewrite files.
 
 set +e
 set -o pipefail
@@ -129,12 +129,12 @@ fi
 # hardware: 8-core dev → 4 parallel; 4-core CI → 2 parallel; 16-core → 8.
 run_check "workspace" "bash scripts/run-turbo-checks.sh lint typecheck test format:check db:check --concurrency=50%"
 
-# check:docs stays outside the turbo graph for now — it regenerates work/items/_index.md via
-# work:index, which makes its output also an input. Caching is deferred to a separate task.
+# check:docs stays outside the turbo graph for now; it validates repository docs metadata
+# and AGENTS.md coverage independently from workspace package checks.
 run_check "check:docs" "pnpm -s check:docs"
 
 # Drift check — flag any content-level mutation caused *by this script* (ignore pre-existing WIP).
-# In strict mode this catches check:docs regenerating _index.md or other surprise writes.
+# In strict mode this catches surprise writes from verify-only checks.
 # In --fix mode this catches auto-fix producing changes the developer hasn't staged yet.
 DRIFTED=false
 if [ "$DRIFT_DETECTION" = true ]; then
@@ -195,7 +195,7 @@ if [ "$DRIFTED" = true ]; then
   if [ "$FIX_MODE" = true ]; then
     echo "Auto-fix produced changes. Review, stage, commit them, then re-run."
   else
-    echo "Strict mode mutated files (usually work/items/_index.md from check:docs)."
+    echo "Strict mode mutated files."
     echo "Run \`pnpm check:fast:fix\` to apply fixes, then commit and re-run \`pnpm check:fast\`."
   fi
 fi

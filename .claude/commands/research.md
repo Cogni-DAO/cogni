@@ -88,12 +88,11 @@ Include this as a `## Proposed Layout` section at the end of the research doc.
 
 1. Update the work item: set `status: done`, add the research doc path to `external_refs`, update `updated:` date.
 2. Create follow-up `task.*`, `bug.*`, or `spike.*` items as needed from findings. Set their status to `needs_triage` (or `needs_implement`/`needs_design` if routing is obvious from research).
-3. Update `_index.md` to reflect the item is done and any new items.
-4. **Finalize**:
+3. **Finalize**:
    - Run `pnpm check:docs` and fix any errors until clean.
-   - Commit all changes (research doc, spike item, follow-up items, `_index.md`) on the work item's branch.
+   - Commit all changes (research doc, spike item, follow-up items) on the work item's branch.
    - Push to remote.
-5. Report: what was learned, what's recommended, what follow-up items were created.
+4. Report: what was learned, what's recommended, what follow-up items were created.
 
 ---
 

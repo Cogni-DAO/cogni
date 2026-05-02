@@ -6,7 +6,7 @@
  * Module: `@scripts/run-scoped-package-build`
  * Purpose: Build only the workspace packages needed for local affected checks.
  * Scope: Local check orchestration only; does not replace full main/CI package builds or validation.
- * Invariants: Changed packages always rebuild ; buildables with missing declaration outputs rebuild regardless of git diff.
+ * Invariants: Changed packages always rebuild; buildables with missing declaration outputs rebuild regardless of git diff.
  * Side-effects: IO (spawns pnpm/tsc subprocesses and writes package dist outputs)
  * Links: scripts/check-fast.sh, scripts/run-turbo-checks.sh, tsconfig.json
  * @internal
@@ -18,6 +18,8 @@ import { join, posix, resolve } from "node:path";
 
 const rootDir = process.cwd();
 const dryRun = process.argv.includes("--dry-run");
+const red = process.stderr.isTTY ? "\u001b[31m" : "";
+const reset = process.stderr.isTTY ? "\u001b[0m" : "";
 
 const currentBranch = gitStdout(["branch", "--show-current"], true).trim();
 let upstreamRef = process.env.TURBO_SCM_BASE ?? "";
@@ -25,18 +27,18 @@ const headRef = process.env.TURBO_SCM_HEAD ?? "HEAD";
 const explicitScope =
   Boolean(process.env.TURBO_SCM_BASE) || Boolean(process.env.TURBO_SCM_HEAD);
 
-if (!upstreamRef) {
-  upstreamRef = gitStdout(
-    ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
-    true
-  ).trim();
-}
-
 if (
   !upstreamRef &&
   gitOk(["show-ref", "--verify", "--quiet", "refs/remotes/origin/main"])
 ) {
   upstreamRef = "origin/main";
+}
+
+if (!upstreamRef) {
+  upstreamRef = gitStdout(
+    ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+    true
+  ).trim();
 }
 
 const useAffected =
@@ -59,7 +61,7 @@ const globalBuildInputsTouched = didTouchGlobalBuildInputs(
 );
 if (globalBuildInputsTouched) {
   console.error(
-    `\u001b[31mWARN(task.0306): global build inputs changed (${scopeBase}...${scopeHead}); falling back to full pnpm packages:build.\u001b[0m`
+    `${red}WARN(task.0306): global build inputs changed (${scopeBase}...${scopeHead}); falling back to full pnpm packages:build.${reset}`
   );
   console.log(
     `Package build scope: full (global inputs changed: ${scopeBase}...${scopeHead})`
@@ -398,12 +400,24 @@ function didTouchGlobalBuildInputs(scopeBase, scopeHead) {
 }
 
 function getChangedPaths(scopeBase, scopeHead) {
-  return gitStdout(
-    ["diff", "--name-only", `${scopeBase}...${scopeHead}`],
-    false
-  )
-    .trim()
-    .replace(/\r\n/g, "\n");
+  const paths = new Set();
+  const outputs = [
+    gitStdout(["diff", "--name-only", `${scopeBase}...${scopeHead}`], false),
+    gitStdout(["diff", "--name-only"], true),
+    gitStdout(["diff", "--cached", "--name-only"], true),
+    gitStdout(["ls-files", "--others", "--exclude-standard"], true),
+  ];
+
+  for (const output of outputs) {
+    for (const line of output.replace(/\r\n/g, "\n").split("\n")) {
+      const path = normalizeRelPath(line.trim());
+      if (path) {
+        paths.add(path);
+      }
+    }
+  }
+
+  return [...paths].sort().join("\n");
 }
 
 function resolveTypesPath(packageJson) {

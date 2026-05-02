@@ -555,12 +555,8 @@ async function main() {
     }
   }
 
-  // Validate items (skip _index.md and _archive/)
-  const itemFiles = await fg([
-    "work/items/**/*.md",
-    "!work/items/_index.md",
-    "!work/items/_archive/**",
-  ]);
+  // Validate legacy markdown items.
+  const itemFiles = await fg(["work/items/**/*.md", "!work/items/_archive/**"]);
   for (const f of itemFiles) {
     try {
       const content = readFileSync(f, "utf8");

@@ -22,8 +22,7 @@ tags: [work, meta]
 | ----------------- | ------------------------------------------------- |
 | `charters/`       | Strategic themes (`chr.<slug>.md`)                |
 | `projects/`       | Phased roadmaps (`proj.<slug>.md`)                |
-| `items/`          | PR-sized work (`<type>.<num>.<slug>.md`)          |
-| `items/_index.md` | Generated index (run `pnpm work:index`)           |
+| `items/`          | Legacy PR-sized work (`<type>.<num>.<slug>.md`)   |
 | `items/_archive/` | Completed items archived by YYYY/MM               |
 | `handoffs/`       | Agent handoff packets (bounded, per work item)    |
 | `_templates/`     | Templates for charters, projects, items, handoffs |
@@ -227,14 +226,14 @@ Required sections (6 max):
 5. **ITEMS_ARE_PR_SIZED** — If an item spans multiple PRs, break it up
 6. **PR_LINKS_ITEM** — Every PR references exactly one Work Item ID (e.g., `WI: bug.0004`)
 7. **SLUG_RENAME_OK** — Renaming the slug portion of a filename is allowed; renaming `<type>.<num>` is forbidden
-8. **INDEX_IS_DERIVED** — `_index.md` is generated from frontmatter by `pnpm work:index`. Never hand-edit. It is gitignored.
+8. **WORK_ITEMS_MOVE_TO_API** — New work items live in the Cogni API/Dolt source of truth, not a generated markdown index.
 
 ## Agent Safety
 
-- Agents may scan `work/items/*.md` and parse frontmatter directly.
-- `_index.md` is a generated convenience view — never edit it manually.
-- Creating or closing an item only requires editing the item file.
-- Use `pnpm work:next-id` to get the next available numeric ID.
+- Agents may scan `work/items/*.md` only for legacy markdown references.
+- Do not create or update a generated work item index.
+- New work item creation and state changes should go through the Cogni API.
+- Use `pnpm work:next-id` only when maintaining legacy markdown items.
 
 ## Related
 

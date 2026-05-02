@@ -5,8 +5,8 @@
 /**
  * Module: `@scripts/next-work-id`
  * Purpose: Scan work/items/*.md frontmatter and print the next available numeric ID.
- * Scope: Reads work item files only; does NOT write any files or depend on _index.md.
- * Invariants: INDEX_IS_DERIVED — does not depend on _index.md.
+ * Scope: Reads legacy markdown work item files only; does not write files.
+ * Invariants: NEXT_ID_SCANS_ITEMS — ID allocation does not depend on a generated index.
  * Side-effects: IO (filesystem reads)
  * Links: [Work README](../work/README.md)
  * @public

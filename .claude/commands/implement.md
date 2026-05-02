@@ -113,12 +113,11 @@ pnpm check
 All tests must pass. Then:
 
 1. Update the work item: set `status: needs_closeout`, update `updated:` date.
-2. Update `_index.md` to reflect `needs_closeout` status.
-3. Run `pnpm check:docs` and fix any errors until clean.
-4. Commit all changes on the work item's branch. `git status` must be clean after commit.
-5. Push to remote.
-6. Report what was implemented, what tests were added, and any notes for the reviewer.
-7. Next command: `/closeout` (docs pass + PR creation).
+2. Run `pnpm check:docs` and fix any errors until clean.
+3. Commit all changes on the work item's branch. `git status` must be clean after commit.
+4. Push to remote.
+5. Report what was implemented, what tests were added, and any notes for the reviewer.
+6. Next command: `/closeout` (docs pass + PR creation).
 
 ---
 

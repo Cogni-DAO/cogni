@@ -28,12 +28,14 @@ cd ../cogni-template-worktrees/<branch-name>
 # 3. Install dependencies (worktrees share .git but not node_modules)
 pnpm install --offline --frozen-lockfile
 
-# 4. Build workspace packages (required before tests can resolve @cogni/* imports)
-pnpm packages:build
+# 4. Check whether the worktree is ready for agent development
+pnpm worktree:check
 
-# 5. Verify
-pnpm check
-pnpm test
+# 5. Build only package declarations needed in this worktree
+node scripts/run-scoped-package-build.mjs
+
+# 6. Verify docs metadata
+pnpm check:docs
 ```
 
 ## Why `packages:build` is Required
@@ -46,7 +48,17 @@ Error: Failed to resolve entry for package "@cogni/scheduler-core"
 
 The main checkout usually has these built already. A fresh worktree does not.
 
-`packages:build` is incremental via `.tsbuildinfo`. If a rebase or merge leaves declarations out of sync, run `pnpm packages:build:clean` to wipe all `dist/` and `.tsbuildinfo` state and rebuild from scratch.
+`scripts/run-scoped-package-build.mjs` scopes against `origin/main` by default and also builds any package with missing declaration output, which is the common fresh-worktree failure. If a rebase or merge leaves declarations out of sync, run `pnpm packages:build:clean` to wipe all `dist/` and `.tsbuildinfo` state and rebuild from scratch.
+
+## Turbo Scope
+
+Do not set a feature branch upstream to `origin/main` just to make Turbo happy; that makes `git push` behavior ambiguous. Local check wrappers set `TURBO_SCM_BASE=origin/main` when `origin/main` exists, so a brand-new worktree branch with no upstream still gets an affected scope.
+
+If you need a different comparison base, pass it explicitly:
+
+```bash
+TURBO_SCM_BASE=<base-ref> TURBO_SCM_HEAD=HEAD pnpm check:fast
+```
 
 ## Cleanup
 

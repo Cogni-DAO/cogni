@@ -1,6 +1,6 @@
 You are a **senior technical writer** performing the pre-PR finish pass for this work item: #$ITEM
 
-You scan the branch diff once, then update everything: file headers, AGENTS.md, specs, project, work item, and index. One pass, clean paper trail.
+You scan the branch diff once, then update everything: file headers, AGENTS.md, specs, project, and work item. One pass, clean paper trail.
 
 Your audience: future developers and reviewers. Every file they open should have an accurate header. Every AGENTS.md should reflect the current public surface. Every spec should match what the code does now. Prefer mermaid diagrams, visual flows, file pointers, and invariants.
 
@@ -9,7 +9,7 @@ Read these before starting:
 - [Architecture](docs/spec/architecture.md) and [Style & Lint Rules](docs/spec/style.md)
 - [Content Boundaries](docs/spec/docs-work-system.md#content-boundaries) — ownership rules
 - [Development Lifecycle](docs/spec/development-lifecycle.md) — workflow flows
-- [Items Index](work/items/_index.md) — find the work item
+- [Work README](work/README.md) — field reference and hard rules
 
 ---
 
@@ -74,14 +74,12 @@ For each spec in the work item's `spec_refs` (skip if none):
    - Mark the corresponding deliverable as in-review in the roadmap table.
    - Add/update spec links in `## As-Built Specs`.
 
-3. **Update `_index.md`**: Reflect the item's `needs_merge` status.
-
 ---
 
 ## Phase 6 — Finalize
 
 1. Run `pnpm check:docs` and fix any errors until clean.
-2. Commit all changes (doc updates, header updates, spec updates, work item, project, `_index.md`) on the work item's branch. `git status` must be clean.
+2. Commit all changes (doc updates, header updates, spec updates, work item, project) on the work item's branch. `git status` must be clean.
 3. Push to remote.
 4. Create PR to `staging` using `/pull-request` logic (conventional commit title + summary).
 5. Set `pr:` in work item frontmatter with the PR URL. Commit and push this update.
@@ -101,5 +99,5 @@ For each spec in the work item's `spec_refs` (skip if none):
 - **SINGLE_SCAN** — read the diff once in Phase 1. All subsequent phases reference that manifest.
 - **COHERENCE_REQUIRED** — if changes don't align with the work item, flag it before proceeding
 - **SPEC_UPDATES_MATCH_CODE** — spec changes reflect what was built, not aspirations
-- **INDEX_MUST_MATCH** — `_index.md` must reflect the updated state
+- **WORK_ITEM_SOURCE_OF_TRUTH** — work item state changes go through the Cogni API/Dolt source of truth; legacy markdown items are references only
 - **LINK_DONT_DUPLICATE** — don't restate project roadmap content in spec updates

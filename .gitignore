@@ -108,9 +108,6 @@ services/*/dist
 # Claude Code worktrees
 .claude/worktrees/
 
-# Generated work index (derived from frontmatter — never hand-edit)
-work/items/_index.md
-services/sandbox-openclaw/gateway-workspace/ideas/work/items/_index.md
 .local/
 
 # Temp files

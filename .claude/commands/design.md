@@ -153,18 +153,17 @@ Update frontmatter:
 
 ## Phase 6 — Finalize
 
-1. Update `_index.md` to reflect the new status of all changed items.
-2. Verify the design:
+1. Verify the design:
    - ✅ Outcome is clear and specific
    - ✅ Approach is the simplest viable path
    - ✅ Reuse/OSS preferred over new code
    - ✅ All spec invariants captured (if applicable)
    - ✅ Architecture alignment documented
    - ✅ Rejected alternatives explained
-3. Run `pnpm check:docs` and fix any errors until clean.
-4. Commit all changes (work item(s), specs, `_index.md`) on the work item's branch.
-5. Push to remote.
-6. Report what was designed and the next command:
+2. Run `pnpm check:docs` and fix any errors until clean.
+3. Commit all changes (work item(s), specs) on the work item's branch.
+4. Push to remote.
+5. Report what was designed and the next command:
    - **For stories**: story is `done`; created task(s) at `needs_implement` → `/implement`
    - **For projects**: `/task` (to start decomposition)
    - **For tasks/bugs**: item is now at `needs_implement` → `/implement`

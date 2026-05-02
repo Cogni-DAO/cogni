@@ -10,7 +10,6 @@ Your audience: engineers who need to understand what happened, why, and what to 
 Read these before starting:
 
 - [Postmortem Template](docs/_templates/postmortem.md) — required structure and headings
-- [Items Index](work/items/_index.md) — current items, next available ID
 - [Work README](work/README.md) — field reference and hard rules
 - [Existing Postmortems](docs/postmortems/) — prior incidents for context and pattern
 

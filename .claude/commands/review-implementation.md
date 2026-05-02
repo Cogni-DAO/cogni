@@ -112,9 +112,8 @@ Output a structured review:
 **If APPROVE:**
 
 1. Set work item `status: done`, update `updated:` date.
-2. Update `_index.md` to reflect done status.
-3. Run `pnpm check:docs` and fix any errors until clean.
-4. Commit all changes on the work item's branch. Push to remote.
+2. Run `pnpm check:docs` and fix any errors until clean.
+3. Commit all changes on the work item's branch. Push to remote.
 
 **If REQUEST CHANGES:**
 
@@ -122,9 +121,8 @@ Output a structured review:
 2. **LOOP_LIMIT check**: If `revision >= 5`, set `status: blocked` with `blocked_by: Review loop limit — escalate to human` instead of sending back to implement.
 3. Otherwise, set `status: needs_implement`.
 4. Add blocking issues to the work item's `## Review Feedback` section.
-5. Update `_index.md` to reflect new status.
-6. Run `pnpm check:docs` and fix any errors until clean.
-7. Commit all changes on the work item's branch. Push to remote.
+5. Run `pnpm check:docs` and fix any errors until clean.
+6. Commit all changes on the work item's branch. Push to remote.
 
 ---
 

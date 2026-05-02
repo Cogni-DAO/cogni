@@ -57,9 +57,11 @@ PRs **do not own** checks; commits do.
 
 Branch protection uses check run names (format: **Workflow name / job name**), e.g.:
 
-- `CI / ci`
-- `CI / test-api`
-- `block-non-release`
+- `CI / static`
+- `CI / unit`
+- `CI / component`
+- `CI / stack-test`
+- `Lint PR / Validate PR title`
 
 If you rename workflows or jobs, you must update required checks in:
 **Settings → Branches → Branch protection rules → Required status checks.**
@@ -76,7 +78,7 @@ Stale names will sit as "Expected — waiting for status to be reported" forever
 - CI on pushes to main (so release/promote flows are covered).
 - No insane duplication.
 
-**Current standard for CI.yml:**
+**Current standard for `ci.yaml`:**
 
 ```yaml
 on:
@@ -117,3 +119,31 @@ on:
 - CI on all PRs (no branch filter = all).
 - CI on pushes to main (so release/promote flows are covered even when PR events are weird).
 - Limited duplication: different branches, different contexts; concurrency already cancels old runs for the same ref.
+
+---
+
+## 5. Dispatchable vs Event-Driven Workflows
+
+Not every workflow can be manually dispatched. GitHub returns HTTP 422 when
+you try to dispatch a workflow that has no `workflow_dispatch` trigger.
+
+Event-driven only:
+
+- `ci.yaml` — `pull_request`, `merge_group`, `push`
+- `pr-lint.yaml` — `pull_request`
+- `pr-build.yml` — `pull_request`
+
+Manual levers:
+
+- `candidate-flight.yml`
+- `candidate-flight-infra.yml`
+- `flight-preview.yml`
+- `promote-and-deploy.yml`
+- `release.yml`
+- `stack-test.yml`
+
+Use the repo check before changing workflow names or triggers:
+
+```bash
+pnpm workflow:check
+```

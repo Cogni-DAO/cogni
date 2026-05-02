@@ -4,7 +4,7 @@
 
 # Module: scripts/run-turbo-checks.sh
 # Purpose: Run workspace-scoped turbo tasks for local check scripts.
-#          Feature branches use `--affected` against their upstream branch;
+#          Feature branches use `--affected` against origin/main by default;
 #          integration branches fall back to full workspace runs.
 # Usage: bash scripts/run-turbo-checks.sh typecheck
 #        bash scripts/run-turbo-checks.sh test --concurrency=1
@@ -21,12 +21,12 @@ if [ -n "${TURBO_SCM_BASE:-}" ] || [ -n "${TURBO_SCM_HEAD:-}" ]; then
   EXPLICIT_SCOPE=true
 fi
 
-if [ -z "$UPSTREAM_REF" ]; then
-  UPSTREAM_REF=$(git rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>/dev/null || true)
-fi
-
 if [ -z "$UPSTREAM_REF" ] && git show-ref --verify --quiet refs/remotes/origin/main; then
   UPSTREAM_REF="origin/main"
+fi
+
+if [ -z "$UPSTREAM_REF" ]; then
+  UPSTREAM_REF=$(git rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>/dev/null || true)
 fi
 
 use_affected=false

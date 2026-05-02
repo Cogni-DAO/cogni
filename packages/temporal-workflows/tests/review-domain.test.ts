@@ -243,7 +243,7 @@ describe("formatCrossDomainRefusal", () => {
       ],
       operatorPaths: [
         "packages/repo-spec/src/bar.ts",
-        ".github/workflows/ci.yml",
+        ".github/workflows/ci.yaml",
       ],
       operatorNodeId: "operator",
     });
@@ -252,7 +252,7 @@ describe("formatCrossDomainRefusal", () => {
     expect(body).toContain("`poly`");
     expect(body).toContain("Operator-territory paths");
     expect(body).toContain("packages/repo-spec/src/bar.ts");
-    expect(body).toContain(".github/workflows/ci.yml");
+    expect(body).toContain(".github/workflows/ci.yaml");
     expect(body).toContain("File an operator PR");
     expect(body).toContain("single-node-scope");
   });
