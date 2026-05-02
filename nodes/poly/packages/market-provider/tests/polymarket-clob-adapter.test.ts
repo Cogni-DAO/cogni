@@ -166,6 +166,36 @@ describe("CLOB diagnostic suppression", () => {
     expect(stderrSpy).not.toHaveBeenCalled();
   });
 
+  it("drops delayed clob-client diagnostics after the awaited SDK call returns", async () => {
+    const original = console.error;
+    const spy = vi.fn();
+    console.error = spy;
+    try {
+      await withSuppressedClobSdkDiagnostics(async () => {
+        setTimeout(() => {
+          console.error("[CLOB Client] request error", {
+            config: {
+              headers: {
+                POLY_SIGNATURE: "sig_live",
+                POLY_API_KEY: "key_live",
+              },
+            },
+            body: "<html>cloudflare</html>",
+          });
+        }, 0);
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    } finally {
+      console.error = original;
+    }
+
+    const emitted = JSON.stringify(spy.mock.calls);
+    expect(spy).not.toHaveBeenCalled();
+    expect(emitted).not.toContain("sig_live");
+    expect(emitted).not.toContain("key_live");
+    expect(emitted).not.toContain("cloudflare");
+  });
+
   it("classifies thrown request-config errors without leaking auth headers", () => {
     const details = classifyClientError(
       new Error(

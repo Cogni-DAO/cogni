@@ -107,68 +107,67 @@ function invokeWriteCallback(args: readonly unknown[]): void {
   }
 }
 
-let clobConsolePatchDepth = 0;
-let originalConsoleError: typeof console.error | undefined;
-let originalConsoleWarn: typeof console.warn | undefined;
-let originalConsoleLog: typeof console.log | undefined;
-let originalStdoutWrite: typeof process.stdout.write | undefined;
-let originalStderrWrite: typeof process.stderr.write | undefined;
+let consoleErrorTarget: typeof console.error = console.error;
+let consoleWarnTarget: typeof console.warn = console.warn;
+let consoleLogTarget: typeof console.log = console.log;
+let stdoutWriteTarget: typeof process.stdout.write = process.stdout.write;
+let stderrWriteTarget: typeof process.stderr.write = process.stderr.write;
+
+const suppressedConsoleError = (...args: unknown[]) => {
+  if (isClobSdkDiagnostic(args)) return;
+  consoleErrorTarget(...args);
+};
+const suppressedConsoleWarn = (...args: unknown[]) => {
+  if (isClobSdkDiagnostic(args)) return;
+  consoleWarnTarget(...args);
+};
+const suppressedConsoleLog = (...args: unknown[]) => {
+  if (isClobSdkDiagnostic(args)) return;
+  consoleLogTarget(...args);
+};
+const suppressedStdoutWrite = ((...args: unknown[]) => {
+  if (isClobSdkDiagnostic(args)) {
+    invokeWriteCallback(args);
+    return true;
+  }
+  return stdoutWriteTarget.apply(process.stdout, args as never) ?? true;
+}) as typeof process.stdout.write;
+const suppressedStderrWrite = ((...args: unknown[]) => {
+  if (isClobSdkDiagnostic(args)) {
+    invokeWriteCallback(args);
+    return true;
+  }
+  return stderrWriteTarget.apply(process.stderr, args as never) ?? true;
+}) as typeof process.stderr.write;
+
+export function installClobSdkDiagnosticSuppression(): void {
+  if (console.error !== suppressedConsoleError) {
+    consoleErrorTarget = console.error;
+    console.error = suppressedConsoleError;
+  }
+  if (console.warn !== suppressedConsoleWarn) {
+    consoleWarnTarget = console.warn;
+    console.warn = suppressedConsoleWarn;
+  }
+  if (console.log !== suppressedConsoleLog) {
+    consoleLogTarget = console.log;
+    console.log = suppressedConsoleLog;
+  }
+  if (process.stdout.write !== suppressedStdoutWrite) {
+    stdoutWriteTarget = process.stdout.write;
+    process.stdout.write = suppressedStdoutWrite;
+  }
+  if (process.stderr.write !== suppressedStderrWrite) {
+    stderrWriteTarget = process.stderr.write;
+    process.stderr.write = suppressedStderrWrite;
+  }
+}
 
 export async function withSuppressedClobSdkDiagnostics<T>(
   fn: () => Promise<T>
 ): Promise<T> {
-  if (clobConsolePatchDepth === 0) {
-    originalConsoleError = console.error;
-    originalConsoleWarn = console.warn;
-    originalConsoleLog = console.log;
-    originalStdoutWrite = process.stdout.write;
-    originalStderrWrite = process.stderr.write;
-
-    console.error = (...args: unknown[]) => {
-      if (isClobSdkDiagnostic(args)) return;
-      originalConsoleError?.(...args);
-    };
-    console.warn = (...args: unknown[]) => {
-      if (isClobSdkDiagnostic(args)) return;
-      originalConsoleWarn?.(...args);
-    };
-    console.log = (...args: unknown[]) => {
-      if (isClobSdkDiagnostic(args)) return;
-      originalConsoleLog?.(...args);
-    };
-    process.stdout.write = ((...args: unknown[]) => {
-      if (isClobSdkDiagnostic(args)) {
-        invokeWriteCallback(args);
-        return true;
-      }
-      return originalStdoutWrite?.apply(process.stdout, args as never) ?? true;
-    }) as typeof process.stdout.write;
-    process.stderr.write = ((...args: unknown[]) => {
-      if (isClobSdkDiagnostic(args)) {
-        invokeWriteCallback(args);
-        return true;
-      }
-      return originalStderrWrite?.apply(process.stderr, args as never) ?? true;
-    }) as typeof process.stderr.write;
-  }
-  clobConsolePatchDepth += 1;
-  try {
-    return await fn();
-  } finally {
-    clobConsolePatchDepth -= 1;
-    if (clobConsolePatchDepth === 0 && originalConsoleError) {
-      console.error = originalConsoleError;
-      if (originalConsoleWarn) console.warn = originalConsoleWarn;
-      if (originalConsoleLog) console.log = originalConsoleLog;
-      if (originalStdoutWrite) process.stdout.write = originalStdoutWrite;
-      if (originalStderrWrite) process.stderr.write = originalStderrWrite;
-      originalConsoleError = undefined;
-      originalConsoleWarn = undefined;
-      originalConsoleLog = undefined;
-      originalStdoutWrite = undefined;
-      originalStderrWrite = undefined;
-    }
-  }
+  installClobSdkDiagnosticSuppression();
+  return await fn();
 }
 
 export const withSanitizedClobSdkConsoleErrors =
@@ -336,6 +335,7 @@ export class PolymarketClobAdapter implements MarketProviderPort {
   private readonly chainId: Chain;
 
   constructor(config: PolymarketClobAdapterConfig) {
+    installClobSdkDiagnosticSuppression();
     this.funderAddress = config.funderAddress;
     this.chainId = config.chainId ?? Chain.POLYGON;
     this.client = new ClobClient({

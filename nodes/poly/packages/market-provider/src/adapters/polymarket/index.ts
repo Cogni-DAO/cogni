@@ -22,6 +22,7 @@ export {
   classifyClobFailure,
   coerceNegRiskApiValue,
   extractClobPlacedOrderId,
+  installClobSdkDiagnosticSuppression,
   mapOpenOrderToReceipt,
   mapOrderResponseToReceipt,
   normalizePolymarketStatus,
