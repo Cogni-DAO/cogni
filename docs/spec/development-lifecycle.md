@@ -77,6 +77,15 @@ graph LR
 /triage on story    → story: done (intake complete); may create task/bug items
 /triage on bug      → needs_implement | needs_design | needs_research
 /triage on task     → needs_implement | needs_design | needs_research
+                      // route to needs_design when ANY of:
+                      //   - touches >1 module/package boundary
+                      //   - introduces a new port, schema column, or HTTP contract
+                      //   - root cause unclear (the bug body doesn't prescribe the fix)
+                      //   - >1 reasonable implementation exists and the choice matters
+                      // route directly to needs_implement when ALL of:
+                      //   - surgical / single-file / fix is in the bug body
+                      //   - no contract, schema, or invariant change
+                      //   - test reproducing the bug is obvious
 /triage on spike    → needs_research
 
 /research           → item: done; creates follow-up task/bug/spike items as needed
