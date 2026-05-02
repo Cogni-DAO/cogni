@@ -294,6 +294,39 @@ describe("poly wallet dashboard DB read routes", () => {
     });
   });
 
+  it("overview read-model freshness skips live Polymarket valuation and P/L history", async () => {
+    mockListTenantPositions.mockResolvedValue([
+      {
+        ...row,
+        attributes: {
+          ...row.attributes,
+          size_usdc: 200,
+          filled_size_usdc: 100,
+        },
+      },
+    ]);
+    const { GET } = await import("@/app/api/v1/poly/wallet/overview/route");
+
+    const response = await GET(
+      new Request(
+        "http://localhost/api/v1/poly/wallet/overview?interval=1W&freshness=read_model"
+      )
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      freshness: "read_model",
+      usdc_available: 0,
+      usdc_locked: 100,
+      usdc_positions_mtm: 100,
+      usdc_total: 130,
+      pnlHistory: [],
+      warnings: [],
+    });
+    expect(mockGetBalanceSlice).not.toHaveBeenCalled();
+    expect(mockGetTradingWalletPnlHistory).not.toHaveBeenCalled();
+  });
+
   it("execution renders live positions from DB when CLOB is fully down", async () => {
     const { GET } = await import("@/app/api/v1/poly/wallet/execution/route");
 
@@ -332,6 +365,65 @@ describe("poly wallet dashboard DB read routes", () => {
       statuses: ["pending", "open", "filled", "partial", "canceled", "error"],
       limit: 2_000,
     });
+  });
+
+  it("execution read-model freshness skips live Polymarket positions", async () => {
+    mockGetExecutionSlice.mockResolvedValue({
+      address: FUNDER,
+      capturedAt: NOW.toISOString(),
+      dailyTradeCounts: [],
+      live_positions: [
+        {
+          positionId: "condition-live:token-live",
+          conditionId:
+            "0x2222222222222222222222222222222222222222222222222222222222222222",
+          asset: "token-live",
+          marketTitle: "Live-only row",
+          marketSlug: "live-only-row",
+          eventSlug: "live-event",
+          marketUrl: "https://polymarket.com/event/live-event",
+          outcome: "YES",
+          status: "open",
+          lifecycleState: null,
+          openedAt: NOW.toISOString(),
+          closedAt: null,
+          resolvesAt: null,
+          heldMinutes: 0,
+          entryPrice: 0.5,
+          currentPrice: 1,
+          size: 7,
+          currentValue: 7,
+          pnlUsd: 3.5,
+          pnlPct: 100,
+          timeline: [],
+          events: [],
+        },
+      ],
+      closed_positions: [],
+      warnings: [],
+    });
+    const { GET } = await import("@/app/api/v1/poly/wallet/execution/route");
+
+    const response = await GET(
+      new Request(
+        "http://localhost/api/v1/poly/wallet/execution?freshness=read_model"
+      )
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.freshness).toBe("read_model");
+    expect(json.live_positions).toHaveLength(1);
+    expect(json.live_positions[0]).toMatchObject({
+      asset: "token-1",
+      marketTitle: "Will CLOB stay up?",
+      currentValue: 10,
+    });
+    expect(json.dailyTradeCounts).toEqual([
+      ...EMPTY_14_DAY_COUNTS.slice(0, -1),
+      { day: "2026-05-02", n: 1 },
+    ]);
+    expect(mockGetExecutionSlice).not.toHaveBeenCalled();
   });
 
   it("execution derives position P/L from refreshed DB current value", async () => {

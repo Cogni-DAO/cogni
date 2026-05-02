@@ -7,10 +7,10 @@
  *   (address, gas, live balance model) plus first-user onboarding nudges:
  *   renders "Connect →" → `/credits` when no wallet exists, and
  *   "Enable trading →" → `/credits` when connected but `trading_ready=false`.
- * Scope: Client component. Two React Query reads — `/api/v1/poly/wallet/overview`
- *   for the balance snapshot and `/api/v1/poly/wallet/status` (shared cache key
- *   with `/credits` via `poly-wallet-status`, deduped across routes) to drive
- *   the onboarding CTA branch. Read-only.
+ * Scope: Client component. Uses the progressive dashboard overview hook for
+ *   the balance snapshot and `/api/v1/poly/wallet/status` (shared cache key with
+ *   `/credits` via `poly-wallet-status`) to drive the onboarding CTA branch.
+ *   Read-only.
  * Invariants:
  *   - TENANT_SCOPED: the backing route resolves the caller's own wallet from
  *     the session — no address plumbing at the UI boundary.
@@ -48,9 +48,7 @@ import {
 } from "@/components";
 import { BalanceBar, WalletProfitLossCard } from "@/features/wallet-analysis";
 import { cn } from "@/shared/util/cn";
-import { fetchTradingWallet } from "../_api/fetchTradingWallet";
-
-const TRADING_WALLET_OVERVIEW_REFETCH_MS = 5 * 60_000;
+import { useTradingWalletOverview } from "../_hooks/useTradingWalletOverview";
 
 function formatDecimal(n: number | null, fractionDigits: number): string {
   if (n === null) return "—";
@@ -80,14 +78,8 @@ async function fetchWalletStatus(): Promise<PolyWalletStatusOutput> {
 
 export function TradingWalletCard(): ReactElement {
   const [interval, setInterval] = useState<PolyWalletOverviewInterval>("1W");
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["dashboard-trading-wallet", interval],
-    queryFn: () => fetchTradingWallet(interval),
-    refetchInterval: TRADING_WALLET_OVERVIEW_REFETCH_MS,
-    staleTime: 60_000,
-    gcTime: 5 * 60_000,
-    retry: 1,
-  });
+  const { data, isLoading, isError, isLiveEnriching } =
+    useTradingWalletOverview(interval);
   // Shares the "poly-wallet-status" key with /credits, so navigating between
   // pages hits the cache rather than refetching.
   const { data: statusData } = useQuery({
@@ -212,6 +204,7 @@ export function TradingWalletCard(): ReactElement {
               history={data.pnlHistory}
               interval={interval}
               onIntervalChange={setInterval}
+              isLoading={isLiveEnriching}
             />
           </div>
         )}

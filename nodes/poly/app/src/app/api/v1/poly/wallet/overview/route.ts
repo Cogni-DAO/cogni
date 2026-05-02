@@ -13,13 +13,12 @@
  *   - CURRENT_ONLY: all values describe the current wallet state only.
  *   - PARTIAL_FAILURE_NEVER_THROWS: upstream failures degrade to nullable
  *     fields plus warnings while the route stays 200.
- * Side-effects: IO (DB read, Polygon RPC, Data API).
+ * Side-effects: IO (DB read, Polygon RPC, optional Data API).
  * @public
  */
 
 import { toUserId } from "@cogni/ids";
 import {
-  PolyWalletOverviewIntervalSchema,
   type PolyWalletOverviewOutput,
   polyWalletOverviewOperation,
 } from "@cogni/poly-node-contracts";
@@ -50,6 +49,7 @@ function emptyPayload(
   return polyWalletOverviewOperation.output.parse({
     configured: true,
     connected: false,
+    freshness: overrides.freshness ?? "live",
     address: null,
     interval,
     capturedAt,
@@ -77,9 +77,11 @@ export const GET = wrapRouteHandlerWithLogging(
     const startedAtMs = performance.now();
     if (!sessionUser) throw new Error("sessionUser required");
     const url = new URL(request.url);
-    const interval = PolyWalletOverviewIntervalSchema.parse(
-      url.searchParams.get("interval") ?? "1W"
-    );
+    const { interval = "1W", freshness } =
+      polyWalletOverviewOperation.input.parse({
+        interval: url.searchParams.get("interval") ?? undefined,
+        freshness: url.searchParams.get("freshness") ?? undefined,
+      });
     const capturedAt = new Date().toISOString();
 
     const container = getContainer();
@@ -95,6 +97,7 @@ export const GET = wrapRouteHandlerWithLogging(
         logOverviewComplete(ctx, startedAtMs, {
           status: "wallet_adapter_unconfigured",
           interval,
+          freshness,
           connected: false,
           warnings: 1,
           openOrders: null,
@@ -105,6 +108,7 @@ export const GET = wrapRouteHandlerWithLogging(
         return NextResponse.json(
           emptyPayload(interval, capturedAt, {
             configured: false,
+            freshness,
             warnings: [
               {
                 code: "wallet_adapter_unconfigured",
@@ -123,6 +127,7 @@ export const GET = wrapRouteHandlerWithLogging(
       logOverviewComplete(ctx, startedAtMs, {
         status: "no_trading_wallet",
         interval,
+        freshness,
         connected: false,
         warnings: 1,
         openOrders: null,
@@ -132,6 +137,7 @@ export const GET = wrapRouteHandlerWithLogging(
       });
       return NextResponse.json(
         emptyPayload(interval, capturedAt, {
+          freshness,
           warnings: [
             {
               code: "no_trading_wallet",
@@ -166,22 +172,26 @@ export const GET = wrapRouteHandlerWithLogging(
       });
     }
 
-    let positionsMtm: number | null = null;
-    try {
-      const balanceSlice = await getBalanceSlice(balances.address);
-      if (balanceSlice.kind === "ok") {
-        positionsMtm = roundToCents(balanceSlice.value.positions);
-      } else {
+    let positionsMtm: number | null = roundToCents(
+      positionSummary.positionsMtm
+    );
+    if (freshness === "live") {
+      try {
+        const balanceSlice = await getBalanceSlice(balances.address);
+        if (balanceSlice.kind === "ok") {
+          positionsMtm = roundToCents(balanceSlice.value.positions);
+        } else {
+          warnings.push({
+            code: "positions_mtm_unavailable",
+            message: balanceSlice.warning.message,
+          });
+        }
+      } catch (err) {
         warnings.push({
           code: "positions_mtm_unavailable",
-          message: balanceSlice.warning.message,
+          message: err instanceof Error ? err.message : String(err),
         });
       }
-    } catch (err) {
-      warnings.push({
-        code: "positions_mtm_unavailable",
-        message: err instanceof Error ? err.message : String(err),
-      });
     }
 
     // `balances.usdcE` and `balances.pusd` are the wallet's two on-chain cash
@@ -203,17 +213,19 @@ export const GET = wrapRouteHandlerWithLogging(
         ? roundToCents(cashOnChain + positionsMtm)
         : null;
     let pnlHistory: PolyWalletOverviewOutput["pnlHistory"] = [];
-    try {
-      pnlHistory = await getTradingWalletPnlHistory({
-        address: balances.address,
-        interval,
-        capturedAt,
-      });
-    } catch (err) {
-      warnings.push({
-        code: "pnl_history_unavailable",
-        message: err instanceof Error ? err.message : String(err),
-      });
+    if (freshness === "live") {
+      try {
+        pnlHistory = await getTradingWalletPnlHistory({
+          address: balances.address,
+          interval,
+          capturedAt,
+        });
+      } catch (err) {
+        warnings.push({
+          code: "pnl_history_unavailable",
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
 
     logOverviewComplete(ctx, startedAtMs, {
@@ -233,6 +245,7 @@ export const GET = wrapRouteHandlerWithLogging(
               ? "balances_partial"
               : "ok",
       interval,
+      freshness,
       connected: true,
       warnings: warnings.length,
       openOrders: positionSummary.openOrders,
@@ -245,6 +258,7 @@ export const GET = wrapRouteHandlerWithLogging(
       polyWalletOverviewOperation.output.parse({
         configured: true,
         connected: true,
+        freshness,
         address: balances.address,
         interval,
         capturedAt,
@@ -274,6 +288,7 @@ function logOverviewComplete(
   fields: {
     status: string;
     interval: PolyWalletOverviewOutput["interval"];
+    freshness: PolyWalletOverviewOutput["freshness"];
     connected: boolean;
     warnings: number;
     openOrders: number | null;
@@ -289,6 +304,7 @@ function logOverviewComplete(
     durationMs: Math.round(performance.now() - startedAtMs),
     outcome: "success",
     interval: fields.interval,
+    freshness: fields.freshness,
     connected: fields.connected,
     warnings: fields.warnings,
     open_orders: fields.openOrders,

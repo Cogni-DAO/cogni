@@ -19,7 +19,7 @@
 
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { PositionsTable } from "@/app/(app)/_components/positions-table";
 import {
@@ -31,11 +31,12 @@ import {
   ToggleGroupItem,
 } from "@/components";
 import type { WalletPosition } from "@/features/wallet-analysis";
-import { fetchExecution } from "../_api/fetchExecution";
+import type { fetchExecution } from "../_api/fetchExecution";
 import {
   postClosePosition,
   postRedeemPosition,
 } from "../_api/fetchPositionActions";
+import { useDashboardExecution } from "../_hooks/useDashboardExecution";
 
 type ExecutionView = "open" | "history";
 
@@ -91,28 +92,21 @@ export function ExecutionActivityCard(): ReactElement {
     [positionAction]
   );
 
-  const {
-    data: executionData,
-    isLoading: isExecutionLoading,
-    isError: isExecutionError,
-  } = useQuery({
-    queryKey: ["dashboard-wallet-execution"],
-    queryFn: fetchExecution,
-    refetchInterval: 30_000,
-    staleTime: 10_000,
-    gcTime: 60_000,
-    retry: 1,
-    select: useCallback((data: Awaited<ReturnType<typeof fetchExecution>>) => {
-      // Per-item eviction: remove any id from recentlyClosedIds that is no
-      // longer present in the freshly fetched live_positions.
+  const reconcileRecentlyClosed = useCallback(
+    (data: Awaited<ReturnType<typeof fetchExecution>>) => {
       const liveIds = new Set(data.live_positions.map((p) => p.positionId));
       setRecentlyClosedIds((prev) => {
         const next = new Set([...prev].filter((id) => liveIds.has(id)));
         return next.size === prev.size ? prev : next;
       });
-      return data;
-    }, []),
-  });
+    },
+    []
+  );
+  const {
+    data: executionData,
+    isLoading: isExecutionLoading,
+    isError: isExecutionError,
+  } = useDashboardExecution({ onLiveData: reconcileRecentlyClosed });
 
   const openPositions = useMemo<WalletPosition[]>(
     () =>

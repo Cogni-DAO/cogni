@@ -12,15 +12,19 @@
  */
 
 import type {
+  PolyWalletDataFreshness,
   PolyWalletOverviewInterval,
   PolyWalletOverviewOutput,
 } from "@cogni/poly-node-contracts";
 
 export async function fetchTradingWallet(
-  interval: PolyWalletOverviewInterval
+  interval: PolyWalletOverviewInterval,
+  opts?: { freshness?: PolyWalletDataFreshness }
 ): Promise<PolyWalletOverviewOutput> {
+  const searchParams = new URLSearchParams({ interval });
+  if (opts?.freshness) searchParams.set("freshness", opts.freshness);
   const response = await fetch(
-    `/api/v1/poly/wallet/overview?interval=${interval}`,
+    `/api/v1/poly/wallet/overview?${searchParams.toString()}`,
     {
       credentials: "include",
     }

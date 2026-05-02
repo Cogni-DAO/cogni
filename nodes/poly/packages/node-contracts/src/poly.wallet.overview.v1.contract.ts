@@ -31,6 +31,10 @@ export const PolyWalletOverviewIntervalSchema = z.enum([
 export type PolyWalletOverviewInterval = z.infer<
   typeof PolyWalletOverviewIntervalSchema
 >;
+export const PolyWalletDataFreshnessSchema = z.enum(["read_model", "live"]);
+export type PolyWalletDataFreshness = z.infer<
+  typeof PolyWalletDataFreshnessSchema
+>;
 
 export const PolyWalletOverviewWarningSchema = z.object({
   code: z.string(),
@@ -56,10 +60,12 @@ export const polyWalletOverviewOperation = {
     "Returns the signed-in user's current trading-wallet snapshot plus a Polymarket-native P/L chart history for the requested interval.",
   input: z.object({
     interval: PolyWalletOverviewIntervalSchema.optional(),
+    freshness: PolyWalletDataFreshnessSchema.optional().default("live"),
   }),
   output: z.object({
     configured: z.boolean(),
     connected: z.boolean(),
+    freshness: PolyWalletDataFreshnessSchema,
     address: walletAddressSchema.nullable(),
     interval: PolyWalletOverviewIntervalSchema,
     capturedAt: z.string(),

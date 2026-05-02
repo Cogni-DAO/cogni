@@ -113,6 +113,36 @@ Important constraint on current `main`:
 - Execution card tabs: "Open" from `live_positions`, "Position History" from `closed_positions`. History tab is read-only (`variant="history"` on `PositionsTable`).
 - Revisit a balance card only after we have deterministic cash + locked + MTM history.
 
+## Dashboard load flow
+
+Use a stale-while-revalidate read path: first paint comes from the local read
+model, then live Polymarket/on-chain enrichment replaces it when available.
+This is the dashboard equivalent of the wallet-watch websocket design in PR
+#1172: a fast local signal drives UI responsiveness, while canonical external
+data remains a second pass.
+
+```mermaid
+flowchart LR
+  Browser["/dashboard"]
+  ReadModel["freshness=read_model\nDB order ledger + cached wallet address"]
+  FirstPaint["render chart + position rows"]
+  Live["freshness=live\nPolymarket/Data API + on-chain balances"]
+  Enriched["replace read-model fields\nwhen live response returns"]
+
+  Browser --> ReadModel --> FirstPaint
+  Browser --> Live --> Enriched
+```
+
+Contract rules:
+
+- `freshness=read_model` must not call Polymarket live position or P/L history
+  reads.
+- `freshness=live` may call Polymarket/Data API and may fall back to the read
+  model on upstream failure.
+- `warnings[]` means degraded data, not intentional progressive loading.
+- UI merge logic lives in dashboard hooks; presentational wallet-analysis
+  components stay pure-prop.
+
 ## Reuse rules
 
 - Keep all Polymarket reads in `packages/market-provider` clients plus feature services. No route-local `fetch`.

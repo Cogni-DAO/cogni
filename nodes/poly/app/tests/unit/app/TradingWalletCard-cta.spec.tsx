@@ -57,6 +57,7 @@ function mockFetch(
   const fullOverview: PolyWalletOverviewOutput = {
     configured: true,
     connected: false,
+    freshness: "live",
     address: null,
     interval: "ALL",
     capturedAt: new Date().toISOString(),

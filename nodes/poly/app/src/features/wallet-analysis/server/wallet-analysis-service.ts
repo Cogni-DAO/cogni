@@ -420,6 +420,7 @@ export async function getExecutionSlice(
 
   return {
     address: addr.toLowerCase() as PolyWalletExecutionOutput["address"],
+    freshness: "live",
     capturedAt,
     dailyTradeCounts: dailyTradeCountsResult,
     live_positions: liveForResponse.map(toExecutionContractPosition),

@@ -7,9 +7,9 @@
  *          counts) for the caller's own Polymarket trading wallet. Powers the dashboard's
  *          `OperatorWalletChartsRow` + `ExecutionActivityCard`.
  * Scope: Session-auth, tenant-scoped. Resolves the caller's billing account,
- *   asks `PolyTraderWalletPort` for its `funder_address`, reads current live
- *   holdings from Polymarket Data API, and keeps trade cadence/closed history
- *   backed by the local order ledger.
+ *   asks `PolyTraderWalletPort` for its `funder_address`, reads the DB
+ *   execution read model first, and optionally enriches current holdings from
+ *   Polymarket Data API.
  * Invariants:
  *   - TENANT_SCOPED: the caller's own wallet is the only thing this route
  *     ever reads. The route has no query-parameter escape hatch.
@@ -21,7 +21,7 @@
  *   - EXECUTION_ONLY: current wallet totals live on
  *     `/api/v1/poly/wallet/overview`; this route stays focused on positions
  *     and trade cadence only.
- * Side-effects: IO (DB read, Polymarket Data API).
+ * Side-effects: IO (DB read, optional Polymarket Data API).
  * Links: nodes/poly/packages/node-contracts/src/poly.wallet.execution.v1.contract.ts,
  *        docs/spec/poly-trader-wallet-port.md,
  *        work/items/task.0354.poly-trading-hardening-followups.md
@@ -55,9 +55,13 @@ export const dynamic = "force-dynamic";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 
-function emptyPayload(warning: { code: string; message: string }) {
+function emptyPayload(
+  freshness: PolyWalletExecutionOutput["freshness"],
+  warning: { code: string; message: string }
+) {
   return polyWalletExecutionOperation.output.parse({
     address: ZERO_ADDRESS,
+    freshness,
     capturedAt: new Date().toISOString(),
     dailyTradeCounts: [],
     live_positions: [],
@@ -71,9 +75,13 @@ export const GET = wrapRouteHandlerWithLogging(
     routeId: "poly.wallet.execution",
     auth: { mode: "required", getSessionUser },
   },
-  async (ctx, _request, sessionUser) => {
+  async (ctx, request, sessionUser) => {
     const startedAtMs = performance.now();
     if (!sessionUser) throw new Error("sessionUser required");
+    const url = new URL(request.url);
+    const { freshness } = polyWalletExecutionOperation.input.parse({
+      freshness: url.searchParams.get("freshness") ?? undefined,
+    });
 
     const container = getContainer();
     const account = await container
@@ -91,13 +99,14 @@ export const GET = wrapRouteHandlerWithLogging(
           status: "wallet_adapter_unconfigured",
           durationMs: Math.round(performance.now() - startedAtMs),
           outcome: "success",
+          freshness,
           live_positions: 0,
           closed_positions: 0,
           daily_trade_days: 0,
           warnings: 1,
         });
         return NextResponse.json(
-          emptyPayload({
+          emptyPayload(freshness, {
             code: "wallet_adapter_unconfigured",
             message:
               "Trading-wallet adapter is not configured on this pod yet.",
@@ -115,13 +124,14 @@ export const GET = wrapRouteHandlerWithLogging(
         status: "no_trading_wallet",
         durationMs: Math.round(performance.now() - startedAtMs),
         outcome: "success",
+        freshness,
         live_positions: 0,
         closed_positions: 0,
         daily_trade_days: 0,
         warnings: 1,
       });
       return NextResponse.json(
-        emptyPayload({
+        emptyPayload(freshness, {
           code: "no_trading_wallet",
           message:
             "No Polymarket trading wallet is provisioned for this account. Connect one from the Money page.",
@@ -158,21 +168,23 @@ export const GET = wrapRouteHandlerWithLogging(
       });
     }
 
-    try {
-      const currentExecution = await getExecutionSlice(address, {
-        includePriceHistory: false,
-        includeTrades: false,
-      });
-      livePositions = currentExecution.live_positions.filter(
-        hasActionableCurrentPosition
-      );
-      warnings.push(...currentExecution.warnings);
-    } catch (err) {
-      warnings.push({
-        code: "positions_current_unavailable",
-        message: err instanceof Error ? err.message : String(err),
-      });
-      livePositions = dbLivePositions;
+    livePositions = dbLivePositions;
+    if (freshness === "live") {
+      try {
+        const currentExecution = await getExecutionSlice(address, {
+          includePriceHistory: false,
+          includeTrades: false,
+        });
+        livePositions = currentExecution.live_positions.filter(
+          hasActionableCurrentPosition
+        );
+        warnings.push(...currentExecution.warnings);
+      } catch (err) {
+        warnings.push({
+          code: "positions_current_unavailable",
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
 
     logEvent(ctx.log, EVENT_NAMES.POLY_WALLET_EXECUTION_COMPLETE, {
@@ -189,6 +201,7 @@ export const GET = wrapRouteHandlerWithLogging(
           : "ok",
       durationMs: Math.round(performance.now() - startedAtMs),
       outcome: "success",
+      freshness,
       live_positions: livePositions.length,
       closed_positions: closedPositions.length,
       daily_trade_days: dailyTradeCounts.length,
@@ -198,6 +211,7 @@ export const GET = wrapRouteHandlerWithLogging(
     return NextResponse.json(
       PolyWalletExecutionOutputSchema.parse({
         address: address.toLowerCase(),
+        freshness,
         capturedAt: capturedAt.toISOString(),
         dailyTradeCounts,
         live_positions: livePositions,

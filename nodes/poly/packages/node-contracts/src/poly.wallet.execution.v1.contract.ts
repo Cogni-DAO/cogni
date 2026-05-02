@@ -17,6 +17,7 @@
  */
 
 import { z } from "zod";
+import { PolyWalletDataFreshnessSchema } from "./poly.wallet.overview.v1.contract";
 import { PolyAddressSchema } from "./poly.wallet-analysis.v1.contract";
 
 export const WalletExecutionPositionStatusSchema = z.enum([
@@ -137,6 +138,7 @@ export type WalletExecutionDailyCount = z.infer<
 
 export const PolyWalletExecutionOutputSchema = z.object({
   address: PolyAddressSchema,
+  freshness: PolyWalletDataFreshnessSchema,
   capturedAt: z.string(),
   dailyTradeCounts: z.array(WalletExecutionDailyCountSchema),
   /** Currently held positions (status open or redeemable). Powers the Open tab. */
@@ -155,6 +157,8 @@ export const polyWalletExecutionOperation = {
     "Trading-wallet execution positions and trades-per-day with traceable price timelines",
   description:
     "Returns the signed-in user's DB-backed daily trade counts, open positions (live_positions), and closed position history (closed_positions) for the trading-wallet dashboard.",
-  input: z.object({}),
+  input: z.object({
+    freshness: PolyWalletDataFreshnessSchema.optional().default("live"),
+  }),
   output: PolyWalletExecutionOutputSchema,
 } as const;

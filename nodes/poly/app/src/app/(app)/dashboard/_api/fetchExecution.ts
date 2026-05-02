@@ -9,10 +9,20 @@
  * @public
  */
 
-import type { PolyWalletExecutionOutput } from "@cogni/poly-node-contracts";
+import type {
+  PolyWalletDataFreshness,
+  PolyWalletExecutionOutput,
+} from "@cogni/poly-node-contracts";
 
-export async function fetchExecution(): Promise<PolyWalletExecutionOutput> {
-  const response = await fetch("/api/v1/poly/wallet/execution", {
+export async function fetchExecution(opts?: {
+  freshness?: PolyWalletDataFreshness;
+}): Promise<PolyWalletExecutionOutput> {
+  const searchParams = new URLSearchParams();
+  if (opts?.freshness) searchParams.set("freshness", opts.freshness);
+  const url = `/api/v1/poly/wallet/execution${
+    searchParams.size > 0 ? `?${searchParams.toString()}` : ""
+  }`;
+  const response = await fetch(url, {
     credentials: "include",
   });
   if (!response.ok) {

@@ -3,20 +3,14 @@
 
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { Card, CardContent } from "@/components";
 import { TradesPerDayChart } from "@/features/wallet-analysis";
-import { fetchExecution } from "../_api/fetchExecution";
+import { useDashboardExecution } from "../_hooks/useDashboardExecution";
 
 export function OperatorWalletChartsRow(): ReactElement {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["dashboard-wallet-execution"],
-    queryFn: fetchExecution,
-    refetchInterval: 30_000,
-    staleTime: 10_000,
-    gcTime: 60_000,
-    retry: 1,
+  const { data, isLoading, isError } = useDashboardExecution({
+    includeLive: false,
   });
 
   const dailyCounts = (data?.dailyTradeCounts ?? []).map((point) => ({
