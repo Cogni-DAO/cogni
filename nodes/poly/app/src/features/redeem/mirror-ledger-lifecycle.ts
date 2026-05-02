@@ -14,6 +14,11 @@
 
 import type { RedeemLifecycleState } from "@/core";
 
+const MIRROR_EVENTS = {
+  mirrored: "feature.poly_redeem.lifecycle_mirrored",
+  failed: "feature.poly_redeem.lifecycle_mirror_failed",
+} as const;
+
 interface LoggerLike {
   info: (obj: object, msg?: string) => void;
   warn: (obj: object, msg?: string) => void;
@@ -57,26 +62,22 @@ export async function mirrorRedeemLifecycleToLedger(
     });
     deps.logger.info(
       {
-        event: "poly.redeem.lifecycle_mirrored_to_ledger",
-        billing_account_id: deps.billingAccountId,
-        condition_id: input.conditionId,
-        position_id: input.positionId,
+        event: MIRROR_EVENTS.mirrored,
         lifecycle: input.lifecycle,
         source: input.source,
+        terminal_correction: input.terminalCorrection ?? null,
         updated_rows: updated,
       },
       "redeem lifecycle mirrored to order ledger"
     );
-  } catch (err) {
+  } catch {
     deps.logger.warn(
       {
-        event: "poly.redeem.lifecycle_mirror_failed",
-        billing_account_id: deps.billingAccountId,
-        condition_id: input.conditionId,
-        position_id: input.positionId,
+        event: MIRROR_EVENTS.failed,
         lifecycle: input.lifecycle,
         source: input.source,
-        err: err instanceof Error ? err.message : String(err),
+        terminal_correction: input.terminalCorrection ?? null,
+        reason_code: "ledger_lifecycle_write_failed",
       },
       "redeem lifecycle mirror to order ledger failed"
     );

@@ -177,7 +177,15 @@ Canonical type: `LedgerPositionLifecycle` in `nodes/poly/app/src/features/tradin
 
 Position lifecycle predicates live in `nodes/poly/app/src/features/trading/ledger-lifecycle.ts`.
 
-Terminal lifecycles are `closed`, `redeemed`, `loser`, `dust`, and `abandoned`. Terminal rows are history and must not be reopened by order refresh. The SQL adapter enforces this with `preserveTerminalLifecycle(...)` in `nodes/poly/app/src/features/trading/order-ledger.ts`.
+Terminal lifecycles are `closed`, `redeemed`, `loser`, `dust`, and
+`abandoned`. Terminal rows are history and must not be reopened by order
+refresh. The SQL adapter enforces this with `preserveTerminalLifecycle(...)` in
+`nodes/poly/app/src/features/trading/order-ledger.ts`.
+
+Terminal labels are not globally immutable. A later terminal lifecycle write may
+refine one terminal label into another for the same asset. The hard invariant is
+that order refresh cannot move terminal rows back into active lifecycle, and
+redeem reorg is the only non-terminal correction.
 
 The only allowed terminal correction is a chain reorg: `redeemed` may move back
 to `redeem_pending` when the redeem subscriber observes a removed
@@ -255,7 +263,7 @@ Redeem lifecycle mirroring:
 
 Important scope rule: redeem lifecycle writes are asset-scoped. The CTF `positionId` is persisted as `poly_redeem_jobs.position_id` and mirrored into `poly_copy_trade_fills.attributes.token_id`. Redeem mirror code must call `markPositionLifecycleByAsset(...)`, not condition-wide mutation, because one condition has multiple outcome assets.
 
-Redeem job de-dup is still condition-scoped at `(funder_address, condition_id)`. If a wallet ever holds multiple outcome assets for one condition, the job row represents the selected `positionId`; ledger writes must therefore be `positionId`/`token_id` scoped so the job cannot relabel sibling outcomes. Dashboard routes read the ledger only.
+Redeem job de-dup is still condition-scoped at `(funder_address, condition_id)`. If a wallet ever holds multiple outcome assets for one condition, the job row represents the selected `positionId`; ledger writes must therefore be `positionId`/`token_id` scoped so the job cannot relabel sibling outcomes. Terminal skip classifications (`loser`, `redeemed` for zero balance) are mirrored to the ledger even when the condition's redeem job already exists, because the job queue and the asset-scoped dashboard read model are different axes. Dashboard routes read the ledger only.
 
 Asset-scoped pointers:
 
