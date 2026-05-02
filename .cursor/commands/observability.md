@@ -28,8 +28,8 @@ Goal: add **minimal, high-signal** logging/metrics for the changes in this branc
 - Adapter (only on failure): `adapter.<dep>.error`
   - Fields: `dep`, `reasonCode`, `status?`, `durationMs`, `reqId?`.
 - When outcome=error, you must include errorCode (enum from the event registry) identifying the failure class; counts alone are not sufficient. Do not log raw error messages.
-- External SDKs that print their own failures must be wrapped or configured so their diagnostics obey the same rule. Preserve classification fields (`reasonCode` / `error_code`, HTTP status, response key names), but redact or drop raw request config, headers, signatures, and message text before it reaches stdout.
-- One-time secret rotation paths belong on internal ops endpoints or scripts, not product UI. Their success log should be a single COMPLETE event with target/rotated/skipped/failed counts; return any per-target ids to the operator response, not to prod logs.
+- External SDKs that print their own failures must be configured or wrapped before production use. If the SDK emits raw request diagnostics, **drop the entire SDK diagnostic before stdout/stderr/console**; do not sanitize-and-forward raw config, headers, URLs, HTML bodies, or message text. Emit a separate first-party adapter error with only stable fields (`reasonCode` / `error_code`, HTTP status, response key names, counts, duration).
+- One-time secret rotation paths belong on internal ops endpoints or scripts, not product UI. Their terminal log should be a single COMPLETE event with target/rotated/skipped/failed counts and an aggregate stable errorCode. Return per-target ids only to the authenticated operator response, not to prod logs.
 
 ## 3) Metrics rule
 

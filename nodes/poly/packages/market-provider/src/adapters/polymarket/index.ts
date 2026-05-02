@@ -32,6 +32,7 @@ export {
   type PolymarketClobAdapterConfig,
   sanitizeClobDiagnosticText,
   withSanitizedClobSdkConsoleErrors,
+  withSuppressedClobSdkDiagnostics,
 } from "./polymarket.clob.adapter.js";
 export {
   type ClobMarketResolutionConfig,

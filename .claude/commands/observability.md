@@ -44,6 +44,8 @@ Node identity flows from repo-spec, not env vars. The logger and metrics registr
 - Inter-node: `internode.callback_sent` / `internode.callback_received` / `internode.callback_failed`
   - Fields: `sourceNodeId`, `targetNodeId`, `callId`, `durationMs`, `status`.
 - When outcome=error, you must include errorCode (enum from the event registry) identifying the failure class; counts alone are not sufficient. Do not log raw error messages.
+- External SDKs that print their own failures must be configured or wrapped before production use. If the SDK emits raw request diagnostics, **drop the entire SDK diagnostic before stdout/stderr/console**; do not sanitize-and-forward raw config, headers, URLs, HTML bodies, or message text. Emit a separate first-party adapter error with only stable fields (`reasonCode` / `error_code`, HTTP status, response key names, counts, duration).
+- One-time secret rotation paths belong on internal ops endpoints or scripts, not product UI. Their terminal log should be a single COMPLETE event with target/rotated/skipped/failed counts and an aggregate stable errorCode. Return per-target ids only to the authenticated operator response, not to prod logs.
 
 ## 4) Metrics rule
 
@@ -56,7 +58,7 @@ Node identity flows from repo-spec, not env vars. The logger and metrics registr
 
 ## 5) Privacy + payload safety
 
-Never log: secrets, headers, tokens, full URLs, request/response bodies, prompts/content.
+Never log: secrets, headers, tokens, signatures, passphrases, raw request config, full URLs, request/response bodies, prompts/content.
 Only log: enums, booleans, counts, durations, coarse status buckets.
 
 ## 6) Self-check: can you debug a production issue with these changes?

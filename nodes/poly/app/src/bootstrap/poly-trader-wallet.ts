@@ -24,6 +24,7 @@ import { PrivyPolyTraderWalletAdapter } from "@/adapters/server/wallet";
 // Re-homed to `poly-trade-executor.ts` so Stage 4's purge of
 // `poly-trade.ts` does not break provisioning. (C7 design-review concern.)
 import {
+  classifyClobCredentialRotationError,
   createOrDerivePolymarketApiKeyForSigner,
   rotatePolymarketApiKeyForSigner,
 } from "@/bootstrap/capabilities/poly-trade-executor";
@@ -71,17 +72,22 @@ export function createRealClobCredsFactory({
       try {
         return await deriveCreds({ signer, polygonRpcUrl });
       } catch (err) {
+        const failure = classifyClobCredentialRotationError(err);
         logger.error(
           {
             component: "poly-trader-wallet-bootstrap",
             funder_address: signer.address,
-            err: err instanceof Error ? err.message : String(err),
+            reason_code: failure.reasonCode,
+            http_status: failure.httpStatus,
+            error_class: failure.errorClass,
           },
           "poly.wallet.provision failed to derive live CLOB creds"
         );
-        throw new Error(
-          "Failed to derive Polymarket CLOB API credentials for the tenant wallet",
-          { cause: err }
+        throw Object.assign(
+          new Error(
+            "Failed to derive Polymarket CLOB API credentials for the tenant wallet"
+          ),
+          { code: failure.reasonCode }
         );
       }
     },
@@ -92,17 +98,22 @@ export function createRealClobCredsFactory({
       try {
         return await rotateCreds({ signer, currentCreds, polygonRpcUrl });
       } catch (err) {
+        const failure = classifyClobCredentialRotationError(err);
         logger.error(
           {
             component: "poly-trader-wallet-bootstrap",
             funder_address: signer.address,
-            err: err instanceof Error ? err.message : String(err),
+            reason_code: failure.reasonCode,
+            http_status: failure.httpStatus,
+            error_class: failure.errorClass,
           },
           "poly.wallet.rotate failed to rotate live CLOB creds"
         );
-        throw new Error(
-          "Failed to rotate Polymarket CLOB API credentials for the tenant wallet",
-          { cause: err }
+        throw Object.assign(
+          new Error(
+            "Failed to rotate Polymarket CLOB API credentials for the tenant wallet"
+          ),
+          { code: failure.reasonCode }
         );
       }
     },

@@ -179,6 +179,13 @@ cache for each rotated billing account, and returns only counts plus
 connection ids/wallet addresses. It never returns API keys, passphrases,
 signatures, or raw CLOB request config.
 
+Rotation is only complete when `rotated_count == target_count` and
+`failed_count == 0`. If Polymarket blocks API-key creation from the deployed
+environment (for example Cloudflare 403), the route must fail with a stable
+`error_code` such as `clob_upstream_forbidden`; it has not rolled credentials.
+The implementation creates replacement credentials before retiring the old key,
+so an upstream create failure does not delete the currently stored key first.
+
 Expected response shape:
 
 ```json

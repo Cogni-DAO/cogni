@@ -72,6 +72,63 @@ import {
 const DEFAULT_CLOB_HOST = "https://clob.polymarket.com";
 const POLYGON_CHAIN_ID = 137;
 
+type ClobHttpErrorLike = {
+  readonly status?: unknown;
+  readonly response?: {
+    readonly status?: unknown;
+  };
+  readonly message?: unknown;
+};
+
+function readClobHttpStatus(err: unknown): number | undefined {
+  const maybe = err as ClobHttpErrorLike | null;
+  if (typeof maybe?.response?.status === "number") {
+    return maybe.response.status;
+  }
+  if (typeof maybe?.status === "number") {
+    return maybe.status;
+  }
+  return undefined;
+}
+
+export function classifyClobCredentialRotationError(err: unknown): {
+  readonly reasonCode: string;
+  readonly httpStatus?: number | undefined;
+  readonly errorClass?: string | undefined;
+} {
+  const httpStatus = readClobHttpStatus(err);
+  const errorClass =
+    err && typeof err === "object" && err.constructor?.name
+      ? err.constructor.name
+      : undefined;
+  if (httpStatus === 401) {
+    return { reasonCode: "clob_upstream_unauthorized", httpStatus, errorClass };
+  }
+  if (httpStatus === 403) {
+    return { reasonCode: "clob_upstream_forbidden", httpStatus, errorClass };
+  }
+  if (httpStatus === 429) {
+    return { reasonCode: "clob_upstream_rate_limited", httpStatus, errorClass };
+  }
+  if (httpStatus !== undefined) {
+    return { reasonCode: "clob_upstream_http_error", httpStatus, errorClass };
+  }
+  return { reasonCode: "clob_upstream_error", errorClass };
+}
+
+function isKnownAlreadyInvalidApiKeyError(err: unknown): boolean {
+  const status = readClobHttpStatus(err);
+  if (status === 401) return true;
+  const message =
+    typeof (err as ClobHttpErrorLike | null)?.message === "string"
+      ? String((err as ClobHttpErrorLike).message).toLowerCase()
+      : "";
+  return (
+    message.includes("invalid api key") ||
+    message.includes("unauthorized api key")
+  );
+}
+
 /**
  * Build a viem wallet client around a Privy-backed signer, then ask the
  * Polymarket CLOB API to create or derive L2 API credentials for it. This
@@ -144,7 +201,13 @@ export async function rotatePolymarketApiKeyForSigner({
 
   // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
   const clobSignerAny: any = walletClient;
-  const clob = new ClobClient({
+  const createClient = new ClobClient({
+    host,
+    chain: POLYGON_CHAIN_ID,
+    signer: clobSignerAny,
+    throwOnError: true,
+  });
+  const oldCredsClient = new ClobClient({
     host,
     chain: POLYGON_CHAIN_ID,
     signer: clobSignerAny,
@@ -153,20 +216,13 @@ export async function rotatePolymarketApiKeyForSigner({
   });
 
   return withSanitizedClobSdkConsoleErrors(async () => {
+    const nextCreds = await createClient.createApiKey();
     try {
-      await clob.deleteApiKey();
+      await oldCredsClient.deleteApiKey();
     } catch (err) {
-      const status = (err as { status?: unknown } | undefined)?.status;
-      const message = err instanceof Error ? err.message.toLowerCase() : "";
-      const alreadyRotated =
-        status === 401 ||
-        status === 403 ||
-        message.includes("invalid api key") ||
-        message.includes("unauthorized") ||
-        message.includes("forbidden");
-      if (!alreadyRotated) throw err;
+      if (!isKnownAlreadyInvalidApiKeyError(err)) throw err;
     }
-    return clob.createApiKey();
+    return nextCreds;
   });
 }
 

@@ -73,6 +73,16 @@ function classifyRotationError(error: unknown): string {
   return "rotate_failed";
 }
 
+function aggregateFailureCode(
+  failed: readonly { readonly error_code: string }[]
+): string {
+  if (failed.length === 0) return "none";
+  const first = failed[0]?.error_code ?? "rotate_failed";
+  return failed.every((item) => item.error_code === first)
+    ? first
+    : "rotate_failed";
+}
+
 async function parseBody(request: Request): Promise<unknown> {
   try {
     return await request.json();
@@ -179,6 +189,7 @@ export const POST = wrapRouteHandlerWithLogging(
     }
 
     const status = failed.length > 0 ? 500 : 200;
+    const errorCode = aggregateFailureCode(failed);
     logEvent(ctx.log, EVENT_NAMES.POLY_WALLET_ROTATE_CLOB_CREDS_COMPLETE, {
       reqId: ctx.reqId,
       routeId: ctx.routeId,
@@ -189,7 +200,7 @@ export const POST = wrapRouteHandlerWithLogging(
       rotated_count: rotated.length,
       skipped_count: skipped.length,
       failed_count: failed.length,
-      ...(failed.length > 0 ? { errorCode: "rotate_failed" } : {}),
+      ...(failed.length > 0 ? { errorCode } : {}),
     });
 
     const payload: PolyWalletRotateClobCredsOutput = {
