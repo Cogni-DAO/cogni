@@ -30,7 +30,9 @@ Note: This directory currently has no governance sync entrypoint file; sync is t
 ## Public Surface
 
 - **Exports:** none (entry points only)
-- **CLI (if any):** `pnpm governance:schedules:sync` (curl to internal ops endpoint)
+- **CLI (if any):**
+  - `pnpm governance:schedules:sync` (curl to internal ops endpoint)
+  - `POLY_HOST=https://<host> pnpm poly:wallet:rotate-clob-creds` (curl to internal ops endpoint; rotates all active tenant CLOB creds)
 
 ## Responsibilities
 
@@ -46,6 +48,7 @@ pnpm governance:schedules:sync
 ## Standards
 
 - `governance:schedules:sync` triggers `/api/internal/ops/governance/schedules/sync`
+- `poly:wallet:rotate-clob-creds` triggers `/api/internal/ops/poly/wallet/rotate-clob-creds`
 
 ## Dependencies
 

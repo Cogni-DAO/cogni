@@ -314,6 +314,11 @@ export interface Container {
     redeemJobs: import("@/ports").RedeemJobsPort;
     funderAddress: `0x${string}`;
   } | null;
+  /**
+   * Drops the cached per-tenant CLOB executor after CLOB credential rotation so
+   * the next placement rebuilds with fresh encrypted creds from DB.
+   */
+  invalidatePolyTradeExecutorFor(billingAccountId: string): void;
 }
 
 // Feature-specific dependency types
@@ -1311,6 +1316,11 @@ function createContainer(): Container {
             funderAddress: handles.funderAddress,
           }
         : null;
+    },
+    invalidatePolyTradeExecutorFor(billingAccountId: string) {
+      polyTradeExecutorFactory?.invalidatePolyTradeExecutorFor(
+        billingAccountId
+      );
     },
   };
 }

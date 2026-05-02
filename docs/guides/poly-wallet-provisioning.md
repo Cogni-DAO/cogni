@@ -23,9 +23,11 @@ tags: [poly, polymarket, wallets, multi-tenant, privy, runbook]
 | `@cogni/poly-wallet` port + types + branded `AuthorizedSigningContext`          | ✅ shipped (`packages/poly-wallet/src/port/`)                            |
 | Migration `0030_poly_wallet_connections.sql` + Drizzle schema                   | ✅ shipped                                                               |
 | `PrivyPolyTraderWalletAdapter` (`provision`, `resolve`, `getAddress`, `revoke`) | ✅ shipped (node-local: `nodes/poly/app/src/adapters/server/wallet/`)    |
-| `authorizeIntent` / `withdrawUsdc` / `rotateClobCreds`                          | ⛔ stubbed (throw) — B4 / follow-up                                      |
+| `authorizeIntent` / `rotateClobCreds`                                           | ✅ shipped                                                               |
+| `withdrawUsdc`                                                                  | ⛔ stubbed (throw) — follow-up                                           |
 | Bootstrap factory `getPolyTraderWalletAdapter` + real CLOB-creds derivation     | ✅ shipped (`nodes/poly/app/src/bootstrap/poly-trader-wallet.ts`)        |
 | `POST /api/v1/poly/wallet/connect` route                                        | ✅ shipped (session-auth, `CUSTODIAL_CONSENT` enforced, 503 on unconfig) |
+| `POST /api/internal/ops/poly/wallet/rotate-clob-creds` route                    | ✅ shipped (internal ops auth, one-time rotation, no secret egress)      |
 | `GET /api/v1/poly/wallet/status` + `/profile` create-wallet control             | ✅ shipped                                                               |
 | Agent-actor auth path                                                           | ⛔ explicit 501 until agent-API-key auth lands                           |
 | CI secret plumbing (`candidate-flight-infra.yml` + `deploy-infra.sh`)           | ✅ wired for all 5 new secrets                                           |
@@ -158,7 +160,59 @@ Loki query (replace `<sha>` with the deployed SHA):
 
 Expect 1 info line per successful request. There should be no stub-creds warning anymore.
 
-### 7. Deploy-verified handshake
+### 7. Rotate exposed CLOB credentials
+
+CLOB credentials are per active tenant wallet connection. This is intentionally
+not a product UI control: rotation is an internal ops action for incident
+response or controlled maintenance.
+
+After the fix is deployed, run the ops command once against the target host:
+
+```bash
+POLY_HOST=https://<poly-host> pnpm poly:wallet:rotate-clob-creds
+```
+
+The command posts to `/api/internal/ops/poly/wallet/rotate-clob-creds` with
+`INTERNAL_OPS_TOKEN` and `{"rotate_all":true}`. It rotates every non-revoked
+`poly_wallet_connections` row, invalidates the process-local trade-executor
+cache for each rotated billing account, and returns only counts plus
+connection ids/wallet addresses. It never returns API keys, passphrases,
+signatures, or raw CLOB request config.
+
+Expected response shape:
+
+```json
+{
+  "target_count": 1,
+  "rotated_count": 1,
+  "skipped_count": 0,
+  "failed_count": 0,
+  "rotated": [
+    {
+      "billing_account_id": "<uuid>",
+      "connection_id": "<uuid>",
+      "funder_address": "0x..."
+    }
+  ],
+  "skipped": [],
+  "failed": []
+}
+```
+
+Loki query:
+
+```logql
+{job="poly-node-app",sha="<sha>"}
+  |= "poly.wallet.rotate_clob_creds.complete"
+  | json
+  | line_format "status={{.status}} targets={{.target_count}} rotated={{.rotated_count}} failed={{.failed_count}}"
+```
+
+Expected log fields are counts/status/duration only. Do not add logs containing
+Polymarket auth headers, signatures, passphrases, raw SDK request config, or
+raw SDK diagnostic text.
+
+### 8. Deploy-verified handshake
 
 When the provision call returns 200 AND the Loki line appears at the deployed SHA, this slice is exercised. Comment on PR #968:
 

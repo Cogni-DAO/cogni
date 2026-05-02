@@ -39,7 +39,8 @@
  *   - NO_STATIC_CLOB_IMPORT — `@polymarket/clob-client` is pulled in via
  *     `await import(...)` so pods without Polymarket creds never load it.
  *   - LAZY_INIT_ADAPTER — adapter construction happens on first per-tenant
- *     call. Subsequent calls reuse the cached instance until the process exits.
+ *     call. Subsequent calls reuse the cached instance until the process exits
+ *     or an ops path invalidates that tenant after CLOB credential rotation.
  *   - SHARED_PUBLIC_CLIENT — the `viem.PublicClient` used for RPC reads is a
  *     process-level singleton; wallet clients fan out per tenant.
  * Side-effects: on first `placeIntent` for a new tenant: HTTPS to Polymarket
@@ -88,6 +89,9 @@ export async function createOrDerivePolymarketApiKeyForSigner({
 }): Promise<{ key: string; secret: string; passphrase: string }> {
   // bug.0418 — clob-client-v2 takes an options object (not positional args).
   const { ClobClient } = await import("@polymarket/clob-client-v2");
+  const { withSanitizedClobSdkConsoleErrors } = await import(
+    "@cogni/poly-market-provider/adapters/polymarket"
+  );
   const { createWalletClient, http } = await import("viem");
   const { polygon } = await import("viem/chains");
 
@@ -109,7 +113,61 @@ export async function createOrDerivePolymarketApiKeyForSigner({
     chain: POLYGON_CHAIN_ID,
     signer: clobSignerAny,
   });
-  return clob.createOrDeriveApiKey();
+  return withSanitizedClobSdkConsoleErrors(() => clob.createOrDeriveApiKey());
+}
+
+export async function rotatePolymarketApiKeyForSigner({
+  signer,
+  currentCreds,
+  polygonRpcUrl,
+  host = DEFAULT_CLOB_HOST,
+}: {
+  signer: LocalAccount;
+  currentCreds: { key: string; secret: string; passphrase: string };
+  polygonRpcUrl?: string | undefined;
+  host?: string | undefined;
+}): Promise<{ key: string; secret: string; passphrase: string }> {
+  const { ClobClient } = await import("@polymarket/clob-client-v2");
+  const { withSanitizedClobSdkConsoleErrors } = await import(
+    "@cogni/poly-market-provider/adapters/polymarket"
+  );
+  const { createWalletClient, http } = await import("viem");
+  const { polygon } = await import("viem/chains");
+
+  // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
+  const signerAny: any = signer;
+  const walletClient = createWalletClient({
+    account: signerAny,
+    chain: polygon,
+    transport: http(polygonRpcUrl),
+  });
+
+  // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
+  const clobSignerAny: any = walletClient;
+  const clob = new ClobClient({
+    host,
+    chain: POLYGON_CHAIN_ID,
+    signer: clobSignerAny,
+    creds: currentCreds,
+    throwOnError: true,
+  });
+
+  return withSanitizedClobSdkConsoleErrors(async () => {
+    try {
+      await clob.deleteApiKey();
+    } catch (err) {
+      const status = (err as { status?: unknown } | undefined)?.status;
+      const message = err instanceof Error ? err.message.toLowerCase() : "";
+      const alreadyRotated =
+        status === 401 ||
+        status === 403 ||
+        message.includes("invalid api key") ||
+        message.includes("unauthorized") ||
+        message.includes("forbidden");
+      if (!alreadyRotated) throw err;
+    }
+    return clob.createApiKey();
+  });
 }
 
 /** Parameters for the autonomous SELL-to-close path. */
@@ -247,6 +305,7 @@ export function createPolyTradeExecutorFactory(
   getPolyTradeExecutorFor: (
     billingAccountId: string
   ) => Promise<PolyTradeExecutor>;
+  invalidatePolyTradeExecutorFor: (billingAccountId: string) => void;
 } {
   const cache = new Map<string, CachedExecutor>();
   const inflight = new Map<string, Promise<CachedExecutor>>();
@@ -275,7 +334,12 @@ export function createPolyTradeExecutorFactory(
     }
   }
 
-  return { getPolyTradeExecutorFor };
+  function invalidatePolyTradeExecutorFor(billingAccountId: string): void {
+    cache.delete(billingAccountId);
+    inflight.delete(billingAccountId);
+  }
+
+  return { getPolyTradeExecutorFor, invalidatePolyTradeExecutorFor };
 }
 
 async function buildExecutor(

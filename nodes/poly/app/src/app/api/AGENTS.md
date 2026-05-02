@@ -42,6 +42,7 @@ HTTP API endpoints using Next.js App Router. Contract-validated entry points tha
   - `/api/setup/verify` [POST] - DAO formation verification
   - `/api/internal/billing/ingest` [POST] - LiteLLM generic_api callback receiver (bearer auth, Docker-internal only)
   - `/api/internal/ops/governance/schedules/sync` [POST] - deploy-time governance sync trigger (bearer auth)
+  - `/api/internal/ops/poly/wallet/rotate-clob-creds` [POST] - one-time ops trigger for rotating encrypted per-tenant Polymarket CLOB L2 credentials (bearer auth)
   - `/api/v1/chat/completions` [POST] - OpenAI-compatible chat completions (streaming + non-streaming, `cogni_status` extension); see [completions spec](../../../docs/spec/completions-api.md)
   - `/api/v1/ai/chat` [POST] - streaming chat with server-authoritative thread persistence
   - `/api/v1/activity` [GET]

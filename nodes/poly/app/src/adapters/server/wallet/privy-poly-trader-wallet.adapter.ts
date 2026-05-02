@@ -51,6 +51,10 @@
  *     `wallet_connection_id` matches, inside the same transaction. Next
  *     `authorizeIntent` fails with `no_active_grant`. Same transaction also
  *     clears `trading_approvals_ready_at` so a re-provision starts un-approved.
+ *   `rotateClobCreds` deletes the current Polymarket L2 API key, creates a
+ *   fresh one for the same tenant wallet, and updates only the encrypted
+ *   credential envelope.
+ *   `withdrawUsdc` remains stubbed until the Money-page withdraw item lands.
  *   - APPROVALS_BEFORE_PLACE: `authorizeIntent` reads
  *     `trading_approvals_ready_at` AFTER the active-grant check and fails
  *     closed with `trading_not_ready` when null. Prevents silent CLOB
@@ -255,6 +259,11 @@ export interface PrivyPolyTraderWalletAdapterConfig {
    * under a follow-up commit that wires @polymarket/clob-client.
    */
   clobCredsFactory: (signer: LocalAccount) => Promise<PolyClobApiKeyCreds>;
+  /** Factory that deletes the active CLOB L2 API key and returns fresh creds. */
+  clobCredsRotator?: (
+    signer: LocalAccount,
+    currentCreds: PolyClobApiKeyCreds
+  ) => Promise<PolyClobApiKeyCreds>;
   /**
    * Polygon RPC URL used by `getBalances`. Optional: when absent, `getBalances`
    * returns the address with `null` USDC.e/POL and an RPC-unconfigured error
@@ -274,6 +283,10 @@ export class PrivyPolyTraderWalletAdapter implements PolyTraderWalletPort {
   private readonly clobCredsFactory: (
     signer: LocalAccount
   ) => Promise<PolyClobApiKeyCreds>;
+  private readonly clobCredsRotator: (
+    signer: LocalAccount,
+    currentCreds: PolyClobApiKeyCreds
+  ) => Promise<PolyClobApiKeyCreds>;
   private readonly polygonRpcUrl: string | undefined;
   private readonly log: Logger;
 
@@ -286,6 +299,11 @@ export class PrivyPolyTraderWalletAdapter implements PolyTraderWalletPort {
     this.encryptionKey = config.encryptionKey;
     this.encryptionKeyId = config.encryptionKeyId;
     this.clobCredsFactory = config.clobCredsFactory;
+    this.clobCredsRotator =
+      config.clobCredsRotator ??
+      (async () => {
+        throw new Error("PrivyPolyTraderWalletAdapter: CLOB rotator missing");
+      });
     this.polygonRpcUrl = config.polygonRpcUrl;
     this.log = config.logger.child({
       component: "PrivyPolyTraderWalletAdapter",
@@ -1787,12 +1805,80 @@ export class PrivyPolyTraderWalletAdapter implements PolyTraderWalletPort {
     );
   }
 
-  async rotateClobCreds(_input: {
+  async rotateClobCreds(input: {
     billingAccountId: string;
   }): Promise<PolyTraderSigningContext> {
-    throw new Error(
-      "PrivyPolyTraderWalletAdapter.rotateClobCreds: not implemented (follow-up ops slice)"
-    );
+    return this.serviceDb.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${input.billingAccountId}))`
+      );
+
+      const rows = await tx
+        .select()
+        .from(polyWalletConnections)
+        .where(
+          and(
+            eq(polyWalletConnections.billingAccountId, input.billingAccountId),
+            isNull(polyWalletConnections.revokedAt)
+          )
+        )
+        .limit(1);
+
+      const row = rows[0];
+      if (!row) {
+        throw Object.assign(
+          new Error("rotateClobCreds: no active connection for tenant"),
+          { code: "no_connection" as EnableTradingPreflightError }
+        );
+      }
+      if (row.billingAccountId !== input.billingAccountId) {
+        throw new Error(
+          "tenant mismatch on rotateClobCreds connection SELECT — aborting"
+        );
+      }
+
+      const aad: AeadAAD = {
+        billing_account_id: row.billingAccountId,
+        connection_id: row.id,
+        provider: CREDENTIAL_PROVIDER,
+      };
+      const currentCreds = this.decryptCreds(row.clobApiKeyCiphertext, aad);
+      const rawAccount = createViemAccount(this.privyClient, {
+        walletId: row.privyWalletId,
+        address: row.address as `0x${string}`,
+        authorizationContext: this.authorizationContext,
+      });
+      // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
+      const account: any = rawAccount;
+
+      const clobCreds = await this.clobCredsRotator(account, currentCreds);
+      const ciphertext = aeadEncrypt(
+        JSON.stringify(clobCreds),
+        aad,
+        this.encryptionKey
+      );
+
+      await tx
+        .update(polyWalletConnections)
+        .set({
+          clobApiKeyCiphertext: ciphertext,
+          encryptionKeyId: this.encryptionKeyId,
+        })
+        .where(
+          and(
+            eq(polyWalletConnections.id, row.id),
+            eq(polyWalletConnections.billingAccountId, input.billingAccountId),
+            isNull(polyWalletConnections.revokedAt)
+          )
+        );
+
+      return {
+        account,
+        clobCreds,
+        funderAddress: getAddress(row.address),
+        connectionId: row.id,
+      };
+    });
   }
 
   // ────────────────────────────────────────────────────────────────────────

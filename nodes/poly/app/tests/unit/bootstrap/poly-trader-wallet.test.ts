@@ -24,7 +24,7 @@ describe("createRealClobCredsFactory", () => {
       deriveCreds,
     });
 
-    await expect(factory(SIGNER)).resolves.toEqual({
+    await expect(factory.derive(SIGNER)).resolves.toEqual({
       key: "key",
       secret: "secret",
       passphrase: "passphrase",
@@ -45,8 +45,38 @@ describe("createRealClobCredsFactory", () => {
       deriveCreds,
     });
 
-    await expect(factory(SIGNER)).rejects.toThrow(
+    await expect(factory.derive(SIGNER)).rejects.toThrow(
       "Failed to derive Polymarket CLOB API credentials for the tenant wallet"
     );
+  });
+
+  it("rotates live creds through the bootstrap CLOB seam", async () => {
+    const rotateCreds = vi.fn().mockResolvedValue({
+      key: "new-key",
+      secret: "new-secret",
+      passphrase: "new-passphrase",
+    });
+    const factory = createRealClobCredsFactory({
+      logger: makeNoopLogger(),
+      polygonRpcUrl: "https://polygon.example",
+      rotateCreds,
+    });
+    const currentCreds = {
+      key: "old-key",
+      secret: "old-secret",
+      passphrase: "old-passphrase",
+    };
+
+    await expect(factory.rotate(SIGNER, currentCreds)).resolves.toEqual({
+      key: "new-key",
+      secret: "new-secret",
+      passphrase: "new-passphrase",
+    });
+
+    expect(rotateCreds).toHaveBeenCalledWith({
+      signer: SIGNER,
+      currentCreds,
+      polygonRpcUrl: "https://polygon.example",
+    });
   });
 });

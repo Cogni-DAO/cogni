@@ -25,6 +25,8 @@ import {
   POLY_CLOB_ERROR_CODES,
   POLY_CLOB_METRICS,
   PolymarketClobAdapter,
+  sanitizeClobDiagnosticText,
+  withSanitizedClobSdkConsoleErrors,
 } from "../src/adapters/polymarket/polymarket.clob.adapter.js";
 import type { OrderIntent } from "../src/domain/order.js";
 import {
@@ -74,6 +76,66 @@ describe("coerceNegRiskApiValue (bug.0329)", () => {
     expect(coerceNegRiskApiValue("0")).toBe(false);
     expect(coerceNegRiskApiValue("true")).toBe(true);
     expect(coerceNegRiskApiValue("false")).toBe(false);
+  });
+});
+
+describe("CLOB diagnostic redaction", () => {
+  it("redacts Polymarket auth fields from diagnostic strings", () => {
+    const raw =
+      '{"headers":{"POLY_SIGNATURE":"sig_live","POLY_API_KEY":"key_live","POLY_PASSPHRASE":"pass_live","authorization":"Bearer token_live"}}';
+
+    const safe = sanitizeClobDiagnosticText(raw);
+
+    expect(safe).not.toContain("sig_live");
+    expect(safe).not.toContain("key_live");
+    expect(safe).not.toContain("pass_live");
+    expect(safe).not.toContain("token_live");
+    expect(safe).toContain("[REDACTED]");
+  });
+
+  it("sanitizes clob-client console.error request config dumps", async () => {
+    const original = console.error;
+    const spy = vi.fn();
+    console.error = spy;
+    try {
+      await withSanitizedClobSdkConsoleErrors(async () => {
+        console.error(
+          "[CLOB Client] request error",
+          JSON.stringify({
+            status: 400,
+            config: {
+              headers: {
+                POLY_SIGNATURE: "sig_live",
+                POLY_API_KEY: "key_live",
+                POLY_PASSPHRASE: "pass_live",
+              },
+            },
+          })
+        );
+      });
+    } finally {
+      console.error = original;
+    }
+
+    const emitted = JSON.stringify(spy.mock.calls);
+    expect(emitted).not.toContain("sig_live");
+    expect(emitted).not.toContain("key_live");
+    expect(emitted).not.toContain("pass_live");
+    expect(emitted).toContain("[REDACTED]");
+  });
+
+  it("classifies thrown request-config errors without leaking auth headers", () => {
+    const details = classifyClientError(
+      new Error(
+        'Request failed with config {"headers":{"POLY_SIGNATURE":"sig_live","POLY_API_KEY":"key_live","POLY_PASSPHRASE":"pass_live"}}'
+      )
+    );
+
+    const emitted = JSON.stringify(details);
+    expect(emitted).not.toContain("sig_live");
+    expect(emitted).not.toContain("key_live");
+    expect(emitted).not.toContain("pass_live");
+    expect(emitted).toContain("[REDACTED]");
   });
 });
 
@@ -1074,10 +1136,10 @@ describe("PolymarketClobAdapter — observability", () => {
   it("cancelOrder error path increments cancel_total{result=error}", async () => {
     const { logger } = makeRecordingLogger();
     const metrics = createRecordingMetrics();
-    const cancelOrder = vi.fn().mockRejectedValue(new Error("not found"));
+    const cancelOrder = vi.fn().mockRejectedValue(new Error("ECONNRESET"));
     const adapter = makeAdapter({ cancelOrder }, { logger, metrics });
 
-    await expect(adapter.cancelOrder("0xabc")).rejects.toThrow(/not found/);
+    await expect(adapter.cancelOrder("0xabc")).rejects.toThrow(/ECONNRESET/);
     const errCounter = metrics.emissions.find(
       (e) =>
         e.kind === "counter" &&

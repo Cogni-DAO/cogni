@@ -3,11 +3,16 @@
 
 /**
  * Module: `@contracts/poly.wallet.connection.v1.contract`
- * Purpose: Contract for provisioning and reading the calling user's Polymarket trading wallet connection.
- * Scope: `POST /api/v1/poly/wallet/connect` and `GET /api/v1/poly/wallet/status`. Schema-only. Does not place trades, set allowances, or move funds.
+ * Purpose: Contract for provisioning, ops rotation, and reading a Polymarket trading wallet connection.
+ * Scope: `POST /api/v1/poly/wallet/connect`,
+ *   `POST /api/internal/ops/poly/wallet/rotate-clob-creds`, and
+ *   `GET /api/v1/poly/wallet/status`. Schema-only. Does not place trades,
+ *   set allowances, or move funds.
  * Invariants:
- *   - TENANT_SCOPED: both operations are session-authenticated and derive the
+ *   - TENANT_SCOPED: user routes are session-authenticated and derive the
  *     tenant from the authenticated user; request bodies cannot override it.
+ *   - OPS_ONLY_ROTATION: CLOB credential rotation is an internal one-time ops
+ *     action behind `INTERNAL_OPS_TOKEN`, not a user-facing product control.
  *   - CUSTODIAL_CONSENT: connect requires explicit acknowledgement.
  *   - STATUS_REFLECTS_ACTIVE_CONNECTION: `connected=true` means there is an
  *     un-revoked `poly_wallet_connections` row for the tenant (DB-only read via
@@ -111,6 +116,50 @@ export const polyWalletStatusOperation = {
   }),
 } as const;
 
+export const polyWalletRotateClobCredsOperation = {
+  id: "poly.wallet.rotate_clob_creds.v1",
+  summary: "Rotate Polymarket CLOB credentials from the internal ops surface",
+  description:
+    "Deletes active Polymarket CLOB L2 API keys, creates fresh keys for the same wallets, and stores only encrypted credential envelopes. Internal-ops authenticated; intended for one-time incident rotation or controlled maintenance.",
+  input: z
+    .object({
+      rotate_all: z.boolean().optional().default(false),
+      billing_account_id: z.string().uuid().optional(),
+    })
+    .refine((input) => input.rotate_all || input.billing_account_id, {
+      message: "Set rotate_all=true or provide billing_account_id.",
+    })
+    .refine((input) => !(input.rotate_all && input.billing_account_id), {
+      message: "Use either rotate_all or billing_account_id, not both.",
+      path: ["billing_account_id"],
+    }),
+  output: z.object({
+    target_count: z.number().int().nonnegative(),
+    rotated_count: z.number().int().nonnegative(),
+    skipped_count: z.number().int().nonnegative(),
+    failed_count: z.number().int().nonnegative(),
+    rotated: z.array(
+      z.object({
+        billing_account_id: z.string().uuid(),
+        connection_id: z.string().uuid(),
+        funder_address: walletAddressSchema,
+      })
+    ),
+    skipped: z.array(
+      z.object({
+        billing_account_id: z.string().uuid(),
+        reason_code: z.string().min(1).max(64),
+      })
+    ),
+    failed: z.array(
+      z.object({
+        billing_account_id: z.string().uuid(),
+        error_code: z.string().min(1).max(64),
+      })
+    ),
+  }),
+} as const;
+
 export type PolyWalletConnectInput = z.infer<
   typeof polyWalletConnectOperation.input
 >;
@@ -119,4 +168,7 @@ export type PolyWalletConnectOutput = z.infer<
 >;
 export type PolyWalletStatusOutput = z.infer<
   typeof polyWalletStatusOperation.output
+>;
+export type PolyWalletRotateClobCredsOutput = z.infer<
+  typeof polyWalletRotateClobCredsOperation.output
 >;

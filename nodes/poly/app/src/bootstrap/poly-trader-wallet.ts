@@ -23,7 +23,10 @@ import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
 import { PrivyPolyTraderWalletAdapter } from "@/adapters/server/wallet";
 // Re-homed to `poly-trade-executor.ts` so Stage 4's purge of
 // `poly-trade.ts` does not break provisioning. (C7 design-review concern.)
-import { createOrDerivePolymarketApiKeyForSigner } from "@/bootstrap/capabilities/poly-trade-executor";
+import {
+  createOrDerivePolymarketApiKeyForSigner,
+  rotatePolymarketApiKeyForSigner,
+} from "@/bootstrap/capabilities/poly-trade-executor";
 import { serverEnv } from "@/shared/env/server-env";
 
 export class WalletAdapterUnconfiguredError extends Error {
@@ -41,6 +44,7 @@ export function createRealClobCredsFactory({
   logger,
   polygonRpcUrl,
   deriveCreds = createOrDerivePolymarketApiKeyForSigner,
+  rotateCreds = rotatePolymarketApiKeyForSigner,
 }: {
   logger: Logger;
   polygonRpcUrl?: string | undefined;
@@ -52,24 +56,56 @@ export function createRealClobCredsFactory({
     secret: string;
     passphrase: string;
   }>;
+  rotateCreds?: (input: {
+    signer: LocalAccount;
+    currentCreds: { key: string; secret: string; passphrase: string };
+    polygonRpcUrl?: string | undefined;
+  }) => Promise<{
+    key: string;
+    secret: string;
+    passphrase: string;
+  }>;
 }) {
-  return async (signer: LocalAccount) => {
-    try {
-      return await deriveCreds({ signer, polygonRpcUrl });
-    } catch (err) {
-      logger.error(
-        {
-          component: "poly-trader-wallet-bootstrap",
-          funder_address: signer.address,
-          err: err instanceof Error ? err.message : String(err),
-        },
-        "poly.wallet.provision failed to derive live CLOB creds"
-      );
-      throw new Error(
-        "Failed to derive Polymarket CLOB API credentials for the tenant wallet",
-        { cause: err }
-      );
-    }
+  return {
+    derive: async (signer: LocalAccount) => {
+      try {
+        return await deriveCreds({ signer, polygonRpcUrl });
+      } catch (err) {
+        logger.error(
+          {
+            component: "poly-trader-wallet-bootstrap",
+            funder_address: signer.address,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "poly.wallet.provision failed to derive live CLOB creds"
+        );
+        throw new Error(
+          "Failed to derive Polymarket CLOB API credentials for the tenant wallet",
+          { cause: err }
+        );
+      }
+    },
+    rotate: async (
+      signer: LocalAccount,
+      currentCreds: { key: string; secret: string; passphrase: string }
+    ) => {
+      try {
+        return await rotateCreds({ signer, currentCreds, polygonRpcUrl });
+      } catch (err) {
+        logger.error(
+          {
+            component: "poly-trader-wallet-bootstrap",
+            funder_address: signer.address,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "poly.wallet.rotate failed to rotate live CLOB creds"
+        );
+        throw new Error(
+          "Failed to rotate Polymarket CLOB API credentials for the tenant wallet",
+          { cause: err }
+        );
+      }
+    },
   };
 }
 
@@ -119,16 +155,19 @@ export function getPolyTraderWalletAdapter(
     appSecret,
   });
 
+  const clobCreds = createRealClobCredsFactory({
+    logger,
+    polygonRpcUrl: env.POLYGON_RPC_URL,
+  });
+
   cached = new PrivyPolyTraderWalletAdapter({
     privyClient,
     privySigningKey: signingKey,
     serviceDb: getServiceDb(),
     encryptionKey,
     encryptionKeyId: aeadKeyId,
-    clobCredsFactory: createRealClobCredsFactory({
-      logger,
-      polygonRpcUrl: env.POLYGON_RPC_URL,
-    }),
+    clobCredsFactory: clobCreds.derive,
+    clobCredsRotator: clobCreds.rotate,
     polygonRpcUrl: env.POLYGON_RPC_URL,
     logger,
   });
