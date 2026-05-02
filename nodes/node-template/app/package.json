@@ -21,6 +21,7 @@
     "@cogni/ai-core": "workspace:*",
     "@cogni/ai-tools": "workspace:*",
     "@cogni/node-app": "workspace:*",
+    "@cogni/node-ui-kit": "workspace:*",
     "@cogni/aragon-osx": "workspace:*",
     "@cogni/attribution-ledger": "workspace:*",
     "@cogni/cogni-contracts": "workspace:*",

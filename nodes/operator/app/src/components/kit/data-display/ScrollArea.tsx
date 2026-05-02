@@ -12,4 +12,4 @@
  * @public
  */
 
-export { ScrollArea, ScrollBar } from "@/components/vendor/shadcn/scroll-area";
+export { ScrollArea, ScrollBar } from "@cogni/node-ui-kit/shadcn/scroll-area";

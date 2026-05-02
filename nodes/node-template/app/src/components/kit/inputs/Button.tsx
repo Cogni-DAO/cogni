@@ -12,12 +12,11 @@
  * @public
  */
 
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import { Slot } from "@radix-ui/react-slot";
 import type { VariantProps } from "class-variance-authority";
 import type { ComponentProps, ReactElement, ReactNode } from "react";
 import { cloneElement, forwardRef, isValidElement } from "react";
-
-import { cn } from "@/shared/util/cn";
 import { button, icon } from "@/styles/ui";
 
 type ButtonBaseProps = ComponentProps<"button">;

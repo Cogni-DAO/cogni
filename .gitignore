@@ -119,3 +119,4 @@ infra/provision/cherry/base/tfplan
 docs/research/fixtures/market-cache/
 .claude/scheduled_tasks.lock
 /.local-auth/
+task5002-import-mapping-*.json

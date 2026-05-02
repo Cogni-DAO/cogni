@@ -1,6 +1,8 @@
 "use client";
 
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
+import { Button } from "@cogni/node-ui-kit/shadcn/button";
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -8,9 +10,6 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { useState } from "react";
-
-import { Button } from "@/components/vendor/shadcn/button";
-import { cn } from "@/shared/util/cn";
 
 export const ToolFallback: ToolCallMessagePartComponent = ({
   toolName,

@@ -13,15 +13,15 @@
  */
 
 import type { PaymentFlowState } from "@cogni/node-core";
-import { CheckCircle2, ExternalLink, Loader2, XCircle } from "lucide-react";
-import type { ReactElement } from "react";
-import { Button } from "@/components/kit/inputs/Button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@/components/vendor/shadcn/dialog";
+} from "@cogni/node-ui-kit/shadcn/dialog";
+import { CheckCircle2, ExternalLink, Loader2, XCircle } from "lucide-react";
+import type { ReactElement } from "react";
+import { Button } from "@/components/kit/inputs/Button";
 
 export interface PaymentFlowDialogProps {
   /** Dialog open state */

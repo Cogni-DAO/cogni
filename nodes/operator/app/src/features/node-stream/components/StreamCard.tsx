@@ -15,9 +15,9 @@
 
 "use client";
 
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import type { ReactElement, ReactNode } from "react";
 import { Badge, Card, CardContent, CardHeader } from "@/components";
-import { cn } from "@/shared/util/cn";
 import type { StreamEvent } from "../hooks/useNodeStream";
 
 interface StreamCardProps {

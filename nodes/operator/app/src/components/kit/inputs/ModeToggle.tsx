@@ -14,14 +14,13 @@
 
 "use client";
 
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import type { VariantProps } from "class-variance-authority";
 import { Check, Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { ComponentProps } from "react";
 import React, { forwardRef, useEffect, useState } from "react";
-
-import { cn } from "@/shared/util/cn";
 import {
   dropdownContent,
   dropdownMenuCheck,

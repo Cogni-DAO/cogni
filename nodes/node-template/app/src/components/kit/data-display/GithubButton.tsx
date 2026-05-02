@@ -14,6 +14,7 @@
 
 "use client";
 
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import { cva, type VariantProps } from "class-variance-authority";
 import { Star } from "lucide-react";
 import {
@@ -29,8 +30,6 @@ import type {
   ReactElement,
 } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-import { cn } from "@/shared/util/cn";
 
 const githubButtonVariants = cva(
   "relative inline-flex items-center justify-center whitespace-nowrap rounded-md border font-medium transition-transform duration-200 ease-out hover:scale-105 focus-visible:outline-none focus-visible:ring-[var(--ring-width-sm)] focus-visible:ring-ring focus-visible:ring-offset-[var(--ring-offset-w-sm)] disabled:pointer-events-none disabled:opacity-60 [&_svg]:shrink-0",

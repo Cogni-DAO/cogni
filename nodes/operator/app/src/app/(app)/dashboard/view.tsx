@@ -22,6 +22,7 @@ import type {
   TimeRange,
   WorkItemDto,
 } from "@cogni/node-contracts";
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import { useQuery } from "@tanstack/react-query";
 import { Radio } from "lucide-react";
 import Link from "next/link";
@@ -54,7 +55,6 @@ import {
   StreamCard,
   useNodeStream,
 } from "@/features/node-stream";
-import { cn } from "@/shared/util/cn";
 import { fetchActivity } from "../activity/_api/fetchActivity";
 import { WorkItemDetail } from "../work/_components/WorkItemDetail";
 import { StatusPill, TypeIcon } from "../work/_components/work-item-icons";

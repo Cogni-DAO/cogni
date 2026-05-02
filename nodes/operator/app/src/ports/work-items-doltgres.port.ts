@@ -22,7 +22,12 @@ export type WorkItemsCreateInput = Parameters<WorkItemCommandPort["create"]>[0];
 
 export type WorkItemsPatchSet = NonNullable<
   Parameters<WorkItemCommandPort["patch"]>[0]["set"]
->;
+> & {
+  readonly deployVerified?: boolean;
+  readonly projectId?: string | null;
+  readonly parentId?: string | null;
+  readonly blockedBy?: string | null;
+};
 
 export interface WorkItemsPatchInput {
   readonly id: WorkItemId;
@@ -31,7 +36,11 @@ export interface WorkItemsPatchInput {
 
 export interface WorkItemsDoltgresPort {
   get(id: WorkItemId): Promise<WorkItem | null>;
-  list(query?: WorkQuery): Promise<{ items: WorkItem[]; nextCursor?: string }>;
+  list(query?: WorkQuery): Promise<{
+    items: WorkItem[];
+    nextCursor?: string;
+    pageInfo: { endCursor: string | null; hasMore: boolean };
+  }>;
   create(input: WorkItemsCreateInput, authorTag: string): Promise<WorkItem>;
   patch(
     input: WorkItemsPatchInput,

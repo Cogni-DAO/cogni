@@ -14,11 +14,10 @@
 
 "use client";
 
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import { AnimatePresence, motion } from "motion/react";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useState } from "react";
-
-import { cn } from "@/shared/util/cn";
 import { codeToken } from "@/styles/ui";
 
 interface HeroActionWordsProps {

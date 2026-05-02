@@ -23,6 +23,21 @@ import { toWorkItemId } from "@cogni/work-items";
 
 import { getContainer } from "@/bootstrap/container";
 
+/**
+ * Thrown when the opaque pagination cursor cannot be decoded — translated
+ * to HTTP 400 in the route layer instead of the wrapper's generic 500.
+ * The adapter's cursor codec throws a structurally identical error
+ * (`name === "InvalidCursorError"`); the facade detects by name and
+ * rethrows its own copy so the app layer doesn't have to import from
+ * `@/adapters/**` (forbidden by `no-restricted-imports`).
+ */
+export class InvalidCursorError extends Error {
+  constructor(message = "invalid cursor") {
+    super(message);
+    this.name = "InvalidCursorError";
+  }
+}
+
 export class WorkItemNotFoundError extends Error {
   constructor(id: string) {
     super(`Work item not found: ${id}`);
@@ -70,14 +85,6 @@ function toDto(item: WorkItem): WorkItemDto {
   };
 }
 
-function isDoltgresId(id: string): boolean {
-  const dot = id.lastIndexOf(".");
-  if (dot < 0) return false;
-  const tail = id.slice(dot + 1);
-  if (!/^\d+$/.test(tail)) return false;
-  return Number.parseInt(tail, 10) >= 5000;
-}
-
 function authorTagFromSession(user: {
   id: string;
   displayName: string | null;
@@ -112,36 +119,71 @@ export async function listWorkItems(
     ...(input.projectId && { projectId: toWorkItemId(input.projectId) }),
     ...(input.node && { node: input.node }),
     ...(input.limit && { limit: input.limit }),
+    ...(input.cursor && { cursor: input.cursor }),
   };
 
-  const mdResult = await container.workItemQuery.list(queryShared);
-  const merged: WorkItem[] = [...mdResult.items];
-  let nextCursor = mdResult.nextCursor;
+  // Pagination strategy:
+  //   - Doltgres is the cursor-paginated source of truth (post-#1144 importer
+  //     back-fills markdown items into Doltgres at their original IDs).
+  //   - On the first page (no cursor) we ALSO query the markdown adapter so
+  //     any items that haven't been imported yet still appear. Doltgres rows
+  //     win on id conflict (single-source dedup).
+  //   - Merged page is truncated to `limit` so the response never overflows.
+  //   - hasMore tracks Doltgres only — markdown is finite/small and only
+  //     contributes to page 1; once Doltgres exhausts pagination ends.
+  //   - Markdown-only items that overflow page 1 are dropped from the response;
+  //     this is acceptable because markdown is being deprecated and the
+  //     importer back-fill closes the gap.
+  let dgItems: WorkItem[] = [];
+  let endCursor: string | null = null;
+  let hasMore = false;
 
   try {
     const dgResult = await container.doltgresWorkItems.list(queryShared);
-    merged.push(...dgResult.items);
-    nextCursor = dgResult.nextCursor ?? nextCursor;
+    dgItems = [...dgResult.items];
+    endCursor = dgResult.pageInfo.endCursor;
+    hasMore = dgResult.pageInfo.hasMore;
   } catch (e) {
-    if ((e as Error)?.name !== "DoltgresNotConfiguredError") throw e;
+    const name = (e as Error)?.name;
+    if (name === "InvalidCursorError") {
+      throw new InvalidCursorError((e as Error).message);
+    }
+    if (name !== "DoltgresNotConfiguredError") throw e;
   }
 
-  return { items: merged.map(toDto), ...(nextCursor && { nextCursor }) };
+  let merged: WorkItem[] = dgItems;
+  if (!input.cursor) {
+    const mdResult = await container.workItemQuery.list(queryShared);
+    const dgIds = new Set(dgItems.map((i) => i.id as string));
+    const mdOnly = mdResult.items.filter((i) => !dgIds.has(i.id as string));
+    merged = [...dgItems, ...mdOnly];
+  }
+
+  const requestedLimit = input.limit ?? 100;
+  if (merged.length > requestedLimit) {
+    merged = merged.slice(0, requestedLimit);
+  }
+
+  return {
+    items: merged.map(toDto),
+    pageInfo: { endCursor, hasMore },
+    ...(endCursor !== null && { nextCursor: endCursor }),
+  };
 }
 
 export async function getWorkItem(id: string): Promise<WorkItemDto | null> {
   const container = getContainer();
-  if (isDoltgresId(id)) {
-    try {
-      const item = await container.doltgresWorkItems.get(toWorkItemId(id));
-      return item ? toDto(item) : null;
-    } catch (e) {
-      if ((e as Error)?.name === "DoltgresNotConfiguredError") return null;
-      throw e;
-    }
+  // Doltgres-first: legacy markdown IDs (e.g. bug.0002) can also live in Doltgres
+  // after the markdown→Doltgres import (task.5002). Fall back to markdown only when
+  // Doltgres returns null, so unimported legacy IDs still resolve during transition.
+  try {
+    const item = await container.doltgresWorkItems.get(toWorkItemId(id));
+    if (item) return toDto(item);
+  } catch (e) {
+    if ((e as Error)?.name !== "DoltgresNotConfiguredError") throw e;
   }
-  const item = await container.workItemQuery.get(id as WorkItemId);
-  return item ? toDto(item) : null;
+  const mdItem = await container.workItemQuery.get(id as WorkItemId);
+  return mdItem ? toDto(mdItem) : null;
 }
 
 export async function createWorkItem(
@@ -154,6 +196,7 @@ export async function createWorkItem(
       {
         type: input.type,
         title: input.title,
+        ...(input.id !== undefined && { id: toWorkItemId(input.id) }),
         ...(input.summary !== undefined && { summary: input.summary }),
         ...(input.outcome !== undefined && { outcome: input.outcome }),
         ...(input.specRefs !== undefined && { specRefs: input.specRefs }),
@@ -166,6 +209,10 @@ export async function createWorkItem(
         ...(input.labels !== undefined && { labels: input.labels }),
         ...(input.assignees !== undefined && { assignees: input.assignees }),
         ...(input.node !== undefined && { node: input.node }),
+        ...(input.status !== undefined && { status: input.status }),
+        ...(input.priority !== undefined && { priority: input.priority }),
+        ...(input.rank !== undefined && { rank: input.rank }),
+        ...(input.estimate !== undefined && { estimate: input.estimate }),
       },
       authorTagFromSession(sessionUser)
     );
@@ -182,9 +229,6 @@ export async function patchWorkItem(
   input: ContractPatchInput,
   sessionUser: { id: string; displayName: string | null }
 ): Promise<WorkItemDto> {
-  if (!isDoltgresId(input.id)) {
-    throw new WorkItemNotFoundError(input.id);
-  }
   const container = getContainer();
   try {
     const patched = await container.doltgresWorkItems.patch(

@@ -14,11 +14,10 @@
 
 "use client";
 
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import * as ProgressPrimitive from "@radix-ui/react-progress";
 import type { ComponentPropsWithoutRef, ElementRef } from "react";
 import { forwardRef } from "react";
-
-import { cn } from "@/shared/util/cn";
 
 export interface ProgressProps
   extends ComponentPropsWithoutRef<typeof ProgressPrimitive.Root> {}

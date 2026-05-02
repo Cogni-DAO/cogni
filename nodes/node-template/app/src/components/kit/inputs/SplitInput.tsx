@@ -12,9 +12,8 @@
  * @public
  */
 
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import type { InputHTMLAttributes } from "react";
-
-import { cn } from "@/shared/util/cn";
 
 interface SplitInputProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "onChange"> {

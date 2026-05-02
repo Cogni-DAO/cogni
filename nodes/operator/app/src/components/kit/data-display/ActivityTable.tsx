@@ -22,7 +22,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/vendor/shadcn/table";
+} from "@cogni/node-ui-kit/shadcn/table";
 
 export interface ActivityLog {
   id: string;

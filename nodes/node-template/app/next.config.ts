@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  transpilePackages: ["@cogni/node-app"],
+  transpilePackages: ["@cogni/node-app", "@cogni/node-ui-kit"],
   // In monorepo: tell Next.js where the workspace root is so standalone output
   // includes shared packages and resolves node_modules correctly.
   outputFileTracingRoot: path.join(__dirname, "../../../"),

@@ -13,12 +13,11 @@
 
 "use client";
 
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
-
 import { Badge } from "@/components/kit/data-display/Badge";
 import { Card } from "@/components/kit/layout/Card";
-import { cn } from "@/shared/util/cn";
 
 export interface RunCardData {
   id: string;

@@ -16,6 +16,7 @@
 
 import type { ModelRef } from "@cogni/ai-core";
 import type { Model } from "@cogni/node-contracts";
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -27,7 +28,6 @@ import {
 } from "@/components/kit/overlays/Dialog";
 import { resolveModelIcon } from "@/features/ai/config/provider-icons";
 import { OpenAIIcon } from "@/features/ai/icons/providers/OpenAIIcon";
-import { cn } from "@/shared/util/cn";
 
 export type LlmBackend = "openrouter" | "chatgpt" | "local";
 

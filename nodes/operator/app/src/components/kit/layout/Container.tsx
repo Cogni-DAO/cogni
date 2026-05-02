@@ -12,10 +12,9 @@
  * @public
  */
 
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import type { VariantProps } from "class-variance-authority";
 import * as React from "react";
-
-import { cn } from "@/shared/util/cn";
 import { container } from "@/styles/ui";
 
 type DivNoClass = Omit<React.HTMLAttributes<HTMLDivElement>, "className">;

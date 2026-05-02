@@ -14,11 +14,10 @@
 
 "use client";
 
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentPropsWithoutRef, ReactElement, ReactNode } from "react";
-
-import { cn } from "@/shared/util/cn";
 import type { VariantProps } from "@/styles/ui";
 import { navLink } from "@/styles/ui";
 

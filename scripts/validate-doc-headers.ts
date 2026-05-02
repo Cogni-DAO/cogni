@@ -46,6 +46,9 @@ const EXCLUDE = [
   "docs/**",
   // Vendor components maintain their own licensing
   "**/vendor/**",
+  // node-ui-kit re-vendored shadcn/reui — same licensing rationale as vendor/
+  "**/node-ui-kit/src/shadcn/**",
+  "**/node-ui-kit/src/reui/**",
 ];
 const MAX_HEADER_LINES = 40;
 const ALLOWED_SIDE_EFFECTS = [

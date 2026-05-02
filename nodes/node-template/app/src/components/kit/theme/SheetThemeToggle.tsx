@@ -14,15 +14,14 @@
 
 "use client";
 
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@cogni/node-ui-kit/shadcn/toggle-group";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
-
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@/components/vendor/shadcn/toggle-group";
 
 export function SheetThemeToggle(): ReactElement {
   const { theme, setTheme } = useTheme();

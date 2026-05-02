@@ -3,6 +3,7 @@
 
 "use client";
 
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import {
   Ban,
   BookOpen,
@@ -20,8 +21,6 @@ import {
   XCircle,
 } from "lucide-react";
 import type { ReactElement } from "react";
-
-import { cn } from "@/shared/util/cn";
 
 // --- Type icons ---
 

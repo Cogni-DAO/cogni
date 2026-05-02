@@ -12,7 +12,7 @@
  * @public
  */
 
-import { cn } from "@/shared/util/cn";
+import { cn } from "@cogni/node-ui-kit/util/cn";
 
 type MaxWidth = "sm" | "md" | "lg" | "xl" | "2xl" | "full";
 

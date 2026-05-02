@@ -13,12 +13,12 @@
  */
 
 "use client";
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import type { Container } from "@tsparticles/engine";
 import Particles, { initParticlesEngine } from "@tsparticles/react";
 import { loadSlim } from "@tsparticles/slim";
 import { motion, useAnimation } from "framer-motion";
 import { useEffect, useId, useState } from "react";
-import { cn } from "@/shared/util/cn";
 
 type ParticlesProps = {
   id?: string;

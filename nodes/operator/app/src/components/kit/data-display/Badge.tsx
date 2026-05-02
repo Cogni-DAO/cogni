@@ -12,10 +12,9 @@
  * @public
  */
 
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import { Slot } from "@radix-ui/react-slot";
 import type { ReactElement, ReactNode } from "react";
-
-import { cn } from "@/shared/util/cn";
 import { badge } from "@/styles/ui";
 
 export interface BadgeProps {

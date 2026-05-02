@@ -15,7 +15,7 @@
  * @public
  */
 
-import { Skeleton } from "@/components/vendor/shadcn/skeleton";
+import { Skeleton } from "@cogni/node-ui-kit/shadcn/skeleton";
 
 interface PageHeaderSkeletonProps {
   /** Width of the title bar in tailwind class form. Default: `w-44`. */

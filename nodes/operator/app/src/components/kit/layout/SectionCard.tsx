@@ -17,8 +17,8 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-} from "@/components/vendor/shadcn/card";
-import { cn } from "@/shared/util/cn";
+} from "@cogni/node-ui-kit/shadcn/card";
+import { cn } from "@cogni/node-ui-kit/util/cn";
 
 interface SectionCardProps {
   title: string;

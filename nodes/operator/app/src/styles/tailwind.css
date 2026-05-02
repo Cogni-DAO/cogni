@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @custom-variant dark (&:is(.dark *));
 @import "tw-animate-css";
+@import "@cogni/node-ui-kit/tailwind-source.css";
 
 @theme inline {
   /* Colors - map CSS vars to Tailwind color namespace */

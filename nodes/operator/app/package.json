@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "test": "vitest run",
     "test:external": "vitest run --config vitest.external.config.mts",
-    "test:external:money": "vitest run --config vitest.external-money.config.mts"
+    "test:external:money": "vitest run --config vitest.external-money.config.mts",
+    "import:work-items": "tsx scripts/import-work-items-via-api.ts"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.12.10",
@@ -21,6 +22,7 @@
     "@cogni/ai-core": "workspace:*",
     "@cogni/ai-tools": "workspace:*",
     "@cogni/node-app": "workspace:*",
+    "@cogni/node-ui-kit": "workspace:*",
     "@cogni/aragon-osx": "workspace:*",
     "@cogni/attribution-ledger": "workspace:*",
     "@cogni/cogni-contracts": "workspace:*",

@@ -13,11 +13,11 @@
 
 "use client";
 
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import { ChevronDown, MessageSquare, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactElement, useState } from "react";
-
 import {
   SidebarMenuAction,
   SidebarMenuButton,
@@ -26,7 +26,6 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components";
-import { cn } from "@/shared/util/cn";
 import { useDeleteThread, useThreads } from "../hooks/useThreads";
 import { useChatSidebarStore } from "./ChatSidebarContext";
 

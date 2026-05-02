@@ -6,6 +6,8 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
 } from "@assistant-ui/react";
+import { Button } from "@cogni/node-ui-kit/shadcn/button";
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -27,8 +29,6 @@ import {
 import { MarkdownText } from "@/components/vendor/assistant-ui/markdown-text";
 import { ToolFallback } from "@/components/vendor/assistant-ui/tool-fallback";
 import { TooltipIconButton } from "@/components/vendor/assistant-ui/tooltip-icon-button";
-import { Button } from "@/components/vendor/shadcn/button";
-import { cn } from "@/shared/util/cn";
 
 // Allow customization of welcome message via children prop
 export interface ThreadProps {

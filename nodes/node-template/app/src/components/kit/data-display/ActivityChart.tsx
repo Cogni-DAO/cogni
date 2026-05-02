@@ -13,15 +13,13 @@
 
 "use client";
 
-import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
-
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/vendor/shadcn/card";
+} from "@cogni/node-ui-kit/shadcn/card";
 import {
   type ChartConfig,
   ChartContainer,
@@ -29,7 +27,8 @@ import {
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
-} from "@/components/vendor/shadcn/chart";
+} from "@cogni/node-ui-kit/shadcn/chart";
+import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 
 export interface ActivityChartProps {
   title: string;

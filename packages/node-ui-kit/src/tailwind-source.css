@@ -1,0 +1,11 @@
+/* Tailwind v4 @source declaration for the kit.
+ *
+ * Tailwind only auto-scans the consuming project's tree; without this,
+ * every shadcn/reui class shipped from this package compiles to nothing
+ * in the consumer's CSS bundle.
+ *
+ * Consumers `@import "@cogni/node-ui-kit/tailwind-source.css"` from their
+ * own `tailwind.css`. The kit owns its source globs so adding new files
+ * here doesn't require touching every consumer.
+ */
+@source "./**/*.{ts,tsx}";

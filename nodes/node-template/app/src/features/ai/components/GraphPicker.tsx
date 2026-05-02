@@ -15,6 +15,7 @@
 "use client";
 
 import type { GraphId } from "@cogni/ai-core";
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import { Bot, Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import {
@@ -24,7 +25,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/kit/overlays/Dialog";
-import { cn } from "@/shared/util/cn";
 
 /**
  * Graph descriptor for UI display.

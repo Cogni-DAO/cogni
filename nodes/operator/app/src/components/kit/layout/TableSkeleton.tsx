@@ -19,7 +19,7 @@
  * @public
  */
 
-import { Skeleton } from "@/components/vendor/shadcn/skeleton";
+import { Skeleton } from "@cogni/node-ui-kit/shadcn/skeleton";
 
 interface TableSkeletonProps {
   /** Number of body rows to render. Default: `8`. */

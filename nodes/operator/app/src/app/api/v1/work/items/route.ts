@@ -19,6 +19,7 @@ import { NextResponse } from "next/server";
 
 import {
   createWorkItem,
+  InvalidCursorError,
   listWorkItems,
   WorkItemsBackendNotReadyError,
 } from "@/app/_facades/work/items.server";
@@ -47,6 +48,7 @@ export const GET = wrapRouteHandlerWithLogging(
     const projectIdParam = url.searchParams.get("projectId");
     const nodeParam = url.searchParams.get("node");
     const limitParam = url.searchParams.get("limit");
+    const cursorParam = url.searchParams.get("cursor");
 
     const input = workItemsListOperation.input.parse({
       types: typesParam ? typesParam.split(",") : undefined,
@@ -60,9 +62,18 @@ export const GET = wrapRouteHandlerWithLogging(
           : nodeParam
         : undefined,
       limit: limitParam ? Number(limitParam) : undefined,
+      cursor: cursorParam ?? undefined,
     });
 
-    const result = await listWorkItems(input);
+    let result: Awaited<ReturnType<typeof listWorkItems>>;
+    try {
+      result = await listWorkItems(input);
+    } catch (e) {
+      if (e instanceof InvalidCursorError) {
+        return NextResponse.json({ error: "invalid cursor" }, { status: 400 });
+      }
+      throw e;
+    }
 
     ctx.log.info({ count: result.items.length }, "work.items.list_success");
 
@@ -114,6 +125,12 @@ export const POST = wrapRouteHandlerWithLogging(
     } catch (e) {
       if (e instanceof WorkItemsBackendNotReadyError) {
         return NextResponse.json({ error: e.message }, { status: 503 });
+      }
+      if ((e as Error)?.name === "WorkItemAlreadyExistsError") {
+        return NextResponse.json(
+          { error: (e as Error).message },
+          { status: 409 }
+        );
       }
       throw e;
     }

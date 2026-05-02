@@ -22,6 +22,13 @@
 "use client";
 
 import type { WorkItemDto } from "@cogni/node-contracts";
+import {
+  DataGrid,
+  DataGridContainer,
+} from "@cogni/node-ui-kit/reui/data-grid/data-grid";
+import { DataGridColumnVisibility } from "@cogni/node-ui-kit/reui/data-grid/data-grid-column-visibility";
+import { DataGridPagination } from "@cogni/node-ui-kit/reui/data-grid/data-grid-pagination";
+import { DataGridTable } from "@cogni/node-ui-kit/reui/data-grid/data-grid-table";
 import { useQuery } from "@tanstack/react-query";
 import {
   type ColumnFiltersState,
@@ -39,13 +46,6 @@ import { Settings2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Input } from "@/components";
-import {
-  DataGrid,
-  DataGridContainer,
-} from "@/components/reui/data-grid/data-grid";
-import { DataGridColumnVisibility } from "@/components/reui/data-grid/data-grid-column-visibility";
-import { DataGridPagination } from "@/components/reui/data-grid/data-grid-pagination";
-import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
 
 import { fetchWorkItems } from "./_api/fetchWorkItems";
 import { columns } from "./_components/columns";

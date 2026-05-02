@@ -16,7 +16,7 @@
  * @public
  */
 
-import { Skeleton } from "@/components/vendor/shadcn/skeleton";
+import { Skeleton } from "@cogni/node-ui-kit/shadcn/skeleton";
 
 type ColCount = 1 | 2 | 3 | 4;
 

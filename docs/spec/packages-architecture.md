@@ -28,8 +28,15 @@ Provide a shared-library layer (`@cogni/*` workspace packages) with strict isola
 ## Non-Goals
 
 - Deployable services with process lifecycle (those belong in `services/`)
-- UI components or feature-specific code (those belong in `src/features/`)
+- Feature-specific UI (feature wrappers, layouts, route components — those belong in `src/features/` or `src/components/kit/`)
 - Published npm packages (all packages are `private: true` workspace-only)
+
+**Carve-out for baseline UI primitive packages.** A package MAY contain framework-agnostic vendored UI primitives (e.g. shadcn/Radix wrappers, reui table kit) when **all** of the following hold:
+
+- It contains only owned vendor primitives + their utilities (no business logic, no node-specific imports, no env reads).
+- It is consumed via `transpilePackages` with **source exports** — no `dist/`, no tsup. (Same shape as `@cogni/node-app`.)
+- Feature code never imports it directly. The consuming node's `components/kit/` and `components/index.ts` barrel are the only places that may import it. Feature code keeps importing from `@/components`, preserving `KIT_IS_ONLY_API` from `ui-implementation.md`.
+- Forks are free to bypass the package and keep a local vendor copy. The package is a baseline, not a mandate.
 
 ## Core Invariants
 
@@ -57,7 +64,9 @@ Create a package when code is:
 2. **Shared across boundaries** — Used by both `src/` and potential future CLI/services
 3. **Isolation-critical** — Must never depend on app internals (e.g., protocol encodings, domain constants)
 
-**Do NOT create a package for:** UI components, feature services, or anything importing from `src/`.
+**Do NOT create a package for:** feature UI (route components, layouts, wrappers), feature services, or anything importing from `src/`.
+
+**Baseline UI primitive packages** (e.g. `@cogni/node-ui-kit`) are the one exception — see the carve-out under Non-Goals. They use the source-export + `transpilePackages` shape (mirroring `@cogni/node-app`), not the capability-package shape below.
 
 ### Capability Package Shape
 

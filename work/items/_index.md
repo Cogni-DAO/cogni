@@ -50,6 +50,7 @@
 | 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 5 | needs_merge | task.0388 | Capability B — event-driven redeem job queue (rips the sweep) | Cogni Poly | proj.poly-copy-trading |
+| 0 | 2 | 2 | needs_implement | task.5002 | One-shot markdown → Doltgres work-item importer (operator v1) | DAO Agentic Project Management | proj.agentic-project-management |
 | 0 | 3 | 2 | needs_design | bug.0062 | OpenClaw gateway: single webchat message can trigger multi-call GOVERN loop (call storm) | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 0 | 3 | 3 | needs_merge | bug.0232 | LlmService port silently drops tools — Codex adapter ignores params.tools, MCP tools invisible to Codex agents | Agentic Interoperability | proj.agentic-interop |
 | 0 | 3 | 2 | needs_merge | task.0294 | Policy-gated release: kill auto-release PR conveyor belt | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -240,6 +241,7 @@
 | 2 | 0 | 2 | needs_triage | task.0109 | Expand GitHub adapter — PR comments, review comments, issue creation | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 2 | 1 | 1 | needs_triage | bug.0422 | Redeemed positions show $0.00 P/L in History card — cost basis lost | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 1 | 1 | needs_implement | task.0432 | Work Items table — port poly's HEADER_OWNS_CONTROLS standard to operator (node-template follows in PR-B) |  |  |
+| 2 | 1 | 3 | needs_review | task.0433 | Extract @cogni/node-ui-kit baseline UI package, vendor into node-template |  |  |
 | 2 | 2 | 3 | needs_design | task.0238 | Agent avatars — Rive/Lottie animated characters on run cards and chat | Premium Frontend UX | proj.premium-frontend-ux |
 | 2 | 2 | 1 | needs_review | bug.0367 | verify-buildsha.sh hostname convention breaks production verify | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 2 | 2 | needs_review | bug.0368 | candidate-flight verify wait is ~4min of migrator image pull, not migration work | CI/CD Pipeline | proj.cicd-services-gitops |

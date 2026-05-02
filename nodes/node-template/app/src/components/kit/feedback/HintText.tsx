@@ -12,7 +12,7 @@
  * @public
  */
 
-import { cn } from "@/shared/util/cn";
+import { cn } from "@cogni/node-ui-kit/util/cn";
 
 interface HintTextProps {
   children: React.ReactNode;

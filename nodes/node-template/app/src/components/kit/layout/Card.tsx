@@ -21,4 +21,4 @@ export {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@/components/vendor/shadcn/card";
+} from "@cogni/node-ui-kit/shadcn/card";

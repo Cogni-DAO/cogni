@@ -13,12 +13,11 @@
 
 "use client";
 
+import { TableCell, TableRow } from "@cogni/node-ui-kit/shadcn/table";
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { useState } from "react";
-
-import { TableCell, TableRow } from "@/components/vendor/shadcn/table";
-import { cn } from "@/shared/util/cn";
 
 interface ExpandableTableRowProps {
   readonly cells: readonly ReactNode[];

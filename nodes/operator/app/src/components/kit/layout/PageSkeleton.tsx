@@ -11,7 +11,7 @@
  * @public
  */
 
-import { Skeleton } from "@/components/vendor/shadcn/skeleton";
+import { Skeleton } from "@cogni/node-ui-kit/shadcn/skeleton";
 import { PageContainer } from "./PageContainer";
 
 type MaxWidth = "sm" | "md" | "lg" | "xl" | "2xl" | "full";

@@ -19,7 +19,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/vendor/shadcn/select";
+} from "@cogni/node-ui-kit/shadcn/select";
 
 export type TimeRange = "1d" | "1w" | "1m";
 

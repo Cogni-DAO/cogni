@@ -14,10 +14,9 @@
 
 "use client";
 
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import { motion } from "framer-motion";
 import type { ReactElement } from "react";
-
-import { cn } from "@/shared/util/cn";
 
 interface StatItem {
   value: string;

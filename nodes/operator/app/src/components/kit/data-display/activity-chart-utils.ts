@@ -11,7 +11,7 @@
  * @internal
  */
 
-import type { ChartConfig } from "@/components/vendor/shadcn/chart";
+import type { ChartConfig } from "@cogni/node-ui-kit/shadcn/chart";
 
 /** Palette for per-group bar colors — theme chart vars at 70% for a subdued look. */
 const GROUP_COLORS = [

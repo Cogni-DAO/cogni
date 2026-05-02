@@ -174,14 +174,30 @@ shadcn/Radix code is **copied and owned**, not a dependency jail:
 
 - Upstream reference kept in file headers for updates
 - Kit is the only API surface — features import from `@/components`
-- Vendor files live in `src/components/vendor/ui-primitives/`
-- ESLint `no-vendor-imports-outside-kit` enforces isolation
+- Vendor files live in **one of two canonical locations**:
+  - **Per-node (legacy / fork-customized)**: `src/components/vendor/{shadcn,assistant-ui,shadcn-io}/` inside the node tree.
+  - **Shared baseline**: the `@cogni/node-ui-kit` package (subpath exports `@cogni/node-ui-kit/{shadcn,reui,util}/*`). See [Packages Architecture › baseline UI primitive packages carve-out](packages-architecture.md#non-goals).
+- ESLint `no-vendor-imports-outside-kit` enforces isolation. Permitted importers of the vendor layer (per-node OR shared) are limited to `components/kit/**` and `components/index.ts`. Feature/app code keeps importing from `@/components` only.
 
-**Workflow**:
+**Workflow** (adding or updating a primitive):
 
-1. Copy shadcn component to `vendor/ui-primitives/shadcn/`
-2. Create kit wrapper in `src/components/kit/`
-3. Export from `src/components/index.ts`
+1. **Forks using the baseline** (e.g. node-template): if the primitive already exists in `@cogni/node-ui-kit`, just wrap it in `components/kit/` and export from `components/index.ts`. Do **not** PR a tweak into the kit; create a local override in your own `kit/` instead.
+2. **Forks running a local vendor**: copy the upstream shadcn file to `src/components/vendor/shadcn/`, wrap in `kit/`, export.
+3. **Adding a primitive to the shared baseline**: copy the file into `packages/node-ui-kit/src/shadcn/`, add it to the barrel, then any consuming fork wraps it locally. CODEOWNERS gates baseline changes.
+
+**Override pattern (forks customize without touching the baseline):**
+
+```ts
+// nodes/<my-fork>/app/src/components/kit/inputs/Button.tsx
+// Wraps the baseline button with a fork-specific variant.
+import { Button as BaseButton } from "@cogni/node-ui-kit/shadcn/button";
+
+export function Button(props: ComponentProps<typeof BaseButton>) {
+  return <BaseButton {...props} className={cn("font-display", props.className)} />;
+}
+```
+
+The fork ships its own kit; baseline package stays untouched.
 
 ### Quality Gates
 

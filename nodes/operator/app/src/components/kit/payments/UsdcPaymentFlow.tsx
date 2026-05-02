@@ -15,9 +15,9 @@
 "use client";
 
 import type { PaymentFlowState } from "@cogni/node-core";
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
-import { cn } from "@/shared/util/cn";
 import { PaymentButton } from "./PaymentButton";
 import { PaymentFlowDialog } from "./PaymentFlowDialog";
 import { PaymentStatusChip } from "./PaymentStatusChip";

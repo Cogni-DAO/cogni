@@ -14,6 +14,13 @@
 
 "use client";
 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@cogni/node-ui-kit/shadcn/dialog";
 import { signIn } from "next-auth/react";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
@@ -23,13 +30,6 @@ import {
   GoogleIcon,
 } from "@/components/kit/data-display/ProviderIcons";
 import { Button } from "@/components/kit/inputs/Button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/vendor/shadcn/dialog";
 
 /** Provider metadata for rendering sign-in buttons */
 const OAUTH_PROVIDERS = [

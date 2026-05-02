@@ -8,13 +8,12 @@ import {
   unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
   useIsMarkdownCodeBlock,
 } from "@assistant-ui/react-markdown";
+import { cn } from "@cogni/node-ui-kit/util/cn";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { type FC, memo, useState } from "react";
 import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
-
 import { TooltipIconButton } from "@/components/vendor/assistant-ui/tooltip-icon-button";
-import { cn } from "@/shared/util/cn";
 
 const MarkdownTextImpl = () => {
   return (

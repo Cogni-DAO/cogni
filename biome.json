@@ -11,6 +11,8 @@
       "nodes/*/app/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
       "!nodes/*/app/src/components/reui",
       "packages/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
+      "!packages/node-ui-kit/src/shadcn",
+      "!packages/node-ui-kit/src/reui",
       "services/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
       "tests/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
       "scripts/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",

@@ -20,4 +20,4 @@ export {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/vendor/shadcn/dialog";
+} from "@cogni/node-ui-kit/shadcn/dialog";
