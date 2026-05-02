@@ -132,9 +132,6 @@ export function shouldCountLedgerTrade(row: LedgerRow): boolean {
   if (row.status === "pending" || row.status === "open") {
     return ledgerExecutedUsdc(row) > 0;
   }
-  if (row.status === "canceled" || row.status === "error") {
-    return false;
-  }
   return ledgerExecutedUsdc(row) > 0;
 }
 

@@ -209,6 +209,49 @@ describe("FakeOrderLedger.cumulativeIntentForMarket", () => {
     ]);
   });
 
+  it("stamps lifecycle on terminal order rows that still have filled exposure", async () => {
+    const updatedAt = new Date();
+    const ledger = new FakeOrderLedger({
+      initial: [
+        makeRow({
+          fill_id: "canceled-with-fill",
+          status: "canceled",
+          position_lifecycle: null,
+          attributes: {
+            market_id: MARKET_X,
+            condition_id: "0xabc",
+            size_usdc: 5,
+            filled_size_usdc: 2,
+          },
+        }),
+        makeRow({
+          fill_id: "canceled-without-fill",
+          status: "canceled",
+          position_lifecycle: null,
+          attributes: {
+            market_id: MARKET_X,
+            condition_id: "0xabc",
+            size_usdc: 5,
+            filled_size_usdc: 0,
+          },
+        }),
+      ],
+    });
+
+    await expect(
+      ledger.markPositionLifecycleByConditionId({
+        billing_account_id: TENANT_A,
+        condition_id: "0xabc",
+        lifecycle: "winner",
+        updated_at: updatedAt,
+      })
+    ).resolves.toBe(1);
+    expect(ledger.rows.map((row) => row.position_lifecycle)).toEqual([
+      "winner",
+      null,
+    ]);
+  });
+
   it("does not reopen terminal lifecycle rows during order refresh", async () => {
     const ledger = new FakeOrderLedger({
       initial: [
@@ -233,6 +276,33 @@ describe("FakeOrderLedger.cumulativeIntentForMarket", () => {
     });
 
     expect(ledger.rows[0]?.position_lifecycle).toBe("closed");
+  });
+
+  it("does not downgrade terminal lifecycle rows during resolution replay", async () => {
+    const updatedAt = new Date();
+    const ledger = new FakeOrderLedger({
+      initial: [
+        makeRow({
+          fill_id: "redeemed-row",
+          status: "filled",
+          position_lifecycle: "redeemed",
+          attributes: {
+            market_id: "prediction-market:polymarket:0xabc",
+            size_usdc: 1,
+          },
+        }),
+      ],
+    });
+
+    await expect(
+      ledger.markPositionLifecycleByConditionId({
+        billing_account_id: TENANT_A,
+        condition_id: "0xabc",
+        lifecycle: "winner",
+        updated_at: updatedAt,
+      })
+    ).resolves.toBe(0);
+    expect(ledger.rows[0]?.position_lifecycle).toBe("redeemed");
   });
 
   it("allows a new same-market insert after the previous row is stamped closed", async () => {

@@ -218,7 +218,9 @@ describe("runReconcileOnce", () => {
     const ledger = new FakeOrderLedger({ initial: [row] });
     const getOrder = vi
       .fn()
-      .mockResolvedValue(found(makeReceipt({ status: "open" })));
+      .mockResolvedValue(
+        found(makeReceipt({ status: "open", filled_size_usdc: 0 }))
+      );
 
     const updateSpy = vi.spyOn(ledger, "updateStatus");
 
@@ -233,6 +235,41 @@ describe("runReconcileOnce", () => {
     expect(updateSpy).not.toHaveBeenCalled();
     // updated_at must not have changed
     expect(ledger.rows[0]?.updated_at).toEqual(originalUpdatedAt);
+  });
+
+  it("status unchanged but filled size changed → updates lifecycle and fill amount", async () => {
+    const ledger = new FakeOrderLedger({
+      initial: [
+        makeRow({
+          status: "open",
+          order_id: "order-abc",
+          attributes: { filled_size_usdc: 0 },
+        }),
+      ],
+    });
+    const getOrder = vi.fn().mockResolvedValue(
+      found(
+        makeReceipt({
+          status: "open",
+          filled_size_usdc: 2.5,
+        })
+      )
+    );
+
+    await runReconcileOnce({
+      ledger,
+      getOrderForTenant: perTenant(getOrder),
+      logger: LOGGER,
+      metrics: noopMetrics,
+      notFoundGraceMs: 900_000,
+    });
+
+    expect(ledger.rows[0]?.status).toBe("open");
+    expect(ledger.rows[0]?.position_lifecycle).toBe("open");
+    expect(
+      (ledger.rows[0]?.attributes as Record<string, unknown> | null)
+        ?.filled_size_usdc
+    ).toBe(2.5);
   });
 
   it("ticks total counter is incremented once per tick", async () => {

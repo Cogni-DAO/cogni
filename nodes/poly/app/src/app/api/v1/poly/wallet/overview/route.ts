@@ -31,10 +31,20 @@ import {
   getPolyTraderWalletAdapter,
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
+import type { LedgerStatus } from "@/features/trading";
 import { getTradingWalletPnlHistory } from "@/features/wallet-analysis/server/trading-wallet-overview-service";
 import { summarizeLedgerPositions } from "../_lib/ledger-positions";
 
 export const dynamic = "force-dynamic";
+
+const WALLET_OVERVIEW_LEDGER_STATUSES = [
+  "pending",
+  "open",
+  "filled",
+  "partial",
+  "canceled",
+  "error",
+] satisfies LedgerStatus[];
 
 function emptyPayload(
   interval: PolyWalletOverviewOutput["interval"],
@@ -128,7 +138,7 @@ export const GET = wrapRouteHandlerWithLogging(
     try {
       const rows = await container.orderLedger.listTenantPositions({
         billing_account_id: account.id,
-        statuses: ["open", "filled", "partial"],
+        statuses: WALLET_OVERVIEW_LEDGER_STATUSES,
         limit: 100,
       });
       positionSummary = summarizeLedgerPositions(rows, capturedAtDate);

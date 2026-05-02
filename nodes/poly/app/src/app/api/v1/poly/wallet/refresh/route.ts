@@ -45,6 +45,8 @@ const REFRESH_LEDGER_STATUSES = [
   "open",
   "filled",
   "partial",
+  "canceled",
+  "error",
 ] satisfies LedgerStatus[];
 const REFRESH_CONCURRENCY = 8;
 

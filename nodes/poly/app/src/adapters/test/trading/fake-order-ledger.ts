@@ -14,6 +14,7 @@
 import {
   isLedgerPositionClosed,
   isLedgerRestingOrder,
+  ledgerExecutedUsdc,
   shouldCountLedgerMarketIntent,
 } from "@/features/trading/ledger-lifecycle";
 import {
@@ -246,11 +247,29 @@ export class FakeOrderLedger implements OrderLedger {
     for (const row of this.rows) {
       const attrs = row.attributes as Record<string, unknown> | null;
       if (row.billing_account_id !== input.billing_account_id) continue;
-      if (!["open", "filled", "partial"].includes(row.status)) continue;
       if (
         attrs?.condition_id !== input.condition_id &&
         attrs?.market_id !== input.condition_id &&
         attrs?.market_id !== normalizedMarketId
+      ) {
+        continue;
+      }
+      if (
+        !["closed", "redeemed", "loser", "dust", "abandoned"].includes(
+          input.lifecycle
+        ) &&
+        row.position_lifecycle !== null &&
+        ["closed", "redeemed", "loser", "dust", "abandoned"].includes(
+          row.position_lifecycle
+        )
+      ) {
+        continue;
+      }
+      if (
+        row.position_lifecycle === null &&
+        row.status !== "filled" &&
+        row.status !== "partial" &&
+        ledgerExecutedUsdc(row) <= 0
       ) {
         continue;
       }

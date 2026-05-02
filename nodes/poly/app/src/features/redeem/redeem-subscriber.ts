@@ -37,6 +37,10 @@ import type { RedeemJobsPort } from "@/ports";
 
 import { decisionToEnqueueInput } from "./decision-to-enqueue-input";
 import {
+  type LedgerLifecycleMirrorPort,
+  mirrorRedeemLifecycleToLedger,
+} from "./mirror-ledger-lifecycle";
+import {
   resolveRedeemCandidatesForCondition,
   sortRedeemCandidatesForEnqueue,
 } from "./resolve-redeem-decision";
@@ -49,6 +53,8 @@ interface LoggerLike {
 
 export interface RedeemSubscriberDeps {
   redeemJobs: RedeemJobsPort;
+  orderLedger: LedgerLifecycleMirrorPort;
+  billingAccountId: string;
   publicClient: PublicClient;
   dataApiClient: PolymarketDataApiClient;
   funderAddress: `0x${string}`;
@@ -180,6 +186,20 @@ export class RedeemSubscriber {
       const enqueueInput = decisionToEnqueueInput(this.deps.funderAddress, c);
       if (enqueueInput === null) continue;
       const result = await this.deps.redeemJobs.enqueue(enqueueInput);
+      if (!result.alreadyExisted) {
+        await mirrorRedeemLifecycleToLedger(
+          {
+            orderLedger: this.deps.orderLedger,
+            billingAccountId: this.deps.billingAccountId,
+            logger: this.deps.logger,
+          },
+          {
+            conditionId: c.conditionId,
+            lifecycle: enqueueInput.lifecycleState,
+            source: "redeem_subscriber_enqueue",
+          }
+        );
+      }
       this.deps.logger.info(
         {
           event: "poly.ctf.redeem.job_enqueued",
@@ -255,6 +275,18 @@ export class RedeemSubscriber {
             jobId: job.id,
             removedTxHash: log.transactionHash as `0x${string}`,
           });
+          await mirrorRedeemLifecycleToLedger(
+            {
+              orderLedger: this.deps.orderLedger,
+              billingAccountId: this.deps.billingAccountId,
+              logger: this.deps.logger,
+            },
+            {
+              conditionId,
+              lifecycle: "redeem_pending",
+              source: "redeem_subscriber_reorg",
+            }
+          );
           this.deps.logger.warn(
             {
               event: "poly.ctf.redeem.payout_reorged",
@@ -281,6 +313,18 @@ export class RedeemSubscriber {
         jobId: job.id,
         lifecycleState: "redeemed",
       });
+      await mirrorRedeemLifecycleToLedger(
+        {
+          orderLedger: this.deps.orderLedger,
+          billingAccountId: this.deps.billingAccountId,
+          logger: this.deps.logger,
+        },
+        {
+          conditionId,
+          lifecycle: "redeemed",
+          source: "redeem_subscriber_payout",
+        }
+      );
       this.deps.logger.info(
         {
           event: "poly.ctf.subscriber.payout_redemption_observed",

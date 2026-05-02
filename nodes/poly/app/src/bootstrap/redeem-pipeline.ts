@@ -53,6 +53,7 @@ import {
   RedeemWorker,
   runRedeemCatchup,
 } from "@/features/redeem";
+import type { LedgerLifecycleMirrorPort } from "@/features/redeem/mirror-ledger-lifecycle";
 import type { RedeemJobsPort } from "@/ports";
 
 const REDEEM_POLL_INTERVAL_MS = 10 * 60 * 1000;
@@ -67,6 +68,7 @@ export interface RedeemPipelineHandles {
 
 export interface StartRedeemPipelineDeps {
   serviceDb: Database;
+  orderLedger: LedgerLifecycleMirrorPort;
   walletPort: PolyTraderWalletPort;
   polygonRpcUrl: string;
   log: Logger;
@@ -177,6 +179,8 @@ async function startOneTenantPipeline(
 
   const subscriber = new RedeemSubscriber({
     redeemJobs,
+    orderLedger: deps.orderLedger,
+    billingAccountId,
     publicClient,
     dataApiClient,
     funderAddress,
@@ -184,6 +188,8 @@ async function startOneTenantPipeline(
   });
   const worker = new RedeemWorker({
     redeemJobs,
+    orderLedger: deps.orderLedger,
+    billingAccountId,
     publicClient,
     walletClient,
     funderAddress,
@@ -199,6 +205,8 @@ async function startOneTenantPipeline(
   try {
     await runRedeemCatchup({
       redeemJobs,
+      orderLedger: deps.orderLedger,
+      billingAccountId,
       publicClient,
       dataApiClient,
       funderAddress,

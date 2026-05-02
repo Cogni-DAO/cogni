@@ -64,11 +64,16 @@ import {
   REDEEM_MAX_TRANSIENT_ATTEMPTS,
   type RedeemFlavor,
   type RedeemJob,
+  type RedeemLifecycleState,
   transition,
 } from "@/core";
 import type { RedeemJobsPort } from "@/ports";
 
 import { buildSubmitArgs } from "./build-submit-args";
+import {
+  type LedgerLifecycleMirrorPort,
+  mirrorRedeemLifecycleToLedger,
+} from "./mirror-ledger-lifecycle";
 
 const ctfBalanceAbi = parseAbi([
   "function balanceOf(address account, uint256 id) view returns (uint256)",
@@ -103,6 +108,8 @@ interface LoggerLike {
 
 export interface RedeemWorkerDeps {
   redeemJobs: RedeemJobsPort;
+  orderLedger: LedgerLifecycleMirrorPort;
+  billingAccountId: string;
   publicClient: PublicClient;
   walletClient: WalletClient;
   /** EOA holding the redeemable positions. */
@@ -227,6 +234,21 @@ export class RedeemWorker {
     this.reaperBurstUntilMs = Date.now() + (this.deps.reaperBurstMs ?? 60_000);
   }
 
+  private async mirrorLifecycle(
+    conditionId: string,
+    lifecycle: RedeemLifecycleState,
+    source: string
+  ): Promise<void> {
+    await mirrorRedeemLifecycleToLedger(
+      {
+        orderLedger: this.deps.orderLedger,
+        billingAccountId: this.deps.billingAccountId,
+        logger: this.deps.logger,
+      },
+      { conditionId, lifecycle, source }
+    );
+  }
+
   private shouldRunReaper(): boolean {
     const now = Date.now();
     if (now < this.reaperBurstUntilMs) {
@@ -263,6 +285,11 @@ export class RedeemWorker {
         errorClass: "malformed",
         error: `unable to build submit args for flavor=${job.flavor}`,
       });
+      await this.mirrorLifecycle(
+        job.conditionId,
+        "abandoned",
+        "worker_malformed"
+      );
       this.deps.logger.error(
         {
           event: "poly.ctf.redeem.bleed_detected",
@@ -313,6 +340,11 @@ export class RedeemWorker {
           errorClass: "transient_exhausted",
           error: msg,
         });
+        await this.mirrorLifecycle(
+          job.conditionId,
+          "abandoned",
+          "worker_transient_exhausted"
+        );
       } else {
         await this.deps.redeemJobs.markTransientFailure({
           jobId: job.id,
@@ -348,6 +380,11 @@ export class RedeemWorker {
       submittedAtBlock: receipt.blockNumber,
       receiptBurnObserved: burnObserved,
     });
+    await this.mirrorLifecycle(
+      job.conditionId,
+      "redeem_pending",
+      "worker_submitted"
+    );
     this.deps.logger.info(
       {
         event: "poly.ctf.redeem.tx_submitted",
@@ -433,6 +470,11 @@ export class RedeemWorker {
           jobId: job.id,
           lifecycleState: "redeemed",
         });
+        await this.mirrorLifecycle(
+          job.conditionId,
+          "redeemed",
+          "worker_reaper_confirmed"
+        );
         if (payoutTx) {
           this.deps.logger.info(
             {
@@ -471,6 +513,11 @@ export class RedeemWorker {
             result.transition.lastError ??
             "REDEEM_REQUIRES_BURN_OBSERVATION: no payout + balance>0",
         });
+        await this.mirrorLifecycle(
+          job.conditionId,
+          "abandoned",
+          "worker_reaper_bleed"
+        );
         this.deps.logger.error(
           {
             event: "poly.ctf.redeem.bleed_detected",

@@ -60,11 +60,6 @@ const TRADE_HISTORY_STATUSES = [
   "canceled",
   "error",
 ] satisfies LedgerStatus[];
-const LIVE_POSITION_STATUSES = new Set<LedgerStatus>([
-  "open",
-  "filled",
-  "partial",
-]);
 
 function emptyPayload(warning: { code: string; message: string }) {
   return polyWalletExecutionOperation.output.parse({
@@ -143,15 +138,13 @@ export const GET = wrapRouteHandlerWithLogging(
       );
 
       dailyTradeCounts = summarizeDailyTradeCounts(rows);
-      const positions = rows
-        .filter((row) => LIVE_POSITION_STATUSES.has(row.status))
-        .map((row) =>
-          toWalletExecutionPosition(
-            row,
-            capturedAt,
-            lifecycleByConditionId.get(getLedgerRowConditionId(row)) ?? null
-          )
-        );
+      const positions = rows.map((row) =>
+        toWalletExecutionPosition(
+          row,
+          capturedAt,
+          lifecycleByConditionId.get(getLedgerRowConditionId(row)) ?? null
+        )
+      );
       livePositions = positions
         .filter((position) => position.status !== "closed")
         .filter((position) => position.currentValue > 0)

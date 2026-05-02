@@ -72,6 +72,15 @@ const nonTerminalPositionLifecycle = sql`(${polyCopyTradeFills.positionLifecycle
 const activeRestingPositionLifecycle = sql`(${polyCopyTradeFills.positionLifecycle} IS NULL OR ${polyCopyTradeFills.positionLifecycle} IN ('unresolved','open','closing'))`;
 const notPositionTerminal = sql`${nonTerminalPositionLifecycle} AND ${polyCopyTradeFills.attributes}->>'closed_at' IS NULL`;
 const activeRestingPosition = sql`${activeRestingPositionLifecycle} AND ${polyCopyTradeFills.attributes}->>'closed_at' IS NULL`;
+const hasPositionLifecycleOrExecution = sql`(
+  ${polyCopyTradeFills.positionLifecycle} IS NOT NULL
+  OR ${polyCopyTradeFills.status} IN ('filled','partial')
+  OR CASE
+    WHEN ${polyCopyTradeFills.attributes}->>'filled_size_usdc' ~ '^[0-9]+(\\.[0-9]+)?$'
+      THEN (${polyCopyTradeFills.attributes}->>'filled_size_usdc')::numeric
+    ELSE 0
+  END > 0
+)`;
 
 export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
   const log = deps.logger.child({ component: "order-ledger" });
@@ -541,6 +550,13 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
       input: MarkPositionLifecycleByConditionIdInput
     ): Promise<number> {
       const normalizedMarketId = `prediction-market:polymarket:${input.condition_id}`;
+      const incomingLifecycleIsTerminal = [
+        "closed",
+        "redeemed",
+        "loser",
+        "dust",
+        "abandoned",
+      ].includes(input.lifecycle);
       const rows = await deps.db
         .update(polyCopyTradeFills)
         .set({
@@ -555,7 +571,8 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
               eq(polyCopyTradeFills.marketId, input.condition_id),
               eq(polyCopyTradeFills.marketId, normalizedMarketId)
             ),
-            inArray(polyCopyTradeFills.status, ["open", "filled", "partial"])
+            incomingLifecycleIsTerminal ? undefined : notPositionTerminal,
+            hasPositionLifecycleOrExecution
           )
         )
         .returning({ clientOrderId: polyCopyTradeFills.clientOrderId });
