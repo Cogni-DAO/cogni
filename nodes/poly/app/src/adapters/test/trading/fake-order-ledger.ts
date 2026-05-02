@@ -29,8 +29,8 @@ import {
   type MarkPositionClosedByAssetInput,
   type MarkPositionLifecycleByAssetInput,
   type MarkPositionLifecycleByConditionIdInput,
-  type MirrorPositionView,
   type OpenOrderRow,
+  type PositionIntentAggregate,
   type OrderLedger,
   type RecordDecisionInput,
   type StateSnapshot,
@@ -46,13 +46,16 @@ export interface FakeOrderLedgerConfig {
 }
 
 /**
- * Compute the per-`condition_id` `MirrorPositionView` map for a target's
- * fills, mirroring the SQL semantics of the Drizzle `snapshotState`. Pure +
- * deterministic so unit tests don't need a Postgres testcontainer.
+ * Compute the generic per-(market_id, token_id) intent-aggregate rows for a
+ * target's fills, mirroring the SQL semantics of the Drizzle `snapshotState`.
+ * Pure + deterministic so unit tests don't need a Postgres testcontainer.
+ *
+ * Mirror-vocabulary overlay (`MirrorPositionView`) is the consumer's job —
+ * see `@/features/copy-trade/types::aggregatePositionRows`.
  */
-function computePositionsForTarget(
+function computeIntentAggregatesForTarget(
   rows: LedgerRow[]
-): Map<string, MirrorPositionView> {
+): PositionIntentAggregate[] {
   const activeStatuses: LedgerStatus[] = [
     "pending",
     "open",
@@ -119,30 +122,17 @@ function computePositionsForTarget(
     }
   }
 
-  const out = new Map<string, MirrorPositionView>();
+  const out: PositionIntentAggregate[] = [];
   for (const [conditionId, buckets] of byCondition) {
-    const legs = [...buckets.values()].sort(
-      (a, b) => b.net_shares - a.net_shares
-    );
-    const longLeg = legs[0];
-    const otherLeg = legs.length === 2 ? legs[1] : undefined;
-    const view: MirrorPositionView = {
-      condition_id: conditionId,
-      our_qty_shares:
-        longLeg && longLeg.net_shares > 0 ? longLeg.net_shares : 0,
-      opposite_qty_shares:
-        otherLeg && otherLeg.net_shares > 0 ? otherLeg.net_shares : 0,
-    };
-    if (longLeg && longLeg.net_shares > 0) {
-      view.our_token_id = longLeg.token_id;
-      if (longLeg.gross_shares_in > 0) {
-        view.our_vwap_usdc = longLeg.gross_usdc_in / longLeg.gross_shares_in;
-      }
+    for (const bucket of buckets.values()) {
+      out.push({
+        market_id: conditionId,
+        token_id: bucket.token_id,
+        net_shares: bucket.net_shares,
+        gross_usdc_in: bucket.gross_usdc_in,
+        gross_shares_in: bucket.gross_shares_in,
+      });
     }
-    if (legs.length === 2 && otherLeg) {
-      view.opposite_token_id = otherLeg.token_id;
-    }
-    out.set(conditionId, view);
   }
   return out;
 }
@@ -164,7 +154,7 @@ export class FakeOrderLedger implements OrderLedger {
         today_spent_usdc: 0,
         fills_last_hour: 0,
         already_placed_ids: [],
-        positions_by_condition: new Map(),
+        position_aggregates: [],
       };
     }
     const now = Date.now();
@@ -185,13 +175,13 @@ export class FakeOrderLedger implements OrderLedger {
       (r) => r.created_at >= oneHourAgo
     ).length;
     const already_placed_ids = myRows.map((r) => r.client_order_id);
-    const positions_by_condition = computePositionsForTarget(myRows);
+    const position_aggregates = computeIntentAggregatesForTarget(myRows);
 
     return {
       today_spent_usdc,
       fills_last_hour,
       already_placed_ids,
-      positions_by_condition,
+      position_aggregates,
     };
   }
 

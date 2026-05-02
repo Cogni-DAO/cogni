@@ -159,9 +159,9 @@ export type MirrorTargetConfig = z.infer<typeof MirrorTargetConfigSchema>;
  * `canceled | error | closed` and lifecycles past `closing`. Fail-safe upward —
  * follow-on sizing under-shoots rather than over-shoots.
  *
- * Mirror of `MirrorPositionView` in `@/features/trading/order-ledger.types`,
- * re-declared in copy-trade-vocabulary to keep the planner free of any
- * trading-port import surface.
+ * Single source of truth — trading-slice only emits generic
+ * `PositionIntentAggregate` rows; this type is the mirror-vocabulary overlay
+ * that copy-trade computes via `aggregatePositionRows()`.
  */
 export const MirrorPositionViewSchema = z.object({
   condition_id: z.string(),
@@ -172,6 +172,71 @@ export const MirrorPositionViewSchema = z.object({
   opposite_qty_shares: z.number(),
 });
 export type MirrorPositionView = z.infer<typeof MirrorPositionViewSchema>;
+
+/**
+ * Pure aggregator: collapse generic per-(market, token) intent aggregates
+ * into a `Map<condition_id, MirrorPositionView>` keyed by the fill's
+ * `condition_id` (== `market_id` in the trading vocabulary).
+ *
+ * For binary markets (≤2 token_ids per condition_id) we surface both
+ * `our_token_id` (larger long leg) and `opposite_token_id` (the other leg).
+ * For multi-outcome markets (>2 token_ids), `opposite_token_id` is left
+ * undefined — hedge predicate downstream no-ops, per
+ * HEDGE_PREDICATE_NOOPS_ON_UNKNOWN_OPPOSITE.
+ *
+ * Pure — no I/O. Designed to be called once per snapshot; output is read by
+ * the planner per-fill via `state.position`.
+ */
+export function aggregatePositionRows(
+  rows: Array<{
+    market_id: string;
+    token_id: string;
+    net_shares: number;
+    gross_usdc_in: number;
+    gross_shares_in: number;
+  }>
+): Map<string, MirrorPositionView> {
+  const byCondition = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const bucket = byCondition.get(row.market_id);
+    if (bucket) bucket.push(row);
+    else byCondition.set(row.market_id, [row]);
+  }
+
+  const out = new Map<string, MirrorPositionView>();
+  for (const [condition_id, group] of byCondition) {
+    const sorted = [...group].sort((a, b) => b.net_shares - a.net_shares);
+    const longLeg = sorted[0];
+    const otherLeg = group.length === 2 ? sorted[1] : undefined;
+    const longShares = longLeg ? longLeg.net_shares : 0;
+
+    if (
+      longShares <= 0 &&
+      (!otherLeg || otherLeg.net_shares <= 0)
+    ) {
+      // No active exposure either leg — skip empty entry.
+      continue;
+    }
+
+    const view: MirrorPositionView = {
+      condition_id,
+      our_qty_shares: longShares > 0 ? longShares : 0,
+      opposite_qty_shares:
+        otherLeg && otherLeg.net_shares > 0 ? otherLeg.net_shares : 0,
+    };
+    if (longShares > 0 && longLeg?.token_id) {
+      view.our_token_id = longLeg.token_id;
+      if (longLeg.gross_shares_in > 0) {
+        view.our_vwap_usdc = longLeg.gross_usdc_in / longLeg.gross_shares_in;
+      }
+    }
+    if (group.length === 2 && otherLeg?.token_id) {
+      view.opposite_token_id = otherLeg.token_id;
+    }
+    out.set(condition_id, view);
+  }
+  return out;
+}
 
 /**
  * Snapshot of runtime state at plan-time. The pipeline computes this via a

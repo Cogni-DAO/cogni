@@ -49,8 +49,8 @@ import {
   type MarkPositionClosedByAssetInput,
   type MarkPositionLifecycleByAssetInput,
   type MarkPositionLifecycleByConditionIdInput,
-  type MirrorPositionView,
   type OpenOrderRow,
+  type PositionIntentAggregate,
   type OrderLedger,
   type RecordDecisionInput,
   type StateSnapshot,
@@ -85,72 +85,30 @@ const hasPositionLifecycleOrExecution = sql`(
 )`;
 
 /**
- * Per-(condition_id, token_id) aggregation row produced by the SQL GROUP BY
- * in `snapshotState`. App-side code collapses up to two binary-market rows
- * per condition_id into a single `MirrorPositionView`.
+ * Materialize the SQL GROUP BY result rows (numeric fields arrive as strings
+ * from postgres-js) into the typed `PositionIntentAggregate` shape consumed
+ * by the trading port. Filters rows whose `token_id` JSON-extract returned
+ * null. Pure — testable in isolation.
  */
-interface PositionAggregateRow {
-  market_id: string;
-  token_id: string | null;
-  net_shares: string;
-  gross_usdc_in: string;
-  gross_shares_in: string;
-}
-
-/**
- * Collapse SQL-grouped rows into a `Map<condition_id, MirrorPositionView>`.
- * Pure helper — testable without DB. For binary markets (≤2 token_ids per
- * condition_id) we surface both `our_token_id` (larger long leg) and
- * `opposite_token_id` (the other leg). For multi-outcome markets (>2
- * token_ids), `opposite_token_id` is left undefined — hedge predicate
- * downstream no-ops, per HEDGE_PREDICATE_NOOPS_ON_UNKNOWN_OPPOSITE.
- */
-export function aggregatePositionRows(
-  rows: PositionAggregateRow[]
-): Map<string, MirrorPositionView> {
-  const byCondition = new Map<string, PositionAggregateRow[]>();
+function materializeIntentAggregates(
+  rows: Array<{
+    market_id: string;
+    token_id: string | null;
+    net_shares: string;
+    gross_usdc_in: string;
+    gross_shares_in: string;
+  }>
+): PositionIntentAggregate[] {
+  const out: PositionIntentAggregate[] = [];
   for (const row of rows) {
     if (row.token_id === null) continue;
-    const bucket = byCondition.get(row.market_id);
-    if (bucket) bucket.push(row);
-    else byCondition.set(row.market_id, [row]);
-  }
-
-  const out = new Map<string, MirrorPositionView>();
-  for (const [condition_id, group] of byCondition) {
-    const sorted = [...group].sort(
-      (a, b) => Number(b.net_shares) - Number(a.net_shares)
-    );
-    const longLeg = sorted[0];
-    const otherLeg = group.length === 2 ? sorted[1] : undefined;
-
-    const longShares = longLeg ? Number(longLeg.net_shares) : 0;
-    const longGrossShares = longLeg ? Number(longLeg.gross_shares_in) : 0;
-    const longGrossUsdc = longLeg ? Number(longLeg.gross_usdc_in) : 0;
-
-    const view: MirrorPositionView = {
-      condition_id,
-      our_qty_shares: longShares > 0 ? longShares : 0,
-      opposite_qty_shares:
-        otherLeg && Number(otherLeg.net_shares) > 0
-          ? Number(otherLeg.net_shares)
-          : 0,
-    };
-
-    if (longShares > 0 && longLeg?.token_id) {
-      view.our_token_id = longLeg.token_id;
-      if (longGrossShares > 0) {
-        view.our_vwap_usdc = longGrossUsdc / longGrossShares;
-      }
-    }
-
-    // Binary markets only: when exactly two token_ids exist, the second leg
-    // is the structural "opposite". For multi-outcome we leave undefined.
-    if (group.length === 2 && otherLeg?.token_id) {
-      view.opposite_token_id = otherLeg.token_id;
-    }
-
-    out.set(condition_id, view);
+    out.push({
+      market_id: row.market_id,
+      token_id: row.token_id,
+      net_shares: Number(row.net_shares),
+      gross_usdc_in: Number(row.gross_usdc_in),
+      gross_shares_in: Number(row.gross_shares_in),
+    });
   }
   return out;
 }
@@ -202,11 +160,13 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
             .select({ cid: polyCopyTradeFills.clientOrderId })
             .from(polyCopyTradeFills)
             .where(eq(polyCopyTradeFills.targetId, target_id)),
-          // MirrorPositionView aggregation — per (condition_id, token_id) net
-          // shares + gross USDC-in / shares-in for VWAP. Intent-based, includes
-          // `pending` so within-tick fills see prior placements (per-fill
-          // snapshotState + INSERT_BEFORE_PLACE means the prior pending row
-          // is committed by the time the next fill snapshots).
+          // Generic per-(market_id, token_id) intent aggregation — net shares
+          // + gross USDC-in / shares-in. Intent-based, includes `pending` so
+          // within-tick fills see prior placements (per-fill snapshotState +
+          // INSERT_BEFORE_PLACE means the prior pending row is committed by
+          // the time the next fill snapshots). Mirror semantics overlay (e.g.
+          // `our_token_id` / `opposite_token_id`) is computed downstream in
+          // `@/features/copy-trade/types::aggregatePositionRows`.
           deps.db
             .select({
               market_id: polyCopyTradeFills.marketId,
@@ -253,13 +213,13 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
         const today_spent_usdc = Number(spendRows[0]?.spent ?? 0);
         const fills_last_hour = Number(rateRows[0]?.n ?? 0);
         const already_placed_ids = cidRows.map((r) => r.cid);
-        const positions_by_condition = aggregatePositionRows(positionRows);
+        const position_aggregates = materializeIntentAggregates(positionRows);
 
         return {
           today_spent_usdc,
           fills_last_hour,
           already_placed_ids,
-          positions_by_condition,
+          position_aggregates,
         };
       } catch (err: unknown) {
         // FAIL_CLOSED — any error returns the fail-closed snapshot.
@@ -277,7 +237,7 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
           today_spent_usdc: 0,
           fills_last_hour: 0,
           already_placed_ids: [],
-          positions_by_condition: new Map(),
+          position_aggregates: [],
         };
       }
     },

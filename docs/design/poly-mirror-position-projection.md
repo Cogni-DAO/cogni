@@ -41,7 +41,7 @@ The name is `MirrorPositionView` — not `Position` — to surface the cache-vs-
 
 **One change in four small parts:**
 
-1. Extend `OrderLedger.snapshotState` (the existing per-tick read) to also return `positions_by_condition: Map<condition_id, MirrorPositionView>` derived in SQL from `poly_copy_trade_fills`. Same query batch, same fail-closed path.
+1. Extend `OrderLedger.snapshotState` (the existing per-tick read) to also return `position_aggregates: PositionIntentAggregate[]` (generic per-(market, token) intent aggregates) derived in SQL from `poly_copy_trade_fills`. Trading vocabulary stays generic — TRADING_IS_GENERIC invariant unbroken. Mirror-vocabulary overlay (`Map<condition_id, MirrorPositionView>`) is computed in copy-trade via `aggregatePositionRows()`.
 2. Plumb the map into the per-tick context. Pipeline picks the entry for the fill's `condition_id` and passes it as a single optional field on the planner's input.
 3. After each successful place inside the tick, the pipeline **mutates** its in-memory copy of the map so the next fill in the same tick sees the updated view (see "Within-tick semantics" below).
 4. `planMirrorFromFill` reads `state.position` synchronously. Pure.
@@ -150,7 +150,7 @@ export const RuntimeStateSchema = z.object({
 });
 ```
 
-`mirror-pipeline.ts:processFill` picks `tickCtx.positions_by_condition.get(fill.market_id)` into `state.position`. No I/O added.
+`mirror-pipeline.ts:processFill` calls `aggregatePositionRows(snapshot.position_aggregates)` and picks `.get(fill.market_id)` into `state.position`. No I/O added.
 
 ### `OrderLedger` surface change
 
@@ -160,11 +160,11 @@ export interface StateSnapshot {
   fills_last_hour: number;
   already_placed_ids: string[];
   /** NEW. Per-condition position view derived in the same query batch. */
-  positions_by_condition: Map<string, MirrorPositionView>;
+  position_aggregates: PositionIntentAggregate[];
 }
 ```
 
-Fail-closed path returns `positions_by_condition: new Map()` alongside the existing zeroes — preserves `FAIL_CLOSED_ON_SNAPSHOT_READ`.
+Fail-closed path returns `position_aggregates: []` alongside the existing zeroes — preserves `FAIL_CLOSED_ON_SNAPSHOT_READ`.
 
 ### Boundary placement
 
@@ -203,7 +203,7 @@ This makes the new branches attributable in Loki without a Grafana refactor. The
 - [ ] **POSITION_DERIVED_AT_SNAPSHOT** — `MirrorPositionView` is computed inside `OrderLedger.snapshotState` only. No second source of truth, no write-side maintenance, no cache layer.
 - [ ] **POSITION_VIEW_IS_CACHE_NOT_TRUTH** — view is _signal_, not authority. SELL execution + redeem flow still consult #1 chain / #3 Data API as today. Doc: docs/design/poly-positions.md.
 - [ ] **WITHIN_TICK_FRESHNESS** — fill `N+1` in the same tick sees fill `N`'s placement in `state.position`. Today this is satisfied automatically because `snapshotState` runs per-fill and the SQL filter includes `pending` rows; a future per-tick `snapshotState` would need explicit in-tick mutation to keep this invariant.
-- [ ] **FAIL_CLOSED_ON_SNAPSHOT_READ** — DB error → `positions_by_condition: new Map()`, same warn log path.
+- [ ] **FAIL_CLOSED_ON_SNAPSHOT_READ** — DB error → `position_aggregates: []`, same warn log path.
 - [ ] **CAPS_LIVE_IN_GRANT untouched** — daily/hourly caps still resolve in `authorizeIntent` against `poly_wallet_grants`. The view is a _signal_ input, never a _cap_.
 - [ ] **HEDGE_PREDICATE_NOOPS_ON_UNKNOWN_OPPOSITE** — when `opposite_token_id` is undefined (unknown / multi-outcome / neg-risk), hedge-followup predicate must NO-OP, not guess.
 - [ ] **DECISION_LOG_NAMES_VIEW** — any decision branched on `state.position` emits `position_branch` + `position_qty_shares` + `position_token_id` on the structured log.
@@ -211,9 +211,10 @@ This makes the new branches attributable in Loki without a Grafana refactor. The
 
 ## Files
 
-- **Modify** `nodes/poly/app/src/features/trading/order-ledger.types.ts` — add `MirrorPositionView` type, extend `StateSnapshot`.
+- **Modify** `nodes/poly/app/src/features/trading/order-ledger.types.ts` — add generic `PositionIntentAggregate` type, extend `StateSnapshot.position_aggregates`. Trading slice stays mirror-free.
+- **Modify** `nodes/poly/app/src/features/copy-trade/types.ts` — add `MirrorPositionView` type + `MirrorPositionViewSchema` + pure `aggregatePositionRows()` (collapses generic aggregates into the mirror-vocabulary view).
 - **Modify** `nodes/poly/app/src/features/trading/order-ledger.ts` — extend `snapshotState` with the GROUP BY, aggregate to `Map<condition_id, MirrorPositionView>`, fail-closed return.
-- **Modify** `nodes/poly/app/src/features/copy-trade/types.ts` — add `MirrorPositionViewSchema`, extend `RuntimeStateSchema` with optional `position`.
+- **Modify** `nodes/poly/app/src/features/copy-trade/types.ts` — extend `RuntimeStateSchema` with optional `position: MirrorPositionView`.
 - **Modify** `nodes/poly/app/src/features/copy-trade/mirror-pipeline.ts` — `processFill` picks view into `state.position`; new helper `applyPlacementToView()` mutates the per-tick map after a successful place.
 - **Test** `nodes/poly/app/tests/unit/features/trading/order-ledger-position-snapshot.test.ts` — empty history, single BUY, BUY-only same token, BUY then partial SELL, both legs (hedge), canceled rows excluded, multi-outcome (>2 tokens) graceful, fail-closed returns empty Map.
 - **Test** `nodes/poly/app/tests/unit/features/copy-trade/plan-mirror-position-state.test.ts` — planner receives `position`, planner is pure across N runs (deepEqual same input → same output), planner branches consume `position` without DB access.
