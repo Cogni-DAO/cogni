@@ -128,7 +128,8 @@ function computePositionsForTarget(
     const otherLeg = legs.length === 2 ? legs[1] : undefined;
     const view: MirrorPositionView = {
       condition_id: conditionId,
-      our_qty_shares: longLeg && longLeg.net_shares > 0 ? longLeg.net_shares : 0,
+      our_qty_shares:
+        longLeg && longLeg.net_shares > 0 ? longLeg.net_shares : 0,
       opposite_qty_shares:
         otherLeg && otherLeg.net_shares > 0 ? otherLeg.net_shares : 0,
     };

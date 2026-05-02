@@ -335,12 +335,12 @@ describe("FakeOrderLedger.snapshotState — positions_by_condition", () => {
     });
     const snap = await ledger.snapshotState(TARGET, TENANT);
     expect(snap.positions_by_condition.size).toBe(2);
-    expect(
-      snap.positions_by_condition.get(CONDITION_X)?.our_token_id
-    ).toBe(TOKEN_YES);
-    expect(
-      snap.positions_by_condition.get(CONDITION_Y)?.our_token_id
-    ).toBe(TOKEN_NO);
+    expect(snap.positions_by_condition.get(CONDITION_X)?.our_token_id).toBe(
+      TOKEN_YES
+    );
+    expect(snap.positions_by_condition.get(CONDITION_Y)?.our_token_id).toBe(
+      TOKEN_NO
+    );
   });
 
   it("FAIL_CLOSED — failConfigRead=true returns empty positions Map", async () => {
