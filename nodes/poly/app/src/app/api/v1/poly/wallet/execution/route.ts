@@ -7,8 +7,9 @@
  *          counts) for the caller's own Polymarket trading wallet. Powers the dashboard's
  *          `OperatorWalletChartsRow` + `ExecutionActivityCard`.
  * Scope: Session-auth, tenant-scoped. Resolves the caller's billing account,
- *   asks `PolyTraderWalletPort` for its `funder_address`, then reads live
- *   positions from `poly_copy_trade_fills`.
+ *   asks `PolyTraderWalletPort` for its `funder_address`, reads current live
+ *   holdings from Polymarket Data API, and keeps trade cadence/closed history
+ *   backed by the local order ledger.
  * Invariants:
  *   - TENANT_SCOPED: the caller's own wallet is the only thing this route
  *     ever reads. The route has no query-parameter escape hatch.
@@ -20,7 +21,7 @@
  *   - EXECUTION_ONLY: current wallet totals live on
  *     `/api/v1/poly/wallet/overview`; this route stays focused on positions
  *     and trade cadence only.
- * Side-effects: IO (DB read).
+ * Side-effects: IO (DB read, Polymarket Data API).
  * Links: nodes/poly/packages/node-contracts/src/poly.wallet.execution.v1.contract.ts,
  *        docs/spec/poly-trader-wallet-port.md,
  *        work/items/task.0354.poly-trading-hardening-followups.md
@@ -29,6 +30,7 @@
 
 import { toUserId } from "@cogni/ids";
 import {
+  type PolyWalletExecutionOutput,
   PolyWalletExecutionOutputSchema,
   polyWalletExecutionOperation,
 } from "@cogni/poly-node-contracts";
@@ -40,6 +42,7 @@ import {
   getPolyTraderWalletAdapter,
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
+import { getExecutionSlice } from "@/features/wallet-analysis/server/wallet-analysis-service";
 import { EVENT_NAMES, logEvent } from "@/shared/observability";
 import {
   DASHBOARD_LEDGER_POSITION_LIMIT,
@@ -128,8 +131,9 @@ export const GET = wrapRouteHandlerWithLogging(
 
     const capturedAt = new Date();
     const warnings: Array<{ code: string; message: string }> = [];
-    let livePositions: ReturnType<typeof toWalletExecutionPosition>[] = [];
-    let closedPositions: ReturnType<typeof toWalletExecutionPosition>[] = [];
+    let livePositions: PolyWalletExecutionOutput["live_positions"] = [];
+    let dbLivePositions: PolyWalletExecutionOutput["live_positions"] = [];
+    let closedPositions: PolyWalletExecutionOutput["closed_positions"] = [];
     let dailyTradeCounts: ReturnType<typeof summarizeDailyTradeCounts> = [];
     try {
       const rows = await container.orderLedger.listTenantPositions({
@@ -141,7 +145,7 @@ export const GET = wrapRouteHandlerWithLogging(
       const positions = rows.map((row) =>
         toWalletExecutionPosition(row, capturedAt)
       );
-      livePositions = positions
+      dbLivePositions = positions
         .filter((position) => position.status !== "closed")
         .filter((position) => position.currentValue > 0)
         .slice(0, 100);
@@ -155,6 +159,22 @@ export const GET = wrapRouteHandlerWithLogging(
       });
     }
 
+    try {
+      const currentExecution = await getExecutionSlice(address, {
+        includePriceHistory: false,
+      });
+      livePositions = currentExecution.live_positions
+        .filter(hasActionableCurrentPosition)
+        .slice(0, 100);
+      warnings.push(...currentExecution.warnings);
+    } catch (err) {
+      warnings.push({
+        code: "positions_current_unavailable",
+        message: err instanceof Error ? err.message : String(err),
+      });
+      livePositions = dbLivePositions;
+    }
+
     logEvent(ctx.log, EVENT_NAMES.POLY_WALLET_EXECUTION_COMPLETE, {
       reqId: ctx.reqId,
       routeId: ctx.routeId,
@@ -162,7 +182,11 @@ export const GET = wrapRouteHandlerWithLogging(
         (warning) => warning.code === "positions_read_model_unavailable"
       )
         ? "positions_read_model_unavailable"
-        : "ok",
+        : warnings.some(
+              (warning) => warning.code === "positions_current_unavailable"
+            )
+          ? "positions_current_unavailable"
+          : "ok",
       durationMs: Math.round(performance.now() - startedAtMs),
       outcome: "success",
       live_positions: livePositions.length,
@@ -183,3 +207,9 @@ export const GET = wrapRouteHandlerWithLogging(
     );
   }
 );
+
+function hasActionableCurrentPosition(
+  position: PolyWalletExecutionOutput["live_positions"][number]
+): boolean {
+  return position.status !== "closed" && position.currentValue > 0;
+}

@@ -655,6 +655,12 @@ async function buildExecutor(
       });
       totalFilledUsdc += receipt.filled_size_usdc;
       lastReceipt = receipt;
+      if (receipt.status === "pending" || receipt.status === "open") {
+        return {
+          ...receipt,
+          filled_size_usdc: totalFilledUsdc,
+        };
+      }
 
       const refreshedPositions =
         await dataApiClient.listUserPositions(funderAddress);

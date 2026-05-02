@@ -191,6 +191,46 @@ describe("createPolyTradeExecutorFactory", () => {
     expect(walletPort.authorizeIntent).not.toHaveBeenCalled();
   });
 
+  it("exitPosition returns an accepted pending market sell without retrying the same shares", async () => {
+    listUserPositions.mockResolvedValue([
+      {
+        asset: "token-1",
+        size: 5,
+        curPrice: 0.25,
+        conditionId: CONDITION_ID,
+        outcome: "YES",
+        redeemable: false,
+      },
+    ]);
+    const receipt: OrderReceipt = {
+      order_id: "0xexit",
+      client_order_id: "0xclient",
+      status: "pending",
+      filled_size_usdc: 0,
+      submitted_at: "2026-04-23T00:00:00.000Z",
+    };
+    sellPositionAtMarket.mockResolvedValue(receipt);
+    const walletPort = makeWalletPort();
+
+    const factory = createPolyTradeExecutorFactory({
+      walletPort,
+      logger: makeLogger() as never,
+      metrics: makeMetrics() as never,
+      host: "https://clob.polymarket.com",
+      polygonRpcUrl: "https://polygon.example",
+    });
+    const executor = await factory.getPolyTradeExecutorFor(BILLING_ACCOUNT_ID);
+
+    const result = await executor.exitPosition({
+      tokenId: "token-1",
+      client_order_id: "0xclient",
+    });
+
+    expect(result).toEqual(receipt);
+    expect(sellPositionAtMarket).toHaveBeenCalledTimes(1);
+    expect(listUserPositions).toHaveBeenCalledTimes(1);
+  });
+
   it("exitPosition self-heals trading approvals when the readiness stamp is missing", async () => {
     listUserPositions
       .mockResolvedValueOnce([

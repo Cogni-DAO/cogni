@@ -32,6 +32,7 @@ import {
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
 import { getTradingWalletPnlHistory } from "@/features/wallet-analysis/server/trading-wallet-overview-service";
+import { getBalanceSlice } from "@/features/wallet-analysis/server/wallet-analysis-service";
 import { EVENT_NAMES, logEvent } from "@/shared/observability";
 import {
   DASHBOARD_LEDGER_POSITION_LIMIT,
@@ -165,6 +166,24 @@ export const GET = wrapRouteHandlerWithLogging(
       });
     }
 
+    let positionsMtm: number | null = null;
+    try {
+      const balanceSlice = await getBalanceSlice(balances.address);
+      if (balanceSlice.kind === "ok") {
+        positionsMtm = roundToCents(balanceSlice.value.positions);
+      } else {
+        warnings.push({
+          code: "positions_mtm_unavailable",
+          message: balanceSlice.warning.message,
+        });
+      }
+    } catch (err) {
+      warnings.push({
+        code: "positions_mtm_unavailable",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     // `balances.usdcE` and `balances.pusd` are the wallet's two on-chain cash
     // balances (USDC.e bridged + Polymarket V2 pUSD). Both are spendable from
     // the dashboard's perspective: pUSD funds CLOB BUYs directly; USDC.e is
@@ -180,8 +199,8 @@ export const GET = wrapRouteHandlerWithLogging(
         ? roundToCents(Math.max(0, cashOnChain - positionSummary.lockedUsdc))
         : cashOnChain;
     const total =
-      cashOnChain !== null
-        ? roundToCents(cashOnChain + positionSummary.positionsMtm)
+      cashOnChain !== null && positionsMtm !== null
+        ? roundToCents(cashOnChain + positionsMtm)
         : null;
     let pnlHistory: PolyWalletOverviewOutput["pnlHistory"] = [];
     try {
@@ -202,16 +221,22 @@ export const GET = wrapRouteHandlerWithLogging(
         (warning) => warning.code === "positions_read_model_unavailable"
       )
         ? "positions_read_model_unavailable"
-        : warnings.some((warning) => warning.code === "pnl_history_unavailable")
-          ? "pnl_history_unavailable"
-          : warnings.some((warning) => warning.code === "balances_partial")
-            ? "balances_partial"
-            : "ok",
+        : warnings.some(
+              (warning) => warning.code === "positions_mtm_unavailable"
+            )
+          ? "positions_mtm_unavailable"
+          : warnings.some(
+                (warning) => warning.code === "pnl_history_unavailable"
+              )
+            ? "pnl_history_unavailable"
+            : warnings.some((warning) => warning.code === "balances_partial")
+              ? "balances_partial"
+              : "ok",
       interval,
       connected: true,
       warnings: warnings.length,
       openOrders: positionSummary.openOrders,
-      positionsMtm: positionSummary.positionsMtm,
+      positionsMtm,
       lockedUsdc: positionSummary.lockedUsdc,
       pnlPoints: pnlHistory.length,
     });
@@ -226,7 +251,7 @@ export const GET = wrapRouteHandlerWithLogging(
         pol_gas: balances.pol,
         usdc_available: usdcAvailable,
         usdc_locked: positionSummary.lockedUsdc,
-        usdc_positions_mtm: positionSummary.positionsMtm,
+        usdc_positions_mtm: positionsMtm,
         usdc_total: total,
         open_orders: positionSummary.openOrders,
         positions_synced_at: positionSummary.syncedAt,
