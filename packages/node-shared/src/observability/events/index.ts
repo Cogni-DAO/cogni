@@ -166,6 +166,7 @@ export const EVENT_NAMES = {
     "poly.wallet.balance.polygon_read_failed",
   POLY_WALLET_BALANCE_OPEN_ORDERS_FAILED:
     "poly.wallet.balance.open_orders_failed",
+  POLY_WALLET_OVERVIEW_COMPLETE: "feature.poly_wallet_overview.complete",
   POLY_WALLET_EXECUTION_COMPLETE: "feature.poly_wallet_execution.complete",
   ADAPTER_ORDER_LEDGER_SNAPSHOT_ERROR: "adapter.order_ledger.snapshot_error",
 

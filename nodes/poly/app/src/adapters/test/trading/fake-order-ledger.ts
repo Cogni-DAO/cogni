@@ -224,7 +224,14 @@ export class FakeOrderLedger implements OrderLedger {
       const attrs = row.attributes as Record<string, unknown> | null;
       if (row.billing_account_id !== input.billing_account_id) continue;
       if (attrs?.token_id !== input.token_id) continue;
-      if (!["open", "filled", "partial"].includes(row.status)) continue;
+      if (
+        row.position_lifecycle === null &&
+        row.status !== "filled" &&
+        row.status !== "partial" &&
+        ledgerExecutedUsdc(row) <= 0
+      ) {
+        continue;
+      }
       if (isLedgerPositionClosed(row)) continue;
       row.updated_at = input.closed_at;
       row.position_lifecycle = "closed";
@@ -248,6 +255,10 @@ export class FakeOrderLedger implements OrderLedger {
       const attrs = row.attributes as Record<string, unknown> | null;
       if (row.billing_account_id !== input.billing_account_id) continue;
       if (attrs?.token_id !== input.token_id) continue;
+      const isRedeemReorgCorrection =
+        input.terminal_correction === "redeem_reorg" &&
+        input.lifecycle === "redeem_pending" &&
+        row.position_lifecycle === "redeemed";
       if (
         !["closed", "redeemed", "loser", "dust", "abandoned"].includes(
           input.lifecycle
@@ -255,7 +266,8 @@ export class FakeOrderLedger implements OrderLedger {
         row.position_lifecycle !== null &&
         ["closed", "redeemed", "loser", "dust", "abandoned"].includes(
           row.position_lifecycle
-        )
+        ) &&
+        !isRedeemReorgCorrection
       ) {
         continue;
       }

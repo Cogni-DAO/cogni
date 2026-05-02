@@ -540,7 +540,7 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
             eq(polyCopyTradeFills.billingAccountId, input.billing_account_id),
             sql`${polyCopyTradeFills.attributes}->>'token_id' = ${input.token_id}`,
             notPositionTerminal,
-            inArray(polyCopyTradeFills.status, ["open", "filled", "partial"])
+            hasPositionLifecycleOrExecution
           )
         )
         .returning({ clientOrderId: polyCopyTradeFills.clientOrderId });
@@ -557,6 +557,11 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
         "dust",
         "abandoned",
       ].includes(input.lifecycle);
+      const terminalCorrectionGuard =
+        input.terminal_correction === "redeem_reorg" &&
+        input.lifecycle === "redeem_pending"
+          ? sql`(${notPositionTerminal} OR ${polyCopyTradeFills.positionLifecycle} = 'redeemed')`
+          : notPositionTerminal;
       const rows = await deps.db
         .update(polyCopyTradeFills)
         .set({
@@ -567,7 +572,7 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
           and(
             eq(polyCopyTradeFills.billingAccountId, input.billing_account_id),
             sql`${polyCopyTradeFills.attributes}->>'token_id' = ${input.token_id}`,
-            incomingLifecycleIsTerminal ? undefined : notPositionTerminal,
+            incomingLifecycleIsTerminal ? undefined : terminalCorrectionGuard,
             hasPositionLifecycleOrExecution
           )
         )

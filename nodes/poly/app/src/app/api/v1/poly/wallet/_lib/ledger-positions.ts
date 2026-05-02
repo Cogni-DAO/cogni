@@ -199,7 +199,6 @@ function deriveExecutionStatus(
   ) {
     return "closed";
   }
-  if (readLedgerNullableString(row, "closed_at") !== null) return "closed";
   if (lifecycleState === "winner") return "redeemable";
   return "open";
 }

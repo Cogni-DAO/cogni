@@ -107,13 +107,14 @@ describe("FakeOrderLedger.cumulativeIntentForMarket", () => {
     expect(result).toBe(7);
   });
 
-  it("excludes rows stamped closed from active market intent", async () => {
+  it("excludes typed closed rows from active market intent", async () => {
     const closedAt = new Date().toISOString();
     const ledger = new FakeOrderLedger({
       initial: [
         makeRow({
           fill_id: "closed-partial",
           status: "partial",
+          position_lifecycle: "closed",
           attributes: {
             market_id: MARKET_X,
             size_usdc: 5,
@@ -252,6 +253,58 @@ describe("FakeOrderLedger.cumulativeIntentForMarket", () => {
     ]);
   });
 
+  it("can close canceled and error rows that still have proven exposure", async () => {
+    const closedAt = new Date();
+    const ledger = new FakeOrderLedger({
+      initial: [
+        makeRow({
+          fill_id: "canceled-filled",
+          status: "canceled",
+          attributes: {
+            market_id: MARKET_X,
+            token_id: "111",
+            size_usdc: 5,
+            filled_size_usdc: 2,
+          },
+        }),
+        makeRow({
+          fill_id: "error-lifecycle",
+          status: "error",
+          position_lifecycle: "open",
+          attributes: {
+            market_id: MARKET_X,
+            token_id: "111",
+            size_usdc: 5,
+          },
+        }),
+        makeRow({
+          fill_id: "error-no-exposure",
+          status: "error",
+          attributes: {
+            market_id: MARKET_X,
+            token_id: "111",
+            size_usdc: 5,
+          },
+        }),
+      ],
+    });
+
+    await expect(
+      ledger.markPositionClosedByAsset({
+        billing_account_id: TENANT_A,
+        token_id: "111",
+        reason: "refresh_no_position",
+        closed_at: closedAt,
+      })
+    ).resolves.toBe(2);
+
+    expect(ledger.rows.map((row) => row.position_lifecycle)).toEqual([
+      "closed",
+      "closed",
+      null,
+    ]);
+  });
+
   it("stamps redeem lifecycle by token id without touching sibling outcomes", async () => {
     const updatedAt = new Date();
     const ledger = new FakeOrderLedger({
@@ -350,13 +403,68 @@ describe("FakeOrderLedger.cumulativeIntentForMarket", () => {
     expect(ledger.rows[0]?.position_lifecycle).toBe("redeemed");
   });
 
-  it("allows a new same-market insert after the previous row is stamped closed", async () => {
+  it("allows a redeem reorg correction from redeemed back to redeem_pending", async () => {
+    const updatedAt = new Date();
+    const ledger = new FakeOrderLedger({
+      initial: [
+        makeRow({
+          fill_id: "redeemed-row",
+          status: "filled",
+          position_lifecycle: "redeemed",
+          attributes: {
+            market_id: MARKET_X,
+            token_id: "111",
+            size_usdc: 5,
+            filled_size_usdc: 5,
+          },
+        }),
+        makeRow({
+          fill_id: "closed-row",
+          status: "filled",
+          position_lifecycle: "closed",
+          attributes: {
+            market_id: MARKET_X,
+            token_id: "222",
+            size_usdc: 5,
+            filled_size_usdc: 5,
+          },
+        }),
+      ],
+    });
+
+    await expect(
+      ledger.markPositionLifecycleByAsset({
+        billing_account_id: TENANT_A,
+        token_id: "111",
+        lifecycle: "redeem_pending",
+        updated_at: updatedAt,
+        terminal_correction: "redeem_reorg",
+      })
+    ).resolves.toBe(1);
+    await expect(
+      ledger.markPositionLifecycleByAsset({
+        billing_account_id: TENANT_A,
+        token_id: "222",
+        lifecycle: "redeem_pending",
+        updated_at: updatedAt,
+        terminal_correction: "redeem_reorg",
+      })
+    ).resolves.toBe(0);
+
+    expect(ledger.rows.map((row) => row.position_lifecycle)).toEqual([
+      "redeem_pending",
+      "closed",
+    ]);
+  });
+
+  it("allows a new same-market insert after the previous row has typed closed lifecycle", async () => {
     const closedAt = new Date().toISOString();
     const ledger = new FakeOrderLedger({
       initial: [
         makeRow({
           fill_id: "closed-partial",
           status: "partial",
+          position_lifecycle: "closed",
           attributes: {
             market_id: MARKET_X,
             size_usdc: 5,

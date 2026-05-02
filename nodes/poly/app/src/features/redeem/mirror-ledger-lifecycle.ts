@@ -25,6 +25,7 @@ export interface LedgerLifecycleMirrorPort {
     token_id: string;
     lifecycle: RedeemLifecycleState;
     updated_at: Date;
+    terminal_correction?: "redeem_reorg";
   }): Promise<number>;
 }
 
@@ -41,6 +42,7 @@ export async function mirrorRedeemLifecycleToLedger(
     positionId: string;
     lifecycle: RedeemLifecycleState;
     source: string;
+    terminalCorrection?: "redeem_reorg";
   }
 ): Promise<void> {
   try {
@@ -49,6 +51,9 @@ export async function mirrorRedeemLifecycleToLedger(
       token_id: input.positionId,
       lifecycle: input.lifecycle,
       updated_at: new Date(),
+      ...(input.terminalCorrection !== undefined
+        ? { terminal_correction: input.terminalCorrection }
+        : {}),
     });
     deps.logger.info(
       {

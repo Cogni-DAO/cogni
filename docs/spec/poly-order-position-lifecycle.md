@@ -124,9 +124,7 @@ stateDiagram-v2
 flowchart TD
   A[Ledger row] --> B{terminal lifecycle?<br/>closed/redeemed/loser/dust/abandoned}
   B -->|yes| C[closed_positions<br/>currentValue=0]
-  B -->|no| D{closed_at attr?}
-  D -->|yes| C
-  D -->|no| E{lifecycle=winner?}
+  B -->|no| E{lifecycle=winner?}
   E -->|yes| F[status=redeemable]
   E -->|no| G[status=open]
   F --> V{currentValue > 0?}
@@ -180,6 +178,12 @@ Canonical type: `LedgerPositionLifecycle` in `nodes/poly/app/src/features/tradin
 Position lifecycle predicates live in `nodes/poly/app/src/features/trading/ledger-lifecycle.ts`.
 
 Terminal lifecycles are `closed`, `redeemed`, `loser`, `dust`, and `abandoned`. Terminal rows are history and must not be reopened by order refresh. The SQL adapter enforces this with `preserveTerminalLifecycle(...)` in `nodes/poly/app/src/features/trading/order-ledger.ts`.
+
+The only allowed terminal correction is a chain reorg: `redeemed` may move back
+to `redeem_pending` when the redeem subscriber observes a removed
+`PayoutRedemption` log. That path is explicit via
+`terminal_correction='redeem_reorg'`; stale CLOB/order refreshes still cannot
+reopen terminal lifecycle rows.
 
 Current task.5006 writer paths emit `open`, `closed`, `winner`,
 `redeem_pending`, `redeemed`, `loser`, and `abandoned`. `unresolved`,

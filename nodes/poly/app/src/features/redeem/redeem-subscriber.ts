@@ -287,6 +287,7 @@ export class RedeemSubscriber {
               positionId: job.positionId,
               lifecycle: "redeem_pending",
               source: "redeem_subscriber_reorg",
+              terminalCorrection: "redeem_reorg",
             }
           );
           this.deps.logger.warn(

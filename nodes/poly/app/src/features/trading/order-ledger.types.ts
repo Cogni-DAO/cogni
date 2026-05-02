@@ -207,6 +207,7 @@ export interface MarkPositionLifecycleByAssetInput {
   token_id: string;
   lifecycle: LedgerPositionLifecycle;
   updated_at: Date;
+  terminal_correction?: "redeem_reorg";
 }
 
 /**
@@ -293,9 +294,8 @@ export interface OrderLedger {
 
   /**
    * Clear DB-derived position exposure after a token is no longer held.
-   * Keeps historical rows but stamps `attributes.closed_at`, so dashboard
-   * page-loads do not resurrect a closed position before the next background
-   * reconciliation/drain.
+   * Keeps historical rows, writes `position_lifecycle='closed'`, and stamps
+   * `attributes.closed_at` as close timestamp metadata.
    */
   markPositionClosedByAsset(
     input: MarkPositionClosedByAssetInput
@@ -304,7 +304,9 @@ export interface OrderLedger {
   /**
    * Mirror asset-scoped redeem lifecycle into position rows. Redeem burns a
    * concrete CTF positionId/token_id, so this is the canonical write path for
-   * redeem pipeline state.
+   * redeem pipeline state. Terminal lifecycles are preserved unless the input
+   * explicitly represents a chain reorg correction from `redeemed` back to
+   * `redeem_pending`.
    */
   markPositionLifecycleByAsset(
     input: MarkPositionLifecycleByAssetInput

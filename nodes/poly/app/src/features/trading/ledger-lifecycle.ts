@@ -9,11 +9,11 @@
  *   durable lifecycle model into typed DB state.
  * Scope: Pure functions only. No DB, app, bootstrap, CLOB, or copy-trade imports.
  * Invariants:
- *   - CLOSED_ATTR_IS_POSITION_TERMINAL: `attributes.closed_at` means the
- *     wallet no longer has position exposure for that asset row.
+ *   - POSITION_LIFECYCLE_IS_AUTHORITY: `position_lifecycle`, not JSON
+ *     timestamp metadata, decides whether an asset row is terminal.
  *   - ORDER_STATUS_IS_NOT_POSITION_STATE: `status` is CLOB/order state; helper
- *     predicates compose it with closed_at when answering position/resting
- *     questions.
+ *     predicates compose it with typed lifecycle when answering
+ *     position/resting questions.
  * Side-effects: none
  * Links: task.5006, bug.5001
  * @public
@@ -75,20 +75,16 @@ export function readLedgerNumber(row: LedgerRow, key: string): number {
 }
 
 export function isLedgerPositionClosed(row: LedgerRow): boolean {
-  if (
+  return (
     row.position_lifecycle !== null &&
     terminalPositionLifecycles.has(row.position_lifecycle)
-  ) {
-    return true;
-  }
-  return readLedgerNullableString(row, "closed_at") !== null;
+  );
 }
 
 export function readLedgerPositionLifecycle(
   row: LedgerRow
 ): LedgerPositionLifecycle | null {
-  if (row.position_lifecycle !== null) return row.position_lifecycle;
-  return readLedgerNullableString(row, "closed_at") !== null ? "closed" : null;
+  return row.position_lifecycle;
 }
 
 export function isLedgerRestingOrder(row: LedgerRow): boolean {
