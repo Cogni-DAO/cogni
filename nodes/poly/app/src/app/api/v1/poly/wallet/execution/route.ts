@@ -8,9 +8,7 @@
  *          `OperatorWalletChartsRow` + `ExecutionActivityCard`.
  * Scope: Session-auth, tenant-scoped. Resolves the caller's billing account,
  *   asks `PolyTraderWalletPort` for its `funder_address`, then reads live
- *   positions from `poly_copy_trade_fills`. If the DB exposure read model has
- *   no rows yet, falls back to the public Data API without CLOB price history
- *   so the dashboard does not regress to an empty active-trades surface.
+ *   positions from `poly_copy_trade_fills`.
  * Invariants:
  *   - TENANT_SCOPED: the caller's own wallet is the only thing this route
  *     ever reads. There is no `?addr=` override.
@@ -22,7 +20,7 @@
  *   - EXECUTION_ONLY: current wallet totals live on
  *     `/api/v1/poly/wallet/overview`; this route stays focused on positions
  *     and trade cadence only.
- * Side-effects: IO (DB read, bounded Data API fallback).
+ * Side-effects: IO (DB read).
  * Links: nodes/poly/packages/node-contracts/src/poly.wallet.execution.v1.contract.ts,
  *        docs/spec/poly-trader-wallet-port.md,
  *        work/items/task.0354.poly-trading-hardening-followups.md
@@ -33,7 +31,6 @@ import { toUserId } from "@cogni/ids";
 import {
   PolyWalletExecutionOutputSchema,
   polyWalletExecutionOperation,
-  type WalletExecutionLifecycleState,
 } from "@cogni/poly-node-contracts";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
@@ -44,7 +41,6 @@ import {
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
 import type { LedgerStatus } from "@/features/trading";
-import { getExecutionSlice } from "@/features/wallet-analysis/server/wallet-analysis-service";
 import {
   hasPositionExposure,
   summarizeDailyTradeCounts,
@@ -127,33 +123,6 @@ export const GET = wrapRouteHandlerWithLogging(
       "poly.wallet.execution"
     );
 
-    const lifecycleByConditionId = new Map<
-      string,
-      WalletExecutionLifecycleState
-    >();
-    const tenantPipeline = container.redeemPipelineFor(account.id);
-    if (
-      tenantPipeline &&
-      tenantPipeline.funderAddress.toLowerCase() === address.toLowerCase()
-    ) {
-      try {
-        const jobs = await tenantPipeline.redeemJobs.listForFunder(
-          tenantPipeline.funderAddress
-        );
-        for (const job of jobs) {
-          lifecycleByConditionId.set(
-            job.conditionId,
-            job.lifecycleState as WalletExecutionLifecycleState
-          );
-        }
-      } catch (err) {
-        ctx.log.warn(
-          { err: err instanceof Error ? err.message : String(err) },
-          "poly.wallet.execution.lifecycle_lookup_failed"
-        );
-      }
-    }
-
     const capturedAt = new Date();
     const warnings: Array<{ code: string; message: string }> = [];
     let livePositions: ReturnType<typeof toWalletExecutionPosition>[] = [];
@@ -175,23 +144,6 @@ export const GET = wrapRouteHandlerWithLogging(
         code: "positions_read_model_unavailable",
         message: err instanceof Error ? err.message : String(err),
       });
-    }
-
-    if (livePositions.length === 0) {
-      try {
-        const fallback = await getExecutionSlice(address, {
-          lifecycleByConditionId,
-          includePriceHistory: false,
-        });
-        return NextResponse.json(
-          PolyWalletExecutionOutputSchema.parse(fallback)
-        );
-      } catch (err) {
-        warnings.push({
-          code: "execution_fallback_unavailable",
-          message: err instanceof Error ? err.message : String(err),
-        });
-      }
     }
 
     return NextResponse.json(

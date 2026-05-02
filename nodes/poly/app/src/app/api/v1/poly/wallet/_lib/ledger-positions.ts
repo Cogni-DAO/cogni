@@ -134,6 +134,7 @@ export function summarizeDailyTradeCounts(
 ): Array<{ day: string; n: number }> {
   const counts = new Map<string, number>();
   for (const row of rows) {
+    if (!isExecutedTradeRow(row)) continue;
     const day = row.observed_at.toISOString().slice(0, 10);
     counts.set(day, (counts.get(day) ?? 0) + 1);
   }
@@ -155,6 +156,20 @@ function readConditionId(row: LedgerRow): string {
 
 function rowCurrentValue(row: LedgerRow): number {
   if (readNullableStr(row, "closed_at") !== null) return 0;
+  return rowExecutedUsdc(row);
+}
+
+function isExecutedTradeRow(row: LedgerRow): boolean {
+  if (row.status === "pending" || row.status === "open") {
+    return rowExecutedUsdc(row) > 0;
+  }
+  if (row.status === "canceled" || row.status === "error") {
+    return false;
+  }
+  return rowExecutedUsdc(row) > 0;
+}
+
+function rowExecutedUsdc(row: LedgerRow): number {
   const filled = readNum(row, "filled_size_usdc");
   if (filled > 0) return filled;
   if (row.status === "filled" || row.status === "partial") {

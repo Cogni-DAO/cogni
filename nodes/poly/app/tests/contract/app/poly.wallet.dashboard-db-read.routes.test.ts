@@ -305,10 +305,99 @@ describe("poly wallet dashboard DB read routes", () => {
 
     expect(response.status).toBe(200);
     expect(json.live_positions).toEqual([]);
-    expect(mockGetExecutionSlice).toHaveBeenCalledWith(FUNDER, {
-      lifecycleByConditionId: expect.any(Map),
-      includePriceHistory: false,
-    });
+    expect(mockGetExecutionSlice).not.toHaveBeenCalled();
+  });
+
+  it("execution trade counts ignore raw non-fill ledger rows", async () => {
+    const today = new Date("2026-05-02T03:00:00.000Z");
+    const yesterday = new Date("2026-05-01T22:00:00.000Z");
+    mockListTenantPositions.mockResolvedValue([
+      {
+        ...row,
+        observed_at: today,
+        status: "filled",
+        attributes: {
+          ...row.attributes,
+          filled_size_usdc: 2,
+        },
+      },
+      {
+        ...row,
+        fill_id: "data-api:closed-fill",
+        client_order_id: "0xclosed",
+        order_id: "0xclosed-order",
+        observed_at: yesterday,
+        status: "filled",
+        attributes: {
+          ...row.attributes,
+          token_id: "token-closed",
+          filled_size_usdc: 1.5,
+          closed_at: yesterday.toISOString(),
+        },
+      },
+      {
+        ...row,
+        fill_id: "data-api:pending-intent",
+        client_order_id: "0xpending",
+        observed_at: today,
+        status: "pending",
+        attributes: {
+          ...row.attributes,
+          filled_size_usdc: 0,
+          size_usdc: 25,
+        },
+      },
+      {
+        ...row,
+        fill_id: "data-api:open-resting",
+        client_order_id: "0xopen",
+        observed_at: today,
+        status: "open",
+        attributes: {
+          ...row.attributes,
+          filled_size_usdc: 0,
+          size_usdc: 25,
+        },
+      },
+      {
+        ...row,
+        fill_id: "data-api:error",
+        client_order_id: "0xerror",
+        observed_at: today,
+        status: "error",
+        attributes: {
+          ...row.attributes,
+          filled_size_usdc: 99,
+          size_usdc: 99,
+        },
+      },
+      {
+        ...row,
+        fill_id: "data-api:canceled",
+        client_order_id: "0xcanceled",
+        observed_at: today,
+        status: "canceled",
+        attributes: {
+          ...row.attributes,
+          filled_size_usdc: 0,
+          size_usdc: 25,
+        },
+      },
+    ]);
+    const { GET } = await import("@/app/api/v1/poly/wallet/execution/route");
+
+    const response = await GET(
+      new Request("http://localhost/api/v1/poly/wallet/execution")
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.dailyTradeCounts).toEqual([
+      { day: "2026-05-01", n: 1 },
+      { day: "2026-05-02", n: 1 },
+    ]);
+    expect(json.live_positions).toHaveLength(1);
+    expect(mockGetExecutionSlice).not.toHaveBeenCalled();
   });
 
   it("refresh updates the ledger rows that dashboard page-loads read", async () => {

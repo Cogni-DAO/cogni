@@ -154,7 +154,7 @@ export const polyWalletExecutionOperation = {
   summary:
     "Trading-wallet execution positions and trades-per-day with traceable price timelines",
   description:
-    "Returns the signed-in user's live daily trade counts, open positions (live_positions), and closed position history (closed_positions) derived from Polymarket Data API trades and positions plus public CLOB price history.",
+    "Returns the signed-in user's DB-backed daily trade counts, open positions (live_positions), and closed position history (closed_positions) for the trading-wallet dashboard.",
   input: z.object({}),
   output: PolyWalletExecutionOutputSchema,
 } as const;
