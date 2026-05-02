@@ -49,6 +49,11 @@ const BASE_TARGET: MirrorTargetConfig = {
   placement: { kind: "mirror_limit" },
 };
 
+const MARKET_CONSTRAINTS = async () => ({
+  minShares: 1,
+  minUsdcNotional: 1,
+});
+
 function makeFill(overrides?: Partial<Fill>): Fill {
   return {
     target_wallet: TARGET_WALLET,
@@ -127,6 +132,7 @@ describe("mirror-pipeline.runMirrorTick — idempotent re-run", () => {
       ledger,
       placeIntent,
       target: BASE_TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
       getCursor: () => cursor,
       setCursor: (n) => {
         cursor = n;
@@ -170,6 +176,7 @@ describe("mirror-pipeline.runMirrorTick — crash resume", () => {
       ledger,
       placeIntent: placeIntent1,
       target: BASE_TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
       getCursor: () => cursor,
       setCursor: (n) => {
         cursor = n;
@@ -187,6 +194,7 @@ describe("mirror-pipeline.runMirrorTick — crash resume", () => {
       ledger,
       placeIntent: placeIntent2,
       target: BASE_TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
       getCursor: () => cursor,
       setCursor: (n) => {
         cursor = n;
@@ -275,6 +283,7 @@ describe("mirror-pipeline.runMirrorTick — SELL fill: no position → skip", ()
       ledger,
       placeIntent,
       target: BASE_TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
       getCursor: () => undefined,
       setCursor: () => {},
       logger: noopLogger,
@@ -314,6 +323,7 @@ describe("mirror-pipeline.runMirrorTick — SELL fill: no position → skip", ()
       ledger,
       placeIntent,
       target: BASE_TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
       getCursor: () => undefined,
       setCursor: () => {},
       logger: noopLogger,
@@ -332,7 +342,7 @@ describe("mirror-pipeline.runMirrorTick — SELL fill: no position → skip", ()
 });
 
 describe("mirror-pipeline.runMirrorTick — SELL fill: has position → closePosition called", () => {
-  it("calls closePosition with matching token_id and max_size_usdc=mirror_usdc, records placed/sell_closed_position", async () => {
+  it("calls closePosition with matching token_id and max_size_usdc=sizing ceiling, records placed/sell_closed_position", async () => {
     const TOKEN = "12345";
     const fill = makeSellFill({ attributes: { asset: TOKEN }, price: 0.75 });
     const ledger = new FakeOrderLedger();
@@ -358,6 +368,7 @@ describe("mirror-pipeline.runMirrorTick — SELL fill: has position → closePos
       ledger,
       placeIntent,
       target: BASE_TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
       getCursor: () => undefined,
       setCursor: () => {},
       logger: noopLogger,
@@ -370,9 +381,7 @@ describe("mirror-pipeline.runMirrorTick — SELL fill: has position → closePos
     expect(closePosition).toHaveBeenCalledTimes(1);
     const callArgs = closePosition.mock.calls[0]?.[0];
     expect(callArgs?.tokenId).toBe(TOKEN);
-    expect(callArgs?.max_size_usdc).toBe(
-      BASE_TARGET.sizing.kind === "fixed" ? BASE_TARGET.sizing.mirror_usdc : 0
-    );
+    expect(callArgs?.max_size_usdc).toBe(BASE_TARGET.sizing.max_usdc_per_trade);
     expect(callArgs?.limit_price).toBe(fill.price);
     expect(callArgs?.client_order_id).toBe(cid);
 
@@ -397,6 +406,7 @@ describe("mirror-pipeline.runMirrorTick — SELL fill: deps absent → degrade t
       ledger,
       placeIntent,
       target: BASE_TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
       getCursor: () => undefined,
       setCursor: () => {},
       logger: noopLogger,
@@ -438,6 +448,7 @@ describe("mirror-pipeline.runMirrorTick — BUY fill smoke", () => {
       ledger,
       placeIntent,
       target: BASE_TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
       getCursor: () => undefined,
       setCursor: () => {},
       logger: noopLogger,
@@ -481,6 +492,7 @@ describe("mirror-pipeline.runMirrorTick — happy path", () => {
       ledger,
       placeIntent,
       target: BASE_TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
       getCursor: () => undefined,
       setCursor: () => {},
       logger: noopLogger,
@@ -503,6 +515,7 @@ describe("mirror-pipeline.runMirrorTick — happy path", () => {
       ledger,
       placeIntent,
       target: BASE_TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
       getCursor: () => undefined,
       setCursor: () => {},
       logger: noopLogger,
