@@ -33,8 +33,8 @@ import { AlreadyRestingError, type OrderLedger } from "@/features/trading";
 import type { WalletActivitySource } from "@/features/wallet-watch";
 
 import { planMirrorFromFill } from "./plan-mirror";
-import { aggregatePositionRows } from "./types";
 import type { MirrorReason, MirrorTargetConfig, SizingPolicy } from "./types";
+import { aggregatePositionRows } from "./types";
 
 type PlacementWire = "limit" | "market_fok";
 

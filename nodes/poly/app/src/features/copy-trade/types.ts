@@ -210,10 +210,7 @@ export function aggregatePositionRows(
     const otherLeg = group.length === 2 ? sorted[1] : undefined;
     const longShares = longLeg ? longLeg.net_shares : 0;
 
-    if (
-      longShares <= 0 &&
-      (!otherLeg || otherLeg.net_shares <= 0)
-    ) {
+    if (longShares <= 0 && (!otherLeg || otherLeg.net_shares <= 0)) {
       // No active exposure either leg — skip empty entry.
       continue;
     }
