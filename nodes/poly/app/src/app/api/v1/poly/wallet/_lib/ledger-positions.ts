@@ -35,6 +35,16 @@ import {
 } from "@/features/trading";
 
 const POSITION_STALE_MS = 5 * 60_000;
+const TRADE_COUNT_WINDOW_DAYS = 14;
+export const DASHBOARD_LEDGER_POSITION_STATUSES = [
+  "pending",
+  "open",
+  "filled",
+  "partial",
+  "canceled",
+  "error",
+] as const;
+export const DASHBOARD_LEDGER_POSITION_LIMIT = 500;
 
 export interface LedgerPositionSummary {
   openOrders: number;
@@ -96,6 +106,13 @@ export function toWalletExecutionPosition(
   const closedAt = readLedgerNullableString(row, "closed_at");
   const executedValue = ledgerExecutedUsdc(row);
   const currentValue = status === "closed" ? 0 : ledgerCurrentValue(row);
+  const costBasis = readLedgerCostBasis(row, executedValue);
+  const pnlUsd =
+    status === "closed" ? 0 : roundToCents(currentValue - costBasis);
+  const pnlPct =
+    status === "closed" || costBasis <= 0
+      ? 0
+      : roundToCents((pnlUsd / costBasis) * 100);
   const size =
     price > 0 ? Number((executedValue / price).toFixed(4)) : executedValue;
   const syncAgeMs =
@@ -142,8 +159,8 @@ export function toWalletExecutionPosition(
     currentPrice: price,
     size,
     currentValue,
-    pnlUsd: 0,
-    pnlPct: 0,
+    pnlUsd,
+    pnlPct,
     syncedAt: row.synced_at?.toISOString() ?? null,
     syncAgeMs,
     syncStale:
@@ -164,8 +181,18 @@ export function hasPositionExposure(row: LedgerRow): boolean {
   return ledgerHasPositionExposure(row);
 }
 
+function readLedgerCostBasis(row: LedgerRow, executedValue: number): number {
+  const intendedNotional = readLedgerNumber(row, "size_usdc");
+  if (row.status === "partial" && intendedNotional > executedValue) {
+    return executedValue;
+  }
+  if (intendedNotional > 0) return intendedNotional;
+  return executedValue;
+}
+
 export function summarizeDailyTradeCounts(
-  rows: readonly LedgerRow[]
+  rows: readonly LedgerRow[],
+  capturedAt: Date
 ): Array<{ day: string; n: number }> {
   const counts = new Map<string, number>();
   for (const row of rows) {
@@ -173,9 +200,27 @@ export function summarizeDailyTradeCounts(
     const day = row.observed_at.toISOString().slice(0, 10);
     counts.set(day, (counts.get(day) ?? 0) + 1);
   }
-  return [...counts.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([day, n]) => ({ day, n }));
+  return buildUtcDayWindow(capturedAt, TRADE_COUNT_WINDOW_DAYS).map((day) => ({
+    day,
+    n: counts.get(day) ?? 0,
+  }));
+}
+
+function buildUtcDayWindow(capturedAt: Date, windowDays: number): string[] {
+  const days: string[] = [];
+  const cursor = new Date(
+    Date.UTC(
+      capturedAt.getUTCFullYear(),
+      capturedAt.getUTCMonth(),
+      capturedAt.getUTCDate()
+    )
+  );
+  cursor.setUTCDate(cursor.getUTCDate() - (windowDays - 1));
+  for (let i = 0; i < windowDays; i++) {
+    days.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return days;
 }
 
 export function getLedgerRowConditionId(row: LedgerRow): string {
@@ -190,7 +235,7 @@ export function getLedgerRowConditionId(row: LedgerRow): string {
 }
 
 function deriveExecutionStatus(
-  row: LedgerRow,
+  _row: LedgerRow,
   lifecycleState: WalletExecutionLifecycleState | null
 ): WalletExecutionPositionStatus {
   if (

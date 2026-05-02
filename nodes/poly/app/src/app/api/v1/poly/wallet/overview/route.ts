@@ -31,21 +31,15 @@ import {
   getPolyTraderWalletAdapter,
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
-import type { LedgerStatus } from "@/features/trading";
 import { getTradingWalletPnlHistory } from "@/features/wallet-analysis/server/trading-wallet-overview-service";
 import { EVENT_NAMES, logEvent } from "@/shared/observability";
-import { summarizeLedgerPositions } from "../_lib/ledger-positions";
+import {
+  DASHBOARD_LEDGER_POSITION_LIMIT,
+  DASHBOARD_LEDGER_POSITION_STATUSES,
+  summarizeLedgerPositions,
+} from "../_lib/ledger-positions";
 
 export const dynamic = "force-dynamic";
-
-const WALLET_OVERVIEW_LEDGER_STATUSES = [
-  "pending",
-  "open",
-  "filled",
-  "partial",
-  "canceled",
-  "error",
-] satisfies LedgerStatus[];
 
 function emptyPayload(
   interval: PolyWalletOverviewOutput["interval"],
@@ -103,6 +97,8 @@ export const GET = wrapRouteHandlerWithLogging(
           connected: false,
           warnings: 1,
           openOrders: null,
+          positionsMtm: null,
+          lockedUsdc: null,
           pnlPoints: 0,
         });
         return NextResponse.json(
@@ -129,6 +125,8 @@ export const GET = wrapRouteHandlerWithLogging(
         connected: false,
         warnings: 1,
         openOrders: null,
+        positionsMtm: null,
+        lockedUsdc: null,
         pnlPoints: 0,
       });
       return NextResponse.json(
@@ -156,8 +154,8 @@ export const GET = wrapRouteHandlerWithLogging(
     try {
       const rows = await container.orderLedger.listTenantPositions({
         billing_account_id: account.id,
-        statuses: WALLET_OVERVIEW_LEDGER_STATUSES,
-        limit: 100,
+        statuses: [...DASHBOARD_LEDGER_POSITION_STATUSES],
+        limit: DASHBOARD_LEDGER_POSITION_LIMIT,
       });
       positionSummary = summarizeLedgerPositions(rows, capturedAtDate);
     } catch (err) {
@@ -213,6 +211,8 @@ export const GET = wrapRouteHandlerWithLogging(
       connected: true,
       warnings: warnings.length,
       openOrders: positionSummary.openOrders,
+      positionsMtm: positionSummary.positionsMtm,
+      lockedUsdc: positionSummary.lockedUsdc,
       pnlPoints: pnlHistory.length,
     });
 
@@ -252,6 +252,8 @@ function logOverviewComplete(
     connected: boolean;
     warnings: number;
     openOrders: number | null;
+    positionsMtm: number | null;
+    lockedUsdc: number | null;
     pnlPoints: number;
   }
 ): void {
@@ -265,6 +267,8 @@ function logOverviewComplete(
     connected: fields.connected,
     warnings: fields.warnings,
     open_orders: fields.openOrders,
+    positions_mtm: fields.positionsMtm,
+    locked_usdc: fields.lockedUsdc,
     pnl_points: fields.pnlPoints,
   });
 }

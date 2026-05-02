@@ -40,9 +40,10 @@ import {
   getPolyTraderWalletAdapter,
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
-import type { LedgerStatus } from "@/features/trading";
 import { EVENT_NAMES, logEvent } from "@/shared/observability";
 import {
+  DASHBOARD_LEDGER_POSITION_LIMIT,
+  DASHBOARD_LEDGER_POSITION_STATUSES,
   summarizeDailyTradeCounts,
   toWalletExecutionPosition,
 } from "../_lib/ledger-positions";
@@ -50,14 +51,6 @@ import {
 export const dynamic = "force-dynamic";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
-const TRADE_HISTORY_STATUSES = [
-  "pending",
-  "open",
-  "filled",
-  "partial",
-  "canceled",
-  "error",
-] satisfies LedgerStatus[];
 
 function emptyPayload(warning: { code: string; message: string }) {
   return polyWalletExecutionOperation.output.parse({
@@ -141,10 +134,10 @@ export const GET = wrapRouteHandlerWithLogging(
     try {
       const rows = await container.orderLedger.listTenantPositions({
         billing_account_id: account.id,
-        statuses: TRADE_HISTORY_STATUSES,
-        limit: 500,
+        statuses: [...DASHBOARD_LEDGER_POSITION_STATUSES],
+        limit: DASHBOARD_LEDGER_POSITION_LIMIT,
       });
-      dailyTradeCounts = summarizeDailyTradeCounts(rows);
+      dailyTradeCounts = summarizeDailyTradeCounts(rows, capturedAt);
       const positions = rows.map((row) =>
         toWalletExecutionPosition(row, capturedAt)
       );
