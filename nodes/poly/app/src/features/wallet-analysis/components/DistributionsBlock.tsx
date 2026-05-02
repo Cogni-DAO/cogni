@@ -6,7 +6,7 @@
  * Purpose: Order-flow deep-dive — 6 stacked histograms (DCA depth, trade size, entry price, DCA window, hour-of-day, event clustering) with a count↔USDC toggle and a pending-share caption. Renders directly from the contract `WalletAnalysisDistributions` shape — no client-side bucket math.
  * Scope: Presentational. CSS-only stacked bars (no chart library) following the project's existing TradesPerDayChart pattern.
  * Invariants:
- *   - PENDING_IS_FIRST_CLASS — every per-fill chart renders three bands (won green / lost red / pending grey).
+ *   - MODE_HIGHLIGHTED — every chart paints the modal bucket green and the rest neutral grey, so the dominant behaviour reads at a glance. Win/lost/pending data stays on the wire (`PENDING_IS_FIRST_CLASS`) and surfaces in tooltips.
  *   - DISTRIBUTIONS_ARE_PURE_DERIVATIONS — the component never recomputes buckets; it renders what the server returned.
  * Side-effects: none
  * Links: docs/design/wallet-analysis-components.md (Checkpoint D), work/items/task.0431.poly-wallet-orderflow-distributions-d1.md
@@ -108,28 +108,19 @@ export function DistributionsBlock({
     >
       {gap ? <CoverageNotice gap={gap} /> : null}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <ChartCard
-          title="Entries per outcome"
-          subtitle="how many trades layered into the same (market, side)"
-        >
+        <ChartCard title="Entries per outcome">
           <StackedBars histogram={data.dcaDepth} viewMode={viewMode} />
         </ChartCard>
-        <ChartCard title="Trade size" subtitle="USDC notional per fill">
+        <ChartCard title="Trade size">
           <StackedBars histogram={data.tradeSize} viewMode={viewMode} />
         </ChartCard>
-        <ChartCard
-          title="Entry price"
-          subtitle="favorite (high) ↔ longshot (low)"
-        >
+        <ChartCard title="Entry price">
           <StackedBars histogram={data.entryPrice} viewMode={viewMode} />
         </ChartCard>
-        <ChartCard
-          title="Time across a position"
-          subtitle="span from first entry to last entry on one outcome"
-        >
+        <ChartCard title="Time in position">
           <StackedBars histogram={data.dcaWindow} viewMode={viewMode} />
         </ChartCard>
-        <ChartCard title="Hour of day (UTC)" subtitle="when do they trade">
+        <ChartCard title="Hour of day (UTC)">
           <StackedBars
             histogram={data.hourOfDay}
             viewMode={viewMode}
@@ -137,28 +128,10 @@ export function DistributionsBlock({
             sparseLabels={3}
           />
         </ChartCard>
-        <ChartCard
-          title="Trades per event"
-          subtitle="how many bets across one game / match (no outcome split — sub-markets resolve independently)"
-        >
+        <ChartCard title="Bets per game">
           <FlatBars histogram={data.eventClustering} viewMode={viewMode} />
-          {data.topEvents.length > 0 ? (
-            <ul className="mt-3 flex flex-col gap-1 text-xs">
-              {data.topEvents.slice(0, 5).map((e) => (
-                <li key={e.slug} className="flex items-center gap-2">
-                  <span className="w-10 shrink-0 text-right font-mono text-muted-foreground">
-                    {e.tradeCount}
-                  </span>
-                  <span className="truncate" title={e.title}>
-                    {e.title || e.slug}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
         </ChartCard>
       </div>
-      <Legend />
     </Section>
   );
 }
@@ -194,25 +167,16 @@ function Section({
 
 function ChartCard({
   title,
-  subtitle,
   children,
 }: {
   title: string;
-  subtitle?: string;
   children: ReactNode;
 }): ReactElement {
   return (
     <div className="flex flex-col gap-3 rounded border bg-card p-3">
-      <div className="flex flex-col gap-0.5">
-        <h4 className="font-medium text-foreground text-xs uppercase tracking-wider">
-          {title}
-        </h4>
-        {subtitle ? (
-          <p className="text-[11px] text-muted-foreground leading-snug">
-            {subtitle}
-          </p>
-        ) : null}
-      </div>
+      <h4 className="font-medium text-foreground text-xs uppercase tracking-wider">
+        {title}
+      </h4>
       {children}
     </div>
   );
@@ -246,11 +210,8 @@ function ViewModeToggle({
   );
 }
 
-const COLORS = {
-  won: "bg-emerald-500/80",
-  lost: "bg-rose-500/80",
-  pending: "bg-muted-foreground/40",
-} as const;
+const BAR_GREY = "bg-muted-foreground/30";
+const BAR_HIGHLIGHT = "bg-emerald-500/80";
 
 function bucketTotal(
   bucket: Histogram["buckets"][number],
@@ -258,6 +219,26 @@ function bucketTotal(
 ): number {
   const v = viewMode === "count" ? bucket.values.count : bucket.values.usdc;
   return v.won + v.lost + v.pending;
+}
+
+function YAxis({
+  max,
+  height,
+  viewMode,
+}: {
+  max: number;
+  height: number;
+  viewMode: WalletDistributionsViewMode;
+}): ReactElement {
+  return (
+    <div
+      className="flex w-8 shrink-0 flex-col justify-between font-mono text-[10px] text-muted-foreground tabular-nums"
+      style={{ height: `${height}px` }}
+    >
+      <span className="leading-none">{fmtVal(max, viewMode)}</span>
+      <span className="leading-none">0</span>
+    </div>
+  );
 }
 
 function StackedBars({
@@ -277,66 +258,67 @@ function StackedBars({
     0
   );
   const scaleMax = Math.max(max, 1);
-  // Pixel heights match the established TradesPerDayChart pattern. Percentage
-  // heights inside `flex flex-col items-end` collapse to 0 because the parent
-  // sizes to content — same trap as `h-32` on the row.
   const chartPx = compact ? 72 : 104;
   return (
-    <div
-      className={cn("flex items-end gap-1", compact ? "h-24" : "h-32")}
-      style={{ minHeight: `${chartPx + 16}px` }}
-    >
-      {histogram.buckets.map((b, i) => {
-        const counts = viewMode === "count" ? b.values.count : b.values.usdc;
-        const total = counts.won + counts.lost + counts.pending;
-        const totalPx =
-          total === 0
-            ? 4
-            : Math.max(8, Math.round((total / scaleMax) * chartPx));
-        const wonPx =
-          total > 0 ? Math.round((counts.won / total) * totalPx) : 0;
-        const lostPx =
-          total > 0 ? Math.round((counts.lost / total) * totalPx) : 0;
-        const pendingPx = totalPx - wonPx - lostPx;
-        const showLabel = !sparseLabels || i % sparseLabels === 0;
-        const tooltip = `${b.label}: won ${fmtVal(counts.won, viewMode)} · lost ${fmtVal(counts.lost, viewMode)} · pending ${fmtVal(counts.pending, viewMode)}`;
-        return (
-          <div
-            key={`${b.label}-${i}`}
-            className="group flex flex-1 flex-col items-center justify-end gap-1"
-            title={tooltip}
-          >
-            <div
-              className="flex w-full flex-col-reverse overflow-hidden rounded-t-sm bg-muted"
-              style={{ height: `${totalPx}px` }}
-            >
-              {wonPx > 0 ? (
-                <div className={COLORS.won} style={{ height: `${wonPx}px` }} />
-              ) : null}
-              {lostPx > 0 ? (
+    <div className="flex items-stretch gap-2">
+      <YAxis max={max} height={chartPx} viewMode={viewMode} />
+      <div className="flex flex-1 flex-col">
+        <div
+          className="relative flex items-end gap-1"
+          style={{ height: `${chartPx}px` }}
+        >
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-0 border-muted-foreground/15 border-t"
+          />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 border-muted-foreground/30 border-t"
+          />
+          {histogram.buckets.map((b, i) => {
+            const counts =
+              viewMode === "count" ? b.values.count : b.values.usdc;
+            const total = counts.won + counts.lost + counts.pending;
+            const heightPx =
+              total === 0
+                ? 2
+                : Math.max(4, Math.round((total / scaleMax) * chartPx));
+            const isMode = total > 0 && total === max;
+            const tooltip = `${b.label}: won ${fmtVal(counts.won, viewMode)} · lost ${fmtVal(counts.lost, viewMode)} · pending ${fmtVal(counts.pending, viewMode)}`;
+            return (
+              <div
+                key={`${b.label}-${i}`}
+                className="flex flex-1 items-end justify-center"
+                title={tooltip}
+              >
                 <div
-                  className={COLORS.lost}
-                  style={{ height: `${lostPx}px` }}
+                  className={cn(
+                    "w-full rounded-t-sm",
+                    isMode ? BAR_HIGHLIGHT : BAR_GREY
+                  )}
+                  style={{ height: `${heightPx}px` }}
                 />
-              ) : null}
-              {pendingPx > 0 ? (
-                <div
-                  className={COLORS.pending}
-                  style={{ height: `${pendingPx}px` }}
-                />
-              ) : null}
-            </div>
-            <span
-              className={cn(
-                "font-mono text-[10px] text-muted-foreground leading-none",
-                showLabel ? "" : "invisible"
-              )}
-            >
-              {b.label}
-            </span>
-          </div>
-        );
-      })}
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-1 flex gap-1">
+          {histogram.buckets.map((b, i) => {
+            const showLabel = !sparseLabels || i % sparseLabels === 0;
+            return (
+              <span
+                key={`${b.label}-label-${i}`}
+                className={cn(
+                  "flex-1 text-center font-mono text-[10px] text-muted-foreground leading-none",
+                  showLabel ? "" : "invisible"
+                )}
+              >
+                {b.label}
+              </span>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -355,49 +337,54 @@ function FlatBars({
   const scaleMax = Math.max(max, 1);
   const chartPx = 104;
   return (
-    <div className="flex h-32 items-end gap-1" style={{ minHeight: "120px" }}>
-      {histogram.buckets.map((b, i) => {
-        const v = viewMode === "count" ? b.count : b.usdc;
-        const heightPx =
-          v === 0 ? 4 : Math.max(8, Math.round((v / scaleMax) * chartPx));
-        return (
-          <div
-            key={`${b.label}-${i}`}
-            className="group flex flex-1 flex-col items-center justify-end gap-1"
-            title={`${b.label}: ${fmtVal(v, viewMode)}`}
-          >
-            <div
-              className="w-full rounded-t-sm bg-primary/70"
-              style={{ height: `${heightPx}px` }}
-            />
-            <span className="font-mono text-[10px] text-muted-foreground leading-none">
+    <div className="flex items-stretch gap-2">
+      <YAxis max={max} height={chartPx} viewMode={viewMode} />
+      <div className="flex flex-1 flex-col">
+        <div
+          className="relative flex items-end gap-1"
+          style={{ height: `${chartPx}px` }}
+        >
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-0 border-muted-foreground/15 border-t"
+          />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 border-muted-foreground/30 border-t"
+          />
+          {histogram.buckets.map((b, i) => {
+            const v = viewMode === "count" ? b.count : b.usdc;
+            const heightPx =
+              v === 0 ? 2 : Math.max(4, Math.round((v / scaleMax) * chartPx));
+            const isMode = v > 0 && v === max;
+            return (
+              <div
+                key={`${b.label}-${i}`}
+                className="flex flex-1 items-end justify-center"
+                title={`${b.label}: ${fmtVal(v, viewMode)}`}
+              >
+                <div
+                  className={cn(
+                    "w-full rounded-t-sm",
+                    isMode ? BAR_HIGHLIGHT : BAR_GREY
+                  )}
+                  style={{ height: `${heightPx}px` }}
+                />
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-1 flex gap-1">
+          {histogram.buckets.map((b, i) => (
+            <span
+              key={`${b.label}-label-${i}`}
+              className="flex-1 text-center font-mono text-[10px] text-muted-foreground leading-none"
+            >
               {b.label}
             </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function Legend(): ReactElement {
-  return (
-    <div className="flex items-center gap-4 text-muted-foreground text-xs">
-      <span className="flex items-center gap-1.5">
-        <span className={cn("inline-block h-2 w-2 rounded-sm", COLORS.won)} />
-        won
-      </span>
-      <span className="flex items-center gap-1.5">
-        <span className={cn("inline-block h-2 w-2 rounded-sm", COLORS.lost)} />
-        lost
-      </span>
-      <span className="flex items-center gap-1.5">
-        <span
-          className={cn("inline-block h-2 w-2 rounded-sm", COLORS.pending)}
-        />
-        pending
-      </span>
-      <span className="ml-auto">events shown without outcome split</span>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
