@@ -421,14 +421,18 @@ function PositionActionButton({
   pendingActionPositionId: string | null;
 }): ReactElement {
   const lifecycle = position.lifecycleState ?? null;
-  const isLoser =
+  const isTerminal =
+    lifecycle === "closed" ||
     lifecycle === "loser" ||
     lifecycle === "dust" ||
     lifecycle === "redeemed" ||
     lifecycle === "abandoned";
   const isRedeemable =
-    position.status === "redeemable" && lifecycle !== "loser" && !isLoser;
-  const isCloseable = position.status === "open" && !isLoser;
+    position.status === "redeemable" &&
+    (lifecycle === null || lifecycle === "winner");
+  const isCloseable =
+    position.status === "open" &&
+    (lifecycle === null || lifecycle === "unresolved" || lifecycle === "open");
   const label = isRedeemable
     ? "Redeem"
     : isCloseable
@@ -454,9 +458,15 @@ function PositionActionButton({
           ? "Actions require a dashboard handler"
           : position.status === "closed"
             ? "Position already settled"
-            : busy
-              ? "Working…"
-              : `${label} via Polymarket`
+            : lifecycle === "redeem_pending"
+              ? "Redeem already pending"
+              : isTerminal
+                ? "Position already settled"
+                : lifecycle === "closing" || lifecycle === "resolving"
+                  ? "Position action already pending"
+                  : busy
+                    ? "Working…"
+                    : `${label} via Polymarket`
       }
       aria-label={`${label} ${position.marketTitle}`}
       onClick={(event) => {

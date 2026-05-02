@@ -46,6 +46,7 @@ const REFRESH_LEDGER_STATUSES = [
   "filled",
   "partial",
 ] satisfies LedgerStatus[];
+const REFRESH_CONCURRENCY = 8;
 
 function mapReceiptStatus(s: OrderStatus): LedgerStatus {
   switch (s) {
@@ -154,60 +155,98 @@ export const POST = wrapRouteHandlerWithLogging(
       ledgerRowsRead = rows.length;
 
       const syncedIds = new Set<string>();
-      for (const row of rows) {
-        if (
-          row.order_id === null ||
-          (row.status !== "pending" &&
-            row.status !== "open" &&
-            row.status !== "partial")
-        ) {
-          continue;
+      const orderRefreshFailures: string[] = [];
+      const positionsPromise = executor.listPositions().then(
+        (positions) => ({ ok: true as const, positions }),
+        (err: unknown) => ({ ok: false as const, err })
+      );
+      const orderRows = rows.filter(isRefreshableOrderRow);
+      const orderUpdateCounts = await mapConcurrent(
+        orderRows,
+        REFRESH_CONCURRENCY,
+        async (row) => {
+          try {
+            if (row.order_id === null) return 0;
+            const result = await executor.getOrder(row.order_id);
+            syncedIds.add(row.client_order_id);
+            if (!("found" in result)) return 0;
+            await container.orderLedger.updateStatus({
+              client_order_id: row.client_order_id,
+              status: mapReceiptStatus(result.found.status),
+              filled_size_usdc: result.found.filled_size_usdc,
+              order_id: result.found.order_id,
+            });
+            return 1;
+          } catch (err) {
+            orderRefreshFailures.push(
+              err instanceof Error ? err.message : String(err)
+            );
+            return 0;
+          }
         }
-        const result = await executor.getOrder(row.order_id);
-        syncedIds.add(row.client_order_id);
-        if ("found" in result) {
-          await container.orderLedger.updateStatus({
-            client_order_id: row.client_order_id,
-            status: mapReceiptStatus(result.found.status),
-            filled_size_usdc: result.found.filled_size_usdc,
-            order_id: result.found.order_id,
-          });
-          ledgerRowsUpdated += 1;
-        }
+      );
+      ledgerRowsUpdated += orderUpdateCounts.reduce<number>(
+        (sum, count) => sum + count,
+        0
+      );
+      if (orderRefreshFailures.length > 0) {
+        warnings.push({
+          code: "order_refresh_partial",
+          message: `${orderRefreshFailures.length} order lookups failed; first error: ${orderRefreshFailures[0]}`,
+        });
       }
 
-      const positions = await executor.listPositions();
-      const currentValueByAsset = new Map(
-        positions
-          .filter((position) => position.size > 0)
-          .map((position) => [
-            position.asset,
-            roundToCents(position.currentValue),
-          ])
-      );
+      const positionsResult = await positionsPromise;
+      if (!positionsResult.ok) {
+        warnings.push({
+          code: "positions_reconciliation_unavailable",
+          message:
+            positionsResult.err instanceof Error
+              ? positionsResult.err.message
+              : String(positionsResult.err),
+        });
+      } else {
+        const currentValueByAsset = new Map(
+          positionsResult.positions
+            .filter((position) => position.size > 0)
+            .map((position) => [
+              position.asset,
+              roundToCents(position.currentValue),
+            ])
+        );
 
-      const exposureRows = rows.filter(hasPositionExposure);
-      for (const row of exposureRows) {
-        const tokenId = readTokenId(row);
-        if (tokenId === null) continue;
-        syncedIds.add(row.client_order_id);
-        const currentValue = currentValueByAsset.get(tokenId);
-        if (currentValue !== undefined && currentValue > 0) {
-          await container.orderLedger.updateStatus({
-            client_order_id: row.client_order_id,
-            status: row.status,
-            filled_size_usdc: currentValue,
-          });
-          ledgerRowsUpdated += 1;
-          continue;
-        }
-        ledgerRowsUpdated +=
-          await container.orderLedger.markPositionClosedByAsset({
-            billing_account_id: account.id,
-            token_id: tokenId,
-            reason: "refresh_no_position",
-            closed_at: new Date(),
-          });
+        const closedAssets = new Set<string>();
+        const exposureRows = rows.filter(hasPositionExposure);
+        const exposureUpdateCounts = await mapConcurrent(
+          exposureRows,
+          REFRESH_CONCURRENCY,
+          async (row) => {
+            const tokenId = readTokenId(row);
+            if (tokenId === null) return 0;
+            syncedIds.add(row.client_order_id);
+            const currentValue = currentValueByAsset.get(tokenId);
+            if (currentValue !== undefined && currentValue > 0) {
+              await container.orderLedger.updateStatus({
+                client_order_id: row.client_order_id,
+                status: row.status,
+                filled_size_usdc: currentValue,
+              });
+              return 1;
+            }
+            if (closedAssets.has(tokenId)) return 0;
+            closedAssets.add(tokenId);
+            return container.orderLedger.markPositionClosedByAsset({
+              billing_account_id: account.id,
+              token_id: tokenId,
+              reason: "refresh_no_position",
+              closed_at: new Date(),
+            });
+          }
+        );
+        ledgerRowsUpdated += exposureUpdateCounts.reduce<number>(
+          (sum, count) => sum + count,
+          0
+        );
       }
 
       await container.orderLedger.markSynced([...syncedIds]);
@@ -252,3 +291,33 @@ export const POST = wrapRouteHandlerWithLogging(
     return NextResponse.json(polyWalletRefreshOperation.output.parse(payload));
   }
 );
+
+function isRefreshableOrderRow(row: LedgerRow): boolean {
+  return (
+    row.order_id !== null &&
+    (row.status === "pending" ||
+      row.status === "open" ||
+      row.status === "partial")
+  );
+}
+
+async function mapConcurrent<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = [];
+  let nextIndex = 0;
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await mapper(items[index] as T);
+      }
+    }
+  );
+  await Promise.all(workers);
+  return results;
+}

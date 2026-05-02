@@ -38,6 +38,8 @@ const mockMarkPositionClosedByAsset = vi.fn();
 const mockMarkSynced = vi.fn();
 const mockGetExecutionSlice = vi.fn();
 const mockInvalidateWalletAnalysisCaches = vi.fn();
+const mockRedeemPipelineFor = vi.fn();
+const mockListRedeemJobsForFunder = vi.fn();
 
 vi.mock("@/bootstrap/http", () => ({
   wrapRouteHandlerWithLogging:
@@ -67,7 +69,7 @@ vi.mock("@/bootstrap/container", () => ({
       markPositionClosedByAsset: mockMarkPositionClosedByAsset,
       markSynced: mockMarkSynced,
     },
-    redeemPipelineFor: vi.fn(() => null),
+    redeemPipelineFor: mockRedeemPipelineFor,
   })),
 }));
 
@@ -160,6 +162,8 @@ describe("poly wallet dashboard DB read routes", () => {
       closed_positions: [],
       warnings: [],
     });
+    mockRedeemPipelineFor.mockReturnValue(null);
+    mockListRedeemJobsForFunder.mockResolvedValue([]);
     syncedAt = new Date();
     row = {
       target_id: "target-1",
@@ -285,6 +289,35 @@ describe("poly wallet dashboard DB read routes", () => {
     });
   });
 
+  it("overview does not count closed partial rows as open orders or locked USDC", async () => {
+    mockListTenantPositions.mockResolvedValue([
+      {
+        ...row,
+        status: "partial",
+        attributes: {
+          ...row.attributes,
+          closed_at: new Date().toISOString(),
+          size_usdc: 20,
+          filled_size_usdc: 10,
+        },
+      },
+    ]);
+    const { GET } = await import("@/app/api/v1/poly/wallet/overview/route");
+
+    const response = await GET(
+      new Request("http://localhost/api/v1/poly/wallet/overview?interval=1W")
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      usdc_available: 30,
+      usdc_locked: 0,
+      usdc_positions_mtm: 0,
+      usdc_total: 30,
+      open_orders: 0,
+    });
+  });
+
   it("execution does not resurrect a DB-backed row stamped closed", async () => {
     mockListTenantPositions.mockResolvedValue([
       {
@@ -306,6 +339,68 @@ describe("poly wallet dashboard DB read routes", () => {
     expect(response.status).toBe(200);
     expect(json.live_positions).toEqual([]);
     expect(mockGetExecutionSlice).not.toHaveBeenCalled();
+  });
+
+  it("execution marks DB-backed winner lifecycle rows redeemable", async () => {
+    mockRedeemPipelineFor.mockReturnValue({
+      funderAddress: FUNDER,
+      redeemJobs: {
+        listForFunder: mockListRedeemJobsForFunder,
+      },
+    });
+    mockListRedeemJobsForFunder.mockResolvedValue([
+      {
+        conditionId:
+          "0x1111111111111111111111111111111111111111111111111111111111111111",
+        lifecycleState: "winner",
+      },
+    ]);
+    const { GET } = await import("@/app/api/v1/poly/wallet/execution/route");
+
+    const response = await GET(
+      new Request("http://localhost/api/v1/poly/wallet/execution")
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.live_positions).toHaveLength(1);
+    expect(json.live_positions[0]).toMatchObject({
+      status: "redeemable",
+      lifecycleState: "winner",
+    });
+    expect(json.closed_positions).toEqual([]);
+    expect(mockListRedeemJobsForFunder).toHaveBeenCalledWith(FUNDER);
+  });
+
+  it("execution moves terminal lifecycle rows to closed history", async () => {
+    mockRedeemPipelineFor.mockReturnValue({
+      funderAddress: FUNDER,
+      redeemJobs: {
+        listForFunder: mockListRedeemJobsForFunder,
+      },
+    });
+    mockListRedeemJobsForFunder.mockResolvedValue([
+      {
+        conditionId:
+          "0x1111111111111111111111111111111111111111111111111111111111111111",
+        lifecycleState: "redeemed",
+      },
+    ]);
+    const { GET } = await import("@/app/api/v1/poly/wallet/execution/route");
+
+    const response = await GET(
+      new Request("http://localhost/api/v1/poly/wallet/execution")
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.live_positions).toEqual([]);
+    expect(json.closed_positions).toHaveLength(1);
+    expect(json.closed_positions[0]).toMatchObject({
+      status: "closed",
+      lifecycleState: "redeemed",
+      currentValue: 0,
+    });
   });
 
   it("execution trade counts ignore raw non-fill ledger rows", async () => {
@@ -435,5 +530,57 @@ describe("poly wallet dashboard DB read routes", () => {
     });
     expect(mockMarkSynced).toHaveBeenCalledWith(["0xclient"]);
     expect(mockInvalidateWalletAnalysisCaches).toHaveBeenCalledWith(FUNDER);
+  });
+
+  it("refresh still reconciles positions when one order lookup fails", async () => {
+    mockGetOrder.mockRejectedValue(new Error("clob getOrder unavailable"));
+    mockListPositions.mockResolvedValue([]);
+    const { POST } = await import("@/app/api/v1/poly/wallet/refresh/route");
+
+    const response = await POST(
+      new Request("http://localhost/api/v1/poly/wallet/refresh", {
+        method: "POST",
+      })
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.warnings).toContainEqual(
+      expect.objectContaining({ code: "order_refresh_partial" })
+    );
+    expect(json.warnings).not.toContainEqual(
+      expect.objectContaining({ code: "ledger_refresh_unavailable" })
+    );
+    expect(mockListPositions).toHaveBeenCalled();
+    expect(mockMarkPositionClosedByAsset).toHaveBeenCalledWith({
+      billing_account_id: ACCOUNT.id,
+      token_id: "token-1",
+      reason: "refresh_no_position",
+      closed_at: expect.any(Date),
+    });
+  });
+
+  it("refresh does not close DB positions when positions reconciliation fails", async () => {
+    mockListPositions.mockRejectedValue(new Error("positions unavailable"));
+    const { POST } = await import("@/app/api/v1/poly/wallet/refresh/route");
+
+    const response = await POST(
+      new Request("http://localhost/api/v1/poly/wallet/refresh", {
+        method: "POST",
+      })
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.warnings).toContainEqual(
+      expect.objectContaining({ code: "positions_reconciliation_unavailable" })
+    );
+    expect(mockUpdateStatus).toHaveBeenCalledWith({
+      client_order_id: "0xclient",
+      status: "partial",
+      filled_size_usdc: 10,
+      order_id: "0xorder",
+    });
+    expect(mockMarkPositionClosedByAsset).not.toHaveBeenCalled();
   });
 });

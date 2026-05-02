@@ -31,6 +31,8 @@ import { toUserId } from "@cogni/ids";
 import {
   PolyWalletExecutionOutputSchema,
   polyWalletExecutionOperation,
+  type WalletExecutionLifecycleState,
+  WalletExecutionLifecycleStateSchema,
 } from "@cogni/poly-node-contracts";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
@@ -42,7 +44,7 @@ import {
 } from "@/bootstrap/poly-trader-wallet";
 import type { LedgerStatus } from "@/features/trading";
 import {
-  hasPositionExposure,
+  getLedgerRowConditionId,
   summarizeDailyTradeCounts,
   toWalletExecutionPosition,
 } from "../_lib/ledger-positions";
@@ -126,6 +128,7 @@ export const GET = wrapRouteHandlerWithLogging(
     const capturedAt = new Date();
     const warnings: Array<{ code: string; message: string }> = [];
     let livePositions: ReturnType<typeof toWalletExecutionPosition>[] = [];
+    let closedPositions: ReturnType<typeof toWalletExecutionPosition>[] = [];
     let dailyTradeCounts: ReturnType<typeof summarizeDailyTradeCounts> = [];
     try {
       const rows = await container.orderLedger.listTenantPositions({
@@ -133,12 +136,29 @@ export const GET = wrapRouteHandlerWithLogging(
         statuses: TRADE_HISTORY_STATUSES,
         limit: 500,
       });
+      const lifecycleByConditionId = await readLifecycleByConditionId(
+        container,
+        account.id,
+        warnings
+      );
+
       dailyTradeCounts = summarizeDailyTradeCounts(rows);
-      livePositions = rows
+      const positions = rows
         .filter((row) => LIVE_POSITION_STATUSES.has(row.status))
-        .filter(hasPositionExposure)
-        .slice(0, 100)
-        .map((row) => toWalletExecutionPosition(row, capturedAt));
+        .map((row) =>
+          toWalletExecutionPosition(
+            row,
+            capturedAt,
+            lifecycleByConditionId.get(getLedgerRowConditionId(row)) ?? null
+          )
+        );
+      livePositions = positions
+        .filter((position) => position.status !== "closed")
+        .filter((position) => position.currentValue > 0)
+        .slice(0, 100);
+      closedPositions = positions
+        .filter((position) => position.status === "closed")
+        .slice(0, 100);
     } catch (err) {
       warnings.push({
         code: "positions_read_model_unavailable",
@@ -152,9 +172,42 @@ export const GET = wrapRouteHandlerWithLogging(
         capturedAt: capturedAt.toISOString(),
         dailyTradeCounts,
         live_positions: livePositions,
-        closed_positions: [],
+        closed_positions: closedPositions,
         warnings,
       })
     );
   }
 );
+
+async function readLifecycleByConditionId(
+  container: ReturnType<typeof getContainer>,
+  billingAccountId: string,
+  warnings: Array<{ code: string; message: string }>
+): Promise<ReadonlyMap<string, WalletExecutionLifecycleState>> {
+  const pipeline = container.redeemPipelineFor(billingAccountId);
+  if (pipeline === null) return new Map();
+
+  try {
+    const jobs = await pipeline.redeemJobs.listForFunder(
+      pipeline.funderAddress
+    );
+    const lifecycleByConditionId = new Map<
+      string,
+      WalletExecutionLifecycleState
+    >();
+    for (const job of jobs) {
+      const parsed = WalletExecutionLifecycleStateSchema.safeParse(
+        job.lifecycleState
+      );
+      if (!parsed.success) continue;
+      lifecycleByConditionId.set(job.conditionId, parsed.data);
+    }
+    return lifecycleByConditionId;
+  } catch (err) {
+    warnings.push({
+      code: "redeem_lifecycle_unavailable",
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return new Map();
+  }
+}

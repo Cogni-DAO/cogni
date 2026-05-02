@@ -15,7 +15,12 @@
  * @internal
  */
 
-import type { WalletExecutionPosition } from "@cogni/poly-node-contracts";
+import {
+  WALLET_EXECUTION_TERMINAL_LIFECYCLE_STATES,
+  type WalletExecutionLifecycleState,
+  type WalletExecutionPosition,
+  type WalletExecutionPositionStatus,
+} from "@cogni/poly-node-contracts";
 import type { LedgerRow } from "@/features/trading";
 
 const POSITION_STALE_MS = 5 * 60_000;
@@ -68,22 +73,33 @@ export function summarizeLedgerPositions(
 
 export function toWalletExecutionPosition(
   row: LedgerRow,
-  capturedAt: Date
+  capturedAt: Date,
+  lifecycleState: WalletExecutionLifecycleState | null = null
 ): WalletExecutionPosition {
   const observed = row.observed_at.toISOString();
   const captured = capturedAt.toISOString();
   const price = readNum(row, "limit_price");
-  const currentValue = rowCurrentValue(row);
+  const status = deriveExecutionStatus(row, lifecycleState);
+  const closedAt = readNullableStr(row, "closed_at");
+  const executedValue = rowExecutedUsdc(row);
+  const currentValue = status === "closed" ? 0 : executedValue;
   const size =
-    price > 0 ? Number((currentValue / price).toFixed(4)) : currentValue;
+    price > 0 ? Number((executedValue / price).toFixed(4)) : executedValue;
   const syncAgeMs =
     row.synced_at !== null
       ? Math.max(0, capturedAt.getTime() - row.synced_at.getTime())
       : null;
+  const terminalTs = status === "closed" ? (closedAt ?? captured) : null;
+  const terminalEvent =
+    status === "redeemable"
+      ? [{ ts: captured, kind: "redeemable" as const, price, shares: size }]
+      : terminalTs !== null
+        ? [{ ts: terminalTs, kind: "close" as const, price, shares: size }]
+        : [];
 
   return {
     positionId: row.order_id ?? row.client_order_id,
-    conditionId: readConditionId(row),
+    conditionId: getLedgerRowConditionId(row),
     asset: readStr(row, "token_id") || row.client_order_id,
     marketTitle:
       readStr(row, "title") || readStr(row, "market_id") || "Polymarket",
@@ -93,10 +109,10 @@ export function toWalletExecutionPosition(
     eventSlug: readNullableStr(row, "event_slug"),
     marketUrl: readMarketUrl(row),
     outcome: readStr(row, "outcome") || "UNKNOWN",
-    status: "open",
-    lifecycleState: null,
+    status,
+    lifecycleState,
     openedAt: observed,
-    closedAt: null,
+    closedAt: terminalTs,
     resolvesAt:
       readNullableStr(row, "game_start_time") ??
       readNullableStr(row, "resolves_at") ??
@@ -121,7 +137,10 @@ export function toWalletExecutionPosition(
       { ts: observed, price, size },
       { ts: captured, price, size },
     ],
-    events: [{ ts: observed, kind: "entry", price, shares: size }],
+    events: [
+      { ts: observed, kind: "entry", price, shares: size },
+      ...terminalEvent,
+    ],
   };
 }
 
@@ -143,7 +162,7 @@ export function summarizeDailyTradeCounts(
     .map(([day, n]) => ({ day, n }));
 }
 
-function readConditionId(row: LedgerRow): string {
+export function getLedgerRowConditionId(row: LedgerRow): string {
   const explicit = readNullableStr(row, "condition_id");
   if (explicit !== null) return explicit;
 
@@ -157,6 +176,21 @@ function readConditionId(row: LedgerRow): string {
 function rowCurrentValue(row: LedgerRow): number {
   if (readNullableStr(row, "closed_at") !== null) return 0;
   return rowExecutedUsdc(row);
+}
+
+function deriveExecutionStatus(
+  row: LedgerRow,
+  lifecycleState: WalletExecutionLifecycleState | null
+): WalletExecutionPositionStatus {
+  if (
+    lifecycleState !== null &&
+    WALLET_EXECUTION_TERMINAL_LIFECYCLE_STATES.has(lifecycleState)
+  ) {
+    return "closed";
+  }
+  if (readNullableStr(row, "closed_at") !== null) return "closed";
+  if (lifecycleState === "winner") return "redeemable";
+  return "open";
 }
 
 function isExecutedTradeRow(row: LedgerRow): boolean {
@@ -186,6 +220,7 @@ function rowRemainingUsdc(row: LedgerRow): number {
 }
 
 function isRestingOrder(row: LedgerRow): boolean {
+  if (readNullableStr(row, "closed_at") !== null) return false;
   return row.status === "open" || row.status === "partial";
 }
 
