@@ -389,4 +389,3 @@ function fmtRange(fromTs: number, toTs: number): string {
   if (from === to) return from;
   return `${from} → ${to}`;
 }
-
