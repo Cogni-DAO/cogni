@@ -195,6 +195,7 @@ export class RedeemSubscriber {
           },
           {
             conditionId: c.conditionId,
+            positionId: enqueueInput.positionId,
             lifecycle: enqueueInput.lifecycleState,
             source: "redeem_subscriber_enqueue",
           }
@@ -283,6 +284,7 @@ export class RedeemSubscriber {
             },
             {
               conditionId,
+              positionId: job.positionId,
               lifecycle: "redeem_pending",
               source: "redeem_subscriber_reorg",
             }
@@ -321,6 +323,7 @@ export class RedeemSubscriber {
         },
         {
           conditionId,
+          positionId: job.positionId,
           lifecycle: "redeemed",
           source: "redeem_subscriber_payout",
         }

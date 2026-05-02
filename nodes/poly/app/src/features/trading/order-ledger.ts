@@ -47,6 +47,7 @@ import {
   type ListRecentOptions,
   type ListTenantPositionsOptions,
   type MarkPositionClosedByAssetInput,
+  type MarkPositionLifecycleByAssetInput,
   type MarkPositionLifecycleByConditionIdInput,
   type OpenOrderRow,
   type OrderLedger,
@@ -540,6 +541,34 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
             sql`${polyCopyTradeFills.attributes}->>'token_id' = ${input.token_id}`,
             notPositionTerminal,
             inArray(polyCopyTradeFills.status, ["open", "filled", "partial"])
+          )
+        )
+        .returning({ clientOrderId: polyCopyTradeFills.clientOrderId });
+      return rows.length;
+    },
+
+    async markPositionLifecycleByAsset(
+      input: MarkPositionLifecycleByAssetInput
+    ): Promise<number> {
+      const incomingLifecycleIsTerminal = [
+        "closed",
+        "redeemed",
+        "loser",
+        "dust",
+        "abandoned",
+      ].includes(input.lifecycle);
+      const rows = await deps.db
+        .update(polyCopyTradeFills)
+        .set({
+          positionLifecycle: input.lifecycle,
+          updatedAt: input.updated_at,
+        })
+        .where(
+          and(
+            eq(polyCopyTradeFills.billingAccountId, input.billing_account_id),
+            sql`${polyCopyTradeFills.attributes}->>'token_id' = ${input.token_id}`,
+            incomingLifecycleIsTerminal ? undefined : notPositionTerminal,
+            hasPositionLifecycleOrExecution
           )
         )
         .returning({ clientOrderId: polyCopyTradeFills.clientOrderId });

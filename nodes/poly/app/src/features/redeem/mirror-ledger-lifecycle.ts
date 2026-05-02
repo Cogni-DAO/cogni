@@ -20,9 +20,9 @@ interface LoggerLike {
 }
 
 export interface LedgerLifecycleMirrorPort {
-  markPositionLifecycleByConditionId(input: {
+  markPositionLifecycleByAsset(input: {
     billing_account_id: string;
-    condition_id: string;
+    token_id: string;
     lifecycle: RedeemLifecycleState;
     updated_at: Date;
   }): Promise<number>;
@@ -38,14 +38,15 @@ export async function mirrorRedeemLifecycleToLedger(
   deps: LedgerLifecycleMirrorDeps,
   input: {
     conditionId: string;
+    positionId: string;
     lifecycle: RedeemLifecycleState;
     source: string;
   }
 ): Promise<void> {
   try {
-    const updated = await deps.orderLedger.markPositionLifecycleByConditionId({
+    const updated = await deps.orderLedger.markPositionLifecycleByAsset({
       billing_account_id: deps.billingAccountId,
-      condition_id: input.conditionId,
+      token_id: input.positionId,
       lifecycle: input.lifecycle,
       updated_at: new Date(),
     });
@@ -54,6 +55,7 @@ export async function mirrorRedeemLifecycleToLedger(
         event: "poly.redeem.lifecycle_mirrored_to_ledger",
         billing_account_id: deps.billingAccountId,
         condition_id: input.conditionId,
+        position_id: input.positionId,
         lifecycle: input.lifecycle,
         source: input.source,
         updated_rows: updated,
@@ -66,6 +68,7 @@ export async function mirrorRedeemLifecycleToLedger(
         event: "poly.redeem.lifecycle_mirror_failed",
         billing_account_id: deps.billingAccountId,
         condition_id: input.conditionId,
+        position_id: input.positionId,
         lifecycle: input.lifecycle,
         source: input.source,
         err: err instanceof Error ? err.message : String(err),

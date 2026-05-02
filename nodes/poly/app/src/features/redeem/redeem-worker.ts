@@ -236,6 +236,7 @@ export class RedeemWorker {
 
   private async mirrorLifecycle(
     conditionId: string,
+    positionId: string,
     lifecycle: RedeemLifecycleState,
     source: string
   ): Promise<void> {
@@ -245,7 +246,7 @@ export class RedeemWorker {
         billingAccountId: this.deps.billingAccountId,
         logger: this.deps.logger,
       },
-      { conditionId, lifecycle, source }
+      { conditionId, positionId, lifecycle, source }
     );
   }
 
@@ -287,6 +288,7 @@ export class RedeemWorker {
       });
       await this.mirrorLifecycle(
         job.conditionId,
+        job.positionId,
         "abandoned",
         "worker_malformed"
       );
@@ -342,6 +344,7 @@ export class RedeemWorker {
         });
         await this.mirrorLifecycle(
           job.conditionId,
+          job.positionId,
           "abandoned",
           "worker_transient_exhausted"
         );
@@ -382,6 +385,7 @@ export class RedeemWorker {
     });
     await this.mirrorLifecycle(
       job.conditionId,
+      job.positionId,
       "redeem_pending",
       "worker_submitted"
     );
@@ -472,6 +476,7 @@ export class RedeemWorker {
         });
         await this.mirrorLifecycle(
           job.conditionId,
+          job.positionId,
           "redeemed",
           "worker_reaper_confirmed"
         );
@@ -515,6 +520,7 @@ export class RedeemWorker {
         });
         await this.mirrorLifecycle(
           job.conditionId,
+          job.positionId,
           "abandoned",
           "worker_reaper_bleed"
         );

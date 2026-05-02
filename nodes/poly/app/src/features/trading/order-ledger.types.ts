@@ -201,6 +201,14 @@ export interface MarkPositionLifecycleByConditionIdInput {
   updated_at: Date;
 }
 
+/** Input to mirror asset-scoped redeem lifecycle into the ledger read model. */
+export interface MarkPositionLifecycleByAssetInput {
+  billing_account_id: string;
+  token_id: string;
+  lifecycle: LedgerPositionLifecycle;
+  updated_at: Date;
+}
+
 /**
  * Aggregate freshness stats returned by `syncHealthSummary`.
  * Used by GET /api/v1/poly/internal/sync-health.
@@ -291,6 +299,15 @@ export interface OrderLedger {
    */
   markPositionClosedByAsset(
     input: MarkPositionClosedByAssetInput
+  ): Promise<number>;
+
+  /**
+   * Mirror asset-scoped redeem lifecycle into position rows. Redeem burns a
+   * concrete CTF positionId/token_id, so this is the canonical write path for
+   * redeem pipeline state.
+   */
+  markPositionLifecycleByAsset(
+    input: MarkPositionLifecycleByAssetInput
   ): Promise<number>;
 
   /**

@@ -252,6 +252,51 @@ describe("FakeOrderLedger.cumulativeIntentForMarket", () => {
     ]);
   });
 
+  it("stamps redeem lifecycle by token id without touching sibling outcomes", async () => {
+    const updatedAt = new Date();
+    const ledger = new FakeOrderLedger({
+      initial: [
+        makeRow({
+          fill_id: "yes-outcome",
+          status: "filled",
+          position_lifecycle: "winner",
+          attributes: {
+            market_id: MARKET_X,
+            condition_id: "0xabc",
+            token_id: "111",
+            size_usdc: 5,
+            filled_size_usdc: 5,
+          },
+        }),
+        makeRow({
+          fill_id: "no-outcome",
+          status: "filled",
+          position_lifecycle: "loser",
+          attributes: {
+            market_id: MARKET_X,
+            condition_id: "0xabc",
+            token_id: "222",
+            size_usdc: 5,
+            filled_size_usdc: 5,
+          },
+        }),
+      ],
+    });
+
+    await expect(
+      ledger.markPositionLifecycleByAsset({
+        billing_account_id: TENANT_A,
+        token_id: "111",
+        lifecycle: "redeemed",
+        updated_at: updatedAt,
+      })
+    ).resolves.toBe(1);
+    expect(ledger.rows.map((row) => row.position_lifecycle)).toEqual([
+      "redeemed",
+      "loser",
+    ]);
+  });
+
   it("does not reopen terminal lifecycle rows during order refresh", async () => {
     const ledger = new FakeOrderLedger({
       initial: [

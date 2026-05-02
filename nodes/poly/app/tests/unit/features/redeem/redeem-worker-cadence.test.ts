@@ -23,7 +23,7 @@ function makeWorker() {
     claimReaperCandidates: vi.fn(async () => []),
   };
   const orderLedger = {
-    markPositionLifecycleByConditionId: vi.fn(async () => 0),
+    markPositionLifecycleByAsset: vi.fn(async () => 0),
   };
   const publicClient = {
     getBlockNumber: vi.fn(async () => 100n),

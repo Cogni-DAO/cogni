@@ -9,6 +9,7 @@ pnpm-lock.yaml
 package-lock.json
 yarn.lock
 docs/research/fixtures/*.json
+.context/
 
 # Machine-written kustomize overlays (bug.0344 / task.0349).
 # Rewritten by scripts/ci/promote-k8s-image.sh on deploy/* branches (flight-preview,

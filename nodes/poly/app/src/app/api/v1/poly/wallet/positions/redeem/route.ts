@@ -153,6 +153,7 @@ export const POST = wrapRouteHandlerWithLogging(
       },
       {
         conditionId: candidate.conditionId,
+        positionId: candidate.positionId.toString(),
         lifecycle: "winner",
         source: "manual_redeem_enqueue",
       }
@@ -184,6 +185,7 @@ export const POST = wrapRouteHandlerWithLogging(
           },
           {
             conditionId: candidate.conditionId,
+            positionId: job.positionId,
             lifecycle: "redeemed",
             source: "manual_redeem_confirmed",
           }
@@ -211,6 +213,7 @@ export const POST = wrapRouteHandlerWithLogging(
           },
           {
             conditionId: candidate.conditionId,
+            positionId: job.positionId,
             lifecycle: "abandoned",
             source: "manual_redeem_abandoned",
           }

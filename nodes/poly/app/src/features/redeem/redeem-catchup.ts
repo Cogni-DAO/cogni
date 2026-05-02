@@ -223,6 +223,7 @@ async function replayPayoutRedemptions(
       },
       {
         conditionId,
+        positionId: job.positionId,
         lifecycle: "redeemed",
         source: "redeem_catchup_payout",
       }

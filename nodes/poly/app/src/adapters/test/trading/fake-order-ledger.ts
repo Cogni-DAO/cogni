@@ -27,6 +27,7 @@ import {
   type ListOpenOrPendingOptions,
   type ListRecentOptions,
   type MarkPositionClosedByAssetInput,
+  type MarkPositionLifecycleByAssetInput,
   type MarkPositionLifecycleByConditionIdInput,
   type OpenOrderRow,
   type OrderLedger,
@@ -234,6 +235,40 @@ export class FakeOrderLedger implements OrderLedger {
         close_client_order_id: input.close_client_order_id,
         close_reason: input.reason,
       };
+      changed += 1;
+    }
+    return changed;
+  }
+
+  async markPositionLifecycleByAsset(
+    input: MarkPositionLifecycleByAssetInput
+  ): Promise<number> {
+    let changed = 0;
+    for (const row of this.rows) {
+      const attrs = row.attributes as Record<string, unknown> | null;
+      if (row.billing_account_id !== input.billing_account_id) continue;
+      if (attrs?.token_id !== input.token_id) continue;
+      if (
+        !["closed", "redeemed", "loser", "dust", "abandoned"].includes(
+          input.lifecycle
+        ) &&
+        row.position_lifecycle !== null &&
+        ["closed", "redeemed", "loser", "dust", "abandoned"].includes(
+          row.position_lifecycle
+        )
+      ) {
+        continue;
+      }
+      if (
+        row.position_lifecycle === null &&
+        row.status !== "filled" &&
+        row.status !== "partial" &&
+        ledgerExecutedUsdc(row) <= 0
+      ) {
+        continue;
+      }
+      row.position_lifecycle = input.lifecycle;
+      row.updated_at = input.updated_at;
       changed += 1;
     }
     return changed;

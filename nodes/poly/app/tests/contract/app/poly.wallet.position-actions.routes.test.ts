@@ -31,7 +31,7 @@ const mockGetOrCreateBillingAccountForUser = vi.fn();
 const mockGetAddress = vi.fn();
 const mockInvalidateWalletAnalysisCaches = vi.fn();
 const mockMarkPositionClosedByAsset = vi.fn();
-const mockMarkPositionLifecycleByConditionId = vi.fn();
+const mockMarkPositionLifecycleByAsset = vi.fn();
 const mockRedeemPipelineFor = vi.fn();
 const mockRedeemJobsEnqueue = vi.fn();
 const mockRedeemJobsFindByKey = vi.fn();
@@ -84,8 +84,7 @@ vi.mock("@/bootstrap/container", () => ({
     redeemPipelineFor: mockRedeemPipelineFor,
     orderLedger: {
       markPositionClosedByAsset: mockMarkPositionClosedByAsset,
-      markPositionLifecycleByConditionId:
-        mockMarkPositionLifecycleByConditionId,
+      markPositionLifecycleByAsset: mockMarkPositionLifecycleByAsset,
     },
   })),
 }));
@@ -135,7 +134,7 @@ describe("poly wallet position action routes", () => {
     });
     mockGetOrCreateBillingAccountForUser.mockResolvedValue(ACCOUNT);
     mockMarkPositionClosedByAsset.mockResolvedValue(1);
-    mockMarkPositionLifecycleByConditionId.mockResolvedValue(1);
+    mockMarkPositionLifecycleByAsset.mockResolvedValue(1);
     mockRedeemJobsEnqueue.mockResolvedValue({
       jobId: "redeem-job-1",
       alreadyExisted: false,
@@ -339,6 +338,7 @@ describe("poly wallet position action routes", () => {
     ]);
     mockRedeemJobsFindByKey.mockResolvedValue({
       id: "redeem-job-1",
+      positionId: "1",
       status: "confirmed",
       txHashes: [txHash],
       errorClass: null,
@@ -365,15 +365,15 @@ describe("poly wallet position action routes", () => {
         lifecycleState: "winner",
       })
     );
-    expect(mockMarkPositionLifecycleByConditionId).toHaveBeenCalledWith({
+    expect(mockMarkPositionLifecycleByAsset).toHaveBeenCalledWith({
       billing_account_id: ACCOUNT.id,
-      condition_id: conditionId,
+      token_id: "1",
       lifecycle: "winner",
       updated_at: expect.any(Date),
     });
-    expect(mockMarkPositionLifecycleByConditionId).toHaveBeenCalledWith({
+    expect(mockMarkPositionLifecycleByAsset).toHaveBeenCalledWith({
       billing_account_id: ACCOUNT.id,
-      condition_id: conditionId,
+      token_id: "1",
       lifecycle: "redeemed",
       updated_at: expect.any(Date),
     });
