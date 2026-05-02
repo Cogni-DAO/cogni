@@ -11,7 +11,7 @@ resources:
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:c02a9b093892346abcfbe82d251afbe2fd4f19083d882d5c59173ebce8a956e4"
+    digest: "sha256:1208dcb24fdbcbb42b4f79853bc1c47e5ad95f58126c545e607f238f0b54b7ff"
 
 patches:
   - target:
