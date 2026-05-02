@@ -78,19 +78,23 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  N[NULL<br/>no proven exposure] -->|fill evidence| O[open]
-  O -->|manual close route<br/>or refresh sees no asset| C[closed]
-  O -->|redeem policy: redeem| W[winner]
-  O -->|redeem policy: losing_outcome| L[loser]
-  O -->|redeem policy: zero_balance| R0[redeemed]
+  N[NULL<br/>no proven exposure] -->|fill evidence| A[active exposure<br/>unresolved/open/closing]
+  A -->|manual close route<br/>or refresh sees no asset| C[closed]
+  A -->|resolution evaluation| Q[action state<br/>resolving]
+  A -->|redeem policy: redeem| W[winner]
+  Q -->|winner selected| W
+  Q -->|losing_outcome| L[loser]
+  Q -->|zero_balance| R0[redeemed]
+  Q -->|dust policy| D[dust]
   W -->|worker submits tx| RP[redeem_pending]
   RP -->|payout observed<br/>or reaper balance=0| R[redeemed]
-  RP -->|no payout and balance>0<br/>or retries exhausted| A[abandoned]
-  R --> T[terminal history]
+  RP -->|no payout and balance>0<br/>or retries exhausted| AB[abandoned]
+  C --> T[terminal history]
+  R --> T
   L --> T
   R0 --> T
-  C --> T
-  A --> T
+  D --> T
+  AB --> T
 ```
 
 ### 3. Redeem Job
@@ -176,6 +180,12 @@ Canonical type: `LedgerPositionLifecycle` in `nodes/poly/app/src/features/tradin
 Position lifecycle predicates live in `nodes/poly/app/src/features/trading/ledger-lifecycle.ts`.
 
 Terminal lifecycles are `closed`, `redeemed`, `loser`, `dust`, and `abandoned`. Terminal rows are history and must not be reopened by order refresh. The SQL adapter enforces this with `preserveTerminalLifecycle(...)` in `nodes/poly/app/src/features/trading/order-ledger.ts`.
+
+Current task.5006 writer paths emit `open`, `closed`, `winner`,
+`redeem_pending`, `redeemed`, `loser`, and `abandoned`. `unresolved`,
+`closing`, `resolving`, and `dust` remain typed states because predicates,
+contracts, and DB constraints already account for them; reviewers should not
+infer a writer exists without following the file pointers below.
 
 ## Required Matrix
 

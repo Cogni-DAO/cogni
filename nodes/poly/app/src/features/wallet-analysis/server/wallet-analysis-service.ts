@@ -11,7 +11,6 @@
  *   - PNL_NOT_IN_SNAPSHOT: `getSnapshotSlice` does not return any PnL field. Headline PnL on the wallet research surface is derived from `getPnlSlice` (Polymarket `user-pnl-api`) — single source, reconciles with the chart by construction.
  *   - PARTIAL_FAILURE_NEVER_THROWS: each slice returns a `{ value | warning }` result; the route surfaces warnings without 5xx-ing.
  *   - CLOB_HISTORY_OPEN_ONLY: `getPriceHistory` is fetched only for open/redeemable positions; closed positions use trade-derived timelines only.
- *   - LIFECYCLE_OVERRIDES_TRADE_DERIVED_STATUS: `getExecutionSlice` accepts an optional `lifecycleByConditionId` map sourced from `poly_redeem_jobs` (task.0388). Positions whose lifecycle resolves to a terminal state (`closed | redeemed | loser | dust | abandoned`) move to `closed_positions` even when the trade-derived status would have kept them in `live_positions`. Absent map ⇒ legacy split unchanged.
  * Side-effects: IO (Polymarket Data API + Polymarket CLOB public + Polymarket user-pnl).
  * Notes: Cache is process-scoped — see `instrumentation.ts` single-replica boot assert.
  * Links: docs/design/wallet-analysis-components.md, nodes/poly/packages/market-provider/src/analysis/wallet-metrics.ts, nodes/poly/packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts, nodes/poly/packages/node-contracts/src/poly.wallet.execution.v1.contract.ts
@@ -36,11 +35,9 @@ import type {
   WalletAnalysisTrades,
   WalletAnalysisWarning,
   WalletExecutionDailyCount,
-  WalletExecutionLifecycleState,
   WalletExecutionPosition,
   WalletExecutionWarning,
 } from "@cogni/poly-node-contracts";
-import { WALLET_EXECUTION_TERMINAL_LIFECYCLE_STATES } from "@cogni/poly-node-contracts";
 import pLimit from "p-limit";
 import { clearTtlCacheByPrefix, coalesce } from "./coalesce";
 import { getTradingWalletPnlHistory } from "./trading-wallet-overview-service";
@@ -290,10 +287,7 @@ export async function getPnlSlice(
 export async function getExecutionSlice(
   addr: string,
   opts: {
-    /** Per-conditionId lifecycle from `poly_redeem_jobs` (task.0388 CP2).
-     * Drives Open vs History tab membership; absent ⇒ legacy split. */
-    lifecycleByConditionId?: ReadonlyMap<string, WalletExecutionLifecycleState>;
-    /** Skip public CLOB price history when this is used as dashboard fallback. */
+    /** Skip public CLOB price history for refresh paths that only need trade cadence. */
     includePriceHistory?: boolean;
   } = {}
 ): Promise<PolyWalletExecutionOutput> {
@@ -355,27 +349,12 @@ export async function getExecutionSlice(
     asOfIso: capturedAt,
   });
 
-  const lifecycleOf = (conditionId: string) =>
-    opts.lifecycleByConditionId?.get(conditionId) ?? null;
-  const isTerminal = (lifecycle: WalletExecutionLifecycleState | null) =>
-    lifecycle !== null &&
-    WALLET_EXECUTION_TERMINAL_LIFECYCLE_STATES.has(lifecycle);
-
   const livePreview = allMapped
-    .filter(
-      (p) =>
-        (p.status === "open" || p.status === "redeemable") &&
-        !isTerminal(lifecycleOf(p.conditionId))
-    )
+    .filter((p) => p.status === "open" || p.status === "redeemable")
     .slice(0, EXECUTION_OPEN_LIMIT);
-  const closedFromTrades = allMapped.filter((p) => p.status === "closed");
-  const closedFromLifecycle = allMapped.filter(
-    (p) => p.status !== "closed" && isTerminal(lifecycleOf(p.conditionId))
-  );
-  const closedPreview = [...closedFromTrades, ...closedFromLifecycle].slice(
-    0,
-    EXECUTION_HISTORY_LIMIT
-  );
+  const closedPreview = allMapped
+    .filter((p) => p.status === "closed")
+    .slice(0, EXECUTION_HISTORY_LIMIT);
 
   let liveForResponse = livePreview;
   if (opts.includePriceHistory ?? true) {
@@ -427,12 +406,8 @@ export async function getExecutionSlice(
     address: addr.toLowerCase() as PolyWalletExecutionOutput["address"],
     capturedAt,
     dailyTradeCounts: dailyTradeCountsResult,
-    live_positions: liveForResponse.map((p) =>
-      toExecutionContractPosition(p, lifecycleOf(p.conditionId))
-    ),
-    closed_positions: closedPreview.map((p) =>
-      toExecutionContractPosition(p, lifecycleOf(p.conditionId))
-    ),
+    live_positions: liveForResponse.map(toExecutionContractPosition),
+    closed_positions: closedPreview.map(toExecutionContractPosition),
     warnings,
   };
 }
@@ -470,8 +445,7 @@ function buildDailyCounts(
 }
 
 function toExecutionContractPosition(
-  position: ReturnType<typeof mapExecutionPositions>[number],
-  lifecycleState: WalletExecutionLifecycleState | null
+  position: ReturnType<typeof mapExecutionPositions>[number]
 ): WalletExecutionPosition {
   return {
     positionId: position.positionId,
@@ -483,7 +457,7 @@ function toExecutionContractPosition(
     marketUrl: position.marketUrl,
     outcome: position.outcome,
     status: position.status,
-    lifecycleState,
+    lifecycleState: null,
     openedAt: position.openedAt,
     closedAt: position.closedAt ?? null,
     resolvesAt: position.resolvesAt ?? null,
