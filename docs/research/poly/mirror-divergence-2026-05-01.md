@@ -1,7 +1,12 @@
 ---
 id: research.poly-mirror-divergence-2026-05-01
 type: research
+title: "Poly Mirror P/L Divergence — 2026-05-01"
 status: draft
+trust: draft
+summary: "Why our copy-mirror was −30% vs target's even-to-up daily P/L. Hypotheses A (slippage — not the bug), C (sizing — material but expected), D (wrong-outcome resolution — active 14% strict / 66% mixed bug), and E (hedge-leg drop — percentile filter skips target's tiny YES hedges, leaving us holding the un-hedged primary). Adds per-bucket histograms for RN1 + swisstony showing 51% of trade events are sub-$5."
+read_when: Before designing or reviewing any change to mirror sizing, hedge handling, layering, or outcome resolution. Cite as the standing analysis behind story.5000 and design.poly-mirror-position-projection.
+owner: derekg1729
 created: 2026-05-01
 tags: [poly, mirror, divergence, slippage, sizing, outcome-mapping]
 implements: bug.5003
