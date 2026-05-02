@@ -7,7 +7,7 @@
  * Scope: Pure type surface. No drizzle imports, no I/O.
  * Invariants: LEDGER_PORT_SHAPE_IS_STABLE — adding fields is a breaking change. INSERT_BEFORE_PLACE is a caller invariant, not a ledger one.
  * Side-effects: none
- * Public types: `LedgerRow` (includes `synced_at`), `LedgerStatus`, `StateSnapshot`, `TenantBinding`, `InsertPendingInput` (extends TenantBinding), `RecordDecisionInput` (extends TenantBinding), `ListRecentOptions`, `ListOpenOrPendingOptions`, `UpdateStatusInput` (includes `reason?`), `SyncHealthSummary`, `OrderLedger` (snapshotState takes `(target_id, billing_account_id)`).
+ * Public types: `LedgerRow` (includes `synced_at` + `position_lifecycle`), `LedgerStatus`, `LedgerPositionLifecycle`, `StateSnapshot`, `TenantBinding`, `InsertPendingInput` (extends TenantBinding), `RecordDecisionInput` (extends TenantBinding), `ListRecentOptions`, `ListOpenOrPendingOptions`, `UpdateStatusInput` (includes `reason?`), `SyncHealthSummary`, `OrderLedger` (snapshotState takes `(target_id, billing_account_id)`).
  * Links: work/items/task.0315.poly-copy-trade-prototype.md (CP4.3b), work/items/task.0328.poly-sync-truth-ledger-cache.md, docs/spec/poly-multi-tenant-auth.md
  * @public
  */
@@ -24,6 +24,23 @@ export type LedgerStatus =
   | "error";
 
 /**
+ * Typed position lifecycle for rows that have or had wallet exposure. NULL
+ * means the order row has not produced a position yet.
+ */
+export type LedgerPositionLifecycle =
+  | "unresolved"
+  | "open"
+  | "closing"
+  | "closed"
+  | "resolving"
+  | "winner"
+  | "redeem_pending"
+  | "redeemed"
+  | "loser"
+  | "dust"
+  | "abandoned";
+
+/**
  * Row shape returned by `listRecent` — mirrors `polyCopyTradeFills` $inferSelect
  * but with the fields the read APIs + mirror-coordinator actually consume.
  * Extra columns (`attributes`, `created_at`, `updated_at`, `synced_at`) surface as-is.
@@ -38,6 +55,7 @@ export interface LedgerRow {
   client_order_id: string;
   order_id: string | null;
   status: LedgerStatus;
+  position_lifecycle: LedgerPositionLifecycle | null;
   attributes: Record<string, unknown> | null;
   /** Last time the reconciler received a typed CLOB response for this row. NULL = never checked. */
   synced_at: Date | null;
@@ -70,8 +88,9 @@ export type LedgerCancelReason = "target_exited_market" | "ttl_expired";
 /**
  * Thrown by `insertPending` when the partial unique index
  * `poly_copy_trade_fills_one_open_per_market` rejects a second open row for
- * the same `(billing_account_id, target_id, market_id)`. Pipeline converts
- * to `skip/already_resting`. task.5001.
+ * the same `(billing_account_id, target_id, market_id)` where the existing row
+ * has not been position-closed (`attributes.closed_at IS NULL`). Pipeline
+ * converts to `skip/already_resting`. task.5001 / task.5006.
  */
 export class AlreadyRestingError extends Error {
   readonly code = "already_resting" as const;
@@ -174,6 +193,23 @@ export interface MarkPositionClosedByAssetInput {
   closed_at: Date;
 }
 
+/** Input to mirror redeem/resolution lifecycle into the ledger read model. */
+export interface MarkPositionLifecycleByConditionIdInput {
+  billing_account_id: string;
+  condition_id: string;
+  lifecycle: LedgerPositionLifecycle;
+  updated_at: Date;
+}
+
+/** Input to mirror asset-scoped redeem lifecycle into the ledger read model. */
+export interface MarkPositionLifecycleByAssetInput {
+  billing_account_id: string;
+  token_id: string;
+  lifecycle: LedgerPositionLifecycle;
+  updated_at: Date;
+  terminal_correction?: "redeem_reorg";
+}
+
 /**
  * Aggregate freshness stats returned by `syncHealthSummary`.
  * Used by GET /api/v1/poly/internal/sync-health.
@@ -220,9 +256,11 @@ export interface OrderLedger {
    * cap would let no-match attempts keep firing through the cap. Revisit
    * once task.0427's design pass lands and the miss rate drops.
    *
-   * Counts rows with `status` ∈ `pending | open | filled | partial`.
-   * Excludes `canceled | error`. Cross-target by design (the cap is on the
-   * tenant's exposure to a market, not per-target). Fail-closed: returns
+   * Counts rows with `status` ∈ `pending | open | filled | partial` while
+   * `attributes.closed_at IS NULL`; closed positions no longer represent
+   * active market exposure. Excludes `canceled | error` except FOK error rows
+   * that can race with on-chain minting. Cross-target by design (the cap is on
+   * the tenant's exposure to a market, not per-target). Fail-closed: returns
    * `Infinity` on DB error so the caller skips the placement rather than
    * mis-allowing it.
    */
@@ -256,18 +294,38 @@ export interface OrderLedger {
 
   /**
    * Clear DB-derived position exposure after a token is no longer held.
-   * Keeps historical rows but stamps `attributes.closed_at`, so dashboard
-   * page-loads do not resurrect a closed position before the next background
-   * reconciliation/drain.
+   * Keeps historical rows, writes `position_lifecycle='closed'`, and stamps
+   * `attributes.closed_at` as close timestamp metadata.
    */
   markPositionClosedByAsset(
     input: MarkPositionClosedByAssetInput
   ): Promise<number>;
 
   /**
+   * Mirror asset-scoped redeem lifecycle into position rows. Redeem burns a
+   * concrete CTF positionId/token_id, so this is the canonical write path for
+   * redeem pipeline state. Terminal lifecycles are preserved unless the input
+   * explicitly represents a chain reorg correction from `redeemed` back to
+   * `redeem_pending`.
+   */
+  markPositionLifecycleByAsset(
+    input: MarkPositionLifecycleByAssetInput
+  ): Promise<number>;
+
+  /**
+   * Mirror a condition-level redeem/resolution lifecycle into position rows so
+   * dashboard and automation can agree on one typed DB read model. Matches
+   * either explicit `attributes.condition_id` or promoted `market_id` values.
+   */
+  markPositionLifecycleByConditionId(
+    input: MarkPositionLifecycleByConditionIdInput
+  ): Promise<number>;
+
+  /**
    * Existence check on the partial unique index slot. True iff any row for
    * `(billing_account_id, target_id, market_id)` has `status IN
-   * ('pending','open','partial')`. Fail-closed: returns `true` on DB error.
+   * ('pending','open','partial') AND attributes.closed_at IS NULL`.
+   * Fail-closed: returns `true` on DB error.
    */
   hasOpenForMarket(args: {
     billing_account_id: string;

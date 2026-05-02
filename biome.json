@@ -8,6 +8,7 @@
   },
   "files": {
     "includes": [
+      "!.context/**",
       "nodes/*/app/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
       "!nodes/*/app/src/components/reui",
       "packages/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",

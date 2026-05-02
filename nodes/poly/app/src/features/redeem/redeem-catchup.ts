@@ -30,6 +30,10 @@ import { decodeEventLog, getAbiItem } from "viem";
 
 import type { RedeemJobsPort } from "@/ports";
 
+import {
+  type LedgerLifecycleMirrorPort,
+  mirrorRedeemLifecycleToLedger,
+} from "./mirror-ledger-lifecycle";
 import type { RedeemSubscriber } from "./redeem-subscriber";
 
 interface LoggerLike {
@@ -40,6 +44,8 @@ interface LoggerLike {
 
 export interface RedeemCatchupDeps {
   redeemJobs: RedeemJobsPort;
+  orderLedger: LedgerLifecycleMirrorPort;
+  billingAccountId: string;
   publicClient: PublicClient;
   dataApiClient: PolymarketDataApiClient;
   funderAddress: `0x${string}`;
@@ -209,6 +215,19 @@ async function replayPayoutRedemptions(
       jobId: job.id,
       lifecycleState: "redeemed",
     });
+    await mirrorRedeemLifecycleToLedger(
+      {
+        orderLedger: deps.orderLedger,
+        billingAccountId: deps.billingAccountId,
+        logger: deps.logger,
+      },
+      {
+        conditionId,
+        positionId: job.positionId,
+        lifecycle: "redeemed",
+        source: "redeem_catchup_payout",
+      }
+    );
   }
   await deps.redeemJobs.setLastProcessedBlock(cursorId, head);
 }

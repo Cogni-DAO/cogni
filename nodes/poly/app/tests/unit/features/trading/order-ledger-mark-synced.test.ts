@@ -25,6 +25,7 @@ function makeRow(overrides: Partial<LedgerRow> = {}): LedgerRow {
     client_order_id: "coid-1",
     order_id: "order-abc",
     status: "open",
+    position_lifecycle: null,
     attributes: null,
     synced_at: null,
     created_at: now,

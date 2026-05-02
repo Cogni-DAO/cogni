@@ -1021,6 +1021,7 @@ function createContainer(): Container {
         const { startRedeemPipelines } = await import("./redeem-pipeline");
         const map = await startRedeemPipelines({
           serviceDb,
+          orderLedger,
           walletPort,
           polygonRpcUrl,
           log,

@@ -31,10 +31,21 @@ import {
   getPolyTraderWalletAdapter,
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
+import type { LedgerStatus } from "@/features/trading";
 import { getTradingWalletPnlHistory } from "@/features/wallet-analysis/server/trading-wallet-overview-service";
+import { EVENT_NAMES, logEvent } from "@/shared/observability";
 import { summarizeLedgerPositions } from "../_lib/ledger-positions";
 
 export const dynamic = "force-dynamic";
+
+const WALLET_OVERVIEW_LEDGER_STATUSES = [
+  "pending",
+  "open",
+  "filled",
+  "partial",
+  "canceled",
+  "error",
+] satisfies LedgerStatus[];
 
 function emptyPayload(
   interval: PolyWalletOverviewOutput["interval"],
@@ -68,6 +79,7 @@ export const GET = wrapRouteHandlerWithLogging(
     auth: { mode: "required", getSessionUser },
   },
   async (ctx, request, sessionUser) => {
+    const startedAtMs = performance.now();
     if (!sessionUser) throw new Error("sessionUser required");
     const url = new URL(request.url);
     const interval = PolyWalletOverviewIntervalSchema.parse(
@@ -85,6 +97,14 @@ export const GET = wrapRouteHandlerWithLogging(
       adapter = getPolyTraderWalletAdapter(ctx.log);
     } catch (err) {
       if (err instanceof WalletAdapterUnconfiguredError) {
+        logOverviewComplete(ctx, startedAtMs, {
+          status: "wallet_adapter_unconfigured",
+          interval,
+          connected: false,
+          warnings: 1,
+          openOrders: null,
+          pnlPoints: 0,
+        });
         return NextResponse.json(
           emptyPayload(interval, capturedAt, {
             configured: false,
@@ -103,6 +123,14 @@ export const GET = wrapRouteHandlerWithLogging(
 
     const balances = await adapter.getBalances(account.id);
     if (!balances) {
+      logOverviewComplete(ctx, startedAtMs, {
+        status: "no_trading_wallet",
+        interval,
+        connected: false,
+        warnings: 1,
+        openOrders: null,
+        pnlPoints: 0,
+      });
       return NextResponse.json(
         emptyPayload(interval, capturedAt, {
           warnings: [
@@ -128,7 +156,7 @@ export const GET = wrapRouteHandlerWithLogging(
     try {
       const rows = await container.orderLedger.listTenantPositions({
         billing_account_id: account.id,
-        statuses: ["open", "filled", "partial"],
+        statuses: WALLET_OVERVIEW_LEDGER_STATUSES,
         limit: 100,
       });
       positionSummary = summarizeLedgerPositions(rows, capturedAtDate);
@@ -171,24 +199,22 @@ export const GET = wrapRouteHandlerWithLogging(
       });
     }
 
-    ctx.log.info(
-      {
-        billing_account_id: account.id,
-        funder_address: balances.address,
-        interval,
-        usdc_available: usdcAvailable,
-        usdc_locked: positionSummary.lockedUsdc,
-        usdc_positions_mtm: positionSummary.positionsMtm,
-        usdc_total: total,
-        pol_gas: balances.pol,
-        open_orders: positionSummary.openOrders,
-        positions_synced_at: positionSummary.syncedAt,
-        positions_stale: positionSummary.stale,
-        pnl_points: pnlHistory.length,
-        warning_count: warnings.length,
-      },
-      "poly.wallet.overview"
-    );
+    logOverviewComplete(ctx, startedAtMs, {
+      status: warnings.some(
+        (warning) => warning.code === "positions_read_model_unavailable"
+      )
+        ? "positions_read_model_unavailable"
+        : warnings.some((warning) => warning.code === "pnl_history_unavailable")
+          ? "pnl_history_unavailable"
+          : warnings.some((warning) => warning.code === "balances_partial")
+            ? "balances_partial"
+            : "ok",
+      interval,
+      connected: true,
+      warnings: warnings.length,
+      openOrders: positionSummary.openOrders,
+      pnlPoints: pnlHistory.length,
+    });
 
     return NextResponse.json(
       polyWalletOverviewOperation.output.parse({
@@ -212,6 +238,36 @@ export const GET = wrapRouteHandlerWithLogging(
     );
   }
 );
+
+function logOverviewComplete(
+  ctx: {
+    log: Parameters<typeof logEvent>[0];
+    reqId: string;
+    routeId: string;
+  },
+  startedAtMs: number,
+  fields: {
+    status: string;
+    interval: PolyWalletOverviewOutput["interval"];
+    connected: boolean;
+    warnings: number;
+    openOrders: number | null;
+    pnlPoints: number;
+  }
+): void {
+  logEvent(ctx.log, EVENT_NAMES.POLY_WALLET_OVERVIEW_COMPLETE, {
+    reqId: ctx.reqId,
+    routeId: ctx.routeId,
+    status: fields.status,
+    durationMs: Math.round(performance.now() - startedAtMs),
+    outcome: "success",
+    interval: fields.interval,
+    connected: fields.connected,
+    warnings: fields.warnings,
+    open_orders: fields.openOrders,
+    pnl_points: fields.pnlPoints,
+  });
+}
 
 function roundToCents(value: number): number {
   return Math.round(value * 100) / 100;

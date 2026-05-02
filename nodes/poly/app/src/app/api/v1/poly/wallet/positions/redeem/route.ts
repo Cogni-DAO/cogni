@@ -31,6 +31,7 @@ import {
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
 import { resolveRedeemCandidatesForCondition } from "@/features/redeem";
+import { mirrorRedeemLifecycleToLedger } from "@/features/redeem/mirror-ledger-lifecycle";
 import { invalidateWalletAnalysisCaches } from "@/features/wallet-analysis/server/wallet-analysis-service";
 import { serverEnv } from "@/shared/env/server-env";
 
@@ -144,6 +145,19 @@ export const POST = wrapRouteHandlerWithLogging(
       expectedPayoutUsdc: decision.expectedPayoutUsdc.toString(),
       lifecycleState: "winner",
     });
+    await mirrorRedeemLifecycleToLedger(
+      {
+        orderLedger: container.orderLedger,
+        billingAccountId: account.id,
+        logger: ctx.log,
+      },
+      {
+        conditionId: candidate.conditionId,
+        positionId: candidate.positionId.toString(),
+        lifecycle: "winner",
+        source: "manual_redeem_enqueue",
+      }
+    );
 
     const startedAt = Date.now();
     while (Date.now() - startedAt < POLL_BUDGET_MS) {
@@ -163,6 +177,19 @@ export const POST = wrapRouteHandlerWithLogging(
         } catch {
           /* cache invalidation is best-effort */
         }
+        await mirrorRedeemLifecycleToLedger(
+          {
+            orderLedger: container.orderLedger,
+            billingAccountId: account.id,
+            logger: ctx.log,
+          },
+          {
+            conditionId: candidate.conditionId,
+            positionId: job.positionId,
+            lifecycle: "redeemed",
+            source: "manual_redeem_confirmed",
+          }
+        );
         ctx.log.info(
           {
             billing_account_id: account.id,
@@ -178,6 +205,19 @@ export const POST = wrapRouteHandlerWithLogging(
         return NextResponse.json(payload);
       }
       if (job.status === "abandoned") {
+        await mirrorRedeemLifecycleToLedger(
+          {
+            orderLedger: container.orderLedger,
+            billingAccountId: account.id,
+            logger: ctx.log,
+          },
+          {
+            conditionId: candidate.conditionId,
+            positionId: job.positionId,
+            lifecycle: "abandoned",
+            source: "manual_redeem_abandoned",
+          }
+        );
         ctx.log.warn(
           {
             billing_account_id: account.id,

@@ -20,11 +20,30 @@ export {
   type CopyTradeExecutorDeps,
   createClobExecutor,
 } from "./clob-executor";
+export {
+  isLedgerPositionClosed,
+  isLedgerPositionStatus,
+  isLedgerRestingOrder,
+  ledgerCurrentValue,
+  ledgerExecutedUsdc,
+  ledgerHasPositionExposure,
+  ledgerRemainingUsdc,
+  POSITION_LEDGER_STATUSES,
+  RESTING_LEDGER_STATUSES,
+  readLedgerNullableString,
+  readLedgerNumber,
+  readLedgerPositionLifecycle,
+  readLedgerString,
+  shouldCountLedgerMarketIntent,
+  shouldCountLedgerTrade,
+  TERMINAL_LEDGER_POSITION_LIFECYCLES,
+} from "./ledger-lifecycle";
 export { createOrderLedger, type OrderLedgerDeps } from "./order-ledger";
 export {
   AlreadyRestingError,
   type InsertPendingInput,
   type LedgerCancelReason,
+  type LedgerPositionLifecycle,
   type LedgerRow,
   type LedgerStatus,
   type ListOpenOrPendingOptions,

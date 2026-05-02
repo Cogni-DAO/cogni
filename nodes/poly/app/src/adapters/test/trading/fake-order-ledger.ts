@@ -12,14 +12,23 @@
  */
 
 import {
+  isLedgerPositionClosed,
+  isLedgerRestingOrder,
+  ledgerExecutedUsdc,
+  shouldCountLedgerMarketIntent,
+} from "@/features/trading/ledger-lifecycle";
+import {
   AlreadyRestingError,
   type InsertPendingInput,
   type LedgerCancelReason,
+  type LedgerPositionLifecycle,
   type LedgerRow,
   type LedgerStatus,
   type ListOpenOrPendingOptions,
   type ListRecentOptions,
   type MarkPositionClosedByAssetInput,
+  type MarkPositionLifecycleByAssetInput,
+  type MarkPositionLifecycleByConditionIdInput,
   type OpenOrderRow,
   type OrderLedger,
   type RecordDecisionInput,
@@ -90,16 +99,7 @@ export class FakeOrderLedger implements OrderLedger {
         if (r.billing_account_id !== billing_account_id) return false;
         const attrs = r.attributes as Record<string, unknown> | null;
         if (attrs?.market_id !== market_id) return false;
-        if (
-          r.status === "pending" ||
-          r.status === "open" ||
-          r.status === "filled" ||
-          r.status === "partial"
-        ) {
-          return true;
-        }
-        // Mirrors order-ledger.ts: only FOK errors count (broadcast race).
-        return r.status === "error" && attrs?.placement === "market_fok";
+        return shouldCountLedgerMarketIntent(r);
       })
       .reduce((sum, r) => {
         const v = (r.attributes as Record<string, unknown> | null)?.size_usdc;
@@ -120,7 +120,7 @@ export class FakeOrderLedger implements OrderLedger {
         r.target_id === input.target_id &&
         ((r.attributes as Record<string, unknown> | null)?.market_id ??
           null) === input.intent.market_id &&
-        ["pending", "open", "partial"].includes(r.status)
+        isLedgerRestingOrder(r)
     );
     if (conflictsOnMarket) {
       throw new AlreadyRestingError(
@@ -156,6 +156,7 @@ export class FakeOrderLedger implements OrderLedger {
       client_order_id: input.intent.client_order_id,
       order_id: null,
       status: "pending",
+      position_lifecycle: null,
       attributes: attrs,
       synced_at: null,
       created_at: now,
@@ -174,6 +175,13 @@ export class FakeOrderLedger implements OrderLedger {
     if (!row) return;
     row.order_id = params.receipt.order_id;
     row.status = mapReceiptStatus(params.receipt.status);
+    const positionLifecycle = lifecycleFromOrderUpdate(
+      row.status,
+      params.receipt.filled_size_usdc
+    );
+    if (positionLifecycle !== null && !isLedgerPositionClosed(row)) {
+      row.position_lifecycle = positionLifecycle;
+    }
     row.updated_at = new Date();
     row.attributes = {
       ...(row.attributes ?? {}),
@@ -216,8 +224,17 @@ export class FakeOrderLedger implements OrderLedger {
       const attrs = row.attributes as Record<string, unknown> | null;
       if (row.billing_account_id !== input.billing_account_id) continue;
       if (attrs?.token_id !== input.token_id) continue;
-      if (!["open", "filled", "partial"].includes(row.status)) continue;
+      if (
+        row.position_lifecycle === null &&
+        row.status !== "filled" &&
+        row.status !== "partial" &&
+        ledgerExecutedUsdc(row) <= 0
+      ) {
+        continue;
+      }
+      if (isLedgerPositionClosed(row)) continue;
       row.updated_at = input.closed_at;
+      row.position_lifecycle = "closed";
       row.attributes = {
         ...(row.attributes ?? {}),
         closed_at: input.closed_at.toISOString(),
@@ -225,6 +242,86 @@ export class FakeOrderLedger implements OrderLedger {
         close_client_order_id: input.close_client_order_id,
         close_reason: input.reason,
       };
+      changed += 1;
+    }
+    return changed;
+  }
+
+  async markPositionLifecycleByAsset(
+    input: MarkPositionLifecycleByAssetInput
+  ): Promise<number> {
+    let changed = 0;
+    for (const row of this.rows) {
+      const attrs = row.attributes as Record<string, unknown> | null;
+      if (row.billing_account_id !== input.billing_account_id) continue;
+      if (attrs?.token_id !== input.token_id) continue;
+      const isRedeemReorgCorrection =
+        input.terminal_correction === "redeem_reorg" &&
+        input.lifecycle === "redeem_pending" &&
+        row.position_lifecycle === "redeemed";
+      if (
+        !["closed", "redeemed", "loser", "dust", "abandoned"].includes(
+          input.lifecycle
+        ) &&
+        row.position_lifecycle !== null &&
+        ["closed", "redeemed", "loser", "dust", "abandoned"].includes(
+          row.position_lifecycle
+        ) &&
+        !isRedeemReorgCorrection
+      ) {
+        continue;
+      }
+      if (
+        row.position_lifecycle === null &&
+        row.status !== "filled" &&
+        row.status !== "partial" &&
+        ledgerExecutedUsdc(row) <= 0
+      ) {
+        continue;
+      }
+      row.position_lifecycle = input.lifecycle;
+      row.updated_at = input.updated_at;
+      changed += 1;
+    }
+    return changed;
+  }
+
+  async markPositionLifecycleByConditionId(
+    input: MarkPositionLifecycleByConditionIdInput
+  ): Promise<number> {
+    const normalizedMarketId = `prediction-market:polymarket:${input.condition_id}`;
+    let changed = 0;
+    for (const row of this.rows) {
+      const attrs = row.attributes as Record<string, unknown> | null;
+      if (row.billing_account_id !== input.billing_account_id) continue;
+      if (
+        attrs?.condition_id !== input.condition_id &&
+        attrs?.market_id !== input.condition_id &&
+        attrs?.market_id !== normalizedMarketId
+      ) {
+        continue;
+      }
+      if (
+        !["closed", "redeemed", "loser", "dust", "abandoned"].includes(
+          input.lifecycle
+        ) &&
+        row.position_lifecycle !== null &&
+        ["closed", "redeemed", "loser", "dust", "abandoned"].includes(
+          row.position_lifecycle
+        )
+      ) {
+        continue;
+      }
+      if (
+        row.position_lifecycle === null &&
+        row.status !== "filled" &&
+        row.status !== "partial" &&
+        ledgerExecutedUsdc(row) <= 0
+      ) {
+        continue;
+      }
+      row.position_lifecycle = input.lifecycle;
+      row.updated_at = input.updated_at;
       changed += 1;
     }
     return changed;
@@ -241,7 +338,7 @@ export class FakeOrderLedger implements OrderLedger {
         r.target_id === args.target_id &&
         ((r.attributes as Record<string, unknown> | null)?.market_id ??
           null) === args.market_id &&
-        ["pending", "open", "partial"].includes(r.status)
+        isLedgerRestingOrder(r)
     );
   }
 
@@ -257,7 +354,7 @@ export class FakeOrderLedger implements OrderLedger {
           r.target_id === args.target_id &&
           ((r.attributes as Record<string, unknown> | null)?.market_id ??
             null) === args.market_id &&
-          ["pending", "open", "partial"].includes(r.status)
+          isLedgerRestingOrder(r)
       )
       .map((r) => ({
         client_order_id: r.client_order_id,
@@ -275,11 +372,7 @@ export class FakeOrderLedger implements OrderLedger {
   }): Promise<OpenOrderRow[]> {
     const cutoff = new Date(Date.now() - args.max_age_minutes * 60_000);
     return this.rows
-      .filter(
-        (r) =>
-          ["pending", "open", "partial"].includes(r.status) &&
-          r.created_at < cutoff
-      )
+      .filter((r) => isLedgerRestingOrder(r) && r.created_at < cutoff)
       .map((r) => {
         const market_id =
           ((r.attributes as Record<string, unknown> | null)?.market_id as
@@ -338,6 +431,7 @@ export class FakeOrderLedger implements OrderLedger {
       .filter(
         (r) =>
           (r.status === "pending" || r.status === "open") &&
+          isLedgerRestingOrder(r) &&
           r.created_at < cutoff
       )
       .sort((a, b) => a.created_at.getTime() - b.created_at.getTime())
@@ -350,6 +444,13 @@ export class FakeOrderLedger implements OrderLedger {
     );
     if (!row) return;
     row.status = input.status;
+    const positionLifecycle = lifecycleFromOrderUpdate(
+      input.status,
+      input.filled_size_usdc
+    );
+    if (positionLifecycle !== null && !isLedgerPositionClosed(row)) {
+      row.position_lifecycle = positionLifecycle;
+    }
     row.updated_at = new Date();
     if (input.order_id !== undefined) {
       row.order_id = input.order_id;
@@ -421,4 +522,13 @@ function mapReceiptStatus(
     default:
       return "open";
   }
+}
+
+function lifecycleFromOrderUpdate(
+  status: LedgerStatus,
+  filledSizeUsdc: number | undefined
+): LedgerPositionLifecycle | null {
+  if (status === "filled" || status === "partial") return "open";
+  if (filledSizeUsdc !== undefined && filledSizeUsdc > 0) return "open";
+  return null;
 }

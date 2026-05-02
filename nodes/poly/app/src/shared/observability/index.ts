@@ -21,10 +21,6 @@ export {
   clientLogger,
   // Context
   createRequestContext,
-  // Event registry
-  EVENT_NAMES,
-  type EventBase,
-  type EventName,
   type PaymentsConfirmedEvent,
   type PaymentsIntentCreatedEvent,
   type PaymentsStateTransitionEvent,
@@ -32,5 +28,7 @@ export {
   type PaymentsVerifiedEvent,
   type RequestContext,
 } from "@cogni/node-shared";
+// App-local event registry (extends @cogni/node-shared).
+export { EVENT_NAMES, type EventBase, type EventName } from "./events";
 // --- App-local: server logger/metrics/redact (pino + prom-client runtime deps) ---
 export * from "./server";

@@ -26,6 +26,7 @@ Load all three if you're reviewing a PR that cuts across them (the `/connect` �
 **Specs (as-built):**
 
 - [docs/spec/poly-copy-trade-phase1.md](../../../docs/spec/poly-copy-trade-phase1.md) — Phase 1 layer boundaries, invariants, `fill_id` shape
+- [docs/spec/poly-order-position-lifecycle.md](../../../docs/spec/poly-order-position-lifecycle.md) — order status vs position lifecycle vs redeem job state machine
 - [docs/spec/poly-multi-tenant-auth.md](../../../docs/spec/poly-multi-tenant-auth.md) — Phase A tenant-scoped copy-trade tables + RLS
 - [docs/spec/poly-trader-wallet-port.md](../../../docs/spec/poly-trader-wallet-port.md) — Phase B `PolyTraderWalletPort` (AEAD, consent, invariants)
 

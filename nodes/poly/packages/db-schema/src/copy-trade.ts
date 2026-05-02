@@ -130,6 +130,11 @@ export const polyCopyTradeFills = pgTable(
     orderId: text("order_id"),
     /** Canonical OrderStatus: pending | open | filled | partial | canceled | error. */
     status: text("status").notNull(),
+    /**
+     * Position lifecycle for rows that have or had wallet exposure. NULL means
+     * the order row has not produced position exposure yet.
+     */
+    positionLifecycle: text("position_lifecycle"),
     /** Provenance + mirror amount + raw normalized fill for debugging. */
     attributes: jsonb("attributes").$type<Record<string, unknown>>(),
     /**
@@ -164,14 +169,24 @@ export const polyCopyTradeFills = pgTable(
     uniqueIndex("poly_copy_trade_fills_order_id_unique")
       .on(table.orderId)
       .where(sql`${table.orderId} IS NOT NULL`),
-    // DEDUPE_AT_DB (task.5001) — exactly one resting mirror order per
-    // (tenant, target, market) at any point in time. The mirror pipeline's
+    // DEDUPE_AT_DB (task.5001/task.5006) — exactly one active resting mirror
+    // order per (tenant, target, market). A row whose `position_lifecycle` is
+    // past the active order phases or whose legacy `attributes.closed_at` is
+    // present is position history, not an active resting slot. The mirror pipeline's
     // application-level `hasOpenForMarket` gate is fast-path optimization;
     // this partial unique index is the correctness backstop. Insert path
     // catches PG 23505 and converts to skip/already_resting.
     uniqueIndex("poly_copy_trade_fills_one_open_per_market")
       .on(table.billingAccountId, table.targetId, table.marketId)
-      .where(sql`${table.status} IN ('pending','open','partial')`),
+      .where(
+        sql`${table.status} IN ('pending','open','partial')
+          AND (${table.positionLifecycle} IS NULL OR ${table.positionLifecycle} IN ('unresolved','open','closing'))
+          AND ${table.attributes}->>'closed_at' IS NULL`
+      ),
+    index("poly_copy_trade_fills_position_lifecycle_idx").on(
+      table.billingAccountId,
+      table.positionLifecycle
+    ),
     check(
       "poly_copy_trade_fills_fill_id_shape",
       sql`${table.fillId} ~ '^(data-api|clob-ws):.+'`
@@ -179,6 +194,13 @@ export const polyCopyTradeFills = pgTable(
     check(
       "poly_copy_trade_fills_status_check",
       sql`${table.status} IN ('pending','open','filled','partial','canceled','error')`
+    ),
+    check(
+      "poly_copy_trade_fills_position_lifecycle_check",
+      sql`${table.positionLifecycle} IS NULL OR ${table.positionLifecycle} IN (
+        'unresolved', 'open', 'closing', 'closed', 'resolving',
+        'winner', 'redeem_pending', 'redeemed', 'loser', 'dust', 'abandoned'
+      )`
     ),
   ]
 );

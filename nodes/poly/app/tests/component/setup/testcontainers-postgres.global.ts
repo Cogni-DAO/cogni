@@ -22,6 +22,8 @@ import { fileURLToPath } from "node:url";
 
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 
+import { CORE_TEST_ENV } from "../../_fixtures/env/base-env";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROVISION_SH = path.resolve(
   __dirname,
@@ -82,9 +84,12 @@ export async function setup() {
   const appUserUri = `postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@${host}:${port}/${APP_DB_NAME}`;
   const serviceUserUri = `postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@${host}:${port}/${APP_DB_NAME}`;
 
-  process.env.DATABASE_URL = appUserUri;
-  process.env.DATABASE_SERVICE_URL = serviceUserUri;
-  process.env.APP_ENV = "test";
+  Object.assign(process.env, {
+    ...CORE_TEST_ENV,
+    DATABASE_URL: appUserUri,
+    DATABASE_SERVICE_URL: serviceUserUri,
+    APP_ENV: "test",
+  });
 
   // Run POLY migrations (not operator's) as app_user (DB owner, same as production).
   // Poly's migrations include every core migration 0001-0027 verbatim AND the

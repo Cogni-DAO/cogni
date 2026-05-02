@@ -114,6 +114,7 @@ describe("mirror-pipeline.runMirrorTick — idempotent re-run", () => {
           client_order_id: cid,
           order_id: "0xpreviouslyplaced",
           status: "open",
+          position_lifecycle: null,
           attributes: { size_usdc: 5 },
           created_at: new Date(),
           updated_at: new Date(),

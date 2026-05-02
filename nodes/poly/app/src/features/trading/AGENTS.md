@@ -39,8 +39,8 @@ Generic Polymarket placement + order-ledger substrate. Every path that places an
 ## Public Surface
 
 - **Exports (executor):** `createClobExecutor(deps) → ClobExecutor`, `ClobExecutorDeps`, `CLOB_EXECUTOR_METRICS`.
-- **Exports (order ledger):** `createOrderLedger(deps) → OrderLedger`, `OrderLedgerDeps`, `snapshotState(target_id, billing_account_id)`, `insertPending` (TenantBinding required; throws `AlreadyRestingError` on partial-unique-index conflict), `markOrderId`, `markError`, `markCanceled` (typed `LedgerCancelReason`), `updateStatus` (accepts optional `reason?`), `recordDecision` (TenantBinding required), `listRecent`, `listOpenOrPending`, `hasOpenForMarket`, `findOpenForMarket`, `findStaleOpen`, `markSynced`, `syncHealthSummary`.
-- **Exports (types):** `LedgerRow` (includes `synced_at`), `LedgerStatus`, `StateSnapshot`, `TenantBinding` (`{billing_account_id, created_by_user_id}`), `UpdateStatusInput`, `ListOpenOrPendingOptions`, `SyncHealthSummary`, `OpenOrderRow`, `LedgerCancelReason`, `AlreadyRestingError`.
+- **Exports (order ledger):** `createOrderLedger(deps) → OrderLedger`, `OrderLedgerDeps`, `snapshotState(target_id, billing_account_id)`, `insertPending` (TenantBinding required; throws `AlreadyRestingError` on partial-unique-index conflict), `markOrderId`, `markError`, `markCanceled` (typed `LedgerCancelReason`), `updateStatus` (accepts optional `reason?`), `recordDecision` (TenantBinding required), `listRecent`, `listOpenOrPending`, `hasOpenForMarket`, `findOpenForMarket`, `findStaleOpen`, `markSynced`, `markPositionLifecycleByConditionId`, `syncHealthSummary`.
+- **Exports (types):** `LedgerRow` (includes `synced_at` + `position_lifecycle`), `LedgerStatus`, `LedgerPositionLifecycle`, `StateSnapshot`, `TenantBinding` (`{billing_account_id, created_by_user_id}`), `UpdateStatusInput`, `ListOpenOrPendingOptions`, `SyncHealthSummary`, `OpenOrderRow`, `LedgerCancelReason`, `AlreadyRestingError`.
 
 ## Invariants
 

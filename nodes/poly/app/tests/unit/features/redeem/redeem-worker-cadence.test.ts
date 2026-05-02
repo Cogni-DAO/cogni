@@ -22,6 +22,9 @@ function makeWorker() {
     claimNextPending: vi.fn(async () => null),
     claimReaperCandidates: vi.fn(async () => []),
   };
+  const orderLedger = {
+    markPositionLifecycleByAsset: vi.fn(async () => 0),
+  };
   const publicClient = {
     getBlockNumber: vi.fn(async () => 100n),
   };
@@ -32,6 +35,8 @@ function makeWorker() {
   };
   const worker = new RedeemWorker({
     redeemJobs: redeemJobs as unknown as RedeemJobsPort,
+    orderLedger,
+    billingAccountId: "billing-account-1",
     publicClient: publicClient as never,
     walletClient: {} as never,
     funderAddress: FUNDER,

@@ -6,10 +6,10 @@
  * Purpose: Translate a Capability A `ResolvedRedeemCandidate` into the
  *   `EnqueueRedeemJobInput` shape consumed by the port. `redeem` decisions
  *   become work the worker will pick up; **terminal** `skip` decisions become
- *   `'skipped'` rows whose only role is to back the dashboard's lifecycle
- *   projection (Open vs History tab membership). **Transient** skip reasons
- *   intentionally produce no row. `malformed` returns `null` — those are code
- *   defects that need a Class-A page, not a row.
+ *   `'skipped'` rows and are also mirrored into the ledger lifecycle read
+ *   model. **Transient** skip reasons intentionally produce no row.
+ *   `malformed` returns `null` — those are code defects that need a Class-A
+ *   page, not a row.
  * Scope: Pure function. No I/O.
  * Invariants:
  *   - TRANSIENT_SKIP_REASONS_NOT_PERSISTED — `market_not_resolved` and

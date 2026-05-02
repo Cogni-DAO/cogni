@@ -5,9 +5,9 @@
  * Module: `@bootstrap/jobs/order-reconciler.job`
  * Purpose: Disposable 60s scheduler that reconciles `poly_copy_trade_fills` rows
  * with current CLOB status. For each `pending` / `open` row with a non-null
- * `order_id`, calls `getOrder` and updates the ledger if the status has changed.
- * Closes the dashboard lie: rows showing `open` that have already filled or
- * been canceled are now updated within one tick.
+ * `order_id`, calls `getOrder` and updates the ledger if the status or filled
+ * amount has changed. Closes the dashboard lie: rows showing `open` that have
+ * already filled or been canceled are now updated within one tick.
  * Scope: Wiring + cadence only. Does not build adapters (container injects),
  * does not own placement logic, does not touch DB directly. Exports
  * `startOrderReconciler(deps) → stop()` and the pure `runReconcileOnce` for
@@ -52,7 +52,12 @@ import type {
   OrderStatus,
 } from "@cogni/poly-market-provider";
 
-import type { LedgerRow, LedgerStatus, OrderLedger } from "@/features/trading";
+import {
+  type LedgerRow,
+  type LedgerStatus,
+  ledgerExecutedUsdc,
+  type OrderLedger,
+} from "@/features/trading";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Metric names
@@ -228,7 +233,10 @@ export async function runReconcileOnce(
       const receipt = result.found;
 
       const newStatus = mapReceiptStatus(receipt.status);
-      if (newStatus === row.status) {
+      const filledChanged =
+        receipt.filled_size_usdc !== undefined &&
+        receipt.filled_size_usdc !== ledgerExecutedUsdc(row);
+      if (newStatus === row.status && !filledChanged) {
         // Nothing changed — avoid a gratuitous UPDATE + updated_at churn.
         continue;
       }

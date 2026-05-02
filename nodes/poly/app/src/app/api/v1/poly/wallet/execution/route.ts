@@ -11,7 +11,7 @@
  *   positions from `poly_copy_trade_fills`.
  * Invariants:
  *   - TENANT_SCOPED: the caller's own wallet is the only thing this route
- *     ever reads. There is no `?addr=` override.
+ *     ever reads. The route has no query-parameter escape hatch.
  *   - CONTRACT_STABLE: response shape matches
  *     `polyWalletExecutionOperation.output`. When the tenant has no trading
  *     wallet provisioned yet (or the adapter itself is unconfigured on this
@@ -31,8 +31,6 @@ import { toUserId } from "@cogni/ids";
 import {
   PolyWalletExecutionOutputSchema,
   polyWalletExecutionOperation,
-  type WalletExecutionLifecycleState,
-  WalletExecutionLifecycleStateSchema,
 } from "@cogni/poly-node-contracts";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
@@ -43,8 +41,8 @@ import {
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
 import type { LedgerStatus } from "@/features/trading";
+import { EVENT_NAMES, logEvent } from "@/shared/observability";
 import {
-  getLedgerRowConditionId,
   summarizeDailyTradeCounts,
   toWalletExecutionPosition,
 } from "../_lib/ledger-positions";
@@ -60,11 +58,6 @@ const TRADE_HISTORY_STATUSES = [
   "canceled",
   "error",
 ] satisfies LedgerStatus[];
-const LIVE_POSITION_STATUSES = new Set<LedgerStatus>([
-  "open",
-  "filled",
-  "partial",
-]);
 
 function emptyPayload(warning: { code: string; message: string }) {
   return polyWalletExecutionOperation.output.parse({
@@ -83,6 +76,7 @@ export const GET = wrapRouteHandlerWithLogging(
     auth: { mode: "required", getSessionUser },
   },
   async (ctx, _request, sessionUser) => {
+    const startedAtMs = performance.now();
     if (!sessionUser) throw new Error("sessionUser required");
 
     const container = getContainer();
@@ -95,6 +89,17 @@ export const GET = wrapRouteHandlerWithLogging(
       adapter = getPolyTraderWalletAdapter(ctx.log);
     } catch (err) {
       if (err instanceof WalletAdapterUnconfiguredError) {
+        logEvent(ctx.log, EVENT_NAMES.POLY_WALLET_EXECUTION_COMPLETE, {
+          reqId: ctx.reqId,
+          routeId: ctx.routeId,
+          status: "wallet_adapter_unconfigured",
+          durationMs: Math.round(performance.now() - startedAtMs),
+          outcome: "success",
+          live_positions: 0,
+          closed_positions: 0,
+          daily_trade_days: 0,
+          warnings: 1,
+        });
         return NextResponse.json(
           emptyPayload({
             code: "wallet_adapter_unconfigured",
@@ -108,6 +113,17 @@ export const GET = wrapRouteHandlerWithLogging(
 
     const address = await adapter.getAddress(account.id);
     if (!address) {
+      logEvent(ctx.log, EVENT_NAMES.POLY_WALLET_EXECUTION_COMPLETE, {
+        reqId: ctx.reqId,
+        routeId: ctx.routeId,
+        status: "no_trading_wallet",
+        durationMs: Math.round(performance.now() - startedAtMs),
+        outcome: "success",
+        live_positions: 0,
+        closed_positions: 0,
+        daily_trade_days: 0,
+        warnings: 1,
+      });
       return NextResponse.json(
         emptyPayload({
           code: "no_trading_wallet",
@@ -116,14 +132,6 @@ export const GET = wrapRouteHandlerWithLogging(
         })
       );
     }
-
-    ctx.log.info(
-      {
-        billing_account_id: account.id,
-        funder_address: address,
-      },
-      "poly.wallet.execution"
-    );
 
     const capturedAt = new Date();
     const warnings: Array<{ code: string; message: string }> = [];
@@ -136,22 +144,10 @@ export const GET = wrapRouteHandlerWithLogging(
         statuses: TRADE_HISTORY_STATUSES,
         limit: 500,
       });
-      const lifecycleByConditionId = await readLifecycleByConditionId(
-        container,
-        account.id,
-        warnings
-      );
-
       dailyTradeCounts = summarizeDailyTradeCounts(rows);
-      const positions = rows
-        .filter((row) => LIVE_POSITION_STATUSES.has(row.status))
-        .map((row) =>
-          toWalletExecutionPosition(
-            row,
-            capturedAt,
-            lifecycleByConditionId.get(getLedgerRowConditionId(row)) ?? null
-          )
-        );
+      const positions = rows.map((row) =>
+        toWalletExecutionPosition(row, capturedAt)
+      );
       livePositions = positions
         .filter((position) => position.status !== "closed")
         .filter((position) => position.currentValue > 0)
@@ -166,6 +162,22 @@ export const GET = wrapRouteHandlerWithLogging(
       });
     }
 
+    logEvent(ctx.log, EVENT_NAMES.POLY_WALLET_EXECUTION_COMPLETE, {
+      reqId: ctx.reqId,
+      routeId: ctx.routeId,
+      status: warnings.some(
+        (warning) => warning.code === "positions_read_model_unavailable"
+      )
+        ? "positions_read_model_unavailable"
+        : "ok",
+      durationMs: Math.round(performance.now() - startedAtMs),
+      outcome: "success",
+      live_positions: livePositions.length,
+      closed_positions: closedPositions.length,
+      daily_trade_days: dailyTradeCounts.length,
+      warnings: warnings.length,
+    });
+
     return NextResponse.json(
       PolyWalletExecutionOutputSchema.parse({
         address: address.toLowerCase(),
@@ -178,36 +190,3 @@ export const GET = wrapRouteHandlerWithLogging(
     );
   }
 );
-
-async function readLifecycleByConditionId(
-  container: ReturnType<typeof getContainer>,
-  billingAccountId: string,
-  warnings: Array<{ code: string; message: string }>
-): Promise<ReadonlyMap<string, WalletExecutionLifecycleState>> {
-  const pipeline = container.redeemPipelineFor(billingAccountId);
-  if (pipeline === null) return new Map();
-
-  try {
-    const jobs = await pipeline.redeemJobs.listForFunder(
-      pipeline.funderAddress
-    );
-    const lifecycleByConditionId = new Map<
-      string,
-      WalletExecutionLifecycleState
-    >();
-    for (const job of jobs) {
-      const parsed = WalletExecutionLifecycleStateSchema.safeParse(
-        job.lifecycleState
-      );
-      if (!parsed.success) continue;
-      lifecycleByConditionId.set(job.conditionId, parsed.data);
-    }
-    return lifecycleByConditionId;
-  } catch (err) {
-    warnings.push({
-      code: "redeem_lifecycle_unavailable",
-      message: err instanceof Error ? err.message : String(err),
-    });
-    return new Map();
-  }
-}

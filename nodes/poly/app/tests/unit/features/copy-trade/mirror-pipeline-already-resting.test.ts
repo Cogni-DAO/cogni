@@ -85,6 +85,7 @@ function makeOpenRow(fillId: string): LedgerRow {
     client_order_id: clientOrderIdFor(TARGET_ID, fillId),
     order_id: "0xprior-order",
     status: "open",
+    position_lifecycle: null,
     attributes: { market_id: MARKET_ID },
     synced_at: null,
     created_at: now,
