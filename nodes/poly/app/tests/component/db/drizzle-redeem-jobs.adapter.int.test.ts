@@ -4,22 +4,18 @@
 /**
  * Module: `@tests/component/db/drizzle-redeem-jobs.adapter.int`
  * Purpose: Component tests for `DrizzleRedeemJobsAdapter` against real
- *   PostgreSQL via testcontainers. Ground-truth coverage for the Blocker #2
- *   fix from task.0388 § Static review: the v0.2 redeem flow no longer
- *   strands resolved positions behind a stale `skipped` row, because the
- *   `decision-to-enqueue-input` boundary doesn't WRITE one for transient
- *   reasons in the first place. These tests pin that contract at the
- *   adapter layer:
+ *   PostgreSQL via testcontainers. Ground-truth coverage for the redeem queue's
+ *   persisted-dedup contract: duplicate events stay idempotent, but stale
+ *   non-work rows do not permanently block current winner evidence. These
+ *   tests pin that contract at the adapter layer:
  *     1. Fresh enqueue creates a `pending/winner` row.
  *     2. Re-enqueueing the same `(funder, conditionId)` returns
  *        `alreadyExisted: true` and the row is unchanged (idempotency).
  *     3. `claimNextPending` atomically flips `pending` → `claimed` and
  *        returns the row exactly once across concurrent claimers.
- *     4. A pre-existing terminal `skipped/loser` row is NOT silently
- *        promoted by a later `pending/winner` enqueue — `onConflictDoNothing`
- *        keeps it terminal. (The fix at the input layer means we never
- *        write the trap rows; this test documents that the adapter's UPSERT
- *        is correctly idempotent and does not perform any reclassification.)
+ *     4. A stale `claimed` row is claimable again after a pod restart.
+ *     5. A pre-existing `skipped/loser` row is promoted when the current
+ *        chain-authoritative decision says the same condition is a winner.
  * Scope: Adapter ↔ Postgres only. No subscriber/worker/route involvement.
  * Invariants: REDEEM_DEDUP_IS_PERSISTED, SKIP_LOCKED_FOR_WORKER (B3 atomic claim).
  * Side-effects: IO (testcontainers PostgreSQL).
@@ -142,7 +138,37 @@ describe("DrizzleRedeemJobsAdapter (Component) — Blocker #2 regression", () =>
     expect(third).toBeNull(); // pool drained
   });
 
-  it("a pre-existing terminal skipped/loser row is NOT promoted by a later enqueue (onConflictDoNothing is correctly idempotent)", async () => {
+  it("claimNextPending reclaims stale claimed rows after a pod restart", async () => {
+    const inserted = await adapter.enqueue({
+      funderAddress: FUNDER,
+      conditionId: COND,
+      positionId: POSITION_ID,
+      outcomeIndex: 0,
+      flavor: "binary",
+      indexSet: ["1", "2"],
+      expectedShares: "5000000",
+      expectedPayoutUsdc: "5000000",
+      lifecycleState: "winner",
+    });
+
+    const firstClaim = await adapter.claimNextPending(FUNDER);
+    expect(firstClaim?.id).toBe(inserted.jobId);
+
+    const secondClaimBeforeStale = await adapter.claimNextPending(FUNDER);
+    expect(secondClaimBeforeStale).toBeNull();
+
+    await db
+      .update(polyRedeemJobs)
+      .set({ updatedAt: sql`now() - interval '11 minutes'` })
+      .where(eq(polyRedeemJobs.id, inserted.jobId));
+
+    const reclaimed = await adapter.claimNextPending(FUNDER);
+    expect(reclaimed?.id).toBe(inserted.jobId);
+    expect(reclaimed?.status).toBe("claimed");
+    expect(reclaimed?.lifecycleState).toBe("winner");
+  });
+
+  it("promotes a pre-existing skipped/loser row when a later enqueue has current winner evidence", async () => {
     // Simulate the dust-loser case: backfill writes a `skipped/loser` row
     // for a market that's already resolved against us.
     const initial = await adapter.enqueue({
@@ -159,10 +185,10 @@ describe("DrizzleRedeemJobsAdapter (Component) — Blocker #2 regression", () =>
     });
     expect(initial.alreadyExisted).toBe(false);
 
-    // A later subscriber-side enqueue (e.g. a stray ConditionResolution
-    // re-fire) for the same key with `pending/winner` MUST NOT silently
-    // overwrite the terminal row — that would mark a known-loser as
-    // redeemable. The adapter is intentionally idempotent at this layer.
+    // A later subscriber-side enqueue with `pending/winner` is backed by
+    // fresh CTF reads: non-zero balance, payoutDenominator > 0, and a winning
+    // payout numerator. That current chain evidence beats the old read-model
+    // classification.
     const later = await adapter.enqueue({
       funderAddress: FUNDER,
       conditionId: COND,
@@ -181,13 +207,13 @@ describe("DrizzleRedeemJobsAdapter (Component) — Blocker #2 regression", () =>
       .select()
       .from(polyRedeemJobs)
       .where(eq(polyRedeemJobs.id, initial.jobId));
-    expect(rows[0]?.status).toBe("skipped");
-    expect(rows[0]?.lifecycleState).toBe("loser");
+    expect(rows[0]?.status).toBe("pending");
+    expect(rows[0]?.lifecycleState).toBe("winner");
+    expect(rows[0]?.expectedShares).toBe("5000000");
 
-    // And the worker still cannot claim it — `claimNextPending` filters
-    // on status IN ('pending', 'failed_transient').
     const claimed = await adapter.claimNextPending(FUNDER);
-    expect(claimed).toBeNull();
+    expect(claimed?.id).toBe(initial.jobId);
+    expect(claimed?.status).toBe("claimed");
   });
 
   it("claimNextPending is funder-scoped — funder A never claims funder B's row (task.0412 multi-tenant fan-out)", async () => {

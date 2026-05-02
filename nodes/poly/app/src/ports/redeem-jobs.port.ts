@@ -78,17 +78,21 @@ export class RedeemJobNotFoundPortError extends Error {
 export interface RedeemJobsPort {
   /**
    * UPSERT a job row. Returns `alreadyExisted: true` if a row already exists
-   * for `(funder_address, condition_id)`; the existing row is left untouched.
+   * for `(funder_address, condition_id)`. A current `winner` enqueue may
+   * revive an existing `skipped` row to `pending`; skipped rows are read-model
+   * classifications, not proof that a later chain-authoritative winner
+   * decision should be ignored.
    */
   enqueue(input: EnqueueRedeemJobInput): Promise<EnqueueRedeemJobResult>;
 
   /**
-   * Atomically claim the next `status='pending'` row for `funderAddress` using
-   * `SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1`. Two concurrent workers — even
-   * for the same funder — never claim the same row. Cross-tenant claims are
-   * impossible because the predicate is funder-scoped: a worker bound to
-   * funder A never picks up a job for funder B (the calling worker would sign
-   * with the wrong wallet, which is the bug the multi-tenant fan-out closes).
+   * Atomically claim the next `pending`, `failed_transient`, or stale `claimed`
+   * row for `funderAddress` using `SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1`.
+   * Two concurrent workers — even for the same funder — never claim the same
+   * row. Cross-tenant claims are impossible because the predicate is
+   * funder-scoped: a worker bound to funder A never picks up a job for funder B
+   * (the calling worker would sign with the wrong wallet, which is the bug the
+   * multi-tenant fan-out closes).
    */
   claimNextPending(funderAddress: `0x${string}`): Promise<RedeemJob | null>;
 
