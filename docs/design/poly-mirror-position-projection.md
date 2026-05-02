@@ -20,15 +20,15 @@ implements: bug.5003
 
 ## Reconciliation with the canonical position model
 
-`docs/design/poly-positions.md` (Derek, 2026-04-26) defines the project-wide position model: **one identity, four authorities, seven states.** This design is **not** an alternate position model — it is a strictly-bounded *cache view* against authority **#4 Local DB**, used **only** as a *signal* input to mirror policy decisions.
+`docs/design/poly-positions.md` (Derek, 2026-04-26) defines the project-wide position model: **one identity, four authorities, seven states.** This design is **not** an alternate position model — it is a strictly-bounded _cache view_ against authority **#4 Local DB**, used **only** as a _signal_ input to mirror policy decisions.
 
-| Concern | Authority used | Type |
-|---|---|---|
-| **Mirror policy hint** ("did we already mirror this condition? on which side?") | #4 Local DB cache (this design) | `MirrorPositionView` (new) |
-| **Settlement / redeem authority** ("do we actually still own these shares on chain?") | #1 Polygon chain via `poly_redeem_jobs` flow | `OperatorPosition` + chain reads (existing, unchanged) |
-| **SELL routing pre-check** ("do we have non-zero balance to close?") | #3 Data API via `getOperatorPositions`, then #2 CLOB | `OperatorPosition` (existing, unchanged) |
+| Concern                                                                               | Authority used                                       | Type                                                   |
+| ------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------ |
+| **Mirror policy hint** ("did we already mirror this condition? on which side?")       | #4 Local DB cache (this design)                      | `MirrorPositionView` (new)                             |
+| **Settlement / redeem authority** ("do we actually still own these shares on chain?") | #1 Polygon chain via `poly_redeem_jobs` flow         | `OperatorPosition` + chain reads (existing, unchanged) |
+| **SELL routing pre-check** ("do we have non-zero balance to close?")                  | #3 Data API via `getOperatorPositions`, then #2 CLOB | `OperatorPosition` (existing, unchanged)               |
 
-**Hard rule**: `MirrorPositionView` may inform *what to plan* (skip / hedge / layer / route to closePosition). It must **never** be used to decide *whether the wallet actually holds the shares* — that path stays as today, going through `getOperatorPositions` (#3 → #1). This design adds zero new authority writes; the existing 7-state lifecycle on `position_lifecycle` is read as a *filter* (only rows in the active phases contribute to the view), never reassigned here.
+**Hard rule**: `MirrorPositionView` may inform _what to plan_ (skip / hedge / layer / route to closePosition). It must **never** be used to decide _whether the wallet actually holds the shares_ — that path stays as today, going through `getOperatorPositions` (#3 → #1). This design adds zero new authority writes; the existing 7-state lifecycle on `position_lifecycle` is read as a _filter_ (only rows in the active phases contribute to the view), never reassigned here.
 
 The name is `MirrorPositionView` — not `Position` — to surface the cache-vs-truth distinction at every callsite.
 
@@ -74,11 +74,11 @@ export type MirrorPositionView = z.infer<typeof MirrorPositionViewSchema>;
 
 ### Storage decision — derive on read, no new table
 
-| Option | Verdict |
-|---|---|
+| Option                                               | Verdict                                                                                                                                                                                                                                    |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **A. Derive in SQL inside `snapshotState` (CHOSEN)** | One extra `GROUP BY` on the same query path. No new table, no migration, no triggers. Fail-closed already wired. Per-tick cost is the cost of a SUM over the target's history (~hundreds of rows worst case; index on `target_id` exists). |
-| B. New materialized table + write-side maintenance | Adds invalidation surface, race on insert-vs-place, doubles the write path. Defer until SQL aggregation is measurably slow. |
-| C. In-memory cache outside the ledger | Breaks `FAIL_CLOSED_ON_SNAPSHOT_READ`; first cold read after restart returns nothing. |
+| B. New materialized table + write-side maintenance   | Adds invalidation surface, race on insert-vs-place, doubles the write path. Defer until SQL aggregation is measurably slow.                                                                                                                |
+| C. In-memory cache outside the ledger                | Breaks `FAIL_CLOSED_ON_SNAPSHOT_READ`; first cold read after restart returns nothing.                                                                                                                                                      |
 
 ### Filled vs intent — explicit choice
 
@@ -87,7 +87,7 @@ The schema today does **not** carry a `filled_size_usdc` column distinct from in
 - Computed via `(attributes->>'size_usdc')::numeric / NULLIF((attributes->>'limit_price')::numeric, 0)`.
 - Includes `status IN ('open','filled','partial')` rows; excludes `canceled` and `error`.
 - Effect: a resting `open` order is treated as fully exposed for follow-on sizing math. **This is intentionally fail-safe upward** — it means hedge-followup and same-side layering predicates will under-shoot rather than over-shoot follow-on orders. Caps stay tighter, not looser, than chain truth.
-- For *settlement* truth (e.g. SELL-routing's "can I actually close this?"), the SELL branch continues to read `getOperatorPositions` (#3 → #1), unchanged.
+- For _settlement_ truth (e.g. SELL-routing's "can I actually close this?"), the SELL branch continues to read `getOperatorPositions` (#3 → #1), unchanged.
 
 If this conservative approximation later proves too tight (e.g. resting orders that never fill skew sizing), the fix is a `filled_size_usdc` column + a typed `Fill` boundary, not a richer aggregation here. Out of scope.
 
@@ -95,7 +95,7 @@ If this conservative approximation later proves too tight (e.g. resting orders t
 
 Two sources, in order:
 
-1. **Self-derivable**: if `poly_copy_trade_fills` has rows for this `condition_id` on a *second* `token_id` (i.e. we've traded both legs ourselves), the view emits both with no external lookup needed.
+1. **Self-derivable**: if `poly_copy_trade_fills` has rows for this `condition_id` on a _second_ `token_id` (i.e. we've traded both legs ourselves), the view emits both with no external lookup needed.
 2. **Market-meta lookup**: otherwise, look up the conditionId via the existing market-meta cache in `nodes/poly/packages/market-provider`. Cache hit → `opposite_token_id` populated. **Cache miss → leave `undefined`**, and the hedge-followup predicate no-ops by design. We never fail a tick on a missed lookup.
 
 For neg-risk / multi-outcome markets (>2 tokens), `opposite_token_id` is always `undefined` — the binary "opposite" concept doesn't apply and hedge-followup predicate no-ops. Flagged on the view via a boolean we'll add only if needed; the `undefined` already short-circuits.
@@ -178,12 +178,12 @@ None needed. `poly_copy_trade_fills` is already the source of truth; the project
 
 Sketches only — full designs land in their own items. Each follow-on is ≤2 lines on the planner.
 
-| Follow-on | Predicate on `state.position` | Action |
-|---|---|---|
-| **story.5000 hedge-followup** | `position?.our_qty_shares > 0 && fill.attributes.token_id === position.opposite_token_id` | Bypass percentile filter; size = `min(market_min_bet, position.our_qty_shares × fill.price, max_usdc_per_trade)` |
-| **SELL-mirror (close-on-target-SELL)** | `fill.side === 'SELL' && position?.our_token_id === fill.attributes.token_id` | Route to `closePosition` sized `min(target_close_pct × position.our_qty_shares, position.our_qty_shares)`. *Authority gate*: SELL execution still requires the live `getOperatorPositions` chain check. |
-| **Layering-aware filter** | `fill.side === 'BUY' && position?.our_token_id === fill.attributes.token_id` | Bypass percentile filter; same-side scale-in. |
-| **Bankroll-fractional sizer** | reads `position?.our_qty_shares` and `our_vwap_usdc` as inputs | Size = `f(target_$, target_bankroll, our_bankroll, position?.our_qty_shares ?? 0)` |
+| Follow-on                              | Predicate on `state.position`                                                             | Action                                                                                                                                                                                                  |
+| -------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **story.5000 hedge-followup**          | `position?.our_qty_shares > 0 && fill.attributes.token_id === position.opposite_token_id` | Bypass percentile filter; size = `min(market_min_bet, position.our_qty_shares × fill.price, max_usdc_per_trade)`                                                                                        |
+| **SELL-mirror (close-on-target-SELL)** | `fill.side === 'SELL' && position?.our_token_id === fill.attributes.token_id`             | Route to `closePosition` sized `min(target_close_pct × position.our_qty_shares, position.our_qty_shares)`. _Authority gate_: SELL execution still requires the live `getOperatorPositions` chain check. |
+| **Layering-aware filter**              | `fill.side === 'BUY' && position?.our_token_id === fill.attributes.token_id`              | Bypass percentile filter; same-side scale-in.                                                                                                                                                           |
+| **Bankroll-fractional sizer**          | reads `position?.our_qty_shares` and `our_vwap_usdc` as inputs                            | Size = `f(target_$, target_bankroll, our_bankroll, position?.our_qty_shares ?? 0)`                                                                                                                      |
 
 ## Observability
 
@@ -201,10 +201,10 @@ This makes the new branches attributable in Loki without a Grafana refactor. The
 
 - [ ] **PLAN_IS_PURE preserved** — `planMirrorFromFill` reads `state.position` synchronously; no DB access added to the planner.
 - [ ] **POSITION_DERIVED_AT_SNAPSHOT** — `MirrorPositionView` is computed inside `OrderLedger.snapshotState` only. No second source of truth, no write-side maintenance, no cache layer.
-- [ ] **POSITION_VIEW_IS_CACHE_NOT_TRUTH** — view is *signal*, not authority. SELL execution + redeem flow still consult #1 chain / #3 Data API as today. Doc: docs/design/poly-positions.md.
+- [ ] **POSITION_VIEW_IS_CACHE_NOT_TRUTH** — view is _signal_, not authority. SELL execution + redeem flow still consult #1 chain / #3 Data API as today. Doc: docs/design/poly-positions.md.
 - [ ] **WITHIN_TICK_FRESHNESS** — fill `N+1` in the same tick sees fill `N`'s placement in `state.position`. Today this is satisfied automatically because `snapshotState` runs per-fill and the SQL filter includes `pending` rows; a future per-tick `snapshotState` would need explicit in-tick mutation to keep this invariant.
 - [ ] **FAIL_CLOSED_ON_SNAPSHOT_READ** — DB error → `positions_by_condition: new Map()`, same warn log path.
-- [ ] **CAPS_LIVE_IN_GRANT untouched** — daily/hourly caps still resolve in `authorizeIntent` against `poly_wallet_grants`. The view is a *signal* input, never a *cap*.
+- [ ] **CAPS_LIVE_IN_GRANT untouched** — daily/hourly caps still resolve in `authorizeIntent` against `poly_wallet_grants`. The view is a _signal_ input, never a _cap_.
 - [ ] **HEDGE_PREDICATE_NOOPS_ON_UNKNOWN_OPPOSITE** — when `opposite_token_id` is undefined (unknown / multi-outcome / neg-risk), hedge-followup predicate must NO-OP, not guess.
 - [ ] **DECISION_LOG_NAMES_VIEW** — any decision branched on `state.position` emits `position_branch` + `position_qty_shares` + `position_token_id` on the structured log.
 - [ ] **NO_NEW_TABLE** — schema migration not required.

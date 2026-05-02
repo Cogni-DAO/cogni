@@ -81,7 +81,7 @@ $2k+          5     0%  26%     $2k+          1    0%   27%
 
 **The asymmetry that matters for mirror design:**
 
-- 51% of RN1's trade *count* is under $5 — but only 0% of dollar flow.
+- 51% of RN1's trade _count_ is under $5 — but only 0% of dollar flow.
 - 87% of trade count is under $100 — only 11% of flow.
 - 3% of trades ($500+) carry **63%** of dollar flow.
 
@@ -115,12 +115,12 @@ overlapping conditions today:                                 29
 
 Examples (last-6-digit suffix shown):
 
-| condition_id | our token | target token |
-|---|---|---|
-| `0x…4f3b8b34d45d` | …899376 | …523617 |
-| `0x…d489781fca0b` | …877414 | …856124 |
-| `0x…d3fab1ab20a3` | …272309 | …221704 |
-| `0x…8e2d383b1793` | …969356 | …123493 |
+| condition_id      | our token | target token |
+| ----------------- | --------- | ------------ |
+| `0x…4f3b8b34d45d` | …899376   | …523617      |
+| `0x…d489781fca0b` | …877414   | …856124      |
+| `0x…d3fab1ab20a3` | …272309   | …221704      |
+| `0x…8e2d383b1793` | …969356   | …123493      |
 
 For each binary-outcome market, target's payout and ours are **inversely correlated** when we picked the wrong token. They win → we lose; they lose → we win. With ~30% of overlapping conditions affected (4 fully opposite + 15 partially), the net P/L damage is plausibly the entire −30% gap.
 
@@ -138,16 +138,16 @@ For each binary-outcome market, target's payout and ours are **inversely correla
 
 Surfaced live on 2026-05-02 prod ("we entered the opposite side" incident on Osasuna BTTS):
 
-| Time (UTC) | Side | Outcome | Price | Size | Mirror action |
-|---|---|---|---|---|---|
-| 19:09–19:54 | BUY | **No** @ 0.43–0.67 | | 9–593 sh | mirrored ✓ ($5.19 NO @ 0.67) |
-| 19:55–20:01 | BUY | No @ 0.66–0.80 | | 5–800 sh | mirrored ✓ |
-| 20:13 | BUY | **Yes** @ 0.20 | | ~1.36 ea (×7) | **all skipped, `below_target_percentile`** |
-| 20:23 | BUY | Yes @ 0.12 | | 1.82 | **skipped** |
+| Time (UTC)  | Side | Outcome            | Price | Size          | Mirror action                              |
+| ----------- | ---- | ------------------ | ----- | ------------- | ------------------------------------------ |
+| 19:09–19:54 | BUY  | **No** @ 0.43–0.67 |       | 9–593 sh      | mirrored ✓ ($5.19 NO @ 0.67)               |
+| 19:55–20:01 | BUY  | No @ 0.66–0.80     |       | 5–800 sh      | mirrored ✓                                 |
+| 20:13       | BUY  | **Yes** @ 0.20     |       | ~1.36 ea (×7) | **all skipped, `below_target_percentile`** |
+| 20:23       | BUY  | Yes @ 0.12         |       | 1.82          | **skipped**                                |
 
 Sequence is unambiguously a **scaling hedge**: target loaded NO heavily at 0.43–0.80, then started layering tiny YES buys at 0.12–0.20 as YES collapsed. Cost-basis-on-the-pair drops; tail risk on the NO leg is capped. Our mirror followed the loud part and ignored the quiet part — exactly what a loud-only filter does, but exactly the wrong choice when target is on the same condition_id with the opposite token.
 
-**Kill criterion for the percentile filter on hedges:** if `(target_wallet, condition_id)` already has an open mirror position on the *opposite* token, drop the percentile gate and follow the small trade. Cap follow-size at our open exposure on that condition.
+**Kill criterion for the percentile filter on hedges:** if `(target_wallet, condition_id)` already has an open mirror position on the _opposite_ token, drop the percentile gate and follow the small trade. Cap follow-size at our open exposure on that condition.
 
 Tracked: `story.5000`. Confirms `Hypothesis D` "wrong-outcome" cases are likely a mix of true outcome-resolution bugs **and** hedges we never followed (so we hold one leg of what target holds two legs of, and it visually presents as "opposite side"). Re-run finding D's matcher with a same-condition hedge filter before declaring it 14% strict — some of that 14% may evaporate.
 
@@ -164,12 +164,12 @@ Tracked: `story.5000`. Confirms `Hypothesis D` "wrong-outcome" cases are likely 
 
 ## Recommendation (priority order)
 
-| # | Action | Why |
-|---|--------|-----|
-| 1 | **Investigate finding D — wrong outcome on 14% strict / 66% partial.** Reproduce the resolution path: target fill `(conditionId, asset, side)` → our normalizer → our `token_id`. Find the condition where they diverge. | This is the dominant explanation for the −30% gap. |
-| 2 | Lift size cap toward target's median ($4) once D is fixed. Don't fix sizing on top of a wrong-outcome bug — you'll just lose more. | C is real but #1 must come first. |
-| 3 | Slippage non-issue at v0 placement style — limit-at-target-price + held-resting works. Defer maker-style placement (P4/CLOB-WS) until the basics are right. | A is fine. |
-| 4 | Mirror cursor lag investigation — 50/84 tokens unaccounted-for in the recent target window. May correlate with finding D or be independent. | Secondary. |
+| #   | Action                                                                                                                                                                                                                   | Why                                                |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| 1   | **Investigate finding D — wrong outcome on 14% strict / 66% partial.** Reproduce the resolution path: target fill `(conditionId, asset, side)` → our normalizer → our `token_id`. Find the condition where they diverge. | This is the dominant explanation for the −30% gap. |
+| 2   | Lift size cap toward target's median ($4) once D is fixed. Don't fix sizing on top of a wrong-outcome bug — you'll just lose more.                                                                                       | C is real but #1 must come first.                  |
+| 3   | Slippage non-issue at v0 placement style — limit-at-target-price + held-resting works. Defer maker-style placement (P4/CLOB-WS) until the basics are right.                                                              | A is fine.                                         |
+| 4   | Mirror cursor lag investigation — 50/84 tokens unaccounted-for in the recent target window. May correlate with finding D or be independent.                                                                              | Secondary.                                         |
 
 ---
 
