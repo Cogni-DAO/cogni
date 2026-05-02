@@ -109,7 +109,7 @@ export interface RedeemJobsPort {
   markSubmitted(input: {
     jobId: string;
     txHash: `0x${string}`;
-    submittedAtBlock: bigint;
+    submittedAtBlock: bigint | null;
     receiptBurnObserved: boolean;
   }): Promise<void>;
 

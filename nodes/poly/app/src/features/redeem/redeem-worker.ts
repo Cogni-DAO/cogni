@@ -369,18 +369,15 @@ export class RedeemWorker {
     }
 
     // Wait for receipt + read its block + decode burn presence.
-    const receipt = await this.deps.publicClient.waitForTransactionReceipt({
-      hash: txHash,
-    });
-    const burnObserved = decodeReceiptForBurn(
-      receipt,
-      job.flavor,
-      this.deps.funderAddress
-    );
+    const receipt = await this.waitForSubmittedReceipt(txHash);
+    const burnObserved =
+      receipt !== null
+        ? decodeReceiptForBurn(receipt, job.flavor, this.deps.funderAddress)
+        : false;
     await this.deps.redeemJobs.markSubmitted({
       jobId: job.id,
       txHash,
-      submittedAtBlock: receipt.blockNumber,
+      submittedAtBlock: receipt?.blockNumber ?? null,
       receiptBurnObserved: burnObserved,
     });
     await this.mirrorLifecycle(
@@ -397,13 +394,53 @@ export class RedeemWorker {
         funder: job.funderAddress,
         tx_hash: txHash,
         collateral_token_used: args.kind === "ctf" ? job.collateralToken : null,
-        block: receipt.blockNumber.toString(),
+        block: receipt?.blockNumber.toString() ?? null,
         flavor: job.flavor,
         burn_observed: burnObserved,
       },
       "redeem-worker: tx submitted"
     );
     return true;
+  }
+
+  private async waitForSubmittedReceipt(
+    txHash: `0x${string}`
+  ): Promise<TransactionReceipt | null> {
+    try {
+      return await this.deps.publicClient.waitForTransactionReceipt({
+        hash: txHash,
+      });
+    } catch (waitErr) {
+      try {
+        const receipt = await this.deps.publicClient.getTransactionReceipt({
+          hash: txHash,
+        });
+        this.deps.logger.warn(
+          {
+            event: "poly.ctf.redeem.receipt_wait_timeout_recovered",
+            tx_hash: txHash,
+            err: waitErr instanceof Error ? waitErr.message : String(waitErr),
+          },
+          "redeem-worker: recovered receipt after wait timeout"
+        );
+        return receipt;
+      } catch (lookupErr) {
+        this.deps.logger.warn(
+          {
+            event: "poly.ctf.redeem.receipt_wait_timeout_pending",
+            tx_hash: txHash,
+            wait_err:
+              waitErr instanceof Error ? waitErr.message : String(waitErr),
+            lookup_err:
+              lookupErr instanceof Error
+                ? lookupErr.message
+                : String(lookupErr),
+          },
+          "redeem-worker: receipt unavailable after wait timeout; preserving submitted tx hash"
+        );
+        return null;
+      }
+    }
   }
 
   private async reapStale(): Promise<void> {
