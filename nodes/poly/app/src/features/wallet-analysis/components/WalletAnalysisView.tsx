@@ -199,7 +199,6 @@ function PageVariant({
           <DistributionsBlock
             data={data.distributions}
             isLoading={isLoading?.distributions}
-            selectedInterval={pnlInterval}
           />
         )}
 
