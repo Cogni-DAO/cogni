@@ -80,6 +80,7 @@ export type WalletPosition = {
   conditionId: string;
   asset: string;
   marketTitle: string;
+  eventTitle?: string | null | undefined;
   marketSlug?: string | null;
   eventSlug?: string | null;
   marketUrl?: string | null;
@@ -89,6 +90,7 @@ export type WalletPosition = {
   openedAt: string;
   closedAt?: string | null;
   resolvesAt?: string | null;
+  gameStartTime?: string | null | undefined;
   heldMinutes: number;
   entryPrice: number;
   currentPrice: number;

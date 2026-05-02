@@ -55,6 +55,7 @@ vi.mock("@/bootstrap/container", () => ({
     orderLedger: {
       listTenantPositions: mockListTenantPositions,
     },
+    redeemPipelineFor: vi.fn(() => null),
   })),
 }));
 
@@ -104,14 +105,19 @@ describe("poly wallet dashboard DB read routes", () => {
       observed_at: new Date(Date.now() - 60_000),
       client_order_id: "0xclient",
       order_id: "0xorder",
-      status: "open",
+      status: "partial",
       attributes: {
         market_id: "condition-1",
         token_id: "token-1",
         title: "Will CLOB stay up?",
+        slug: "will-clob-stay-up",
+        event_slug: "clob-health",
+        event_title: "CLOB Health",
+        game_start_time: "2026-05-02T12:00:00.000Z",
         outcome: "YES",
         side: "BUY",
-        size_usdc: 10,
+        size_usdc: 20,
+        filled_size_usdc: 10,
         limit_price: 0.5,
       },
       synced_at: syncedAt,
@@ -163,6 +169,11 @@ describe("poly wallet dashboard DB read routes", () => {
       positionId: "0xorder",
       asset: "token-1",
       marketTitle: "Will CLOB stay up?",
+      eventTitle: "CLOB Health",
+      marketSlug: "will-clob-stay-up",
+      eventSlug: "clob-health",
+      resolvesAt: "2026-05-02T12:00:00.000Z",
+      gameStartTime: "2026-05-02T12:00:00.000Z",
       outcome: "YES",
       currentValue: 10,
       syncedAt: syncedAt.toISOString(),
@@ -176,6 +187,34 @@ describe("poly wallet dashboard DB read routes", () => {
       billing_account_id: ACCOUNT.id,
       statuses: ["pending", "open", "filled", "partial", "canceled", "error"],
       limit: 500,
+    });
+  });
+
+  it("overview does not double-count unfilled resting BUY orders as position MTM", async () => {
+    mockListTenantPositions.mockResolvedValue([
+      {
+        ...row,
+        status: "open",
+        attributes: {
+          ...row.attributes,
+          size_usdc: 10,
+          filled_size_usdc: 0,
+        },
+      },
+    ]);
+    const { GET } = await import("@/app/api/v1/poly/wallet/overview/route");
+
+    const response = await GET(
+      new Request("http://localhost/api/v1/poly/wallet/overview?interval=1W")
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      usdc_available: 20,
+      usdc_locked: 10,
+      usdc_positions_mtm: 0,
+      usdc_total: 30,
+      open_orders: 1,
     });
   });
 });

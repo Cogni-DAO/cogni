@@ -231,6 +231,26 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
           typeof input.intent.attributes?.title === "string"
             ? input.intent.attributes.title
             : undefined,
+        slug:
+          typeof input.intent.attributes?.slug === "string"
+            ? input.intent.attributes.slug
+            : undefined,
+        event_slug:
+          typeof input.intent.attributes?.event_slug === "string"
+            ? input.intent.attributes.event_slug
+            : undefined,
+        event_title:
+          typeof input.intent.attributes?.event_title === "string"
+            ? input.intent.attributes.event_title
+            : undefined,
+        end_date:
+          typeof input.intent.attributes?.end_date === "string"
+            ? input.intent.attributes.end_date
+            : undefined,
+        game_start_time:
+          typeof input.intent.attributes?.game_start_time === "string"
+            ? input.intent.attributes.game_start_time
+            : undefined,
         transaction_hash:
           typeof input.intent.attributes?.transaction_hash === "string"
             ? input.intent.attributes.transaction_hash

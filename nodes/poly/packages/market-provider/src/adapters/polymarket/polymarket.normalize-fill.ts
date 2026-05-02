@@ -87,6 +87,11 @@ export function normalizePolymarketDataApiFill(
       condition_id: trade.conditionId,
       transaction_hash: trade.transactionHash,
       title: trade.title,
+      slug: trade.slug,
+      event_slug: trade.eventSlug,
+      event_title: readOptionalString(trade, "eventTitle"),
+      end_date: readOptionalString(trade, "endDate"),
+      game_start_time: readOptionalString(trade, "gameStartTime"),
       timestamp_unix: trade.timestamp,
     },
   };
@@ -95,4 +100,12 @@ export function normalizePolymarketDataApiFill(
   // that would otherwise pass a malformed Fill into decide(). Throwing here
   // is correct: it indicates a type/shape bug, not a skippable data row.
   return { ok: true, fill: FillSchema.parse(fill) };
+}
+
+function readOptionalString(
+  value: Record<string, unknown>,
+  key: string
+): string | undefined {
+  const field = value[key];
+  return typeof field === "string" && field.length > 0 ? field : undefined;
 }

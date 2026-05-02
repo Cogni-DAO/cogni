@@ -293,6 +293,8 @@ export async function getExecutionSlice(
     /** Per-conditionId lifecycle from `poly_redeem_jobs` (task.0388 CP2).
      * Drives Open vs History tab membership; absent ⇒ legacy split. */
     lifecycleByConditionId?: ReadonlyMap<string, WalletExecutionLifecycleState>;
+    /** Skip public CLOB price history when this is used as dashboard fallback. */
+    includePriceHistory?: boolean;
   } = {}
 ): Promise<PolyWalletExecutionOutput> {
   const capturedAt = new Date().toISOString();
@@ -375,54 +377,57 @@ export async function getExecutionSlice(
     EXECUTION_HISTORY_LIMIT
   );
 
-  // Fetch CLOB price history for live positions only.
-  const priceHistoryByAsset = new Map<
-    string,
-    Awaited<ReturnType<PolymarketClobPublicClient["getPriceHistory"]>>
-  >();
+  let liveForResponse = livePreview;
+  if (opts.includePriceHistory ?? true) {
+    // Fetch CLOB price history for live positions only.
+    const priceHistoryByAsset = new Map<
+      string,
+      Awaited<ReturnType<PolymarketClobPublicClient["getPriceHistory"]>>
+    >();
 
-  await Promise.all(
-    livePreview.map(async (position) => {
-      const startTs = Math.max(
-        0,
-        Math.floor(new Date(position.openedAt).getTime() / 1000) - 3600
-      );
-      const endTs = Math.floor(new Date(capturedAt).getTime() / 1000);
-      const fidelity = pickPriceHistoryFidelity(startTs, endTs);
+    await Promise.all(
+      livePreview.map(async (position) => {
+        const startTs = Math.max(
+          0,
+          Math.floor(new Date(position.openedAt).getTime() / 1000) - 3600
+        );
+        const endTs = Math.floor(new Date(capturedAt).getTime() / 1000);
+        const fidelity = pickPriceHistoryFidelity(startTs, endTs);
 
-      const history = await coalesce(
-        `execution-price-history:${position.asset}:${startTs}:${endTs}:${fidelity}`,
-        () =>
-          upstreamLimit(() =>
-            getClobPublicClient().getPriceHistory(position.asset, {
-              startTs,
-              endTs,
-              fidelity,
-            })
-          ),
-        SLICE_TTL_MS
-      );
-      if (history.length > 0) {
-        priceHistoryByAsset.set(position.asset, history);
-      }
-    })
-  );
+        const history = await coalesce(
+          `execution-price-history:${position.asset}:${startTs}:${endTs}:${fidelity}`,
+          () =>
+            upstreamLimit(() =>
+              getClobPublicClient().getPriceHistory(position.asset, {
+                startTs,
+                endTs,
+                fidelity,
+              })
+            ),
+          SLICE_TTL_MS
+        );
+        if (history.length > 0) {
+          priceHistoryByAsset.set(position.asset, history);
+        }
+      })
+    );
 
-  // Re-map live positions with fetched price history timelines.
-  const liveAssets = new Set(livePreview.map((p) => p.asset));
-  const liveWithHistory = mapExecutionPositions({
-    positions,
-    trades,
-    priceHistoryByAsset,
-    asOfIso: capturedAt,
-    assets: [...liveAssets],
-  });
+    // Re-map live positions with fetched price history timelines.
+    const liveAssets = new Set(livePreview.map((p) => p.asset));
+    liveForResponse = mapExecutionPositions({
+      positions,
+      trades,
+      priceHistoryByAsset,
+      asOfIso: capturedAt,
+      assets: [...liveAssets],
+    });
+  }
 
   return {
     address: addr.toLowerCase() as PolyWalletExecutionOutput["address"],
     capturedAt,
     dailyTradeCounts: dailyTradeCountsResult,
-    live_positions: liveWithHistory.map((p) =>
+    live_positions: liveForResponse.map((p) =>
       toExecutionContractPosition(p, lifecycleOf(p.conditionId))
     ),
     closed_positions: closedPreview.map((p) =>

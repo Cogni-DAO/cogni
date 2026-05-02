@@ -68,6 +68,7 @@ HTTP API endpoints using Next.js App Router. Contract-validated entry points tha
   - `/api/v1/poly/wallet/status` [GET] - read whether the calling user already has a resolvable dedicated Polymarket trading wallet (session auth)
   - `/api/v1/poly/wallet/balances` [GET] - read USDC.e + POL balances on the calling user's dedicated Polymarket trading wallet (session auth, distinct from legacy operator-only `/balance`)
   - `/api/v1/poly/wallet/overview` [GET] - current dashboard wallet summary for the calling user's dedicated Polymarket trading wallet (session auth; available + locked + positions + gas)
+  - `/api/v1/poly/wallet/refresh` [POST] - force-refresh process-local Polymarket wallet caches and warm non-CLOB execution data for the caller's trading wallet (session auth)
   - `/api/v1/poly/wallet/positions/close` [POST] - CLOB SELL-to-close an open position for the caller's wallet (`token_id`; session auth)
   - `/api/v1/poly/wallet/positions/redeem` [POST] - CTF redeemPositions after resolution (`condition_id`; session auth)
   - `/api/v1/poly/internal/sync-health` [GET] - aggregate sync-freshness stats for the reconciler (no auth; aggregate-only)

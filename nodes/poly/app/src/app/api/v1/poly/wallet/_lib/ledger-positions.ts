@@ -43,12 +43,12 @@ export function summarizeLedgerPositions(
     latestSyncedMs !== null ? Math.max(0, capturedMs - latestSyncedMs) : null;
 
   return {
-    openOrders: rows.filter((row) => row.status === "open").length,
+    openOrders: rows.filter(isRestingOrder).length,
     lockedUsdc: roundToCents(
       rows.reduce((sum, row) => {
-        if (row.status !== "open") return sum;
+        if (!isRestingOrder(row)) return sum;
         if (readStr(row, "side") !== "BUY") return sum;
-        return sum + readNum(row, "size_usdc");
+        return sum + rowRemainingUsdc(row);
       }, 0)
     ),
     positionsMtm: roundToCents(
@@ -87,15 +87,21 @@ export function toWalletExecutionPosition(
     asset: readStr(row, "token_id") || row.client_order_id,
     marketTitle:
       readStr(row, "title") || readStr(row, "market_id") || "Polymarket",
-    marketSlug: null,
-    eventSlug: null,
-    marketUrl: null,
+    eventTitle: readNullableStr(row, "event_title"),
+    marketSlug:
+      readNullableStr(row, "market_slug") ?? readNullableStr(row, "slug"),
+    eventSlug: readNullableStr(row, "event_slug"),
+    marketUrl: readMarketUrl(row),
     outcome: readStr(row, "outcome") || "UNKNOWN",
     status: "open",
     lifecycleState: null,
     openedAt: observed,
     closedAt: null,
-    resolvesAt: null,
+    resolvesAt:
+      readNullableStr(row, "game_start_time") ??
+      readNullableStr(row, "resolves_at") ??
+      readNullableStr(row, "end_date"),
+    gameStartTime: readNullableStr(row, "game_start_time"),
     heldMinutes: Math.max(
       0,
       Math.floor((capturedAt.getTime() - row.observed_at.getTime()) / 60_000)
@@ -119,6 +125,10 @@ export function toWalletExecutionPosition(
   };
 }
 
+export function hasPositionExposure(row: LedgerRow): boolean {
+  return rowCurrentValue(row) > 0;
+}
+
 export function summarizeDailyTradeCounts(
   rows: readonly LedgerRow[]
 ): Array<{ day: string; n: number }> {
@@ -135,7 +145,36 @@ export function summarizeDailyTradeCounts(
 function rowCurrentValue(row: LedgerRow): number {
   const filled = readNum(row, "filled_size_usdc");
   if (filled > 0) return filled;
-  return readNum(row, "size_usdc");
+  if (row.status === "filled" || row.status === "partial") {
+    return readNum(row, "size_usdc");
+  }
+  return 0;
+}
+
+function rowRemainingUsdc(row: LedgerRow): number {
+  return Math.max(
+    0,
+    readNum(row, "size_usdc") - readNum(row, "filled_size_usdc")
+  );
+}
+
+function isRestingOrder(row: LedgerRow): boolean {
+  return row.status === "open" || row.status === "partial";
+}
+
+function readNullableStr(row: LedgerRow, key: string): string | null {
+  const value = readStr(row, key);
+  return value.length > 0 ? value : null;
+}
+
+function readMarketUrl(row: LedgerRow): string | null {
+  const explicit = readNullableStr(row, "market_url");
+  if (explicit !== null) return explicit;
+  const eventSlug = readNullableStr(row, "event_slug");
+  const marketSlug =
+    readNullableStr(row, "market_slug") ?? readNullableStr(row, "slug");
+  if (eventSlug === null || marketSlug === null) return null;
+  return `https://polymarket.com/event/${eventSlug}/${marketSlug}`;
 }
 
 function readStr(row: LedgerRow, key: string): string {

@@ -22,7 +22,12 @@ import type {
   TimeRange,
   WorkItemDto,
 } from "@cogni/node-contracts";
-import { useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useIsFetching,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { Radio, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import type { ReactElement } from "react";
@@ -55,6 +60,7 @@ import { cn } from "@/shared/util/cn";
 import { fetchActivity } from "../activity/_api/fetchActivity";
 import { WorkItemDetail } from "../work/_components/WorkItemDetail";
 import { StatusPill, TypeIcon } from "../work/_components/work-item-icons";
+import { postPolymarketRefresh } from "./_api/fetchPolymarketRefresh";
 import { fetchRuns } from "./_api/fetchRuns";
 import { CopyTradedWalletsCard } from "./_components/CopyTradedWalletsCard";
 import { ExecutionActivityCard } from "./_components/ExecutionActivityCard";
@@ -214,17 +220,20 @@ export function DashboardView(): ReactElement {
     useIsFetching({ queryKey: ["dashboard-trading-wallet"] }) +
     useIsFetching({ queryKey: ["dashboard-wallet-execution"] }) +
     useIsFetching({ queryKey: ["poly-wallet-status"] });
-  const isRefreshingPolymarket = polymarketFetches > 0;
-
-  const refreshPolymarketData = (): void => {
-    void queryClient.invalidateQueries({
-      queryKey: ["dashboard-trading-wallet"],
-    });
-    void queryClient.invalidateQueries({
-      queryKey: ["dashboard-wallet-execution"],
-    });
-    void queryClient.invalidateQueries({ queryKey: ["poly-wallet-status"] });
-  };
+  const refreshPolymarket = useMutation({
+    mutationFn: postPolymarketRefresh,
+    onSettled: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["dashboard-trading-wallet"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["dashboard-wallet-execution"],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["poly-wallet-status"] });
+    },
+  });
+  const isRefreshingPolymarket =
+    refreshPolymarket.isPending || polymarketFetches > 0;
 
   const runs = runsData?.runs ? sortRuns(runsData.runs) : [];
   const agents = dedupeByThread(runs);
@@ -295,7 +304,7 @@ export function DashboardView(): ReactElement {
             icon
             aria-label="Refresh Polymarket data"
             title="Refresh Polymarket data"
-            onClick={refreshPolymarketData}
+            onClick={() => refreshPolymarket.mutate()}
             disabled={isRefreshingPolymarket}
             className="size-8 px-0"
           >

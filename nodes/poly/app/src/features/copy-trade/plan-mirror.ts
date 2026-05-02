@@ -242,6 +242,26 @@ function buildIntent(
         typeof fill.attributes?.title === "string"
           ? fill.attributes.title
           : undefined,
+      slug:
+        typeof fill.attributes?.slug === "string"
+          ? fill.attributes.slug
+          : undefined,
+      event_slug:
+        typeof fill.attributes?.event_slug === "string"
+          ? fill.attributes.event_slug
+          : undefined,
+      event_title:
+        typeof fill.attributes?.event_title === "string"
+          ? fill.attributes.event_title
+          : undefined,
+      end_date:
+        typeof fill.attributes?.end_date === "string"
+          ? fill.attributes.end_date
+          : undefined,
+      game_start_time:
+        typeof fill.attributes?.game_start_time === "string"
+          ? fill.attributes.game_start_time
+          : undefined,
       transaction_hash:
         typeof fill.attributes?.transaction_hash === "string"
           ? fill.attributes.transaction_hash

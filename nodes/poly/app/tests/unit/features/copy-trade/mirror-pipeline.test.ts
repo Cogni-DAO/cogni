@@ -48,11 +48,6 @@ const BASE_TARGET: MirrorTargetConfig = {
   },
   placement: { kind: "mirror_limit" },
 };
-const GET_MARKET_CONSTRAINTS = async () => ({
-  minShares: 1,
-  minUsdcNotional: 1,
-});
-
 const MARKET_CONSTRAINTS = async () => ({
   minShares: 1,
   minUsdcNotional: 1,
@@ -143,7 +138,6 @@ describe("mirror-pipeline.runMirrorTick — idempotent re-run", () => {
       },
       logger: noopLogger,
       metrics,
-      getMarketConstraints: GET_MARKET_CONSTRAINTS,
     });
 
     expect(placeIntent).not.toHaveBeenCalled();
@@ -188,7 +182,6 @@ describe("mirror-pipeline.runMirrorTick — crash resume", () => {
       },
       logger: noopLogger,
       metrics,
-      getMarketConstraints: GET_MARKET_CONSTRAINTS,
     });
     expect(placeIntent1).toHaveBeenCalledTimes(1);
     expect(ledger.rows).toHaveLength(1);
@@ -461,7 +454,6 @@ describe("mirror-pipeline.runMirrorTick — BUY fill smoke", () => {
       metrics: createRecordingMetrics(),
       closePosition,
       getOperatorPositions,
-      getMarketConstraints: GET_MARKET_CONSTRAINTS,
     });
 
     expect(placeIntent).toHaveBeenCalledTimes(1);
@@ -504,7 +496,6 @@ describe("mirror-pipeline.runMirrorTick — happy path", () => {
       setCursor: () => {},
       logger: noopLogger,
       metrics,
-      getMarketConstraints: GET_MARKET_CONSTRAINTS,
     });
 
     expect(placeIntent).toHaveBeenCalledTimes(1);
@@ -528,7 +519,6 @@ describe("mirror-pipeline.runMirrorTick — happy path", () => {
       setCursor: () => {},
       logger: noopLogger,
       metrics: createRecordingMetrics(),
-      getMarketConstraints: GET_MARKET_CONSTRAINTS,
     });
     const expectedCid = clientOrderIdFor(TARGET_ID, fill.fill_id);
     expect(ledger.rows[0]?.client_order_id).toBe(expectedCid);
