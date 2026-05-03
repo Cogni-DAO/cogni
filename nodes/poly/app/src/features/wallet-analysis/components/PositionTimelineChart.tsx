@@ -155,6 +155,7 @@ export function PositionTimelineChart({
           strokeWidth={1.5}
           dot={false}
           activeDot={{ r: 3 }}
+          isAnimationActive={false}
         />
 
         {lastPoint ? (
