@@ -219,7 +219,7 @@ function YAxis({
 }): ReactElement {
   return (
     <div
-      className="flex w-8 shrink-0 flex-col justify-between font-mono text-[10px] text-muted-foreground tabular-nums"
+      className="flex w-8 shrink-0 flex-col justify-between font-mono text-[var(--text-xs)] text-muted-foreground tabular-nums"
       style={{ height: `${height}px` }}
     >
       <span className="leading-none">{fmtVal(max, viewMode)}</span>
@@ -296,7 +296,7 @@ function StackedBars({
               <span
                 key={`${b.label}-label-${i}`}
                 className={cn(
-                  "flex-1 text-center font-mono text-[10px] text-muted-foreground leading-none",
+                  "flex-1 text-center font-mono text-[var(--text-xs)] text-muted-foreground leading-none",
                   showLabel ? "" : "invisible"
                 )}
               >
@@ -365,7 +365,7 @@ function FlatBars({
           {histogram.buckets.map((b, i) => (
             <span
               key={`${b.label}-label-${i}`}
-              className="flex-1 text-center font-mono text-[10px] text-muted-foreground leading-none"
+              className="flex-1 text-center font-mono text-[var(--text-xs)] text-muted-foreground leading-none"
             >
               {b.label}
             </span>
