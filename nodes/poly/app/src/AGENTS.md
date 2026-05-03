@@ -84,3 +84,4 @@ pnpm typecheck
 - Every subdirectory has detailed AGENTS.md with specific layer rules
 - Dependencies flow inward per hexagonal architecture principles
 - **Authentication**: SIWE-based wallet auth with `users.wallet_address` UNIQUE constraint (1 wallet = 1 user MVP, see ACCOUNTS_DESIGN.md for multi-wallet migration plan)
+- Preview recovery PRs that need a fresh poly image must merge through the GitHub merge queue; admin/squash merging bypasses the `merge_group` image tag that `flight-preview.yml` promotes.
