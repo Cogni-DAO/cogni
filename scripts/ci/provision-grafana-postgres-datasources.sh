@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Provision Grafana Cloud Postgres datasources for the current environment.
+# This runs from CI, not on the VM: CI has GitHub secrets for Grafana and the
+# Postgres root secret, while the VM hosts the PDC agent next to Postgres.
+
+set -euo pipefail
+
+log() {
+  echo "[grafana-postgres] $*"
+}
+
+derive_secret() {
+  local salt="$1"
+  if command -v openssl >/dev/null 2>&1; then
+    printf '%s:%s' "$salt" "${POSTGRES_ROOT_PASSWORD:?}" | openssl dgst -sha256 -hex | awk '{print $NF}' | cut -c1-32
+  elif command -v sha256sum >/dev/null 2>&1; then
+    printf '%s:%s' "$salt" "${POSTGRES_ROOT_PASSWORD:?}" | sha256sum | cut -c1-32
+  else
+    echo "No sha256 tool available" >&2
+    exit 1
+  fi
+}
+
+missing_or_placeholder() {
+  [[ -z "${1:-}" || "$1" == *"<"* || "$1" == *">"* || "$1" == *" "* ]]
+}
+
+base64url_decode() {
+  local value="${1//-/+}"
+  value="${value//_/\/}"
+  while (( ${#value} % 4 != 0 )); do
+    value="${value}="
+  done
+  if ! printf '%s' "$value" | base64 -d 2>/dev/null; then
+    printf '%s' "$value" | base64 -D
+  fi
+}
+
+derive_pdc_defaults_from_token() {
+  [[ -n "${GRAFANA_PDC_SIGNING_TOKEN:-}" ]] || return 0
+  [[ "$GRAFANA_PDC_SIGNING_TOKEN" == glc_* ]] || return 0
+
+  local decoded
+  decoded="$(base64url_decode "${GRAFANA_PDC_SIGNING_TOKEN#glc_}" 2>/dev/null || true)"
+  [[ -n "$decoded" ]] || return 0
+
+  local network_id cluster hosted_id
+  network_id="$(printf '%s' "$decoded" | jq -r '.n // empty')"
+  cluster="$(printf '%s' "$decoded" | jq -r '.m.r // empty')"
+  hosted_id="$(printf '%s' "$decoded" | jq -r '.o // empty')"
+
+  if missing_or_placeholder "${GRAFANA_PDC_NETWORK_ID:-}" && [[ -n "$network_id" ]]; then
+    GRAFANA_PDC_NETWORK_ID="$network_id"
+  fi
+  if missing_or_placeholder "${GRAFANA_PDC_CLUSTER:-}" && [[ -n "$cluster" ]]; then
+    GRAFANA_PDC_CLUSTER="$cluster"
+  fi
+  if missing_or_placeholder "${GRAFANA_PDC_HOSTED_GRAFANA_ID:-}" && [[ -n "$hosted_id" ]]; then
+    GRAFANA_PDC_HOSTED_GRAFANA_ID="$hosted_id"
+  fi
+}
+
+if [[ -z "${GRAFANA_URL:-}" && -z "${GRAFANA_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
+  log "Grafana not configured; skipping Postgres datasource provisioning"
+  exit 0
+fi
+
+: "${DEPLOY_ENVIRONMENT:?DEPLOY_ENVIRONMENT not set}"
+: "${POSTGRES_ROOT_PASSWORD:?POSTGRES_ROOT_PASSWORD not set}"
+: "${GRAFANA_URL:?GRAFANA_URL not set}"
+: "${GRAFANA_SERVICE_ACCOUNT_TOKEN:?GRAFANA_SERVICE_ACCOUNT_TOKEN not set}"
+
+case "$GRAFANA_SERVICE_ACCOUNT_TOKEN" in
+  glc_*)
+    echo "GRAFANA_SERVICE_ACCOUNT_TOKEN is a Grafana Cloud token (glc_), not a Grafana stack service-account token (glsa_)" >&2
+    exit 1
+    ;;
+esac
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required" >&2
+  exit 1
+fi
+
+derive_pdc_defaults_from_token
+: "${GRAFANA_PDC_NETWORK_ID:?GRAFANA_PDC_NETWORK_ID not set and could not be derived from GRAFANA_PDC_SIGNING_TOKEN; refusing to provision public Postgres datasources}"
+
+grafana_base="${GRAFANA_URL%/}"
+datasource_host="${GRAFANA_POSTGRES_HOST:-postgres:5432}"
+readonly_user="${APP_DB_READONLY_USER:-app_readonly}"
+readonly_password="${APP_DB_READONLY_PASSWORD:-$(derive_secret postgres-readonly)}"
+dbs="${COGNI_NODE_DBS:-cogni_operator,cogni_poly,cogni_resy}"
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+
+if [[ "$datasource_host" != "postgres:5432" && "${GRAFANA_POSTGRES_ALLOW_NON_INTERNAL_HOST:-0}" != "1" ]]; then
+  echo "Refusing non-internal Grafana Postgres host: ${datasource_host}" >&2
+  echo "Use GRAFANA_POSTGRES_HOST=postgres:5432 through PDC, or set GRAFANA_POSTGRES_ALLOW_NON_INTERNAL_HOST=1 deliberately." >&2
+  exit 1
+fi
+
+IFS=',' read -ra grafana_dbs <<< "$dbs"
+for db_name in "${grafana_dbs[@]}"; do
+  db_name="$(echo "$db_name" | xargs)"
+  [[ -n "$db_name" ]] || continue
+
+  node="${db_name#cogni_}"
+  uid="cogni-${DEPLOY_ENVIRONMENT}-${node}-postgres"
+  name="Postgres - ${DEPLOY_ENVIRONMENT} ${node}"
+  payload_file="${tmpdir}/${uid}.json"
+  response_file="${tmpdir}/${uid}.response.json"
+  query_file="${tmpdir}/${uid}.query.json"
+
+  jq -n \
+    --arg name "$name" \
+    --arg uid "$uid" \
+    --arg url "$datasource_host" \
+    --arg user "$readonly_user" \
+    --arg database "$db_name" \
+    --arg password "$readonly_password" \
+    --arg pdc_network_id "$GRAFANA_PDC_NETWORK_ID" \
+    '{
+      name: $name,
+      uid: $uid,
+      type: "postgres",
+      access: "proxy",
+      url: $url,
+      user: $user,
+      jsonData: {
+        database: $database,
+        sslmode: "disable",
+        postgresVersion: 1500,
+        timescaledb: false,
+        enableSecureSocksProxy: true,
+        secureSocksProxyUsername: $pdc_network_id
+      },
+      secureJsonData: {
+        password: $password
+      }
+    }' > "$payload_file"
+
+  status=$(curl -sS -o "$response_file" -w "%{http_code}" \
+    -H "Authorization: Bearer ${GRAFANA_SERVICE_ACCOUNT_TOKEN}" \
+    "${grafana_base}/api/datasources/uid/${uid}")
+
+  if [[ "$status" == "200" ]]; then
+    log "updating ${uid}"
+    curl -fsS -X PUT "${grafana_base}/api/datasources/uid/${uid}" \
+      -H "Authorization: Bearer ${GRAFANA_SERVICE_ACCOUNT_TOKEN}" \
+      -H "content-type: application/json" \
+      --data @"$payload_file" >/dev/null
+  elif [[ "$status" == "404" ]]; then
+    log "creating ${uid}"
+    curl -fsS -X POST "${grafana_base}/api/datasources" \
+      -H "Authorization: Bearer ${GRAFANA_SERVICE_ACCOUNT_TOKEN}" \
+      -H "content-type: application/json" \
+      --data @"$payload_file" >/dev/null
+  else
+    echo "Grafana datasource lookup failed for ${uid}: HTTP ${status}" >&2
+    cat "$response_file" >&2 || true
+    exit 1
+  fi
+
+  jq -n \
+    --arg uid "$uid" \
+    '{
+      from: "now-5m",
+      to: "now",
+      queries: [
+        {
+          refId: "A",
+          datasource: { uid: $uid, type: "postgres" },
+          rawSql: "select current_user",
+          format: "table",
+          maxDataPoints: 1000,
+          intervalMs: 1000
+        }
+      ]
+    }' > "$query_file"
+
+  log "validating ${uid}"
+  curl -fsS -X POST "${grafana_base}/api/ds/query" \
+    -H "Authorization: Bearer ${GRAFANA_SERVICE_ACCOUNT_TOKEN}" \
+    -H "content-type: application/json" \
+    --data @"$query_file" >/dev/null
+done

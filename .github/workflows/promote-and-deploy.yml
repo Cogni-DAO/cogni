@@ -399,6 +399,10 @@ jobs:
       GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
       GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
       GRAFANA_SERVICE_ACCOUNT_TOKEN: ${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}
+      GRAFANA_PDC_SIGNING_TOKEN: ${{ secrets.GRAFANA_PDC_SIGNING_TOKEN }}
+      GRAFANA_PDC_HOSTED_GRAFANA_ID: ${{ secrets.GRAFANA_PDC_HOSTED_GRAFANA_ID }}
+      GRAFANA_PDC_CLUSTER: ${{ secrets.GRAFANA_PDC_CLUSTER }}
+      GRAFANA_PDC_NETWORK_ID: ${{ secrets.GRAFANA_PDC_NETWORK_ID }}
       GH_REVIEW_APP_ID: ${{ secrets.GH_REVIEW_APP_ID }}
       GH_REVIEW_APP_PRIVATE_KEY_BASE64: ${{ secrets.GH_REVIEW_APP_PRIVATE_KEY_BASE64 }}
       GH_REPOS: ${{ vars.GH_REPOS }}
@@ -437,6 +441,10 @@ jobs:
       - name: Deploy infrastructure
         if: env.VM_HOST != ''
         run: scripts/ci/deploy-infra.sh --ref main
+
+      - name: Provision Grafana Postgres datasources
+        if: env.VM_HOST != ''
+        run: bash scripts/ci/provision-grafana-postgres-datasources.sh
 
       - name: Upload deployment artifacts
         if: always()

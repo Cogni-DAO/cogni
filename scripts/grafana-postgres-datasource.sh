@@ -18,6 +18,7 @@
 #   GRAFANA_POSTGRES_SSLMODE        defaults to disable for VM Postgres
 #   GRAFANA_POSTGRES_DATASOURCE_UID defaults to cogni-${COGNI_ENV}-${COGNI_NODE}-postgres
 #   GRAFANA_POSTGRES_ALLOW_PUBLIC_HOST=1 required for public internet hosts
+#   GRAFANA_PDC_NETWORK_ID          enables Grafana PDC / secure socks proxy
 
 set -euo pipefail
 
@@ -84,6 +85,7 @@ payload=$(
     --arg database "$GRAFANA_POSTGRES_DATABASE" \
     --arg sslmode "$GRAFANA_POSTGRES_SSLMODE" \
     --arg password "$GRAFANA_POSTGRES_PASSWORD" \
+    --arg pdc_network_id "${GRAFANA_PDC_NETWORK_ID:-}" \
     '{
       name: $name,
       uid: $uid,
@@ -100,7 +102,13 @@ payload=$(
       secureJsonData: {
         password: $password
       }
-    }'
+    }
+    | if $pdc_network_id != "" then
+        .jsonData.enableSecureSocksProxy = true
+        | .jsonData.secureSocksProxyUsername = $pdc_network_id
+      else
+        .
+      end'
 )
 
 base="${GRAFANA_URL%/}"

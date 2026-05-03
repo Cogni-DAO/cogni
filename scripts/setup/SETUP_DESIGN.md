@@ -144,6 +144,7 @@ pnpm setup github --env production
    - **Grafana (optional):**
      - `GRAFANA_URL` (Grafana instance URL)
      - `GRAFANA_SERVICE_ACCOUNT_TOKEN` (Grafana stack service-account token, usually `glsa_`, with `datasources:read`, `datasources:query`, `datasources:create`, and `datasources:write` when setup/deploy provisions datasources; do not use a Grafana Cloud access-policy token prefixed `glc_`; use Grafana Cloud PDC or another private path for database datasources, never public inbound Postgres)
+     - `GRAFANA_PDC_SIGNING_TOKEN` (the only generated PDC secret; from Connections → Private data source connections → Configuration Details → Generate token)
    - **Privy — Operator Wallet (optional — skipped if missing):**
      - `PRIVY_APP_ID` (from privy.io → App Settings)
      - `PRIVY_APP_SECRET` (from privy.io → App Settings)

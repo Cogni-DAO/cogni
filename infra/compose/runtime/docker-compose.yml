@@ -405,6 +405,22 @@ services:
       - PROMETHEUS_USERNAME=${PROMETHEUS_USERNAME:-}
       - PROMETHEUS_PASSWORD=${PROMETHEUS_PASSWORD:-}
 
+  pdc-agent:
+    image: grafana/pdc-agent:0.0.57@sha256:541e46e2c404686b881c8c9e633a0242b5d7b714c945b186d0e581fb568e509e
+    restart: unless-stopped
+    profiles:
+      - pdc
+    networks:
+      - internal
+    command:
+      - -token
+      - ${GRAFANA_PDC_SIGNING_TOKEN:-}
+      - -cluster
+      - ${GRAFANA_PDC_CLUSTER:-}
+      - -gcloud-hosted-grafana-id
+      - ${GRAFANA_PDC_HOSTED_GRAFANA_ID:-}
+      - -ssh-flag=-o PermitRemoteOpen=postgres:5432
+
   # =============================================================================
   # Temporal Services (from temporalio/docker-compose v1.29.1, postgres-only)
   # Per SCHEDULER_SPEC.md: Required for schedule orchestration

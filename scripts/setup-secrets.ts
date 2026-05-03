@@ -568,6 +568,21 @@ const SECRETS: Secret[] = [
     ],
   },
   {
+    name: "GRAFANA_PDC_SIGNING_TOKEN",
+    required: false,
+    category: "Observability (Grafana Cloud)",
+    source: "human",
+    description:
+      "The only generated Grafana PDC secret; used by the runtime pdc-agent",
+    steps: [
+      "Grafana instance",
+      "Connections -> Private data source connections",
+      "Select or create the runtime network",
+      "Configuration Details -> Generate token",
+      "Copy the token labeled GCLOUD_PDC_SIGNING_TOKEN",
+    ],
+  },
+  {
     name: "GRAFANA_CLOUD_LOKI_URL",
     required: false,
     category: "Observability (Grafana Cloud)",
