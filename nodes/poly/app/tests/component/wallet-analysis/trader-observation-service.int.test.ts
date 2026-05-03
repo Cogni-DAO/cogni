@@ -69,8 +69,12 @@ function clientWithPositions(
     async listUserActivity(): Promise<PolymarketUserTrade[]> {
       return [];
     },
-    async listUserPositions(): Promise<PolymarketUserPosition[]> {
-      return [...positions];
+    async listUserPositions(
+      walletAddress: string
+    ): Promise<PolymarketUserPosition[]> {
+      return walletAddress.toLowerCase() === TARGET_WALLET.toLowerCase()
+        ? [...positions]
+        : [];
     },
   } as unknown as PolymarketDataApiClient;
 }
