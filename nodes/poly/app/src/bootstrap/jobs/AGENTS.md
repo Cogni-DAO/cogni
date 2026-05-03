@@ -34,7 +34,7 @@ Job modules that wire business logic to the application container for ops-trigge
 
 **order-reconciler.job.ts** — 60s interval reconciler for `poly_copy_trade_fills`. Resolves typed `GetOrderResult` per row (no null skips); promotes not_found rows older than `notFoundGraceMs` to `canceled`; writes `synced_at` via `markSynced`; stamps `reconcilerLastTickAt` for the sync-health endpoint. Pure `runReconcileOnce` export for unit tests. Scaffolding — deleted in phase 4.
 
-**copy-trade-mirror.job.ts** — 30s mirror poll per `(target, tenant)`. `buildMirrorTargetConfig` defaults `placement: {kind: "mirror_limit"}`. Sizing defaults to `{kind: "min_bet"}` except curated RN1/swisstony targets, which use `{kind: "target_percentile"}` to filter low target fills before placing the same min bet. Wires `MirrorPipelineDeps.cancelOrder` from the per-tenant `PolyTradeExecutor`. task.5001, task.5005.
+**copy-trade-mirror.job.ts** — 30s mirror poll per `(target, tenant)`. `buildMirrorTargetConfig` defaults `placement: {kind: "mirror_limit"}`. Sizing defaults to `{kind: "min_bet"}` except curated RN1/swisstony targets, which use hardcoded target-position pXX snapshots with `{kind: "target_percentile_scaled"}`. Individual target orders are triggers only. Wires `MirrorPipelineDeps.cancelOrder` from the per-tenant `PolyTradeExecutor`. task.5001, task.5005.
 
 **poly-mirror-resting-sweep.job.ts** — `setInterval` (default 60s) TTL sweeper. Cancels mirror orders with `created_at < now() - MIRROR_RESTING_TTL_MINUTES` (default 20) AND `status IN ('pending','open','partial')`. Single global `findStaleOpen` query; app-side groupBy on `billing_account_id`; per-tenant `executor.cancelOrder` dispatch. Emits `poly_mirror_resting_swept_total{reason}`. task.5001.
 

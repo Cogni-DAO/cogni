@@ -52,11 +52,11 @@ export const WalletSizeStatisticSchema = z.object({
   label: z.string().min(1),
   /** UTC ISO timestamp for the Data-API sample window. */
   captured_at: z.string().min(1),
-  /** Number of target fills in the snapshot. */
+  /** Number of target token positions in the snapshot. */
   sample_size: z.number().int().positive(),
-  /** Target-wallet USDC-notional threshold; fills below this skip. */
+  /** Target-wallet position cost-basis threshold; positions below this skip. */
   min_target_usdc: z.number().positive(),
-  /** Largest observed target-wallet USDC notional in the snapshot. */
+  /** High-water percentile used as the top of the mirror scaling range. */
   max_target_usdc: z.number().positive(),
   /** Percentile slider that produced `min_target_usdc`, e.g. 75 = p75. */
   percentile: z.number().min(0).max(100),
@@ -64,9 +64,10 @@ export const WalletSizeStatisticSchema = z.object({
 export type WalletSizeStatistic = z.infer<typeof WalletSizeStatisticSchema>;
 
 /**
- * Filter-low-bets policy for conviction-aware copy trading. A target fill must
- * be at or above the configured wallet-stat percentile before we mirror it.
- * Accepted fills use the same min-bet sizing as `kind: "min_bet"`; relative
+ * Filter-low-position policy for conviction-aware copy trading. A target
+ * condition/token position must be at or above the configured wallet-stat
+ * percentile before we mirror it.
+ * Accepted triggers use the same min-bet sizing as `kind: "min_bet"`; relative
  * sizing is a future policy, not an implicit fallback here. Tenant
  * daily/hourly caps still live downstream in `authorizeIntent`.
  */
@@ -80,9 +81,10 @@ export type TargetPercentileSizingPolicy = z.infer<
 >;
 
 /**
- * Percentile-filtered relative sizing. Fills below `statistic.min_target_usdc`
- * skip. Accepted fills map linearly from market min bet at pXX to
- * `max_usdc_per_trade` at p100. This is intentionally a distinct policy from
+ * Percentile-filtered relative sizing. Positions below
+ * `statistic.min_target_usdc` skip. Accepted positions map linearly from
+ * market min bet at pXX to `max_usdc_per_trade` at the configured snapshot
+ * high-water percentile. This is intentionally a distinct policy from
  * `target_percentile`; there is no silent fallback between min-bet and scaled
  * sizing.
  */
@@ -120,10 +122,10 @@ export const PlacementPolicySchema = z.discriminatedUnion("kind", [
 export type PlacementPolicy = z.infer<typeof PlacementPolicySchema>;
 
 /**
- * Position-aware follow-up policy. This is deliberately orthogonal to the
- * target percentile slider: pXX remains the new-entry gate, while this policy
- * decides whether an existing mirror position is large enough to justify
- * market-min same-token layers or opposite-token hedges.
+ * Position-aware follow-up policy. pXX remains the target-position conviction
+ * gate for every BUY branch; this policy adds the mirror-position safety gates
+ * that decide whether market-min layers or hedges are too chunky for our
+ * current exposure.
  */
 export const PositionFollowupPolicySchema = z.object({
   enabled: z.boolean(),

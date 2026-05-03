@@ -222,7 +222,7 @@ export function planMirrorFromFill(input: PlanMirrorInput): MirrorPlan {
   const sizing = applySizingPolicy(
     config.sizing,
     fill.price,
-    fill.size_usdc,
+    targetSizingUsdcForFill(fill, state, config.sizing),
     min_shares,
     min_usdc_notional,
     state.cumulative_intent_usdc_for_market
@@ -376,6 +376,17 @@ function applyPositionFollowupPolicy(
       cumulativeIntentForMarket: state.cumulative_intent_usdc_for_market,
     }),
   };
+}
+
+function targetSizingUsdcForFill(
+  fill: PlanMirrorInput["fill"],
+  state: PlanMirrorInput["state"],
+  policy: SizingPolicy
+): number {
+  if (policy.kind === "min_bet") return fill.size_usdc;
+  const tokenId =
+    typeof fill.attributes?.asset === "string" ? fill.attributes.asset : "";
+  return targetTokenCostUsdc(state.target_position, tokenId);
 }
 
 function mirrorExposureUsdcForBranch(

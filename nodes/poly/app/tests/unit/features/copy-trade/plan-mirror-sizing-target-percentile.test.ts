@@ -4,7 +4,7 @@
 /**
  * Module: `@tests/unit/features/copy-trade/plan-mirror-sizing-target-percentile`
  * Purpose: Cover conviction-aware target-percentile sizing: filter low target
- * fills, mirror accepted fills at min bet, and keep market floors
+ * positions, mirror accepted triggers at min bet, and keep market floors
  * authoritative.
  * Scope: Pure function; no I/O. Exercises `config.sizing.kind ===
  * "target_percentile"` with a wallet-stat snapshot.
@@ -28,6 +28,23 @@ const TARGET_WALLET = "0x2005d16a84ceefa912d4e380cd32e7ff827875ea" as const;
 const CLEAN_STATE: RuntimeState = {
   already_placed_ids: [],
 };
+
+function stateWithTargetPosition(cost_usdc: number): RuntimeState {
+  return {
+    already_placed_ids: [],
+    target_position: {
+      condition_id: "prediction-market:polymarket:0xcondition",
+      tokens: [
+        {
+          token_id: "0xasset",
+          size_shares: cost_usdc / 0.5,
+          cost_usdc,
+          current_value_usdc: cost_usdc,
+        },
+      ],
+    },
+  };
+}
 
 const CONFIG: MirrorTargetConfig = {
   target_id: TARGET_ID,
@@ -67,12 +84,12 @@ function makeFill(size_usdc: number, price = 0.5): Fill {
 }
 
 describe("planMirrorFromFill() — sizing policy: kind=target_percentile", () => {
-  it("skips low-conviction fills below the configured wallet percentile", () => {
+  it("skips low-conviction positions below the configured wallet percentile", () => {
     const fill = makeFill(64.1);
     const d = planMirrorFromFill({
       fill,
       config: CONFIG,
-      state: CLEAN_STATE,
+      state: stateWithTargetPosition(64.1),
       client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
       min_shares: 1,
       min_usdc_notional: 1,
@@ -84,12 +101,12 @@ describe("planMirrorFromFill() — sizing policy: kind=target_percentile", () =>
     });
   });
 
-  it("mirrors accepted fills at min bet, not relative target size", () => {
-    const fill = makeFill(888.12);
+  it("mirrors accepted positions at min bet, not relative target size", () => {
+    const fill = makeFill(1);
     const d = planMirrorFromFill({
       fill,
       config: CONFIG,
-      state: CLEAN_STATE,
+      state: stateWithTargetPosition(888.12),
       client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
       min_shares: 1,
       min_usdc_notional: 1,
@@ -98,12 +115,12 @@ describe("planMirrorFromFill() — sizing policy: kind=target_percentile", () =>
     expect(d.intent.size_usdc).toBe(1);
   });
 
-  it("accepts fills exactly at the configured wallet percentile threshold", () => {
-    const fill = makeFill(64.11);
+  it("accepts positions exactly at the configured wallet percentile threshold", () => {
+    const fill = makeFill(1);
     const d = planMirrorFromFill({
       fill,
       config: CONFIG,
-      state: CLEAN_STATE,
+      state: stateWithTargetPosition(64.11),
       client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
       min_shares: 1,
       min_usdc_notional: 1,
@@ -112,12 +129,12 @@ describe("planMirrorFromFill() — sizing policy: kind=target_percentile", () =>
     expect(d.intent.size_usdc).toBe(1);
   });
 
-  it("raises accepted fills to the share-space market floor before placement", () => {
-    const fill = makeFill(70, 0.9);
+  it("raises accepted triggers to the share-space market floor before placement", () => {
+    const fill = makeFill(1, 0.9);
     const d = planMirrorFromFill({
       fill,
       config: CONFIG,
-      state: CLEAN_STATE,
+      state: stateWithTargetPosition(70),
       client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
       min_shares: 5,
       min_usdc_notional: 1,
@@ -127,11 +144,11 @@ describe("planMirrorFromFill() — sizing policy: kind=target_percentile", () =>
   });
 
   it("skips below_market_min when the market floor exceeds the hard ceiling", () => {
-    const fill = makeFill(70, 0.99);
+    const fill = makeFill(1, 0.99);
     const d = planMirrorFromFill({
       fill,
       config: CONFIG,
-      state: CLEAN_STATE,
+      state: stateWithTargetPosition(70),
       client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
       min_shares: 6,
       min_usdc_notional: 1,
@@ -163,11 +180,11 @@ describe("planMirrorFromFill() — sizing policy: kind=target_percentile_scaled"
   };
 
   it("maps the selected percentile threshold to the market min bet", () => {
-    const fill = makeFill(100);
+    const fill = makeFill(1);
     const d = planMirrorFromFill({
       fill,
       config: scaledConfig,
-      state: CLEAN_STATE,
+      state: stateWithTargetPosition(100),
       client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
       min_shares: 1,
       min_usdc_notional: 1,
@@ -176,7 +193,7 @@ describe("planMirrorFromFill() — sizing policy: kind=target_percentile_scaled"
     expect(d.intent.size_usdc).toBe(1);
   });
 
-  it("maps p100-or-larger target fills to the configured max bet", () => {
+  it("fails closed when percentile sizing has no target position snapshot", () => {
     const fill = makeFill(500);
     const d = planMirrorFromFill({
       fill,
@@ -186,16 +203,61 @@ describe("planMirrorFromFill() — sizing policy: kind=target_percentile_scaled"
       min_shares: 1,
       min_usdc_notional: 1,
     });
+    expect(d).toEqual({
+      kind: "skip",
+      reason: "below_target_percentile",
+      position_branch: "new_entry",
+    });
+  });
+
+  it("uses target position cost, not individual order size, for the percentile gate", () => {
+    const fill = makeFill(1);
+    const d = planMirrorFromFill({
+      fill,
+      config: scaledConfig,
+      state: {
+        already_placed_ids: [],
+        target_position: {
+          condition_id: fill.market_id,
+          tokens: [
+            {
+              token_id: "0xasset",
+              size_shares: 400,
+              cost_usdc: 300,
+              current_value_usdc: 300,
+            },
+          ],
+        },
+      },
+      client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
+      min_shares: 1,
+      min_usdc_notional: 1,
+    });
+    if (d.kind !== "place") throw new Error("expected place");
+    expect(d.intent.size_usdc).toBe(5);
+    expect(d.position_branch).toBe("new_entry");
+  });
+
+  it("maps p99-or-larger target positions to the configured max bet", () => {
+    const fill = makeFill(1);
+    const d = planMirrorFromFill({
+      fill,
+      config: scaledConfig,
+      state: stateWithTargetPosition(500),
+      client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
+      min_shares: 1,
+      min_usdc_notional: 1,
+    });
     if (d.kind !== "place") throw new Error("expected place");
     expect(d.intent.size_usdc).toBe(9);
   });
 
-  it("linearly scales between the selected threshold and p100", () => {
-    const fill = makeFill(300);
+  it("linearly scales between the selected threshold and p99", () => {
+    const fill = makeFill(1);
     const d = planMirrorFromFill({
       fill,
       config: scaledConfig,
-      state: CLEAN_STATE,
+      state: stateWithTargetPosition(300),
       client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
       min_shares: 1,
       min_usdc_notional: 1,

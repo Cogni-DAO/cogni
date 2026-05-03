@@ -265,7 +265,6 @@ async function processFill(
   const targetPosition = await fetchTargetConditionPosition({
     deps,
     fill,
-    position,
     log,
   });
 
@@ -374,14 +373,13 @@ async function processFill(
 async function fetchTargetConditionPosition(args: {
   deps: MirrorPipelineDeps;
   fill: import("@cogni/poly-market-provider").Fill;
-  position: MirrorPositionView | undefined;
   log: LoggerPort;
 }): Promise<TargetConditionPositionView | undefined> {
-  const { deps, fill, position, log } = args;
+  const { deps, fill, log } = args;
   if (!deps.target.position_followup?.enabled) return undefined;
   if (!deps.getTargetConditionPosition) return undefined;
   if (fill.side !== "BUY") return undefined;
-  if (!position?.our_token_id) return undefined;
+  if (typeof fill.attributes?.asset !== "string") return undefined;
   try {
     return await deps.getTargetConditionPosition({
       targetWallet: deps.target.target_wallet,

@@ -1,9 +1,9 @@
 ---
 id: design.poly-bet-sizer-v1
 type: design
-status: draft
+status: active
 created: 2026-05-02
-updated: 2026-05-02
+updated: 2026-05-03
 tags: [poly, copy-trading, bet-sizer, rn1, swisstony]
 implements: task.5005
 ---
@@ -12,27 +12,52 @@ implements: task.5005
 
 ## One Screen
 
-This policy only has percentile distributions for the two pre-researched target
-wallets:
+This doc describes the current hardcoded copy-target sizing policy and the
+critical correction after PR #1203: **pXX must mean target position size, not
+individual order size.** Individual target orders are only triggers. The
+decision to create or add to a mirror position should be based on the target's
+current condition/token position and our current mirror position.
 
-| Wallet                                       | Label     | p75     | p90     | p95     | p100      |
-| -------------------------------------------- | --------- | ------- | ------- | ------- | --------- |
-| `0x2005d16a84ceefa912d4e380cd32e7ff827875ea` | RN1       | $117.65 | $427.81 | $702.30 | $2,660.08 |
-| `0x204f72f35326db932158cba6adff0b9a1da95e14` | swisstony | $114.57 | $321.62 | $805.05 | $4,811.89 |
+## Current As-Built State
+
+Position-aware mirror sizing is hardcoded for the two researched target wallets:
+
+| Wallet                                       | Label     |  p75 |  p90 |    p95 |    p99 |
+| -------------------------------------------- | --------- | ---: | ---: | -----: | -----: |
+| `0x2005d16a84ceefa912d4e380cd32e7ff827875ea` | RN1       | $199 | $726 | $1,773 | $5,453 |
+| `0x204f72f35326db932158cba6adff0b9a1da95e14` | swisstony | $146 | $633 | $1,460 | $5,463 |
 
 Snapshot source in code:
 `nodes/poly/app/src/bootstrap/jobs/copy-trade-mirror.job.ts`
 `TOP_TARGET_SIZE_SNAPSHOTS`.
 
-Snapshot metadata: latest 1000 observed fills per wallet, captured at
-`2026-05-02T01:51:56Z`.
+Snapshot metadata: current token-position cost-basis distribution from
+Polymarket Data API `/positions`, captured at `2026-05-03T00:59Z`.
+
+As-built behavior:
+
+- Curated target wallets use `target_percentile_scaled`.
+- `mirror_filter_percentile` defaults to `75`.
+- `mirror_max_usdc_per_trade` defaults to `$5`.
+- `placement.kind` defaults to `mirror_limit`.
+- `position_followup` is enabled for these snapshot-backed wallets.
+- New-entry, layer, and hedge BUY branches all evaluate the target's current
+  condition/token position cost basis against the table above.
+
+The exact source-of-truth values are in:
+
+- `nodes/poly/app/src/bootstrap/jobs/copy-trade-mirror.job.ts`
+- `nodes/poly/app/src/features/copy-trade/plan-mirror.ts`
+- `nodes/poly/app/src/features/copy-trade/types.ts`
+
+## Correct MVP Policy: One pXX, Position-Sized
 
 ## Mental Model
 
 ```text
-target bet size
+target position size
 
-  below selected pXX        selected pXX                     p100+
+  below selected pXX        selected pXX                     p99+
   ------------------|-----------------------------|------------->
         SKIP              mirror market min bet       mirror max bet
                            \_____________________/
@@ -42,28 +67,62 @@ target bet size
 Example with `p75` selected and `$5.00` max:
 
 ```text
-target bets less than p75      -> skip
-target bet exactly p75         -> place market minimum
-target bet halfway p75 to p100 -> place halfway between min and $5.00
-target bet p100 or larger      -> place $5.00, subject to grant caps
+target position below p75      -> skip
+target position exactly p75    -> place market minimum
+target position halfway p75 to p99 -> place halfway between min and $5.00
+target position p99 or larger      -> place $5.00, subject to grant caps
 ```
+
+For MVP, there should not be separate order-pXX and position-pXX controls.
+There is one user-facing percentile selector, and it selects the threshold on
+the target's current condition/token position size.
+
+Individual order size should only decide whether there is a new trigger to
+evaluate. It should not be the conviction gate.
+
+Use token-position cost basis when comparing against
+`TargetConditionPositionView.tokens[].cost_usdc`. Use condition-total thresholds
+only if the planner explicitly compares total condition exposure across both
+tokens.
 
 ## Formula
 
-For snapshot-backed wallets, the planner uses `target_percentile_scaled`:
+For the corrected MVP, snapshot-backed wallets should still use
+`target_percentile_scaled`, but `target_usdc` must be the target's current
+condition/token position cost basis, not the current target order notional:
 
 ```text
 threshold = snapshot[pXX]
-max_target = snapshot[p100]
+max_target = snapshot[p99]
 floor = market minimum bet for this market
 
-if target_usdc < threshold:
+if target_position_usdc is unavailable:
   skip below_target_percentile
 
-ratio = clamp((target_usdc - threshold) / (max_target - threshold), 0, 1)
+if target_position_usdc < threshold:
+  skip below_target_percentile
+
+ratio = clamp((target_position_usdc - threshold) / (max_target - threshold), 0, 1)
 mirror_usdc = floor + (user_max_usdc - floor) * ratio
 mirror_usdc = apply market floors, then clamp to user_max_usdc
 ```
+
+Branch choice:
+
+```text
+if no mirror position on condition:
+  branch = new_entry
+elif target token == our_token_id:
+  branch = layer
+elif target token == opposite_token_id:
+  branch = hedge
+else:
+  skip
+```
+
+All branches use the same target-position pXX gate. Layer/hedge additionally
+require our mirror exposure to be large enough that the market floor is not a
+chunky over-adjustment.
 
 If the market minimum is already above the user max, the plan skips as
 `below_market_min`.
@@ -75,7 +134,7 @@ Both controls are stored per active copied target:
 | Control                     | Meaning                            | Default |
 | --------------------------- | ---------------------------------- | ------- |
 | `mirror_filter_percentile`  | Which pXX threshold starts copying | `75`    |
-| `mirror_max_usdc_per_trade` | Mirror size at p100 and above      | `5.00`  |
+| `mirror_max_usdc_per_trade` | Mirror size at p99 and above       | `5.00`  |
 
 These are persisted on `poly_copy_trade_targets`. The distribution itself is
 not in the database today; only the user's selected pXX and max bet are.

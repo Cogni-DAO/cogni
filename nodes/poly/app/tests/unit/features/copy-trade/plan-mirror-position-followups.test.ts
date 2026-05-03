@@ -4,7 +4,7 @@
 /**
  * Module: `@tests/unit/features/copy-trade/plan-mirror-position-followups`
  * Purpose: Cover position-aware mirror follow-up branches: same-token layers
- * and opposite-token hedges bypass the target-order percentile only when both
+ * and opposite-token hedges ignore tiny trigger orders only when both
  * mirror and target total-position thresholds make market-min sizing sane.
  * Scope: Pure planner tests. No DB, no Data API, no CLOB.
  * Invariants: PLAN_IS_PURE, HEDGE_PREDICATE_NOOPS_ON_UNKNOWN_OPPOSITE,
@@ -40,11 +40,11 @@ const CONFIG: MirrorTargetConfig = {
     statistic: {
       wallet: TARGET_WALLET,
       label: "RN1",
-      captured_at: "2026-05-02T16:44:45Z",
-      sample_size: 1000,
+      captured_at: "2026-05-03T00:59:00Z",
+      sample_size: 3942,
       percentile: 75,
-      min_target_usdc: 49,
-      max_target_usdc: 1219,
+      min_target_usdc: 199,
+      max_target_usdc: 5453,
     },
   },
   placement: { kind: "mirror_limit" },
@@ -91,9 +91,9 @@ function state(overrides?: Partial<RuntimeState>): RuntimeState {
       tokens: [
         {
           token_id: PRIMARY_TOKEN,
-          size_shares: 200,
-          cost_usdc: 100,
-          current_value_usdc: 100,
+          size_shares: 400,
+          cost_usdc: 200,
+          current_value_usdc: 200,
         },
         {
           token_id: HEDGE_TOKEN,
@@ -108,7 +108,7 @@ function state(overrides?: Partial<RuntimeState>): RuntimeState {
 }
 
 describe("planMirrorFromFill() — position-aware followups", () => {
-  it("keeps the configured percentile slider as the new-entry gate when no mirror position exists", () => {
+  it("fails closed for new entries when target position context is missing", () => {
     const fill = makeFill(PRIMARY_TOKEN, 1);
     const d = planMirrorFromFill({
       fill,
@@ -125,7 +125,7 @@ describe("planMirrorFromFill() — position-aware followups", () => {
     });
   });
 
-  it("places a same-token layer below pXX once mirror and target total positions clear thresholds", () => {
+  it("places a same-token layer from a tiny trigger once mirror and target positions clear thresholds", () => {
     const fill = makeFill(PRIMARY_TOKEN, 1);
     const d = planMirrorFromFill({
       fill,
@@ -168,7 +168,7 @@ describe("planMirrorFromFill() — position-aware followups", () => {
     });
   });
 
-  it("places an opposite-token hedge below pXX when target total hedge ratio clears thresholds", () => {
+  it("places an opposite-token hedge from a tiny trigger when target hedge ratio clears thresholds", () => {
     const fill = makeFill(HEDGE_TOKEN, 1, 0.2);
     const d = planMirrorFromFill({
       fill,
@@ -196,9 +196,9 @@ describe("planMirrorFromFill() — position-aware followups", () => {
           tokens: [
             {
               token_id: PRIMARY_TOKEN,
-              size_shares: 200,
-              cost_usdc: 100,
-              current_value_usdc: 100,
+              size_shares: 400,
+              cost_usdc: 200,
+              current_value_usdc: 200,
             },
           ],
         },
@@ -225,9 +225,9 @@ describe("planMirrorFromFill() — position-aware followups", () => {
           tokens: [
             {
               token_id: PRIMARY_TOKEN,
-              size_shares: 200,
-              cost_usdc: 100,
-              current_value_usdc: 100,
+              size_shares: 400,
+              cost_usdc: 200,
+              current_value_usdc: 200,
             },
             {
               token_id: HEDGE_TOKEN,
