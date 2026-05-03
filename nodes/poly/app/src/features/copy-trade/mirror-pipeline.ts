@@ -403,7 +403,8 @@ async function fetchTargetConditionPosition(args: {
 
 function needsTargetPosition(target: MirrorTargetConfig): boolean {
   return (
-    target.position_followup?.enabled === true || target.sizing.kind !== "min_bet"
+    target.position_followup?.enabled === true ||
+    target.sizing.kind !== "min_bet"
   );
 }
 
