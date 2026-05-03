@@ -18,6 +18,10 @@
  */
 
 import {
+  polyTraderFills,
+  polyTraderWallets,
+} from "@cogni/poly-db-schema/trader-activity";
+import {
   PolymarketClobPublicClient,
   PolymarketDataApiClient,
 } from "@cogni/poly-market-provider/adapters/polymarket";
@@ -25,6 +29,7 @@ import {
   computeWalletMetrics,
   type MarketResolutionInput,
   mapExecutionPositions,
+  type OrderFlowTrade,
   summariseOrderFlow,
 } from "@cogni/poly-market-provider/analysis";
 import type {
@@ -40,6 +45,9 @@ import type {
   WalletExecutionPosition,
   WalletExecutionWarning,
 } from "@cogni/poly-node-contracts";
+import { asc, eq } from "drizzle-orm";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import pLimit from "p-limit";
 import { clearTtlCacheByPrefix, coalesce } from "./coalesce";
 import { getTradingWalletPnlHistory } from "./trading-wallet-overview-service";
@@ -59,6 +67,19 @@ const EXECUTION_OPEN_LIMIT = 18;
 /** Max closed rows returned in closed_positions. */
 const EXECUTION_HISTORY_LIMIT = 30;
 const EXECUTION_HISTORY_WINDOW_DAYS = 14;
+type Db =
+  | NodePgDatabase<Record<string, unknown>>
+  | PostgresJsDatabase<Record<string, unknown>>;
+
+type HistoricalFillRow = {
+  conditionId: string;
+  tokenId: string;
+  side: string;
+  price: string | number;
+  shares: string | number;
+  observedAt: Date;
+  raw: Record<string, unknown> | null;
+};
 
 /**
  * Module-singleton clients — created lazily so test code can `vi.mock` either of them
@@ -217,23 +238,26 @@ export async function getSnapshotSlice(
  * entries populated by `getSnapshotSlice` so a request that includes both
  * slices triggers exactly one upstream fan-out per (wallet, market).
  *
- * D1 ships `live` mode only; `historical` returns a `distributions_unavailable`
- * warning until the persistence layer in D2 lands.
+ * `historical` reads every saved observation for rostered research wallets;
+ * `live` keeps the arbitrary-address on-demand path.
  */
 export async function getDistributionsSlice(
   addr: string,
-  mode: "live" | "historical"
+  mode: "live" | "historical",
+  opts: { db?: Db | undefined } = {}
 ): Promise<SliceResult<WalletAnalysisDistributions>> {
   if (mode === "historical") {
-    return {
-      kind: "warn",
-      warning: {
-        slice: "distributions",
-        code: "distributions_unavailable",
-        message:
-          "historical mode requires the poly_target_fills persistence layer (D2) which is not yet shipped",
-      },
-    };
+    if (!opts.db) {
+      return {
+        kind: "warn",
+        warning: {
+          slice: "distributions",
+          code: "distributions_unavailable",
+          message: "historical mode requires a service database handle",
+        },
+      };
+    }
+    return getHistoricalDistributionsSlice(addr, opts.db);
   }
   try {
     const trades = await coalesce(
@@ -286,6 +310,98 @@ export async function getDistributionsSlice(
       warning: warning("distributions", err),
     };
   }
+}
+
+async function getHistoricalDistributionsSlice(
+  addr: string,
+  db: Db
+): Promise<SliceResult<WalletAnalysisDistributions>> {
+  try {
+    const trades = await coalesce(
+      `historical-trader-fills:${addr}`,
+      async () => {
+        const rows = (await db
+          .select({
+            conditionId: polyTraderFills.conditionId,
+            tokenId: polyTraderFills.tokenId,
+            side: polyTraderFills.side,
+            price: polyTraderFills.price,
+            shares: polyTraderFills.shares,
+            observedAt: polyTraderFills.observedAt,
+            raw: polyTraderFills.raw,
+          })
+          .from(polyTraderFills)
+          .innerJoin(
+            polyTraderWallets,
+            eq(polyTraderWallets.id, polyTraderFills.traderWalletId)
+          )
+          .where(eq(polyTraderWallets.walletAddress, addr.toLowerCase()))
+          .orderBy(asc(polyTraderFills.observedAt))) as HistoricalFillRow[];
+        return rows.map(historicalFillToOrderFlowTrade);
+      },
+      SLICE_TTL_MS
+    );
+
+    const cids = [...new Set(trades.map((t) => t.conditionId))];
+    const resolutions = new Map<string, MarketResolutionInput>();
+    await Promise.all(
+      cids.map((cid) =>
+        coalesce(
+          `resolution:${cid}`,
+          () =>
+            upstreamLimit(() => getClobPublicClient().getMarketResolution(cid)),
+          SLICE_TTL_MS
+        ).then((r) => {
+          if (r) resolutions.set(cid, r);
+        })
+      )
+    );
+
+    const summary = summariseOrderFlow(trades, resolutions);
+    return {
+      kind: "ok",
+      value: {
+        mode: "historical",
+        range: summary.range,
+        dcaDepth: { buckets: [...summary.dcaDepth.buckets] },
+        tradeSize: { buckets: [...summary.tradeSize.buckets] },
+        entryPrice: { buckets: [...summary.entryPrice.buckets] },
+        dcaWindow: { buckets: [...summary.dcaWindow.buckets] },
+        hourOfDay: { buckets: [...summary.hourOfDay.buckets] },
+        eventClustering: { buckets: [...summary.eventClustering.buckets] },
+        topEvents: [...summary.topEvents],
+        pendingShare: summary.pendingShare,
+        quantiles: summary.quantiles,
+        computedAt: new Date().toISOString(),
+      },
+    };
+  } catch (err) {
+    return {
+      kind: "warn",
+      warning: warning("distributions", err),
+    };
+  }
+}
+
+function historicalFillToOrderFlowTrade(
+  row: HistoricalFillRow
+): OrderFlowTrade {
+  const raw = isRecord(row.raw) ? row.raw : {};
+  const attributes = isRecord(raw.attributes) ? raw.attributes : {};
+  const shares = toFiniteNumber(row.shares);
+  const price = toFiniteNumber(row.price);
+  return {
+    side: row.side,
+    asset: row.tokenId,
+    conditionId: row.conditionId,
+    size: shares,
+    price,
+    timestamp: Math.floor(row.observedAt.getTime() / 1000),
+    ...optionalField("title", readOptionalString(attributes, "title")),
+    ...optionalField("outcome", readOptionalString(raw, "outcome")),
+    ...optionalField("slug", readOptionalString(attributes, "slug")),
+    ...optionalField("eventSlug", readOptionalString(attributes, "event_slug")),
+  };
 }
 
 /**
@@ -529,6 +645,32 @@ function warning(
     code: "upstream_failed",
     message: err instanceof Error ? err.message : String(err),
   };
+}
+
+function toFiniteNumber(value: string | number): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readOptionalString(
+  record: Record<string, unknown>,
+  key: string
+): string | undefined {
+  const value = record[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function optionalField<TKey extends string>(
+  key: TKey,
+  value: string | undefined
+): { [K in TKey]: string } | Record<string, never> {
+  return value === undefined
+    ? {}
+    : ({ [key]: value } as { [K in TKey]: string });
 }
 
 function buildDailyCounts(

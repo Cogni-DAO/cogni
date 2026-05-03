@@ -82,6 +82,12 @@ export const GET = wrapRouteHandlerWithLogging<{
     const wantPnl = include.includes("pnl");
     const wantDistributions = include.includes("distributions");
     const wantBenchmark = include.includes("benchmark");
+    const serviceDb =
+      wantBenchmark || (wantDistributions && distributionMode === "historical")
+        ? (resolveServiceDb() as unknown as import("drizzle-orm/node-postgres").NodePgDatabase<
+            Record<string, unknown>
+          >)
+        : null;
     const comparisonWalletAddress = wantBenchmark
       ? await readComparisonWalletAddress(sessionUser.id, ctx.log)
       : null;
@@ -93,17 +99,14 @@ export const GET = wrapRouteHandlerWithLogging<{
         wantBalance ? getBalanceSlice(addr) : null,
         wantPnl ? getPnlSlice(addr, interval) : null,
         wantDistributions
-          ? getDistributionsSlice(addr, distributionMode)
+          ? getDistributionsSlice(addr, distributionMode, {
+              db: serviceDb ?? undefined,
+            })
           : null,
         wantBenchmark
-          ? getBenchmarkSlice(
-              resolveServiceDb() as unknown as import("drizzle-orm/node-postgres").NodePgDatabase<
-                Record<string, unknown>
-              >,
-              addr,
-              interval,
-              { comparisonWalletAddress }
-            )
+          ? getBenchmarkSlice(serviceDb!, addr, interval, {
+              comparisonWalletAddress,
+            })
           : null,
       ]);
 

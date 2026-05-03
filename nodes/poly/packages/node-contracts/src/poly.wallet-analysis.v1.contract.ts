@@ -304,8 +304,8 @@ export const WalletAnalysisQuerySchema = z.object({
   interval: PolyWalletOverviewIntervalSchema.optional().default("ALL"),
   /**
    * Source mode for the `distributions` slice. `live` always succeeds for any
-   * 0x address; `historical` returns a `distributions_unavailable` warning in
-   * D1 — the persistence layer is gated behind D2.
+   * 0x address; `historical` reads saved observed trader fills from the
+   * service database when the wallet is on the research roster.
    */
   distributionMode: z.enum(["live", "historical"]).optional().default("live"),
 });
@@ -315,7 +315,7 @@ export const polyWalletAnalysisOperation = {
   id: "poly.wallet-analysis.v1",
   summary: "Wallet analysis — deterministic metrics, trades, and balance",
   description:
-    "Single route covering any 0x Polymarket wallet. Slice-scoped via `include` (snapshot, trades, balance, pnl). Numbers computed on demand from public Polymarket Data-API + CLOB resolutions plus Polymarket's public user-pnl service; no storage layer. Balance is positions-only for non-operator wallets. Each slice is independently optional in the response; partial failure surfaces via `warnings`.",
+    "Single route covering any 0x Polymarket wallet. Slice-scoped via `include` (snapshot, trades, balance, pnl, distributions, benchmark). On-demand slices read public Polymarket APIs; historical distributions and benchmarks read saved observed trader facts when available. Balance is positions-only for non-operator wallets. Each slice is independently optional in the response; partial failure surfaces via `warnings`.",
   input: z.object({
     addr: PolyAddressSchema,
     query: WalletAnalysisQuerySchema,

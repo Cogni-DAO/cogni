@@ -6,9 +6,10 @@
  * Purpose: Organism that composes the wallet-analysis molecules into a layout for the chosen variant.
  * Scope: Pure component. Accepts `data` + `isLoading`; no fetching.
  * Invariants:
- *   - `variant="page"` renders the full layout (identity + stats + balance + chart + trades + markets + hypothesis).
+ *   - `variant="page"` renders the full wallet dossier without recent-trade or top-market samples.
+ *   - `variant="compact"` renders the research deep dive used by `/research`: benchmark, all saved distributions, P/L, and cadence.
  *   - `size="hero"` enlarges typography on the page variant; layout is identical.
- *   - Other variants (`drawer`, `compact`) ship in later checkpoints — fall back to `page` for now.
+ *   - Other variants (`drawer`) use the page layout without the compact research treatment.
  * Side-effects: none
  * @public
  */
@@ -27,10 +28,8 @@ import type {
 import { BalanceBar } from "./BalanceBar";
 import { DistributionsBlock } from "./DistributionsBlock";
 import { EdgeHypothesis } from "./EdgeHypothesis";
-import { RecentTradesTable } from "./RecentTradesTable";
 import { StatGrid } from "./StatGrid";
 import { TimeWindowHeader } from "./TimeWindowHeader";
-import { TopMarketsList } from "./TopMarketsList";
 import { TradesPerDayChart } from "./TradesPerDayChart";
 import { WalletIdentityHeader } from "./WalletIdentityHeader";
 import { WalletProfitLossCard } from "./WalletProfitLossCard";
@@ -70,14 +69,26 @@ export function WalletAnalysisView({
   onPnlIntervalChange,
   headerActions,
 }: WalletAnalysisViewProps): ReactElement {
-  // variant fallback while drawer/compact land in later checkpoints
+  if (variant === "compact") {
+    return (
+      <ResearchDeepDiveVariant
+        data={data}
+        isLoading={isLoading}
+        capturedAt={capturedAt}
+        pnlInterval={pnlInterval}
+        onPnlIntervalChange={onPnlIntervalChange}
+        headerActions={headerActions}
+      />
+    );
+  }
+
+  // Drawer stays concise; the dedicated research page owns the heavy exploration.
   if (variant !== "page") {
     return (
       <PageVariant
         data={data}
         size="default"
         isLoading={isLoading}
-        capturedAt={capturedAt}
         pnlInterval={pnlInterval}
         onPnlIntervalChange={onPnlIntervalChange}
         headerActions={headerActions}
@@ -89,7 +100,6 @@ export function WalletAnalysisView({
       data={data}
       size={size}
       isLoading={isLoading}
-      capturedAt={capturedAt}
       rankBadge={rankBadge}
       pnlInterval={pnlInterval}
       onPnlIntervalChange={onPnlIntervalChange}
@@ -102,7 +112,6 @@ function PageVariant({
   data,
   size,
   isLoading,
-  capturedAt,
   rankBadge,
   pnlInterval,
   onPnlIntervalChange,
@@ -111,7 +120,6 @@ function PageVariant({
   data: WalletAnalysisData;
   size: WalletAnalysisSize;
   isLoading?: WalletAnalysisLoadingState | undefined;
-  capturedAt?: string | undefined;
   rankBadge?: string | undefined;
   pnlInterval?: PolyWalletOverviewInterval | undefined;
   onPnlIntervalChange?:
@@ -124,14 +132,14 @@ function PageVariant({
     <Card
       className={
         isHero
-          ? "relative overflow-hidden border-primary/30"
+          ? "border-primary/30 relative overflow-hidden"
           : "relative overflow-hidden"
       }
     >
       {rankBadge && (
         <span
           aria-hidden
-          className="pointer-events-none absolute top-4 right-6 select-none font-black text-8xl text-primary/5 leading-none tracking-tighter"
+          className="text-primary/5 pointer-events-none absolute top-4 right-6 text-8xl leading-none font-black tracking-tighter select-none"
         >
           {rankBadge}
         </span>
@@ -178,31 +186,6 @@ function PageVariant({
           />
         )}
 
-        <div className="grid gap-8 lg:grid-cols-5">
-          <div className="lg:col-span-3">
-            <TradesPerDayChart
-              daily={data.trades?.dailyCounts}
-              isLoading={isLoading?.trades}
-            />
-          </div>
-          <div className="lg:col-span-2">
-            <TopMarketsList
-              markets={data.trades?.topMarkets}
-              isLoading={isLoading?.trades}
-              // TODO(task.0333): replace with Dolt-stored AI analyst summary.
-              // Lorem Cognison until the wallet-analyst graph can author this.
-              caption="Lorem Cognison — a Dolt-stored AI analysis will describe this wallet's playbook here: why they win, which markets they favour, which patterns repeat."
-            />
-          </div>
-        </div>
-
-        <RecentTradesTable
-          trades={data.trades?.last}
-          limit={5}
-          isLoading={isLoading?.trades}
-          capturedAt={capturedAt}
-        />
-
         {(data.distributions || isLoading?.distributions) && (
           <DistributionsBlock
             data={data.distributions}
@@ -211,6 +194,94 @@ function PageVariant({
         )}
 
         <EdgeHypothesis text={data.snapshot?.hypothesisMd} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function ResearchDeepDiveVariant({
+  data,
+  isLoading,
+  capturedAt,
+  pnlInterval,
+  onPnlIntervalChange,
+  headerActions,
+}: {
+  data: WalletAnalysisData;
+  isLoading?: WalletAnalysisLoadingState | undefined;
+  capturedAt?: string | undefined;
+  pnlInterval?: PolyWalletOverviewInterval | undefined;
+  onPnlIntervalChange?:
+    | ((interval: PolyWalletOverviewInterval) => void)
+    | undefined;
+  headerActions?: ReactNode | undefined;
+}): ReactElement {
+  return (
+    <Card className="border-primary/20 relative overflow-hidden">
+      <CardHeader className="gap-3">
+        <WalletIdentityHeader
+          address={data.address}
+          identity={data.identity}
+          size="default"
+          resolvedCount={data.snapshot?.n}
+          actions={headerActions}
+        />
+      </CardHeader>
+
+      <CardContent className="flex flex-col gap-6 pt-0">
+        <StatGrid snapshot={data.snapshot} isLoading={isLoading?.snapshot} />
+
+        {(data.benchmark || isLoading?.benchmark) && (
+          <CopyTargetBenchmarkBlock
+            benchmark={data.benchmark}
+            isLoading={isLoading?.benchmark}
+          />
+        )}
+
+        {(data.distributions || isLoading?.distributions) && (
+          <DistributionsBlock
+            data={data.distributions}
+            isLoading={isLoading?.distributions}
+          />
+        )}
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
+          {(data.pnl || isLoading?.pnl || pnlInterval) && (
+            <div className="flex flex-col gap-4">
+              {pnlInterval && onPnlIntervalChange ? (
+                <TimeWindowHeader
+                  interval={pnlInterval}
+                  onIntervalChange={onPnlIntervalChange}
+                  pnlHistory={data.pnl?.history}
+                  isLoading={isLoading?.pnl}
+                />
+              ) : null}
+              <WalletProfitLossCard
+                history={data.pnl?.history}
+                interval={pnlInterval ?? data.pnl?.interval ?? "ALL"}
+                isLoading={isLoading?.pnl}
+              />
+            </div>
+          )}
+
+          <div className="flex flex-col gap-4">
+            {(data.balance || isLoading?.balance) && (
+              <BalanceBar
+                balance={data.balance}
+                isLoading={isLoading?.balance}
+              />
+            )}
+            <TradesPerDayChart
+              daily={data.trades?.dailyCounts}
+              isLoading={isLoading?.trades}
+            />
+            {capturedAt ? (
+              <p className="text-muted-foreground text-xs">
+                Captured {capturedAt}
+              </p>
+            ) : null}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -225,12 +296,12 @@ function CopyTargetBenchmarkBlock({
 }): ReactNode {
   if (isLoading && !benchmark) {
     return (
-      <div className="rounded-lg border bg-muted/20 p-4">
-        <div className="h-4 w-40 animate-pulse rounded bg-muted" />
+      <div className="bg-muted/20 rounded-lg border p-4">
+        <div className="bg-muted h-4 w-40 animate-pulse rounded" />
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <div className="h-16 animate-pulse rounded bg-muted" />
-          <div className="h-16 animate-pulse rounded bg-muted" />
-          <div className="h-16 animate-pulse rounded bg-muted" />
+          <div className="bg-muted h-16 animate-pulse rounded" />
+          <div className="bg-muted h-16 animate-pulse rounded" />
+          <div className="bg-muted h-16 animate-pulse rounded" />
         </div>
       </div>
     );
@@ -239,16 +310,20 @@ function CopyTargetBenchmarkBlock({
 
   const capture =
     benchmark.summary.copyCaptureRatio !== null
-      ? `${Math.round(benchmark.summary.copyCaptureRatio * 100)}%`
+      ? formatPct(benchmark.summary.copyCaptureRatio)
       : "—";
+  const observedSpan = formatObservedSpan(
+    benchmark.coverage.observedSince,
+    benchmark.coverage.lastSuccessAt
+  );
   return (
-    <section className="rounded-lg border bg-background p-4">
+    <section className="bg-background rounded-lg border p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-sm">Copy Benchmark</h3>
+          <h3 className="text-sm font-semibold">Copy Benchmark</h3>
           <p className="text-muted-foreground text-xs">
-            {benchmark.label ?? "Observed wallet"} · {benchmark.window} ·{" "}
-            {benchmark.coverage.status ?? "pending"}
+            {benchmark.label ?? "Observed wallet"} · {benchmark.window} saved
+            window · {benchmark.coverage.status ?? "pending"}
           </p>
         </div>
         <p className="text-muted-foreground text-xs">
@@ -256,47 +331,28 @@ function CopyTargetBenchmarkBlock({
         </p>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricTile
-          label="Target size"
+          label="Target notional"
           value={formatUsd(benchmark.summary.targetSizeUsdc)}
+          detail={`${benchmark.coverage.targetTrades.toLocaleString()} fills`}
         />
         <MetricTile
-          label="Cogni size"
+          label="Cogni notional"
           value={formatUsd(benchmark.summary.cogniSizeUsdc)}
+          detail={`${benchmark.coverage.cogniTrades.toLocaleString()} fills`}
         />
-        <MetricTile label="Capture" value={capture} />
+        <MetricTile
+          label="Capture"
+          value={capture}
+          detail={`${benchmark.activeGaps.length.toLocaleString()} active gaps`}
+        />
+        <MetricTile
+          label="Observed span"
+          value={observedSpan.value}
+          detail={observedSpan.detail}
+        />
       </div>
-
-      {benchmark.markets.length > 0 && (
-        <div className="mt-4 overflow-hidden rounded-md border">
-          <div className="grid grid-cols-5 bg-muted/40 px-3 py-2 font-medium text-muted-foreground text-xs">
-            <span className="col-span-2">Market</span>
-            <span>Target VWAP</span>
-            <span>Cogni VWAP</span>
-            <span>Status</span>
-          </div>
-          {benchmark.markets.slice(0, 5).map((market) => (
-            <div
-              key={`${market.conditionId}:${market.tokenId}`}
-              className="grid grid-cols-5 border-t px-3 py-2 text-xs"
-            >
-              <span className="col-span-2 truncate">
-                {market.conditionId.slice(0, 10)}…/{market.tokenId.slice(0, 6)}
-              </span>
-              <span>{formatPrice(market.targetVwap)}</span>
-              <span>{formatPrice(market.cogniVwap)}</span>
-              <span>{market.status}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {benchmark.activeGaps.length > 0 && (
-        <p className="mt-3 text-muted-foreground text-xs">
-          {benchmark.activeGaps.length} active target gaps above dust.
-        </p>
-      )}
     </section>
   );
 }
@@ -304,14 +360,19 @@ function CopyTargetBenchmarkBlock({
 function MetricTile({
   label,
   value,
+  detail,
 }: {
   label: string;
   value: string;
+  detail?: string | undefined;
 }): ReactElement {
   return (
-    <div className="rounded-md border bg-muted/20 p-3">
+    <div className="bg-muted/20 rounded-md border p-3">
       <p className="text-muted-foreground text-xs">{label}</p>
-      <p className="mt-1 font-semibold text-lg">{value}</p>
+      <p className="mt-1 text-lg font-semibold">{value}</p>
+      {detail ? (
+        <p className="text-muted-foreground mt-1 text-xs">{detail}</p>
+      ) : null}
     </div>
   );
 }
@@ -324,11 +385,30 @@ function formatUsd(value: number): string {
   });
 }
 
-function formatPrice(value: number | null): string {
-  return value === null ? "—" : value.toFixed(3);
-}
-
 function formatCoverageTime(value: string | null): string {
   if (!value) return "pending";
   return new Date(value).toISOString().slice(5, 16).replace("T", " ");
+}
+
+function formatPct(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatObservedSpan(
+  fromIso: string | null,
+  toIso: string | null
+): { value: string; detail: string } {
+  if (!fromIso || !toIso) return { value: "—", detail: "pending" };
+  const from = new Date(fromIso);
+  const to = new Date(toIso);
+  const days = Math.max(
+    0,
+    Math.round((to.getTime() - from.getTime()) / 86_400_000)
+  );
+  return {
+    value: days === 1 ? "1 day" : `${days.toLocaleString()} days`,
+    detail: `${from.toISOString().slice(5, 10)} → ${to
+      .toISOString()
+      .slice(5, 10)}`,
+  };
 }

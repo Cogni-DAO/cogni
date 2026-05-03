@@ -24,6 +24,7 @@ import { useWalletAnalysis } from "../client/use-wallet-analysis";
 import type {
   WalletAnalysisSize,
   WalletAnalysisVariant,
+  WalletDistributionsRangeMode,
 } from "../types/wallet-analysis";
 import { WalletAnalysisView } from "./WalletAnalysisView";
 
@@ -32,6 +33,10 @@ export type WalletAnalysisSurfaceProps = {
   enabled?: boolean | undefined;
   variant?: WalletAnalysisVariant | undefined;
   size?: WalletAnalysisSize | undefined;
+  /** Override whether distribution histograms are requested. Defaults to page + compact surfaces. */
+  includeDistributions?: boolean | undefined;
+  /** Source for distribution histograms. Research cards use saved historical observations. */
+  distributionMode?: WalletDistributionsRangeMode | undefined;
   /** Inline actions rendered next to the wallet's Polymarket / Polygonscan links. */
   headerActions?: ReactNode | undefined;
 };
@@ -41,16 +46,18 @@ export function WalletAnalysisSurface({
   enabled = true,
   variant = "page",
   size = "default",
+  includeDistributions: includeDistributionsProp,
+  distributionMode,
   headerActions,
 }: WalletAnalysisSurfaceProps): ReactElement {
   const [interval, setInterval] = useState<PolyWalletOverviewInterval>("ALL");
-  // Distributions are heavy (extra Gamma resolution fan-out). Only fetch them
-  // for the full page variant — drawer / compact stay snapshot-sized.
-  const includeDistributions = variant === "page";
+  const includeDistributions =
+    includeDistributionsProp ?? (variant === "page" || variant === "compact");
   const { data, isLoading } = useWalletAnalysis(addr, enabled, {
     interval,
     includeDistributions,
-    distributionMode: "live",
+    distributionMode:
+      distributionMode ?? (variant === "compact" ? "historical" : "live"),
   });
 
   return (
