@@ -546,6 +546,8 @@ describe("PrivyPolyTraderWalletAdapter.authorizeIntent + provisionWithGrant (com
 
   beforeEach(async () => {
     createViemAccountMock.mockClear();
+    createPublicClientMock.mockReset();
+    createWalletClientMock.mockReset();
     await seedDb
       .delete(polyCopyTradeFills)
       .where(eq(polyCopyTradeFills.billingAccountId, tenant.billingAccountId));
@@ -1041,5 +1043,88 @@ describe("PrivyPolyTraderWalletAdapter.authorizeIntent + provisionWithGrant (com
       )
       .limit(1);
     expect(connection?.tradingApprovalsReadyAt).toBeInstanceOf(Date);
+  });
+
+  it("withdraw unwraps pUSD through the pinned CollateralOfframp", async () => {
+    const approveHash =
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const unwrapHash =
+      "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+    const destination =
+      "0x3333333333333333333333333333333333333333" as `0x${string}`;
+
+    const walletWriteContract = vi.fn(
+      async (input: { functionName: string }) => {
+        if (input.functionName === "approve") return approveHash;
+        if (input.functionName === "unwrap") return unwrapHash;
+        throw new Error(`unexpected function ${input.functionName}`);
+      }
+    );
+    const waitForTransactionReceipt = vi.fn().mockResolvedValue({
+      status: "success",
+      blockNumber: 123n,
+    });
+
+    createPublicClientMock.mockReturnValue({
+      readContract: vi.fn(
+        async (input: { functionName: string; args: readonly unknown[] }) => {
+          if (input.functionName === "balanceOf") return 5_000_000n;
+          if (input.functionName === "allowance") return 0n;
+          throw new Error(`unexpected read ${input.functionName}`);
+        }
+      ),
+      waitForTransactionReceipt,
+    });
+    createWalletClientMock.mockReturnValue({
+      writeContract: walletWriteContract,
+    });
+
+    const { adapter } = makeAdapter(USER_WALLET_A, {
+      polygonRpcUrl: "https://polygon.example",
+    });
+    await adapter.provisionWithGrant({
+      billingAccountId: tenant.billingAccountId,
+      createdByUserId: tenant.userId,
+      custodialConsent: { ...consent, actorId: tenant.userId },
+      defaultGrant: { perOrderUsdcCap: 5, dailyUsdcCap: 20 },
+    });
+
+    const result = await adapter.withdraw({
+      billingAccountId: tenant.billingAccountId,
+      asset: "pusd",
+      destination,
+      amountAtomic: 2_500_000n,
+      requestedByUserId: tenant.userId,
+    });
+
+    expect(result).toEqual({
+      asset: "pusd",
+      deliveredAsset: "usdc_e",
+      sourceAddress: getAddress(USER_WALLET_A.address),
+      destination,
+      amountAtomic: 2_500_000n,
+      primaryTxHash: unwrapHash,
+      txHashes: [approveHash, unwrapHash],
+    });
+    expect(walletWriteContract).toHaveBeenCalledTimes(2);
+    expect(walletWriteContract).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        functionName: "approve",
+        args: ["0x2957922Eb93258b93368531d39fAcCA3B4dC5854", 2_500_000n],
+      })
+    );
+    expect(walletWriteContract).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        functionName: "unwrap",
+        args: [
+          "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+          destination,
+          2_500_000n,
+        ],
+      })
+    );
+    expect(waitForTransactionReceipt).toHaveBeenCalledTimes(2);
   });
 });

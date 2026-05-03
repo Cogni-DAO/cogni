@@ -4,8 +4,8 @@
 /**
  * Module: `@app/(app)/credits/CreditsPage.client`
  * Purpose: Money page composed of two panels — AI Credits (USDC top-up)
- *   and the Polymarket Trading Wallet (per-tenant Privy wallet balances +
- *   stubbed fund/withdraw). Two columns on desktop; mobile uses Credits /
+ *   and the Polymarket Trading Wallet (per-tenant Privy wallet balances,
+ *   withdraw, and stubbed fund). Two columns on desktop; mobile uses Credits /
  *   Wallet pill toggle. Route stays `/credits` so existing links and footer
  *   nav stay stable.
  * Scope: Client layout shell only. Panels own their own data fetching.

@@ -91,6 +91,11 @@ export {
   CopyAddressButton,
   type CopyAddressButtonProps,
   formatShortWallet,
+  type WithdrawalAssetOption,
+  WithdrawalFlowDialog,
+  type WithdrawalFlowDialogProps,
+  type WithdrawalSubmitInput,
+  type WithdrawalSubmitResult,
 } from "./kit/wallet";
 export {
   type ChartConfig,
