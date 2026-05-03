@@ -686,6 +686,148 @@ APP_DB_READONLY_PASSWORD="${APP_DB_READONLY_PASSWORD:-$(derive_secret postgres-r
 printf '%s=%s\n' APP_DB_READONLY_USER "$APP_DB_READONLY_USER" >> "$RUNTIME_ENV"
 printf '%s=%s\n' APP_DB_READONLY_PASSWORD "$APP_DB_READONLY_PASSWORD" >> "$RUNTIME_ENV"
 
+provision_grafana_postgres_datasources() {
+  if [[ -z "${GRAFANA_URL:-}" || -z "${GRAFANA_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
+    log_warn "Skipping Grafana Postgres datasources: GRAFANA_URL or GRAFANA_SERVICE_ACCOUNT_TOKEN is unset"
+    return 0
+  fi
+  if [[ "$GRAFANA_SERVICE_ACCOUNT_TOKEN" == glc_* ]]; then
+    log_warn "Skipping Grafana Postgres datasources: GRAFANA_SERVICE_ACCOUNT_TOKEN is a Grafana Cloud token, not a stack service-account token"
+    return 0
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+    log_warn "Skipping Grafana Postgres datasources: jq is not installed on the VM"
+    return 0
+  fi
+
+  local grafana_base="${GRAFANA_URL%/}"
+  local datasource_host="${GRAFANA_POSTGRES_HOST:-${DEPLOY_ENVIRONMENT}.vm.cognidao.org:5432}"
+  local pdc_network_id="${GRAFANA_POSTGRES_PDC_NETWORK_ID:-}"
+
+  if [[ -z "$pdc_network_id" && "$datasource_host" == *".vm.cognidao.org:"* ]]; then
+    log_warn "Grafana Postgres datasource will use public VM host ${datasource_host}; set GRAFANA_POSTGRES_PDC_NETWORK_ID + GRAFANA_POSTGRES_HOST=postgres:5432 to route through PDC"
+  fi
+
+  local dbs="${COGNI_NODE_DBS:-}"
+  if [[ -z "$dbs" ]]; then
+    dbs="cogni_operator,cogni_poly,cogni_resy"
+  fi
+
+  IFS=',' read -ra grafana_dbs <<< "$dbs"
+  for db_name in "${grafana_dbs[@]}"; do
+    db_name="$(echo "$db_name" | xargs)"
+    [[ -n "$db_name" ]] || continue
+
+    local node="${db_name#cogni_}"
+    local uid="cogni-${DEPLOY_ENVIRONMENT}-${node}-postgres"
+    local name="Postgres - ${DEPLOY_ENVIRONMENT} ${node}"
+    local payload_file="/tmp/grafana-postgres-${uid}.json"
+    local response_file="/tmp/grafana-postgres-${uid}.response.json"
+    local query_file="/tmp/grafana-postgres-${uid}.query.json"
+
+    if [[ -n "$pdc_network_id" ]]; then
+      jq -n \
+        --arg name "$name" \
+        --arg uid "$uid" \
+        --arg url "$datasource_host" \
+        --arg user "$APP_DB_READONLY_USER" \
+        --arg database "$db_name" \
+        --arg password "$APP_DB_READONLY_PASSWORD" \
+        --arg pdc_network_id "$pdc_network_id" \
+        '{
+          name: $name,
+          uid: $uid,
+          type: "postgres",
+          access: "proxy",
+          url: $url,
+          user: $user,
+          jsonData: {
+            database: $database,
+            sslmode: "disable",
+            postgresVersion: 1500,
+            timescaledb: false,
+            enableSecureSocksProxy: true,
+            secureSocksProxyUsername: $pdc_network_id
+          },
+          secureJsonData: {
+            password: $password
+          }
+        }' > "$payload_file"
+    else
+      jq -n \
+        --arg name "$name" \
+        --arg uid "$uid" \
+        --arg url "$datasource_host" \
+        --arg user "$APP_DB_READONLY_USER" \
+        --arg database "$db_name" \
+        --arg password "$APP_DB_READONLY_PASSWORD" \
+        '{
+          name: $name,
+          uid: $uid,
+          type: "postgres",
+          access: "proxy",
+          url: $url,
+          user: $user,
+          jsonData: {
+            database: $database,
+            sslmode: "disable",
+            postgresVersion: 1500,
+            timescaledb: false
+          },
+          secureJsonData: {
+            password: $password
+          }
+        }' > "$payload_file"
+    fi
+
+    local status
+    status=$(curl -sS -o "$response_file" -w "%{http_code}" \
+      -H "Authorization: Bearer ${GRAFANA_SERVICE_ACCOUNT_TOKEN}" \
+      "${grafana_base}/api/datasources/uid/${uid}")
+
+    if [[ "$status" == "200" ]]; then
+      log_info "Updating Grafana Postgres datasource ${uid}"
+      curl -fsS -X PUT "${grafana_base}/api/datasources/uid/${uid}" \
+        -H "Authorization: Bearer ${GRAFANA_SERVICE_ACCOUNT_TOKEN}" \
+        -H "content-type: application/json" \
+        --data @"$payload_file" >/dev/null
+    elif [[ "$status" == "404" ]]; then
+      log_info "Creating Grafana Postgres datasource ${uid}"
+      curl -fsS -X POST "${grafana_base}/api/datasources" \
+        -H "Authorization: Bearer ${GRAFANA_SERVICE_ACCOUNT_TOKEN}" \
+        -H "content-type: application/json" \
+        --data @"$payload_file" >/dev/null
+    else
+      log_warn "Grafana datasource lookup failed for ${uid}: HTTP ${status}"
+      cat "$response_file" || true
+      return 1
+    fi
+
+    jq -n \
+      --arg uid "$uid" \
+      '{
+        from: "now-5m",
+        to: "now",
+        queries: [
+          {
+            refId: "A",
+            datasource: { uid: $uid, type: "postgres" },
+            rawSql: "select current_user",
+            format: "table",
+            maxDataPoints: 1000,
+            intervalMs: 1000
+          }
+        ]
+      }' > "$query_file"
+
+    log_info "Validating Grafana Postgres datasource ${uid}"
+    curl -fsS -X POST "${grafana_base}/api/ds/query" \
+      -H "Authorization: Bearer ${GRAFANA_SERVICE_ACCOUNT_TOKEN}" \
+      -H "content-type: application/json" \
+      --data @"$query_file" >/dev/null
+  done
+}
+
 # Doltgres has weak GRANT support so roles are near-permissive today; derived
 # secrets are still a least-privilege improvement over a shared root pw.
 DOLTGRES_PASSWORD="${DOLTGRES_PASSWORD:-$(derive_secret doltgres-root)}"
@@ -826,6 +968,13 @@ else
 fi
 log_info "[$(date -u +%H:%M:%S)] DB provisioning complete"
 emit_deployment_event "infra_deployment.db_provision_complete" "success" "Database provisioned successfully"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 6b: Provision Grafana Cloud Postgres datasources
+# The remote VM has the derived read-only password and the Postgres role/DBs now
+# exist, so this is the reproducible place to create the datasource credentials.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+provision_grafana_postgres_datasources
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 6.6: Start/update infra services (rolling update, no down)
