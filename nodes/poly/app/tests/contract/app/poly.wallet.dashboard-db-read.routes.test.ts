@@ -771,7 +771,10 @@ describe("poly wallet dashboard DB read routes", () => {
     expect(response.status).toBe(200);
     expect(json.live_positions).toEqual([]);
     expect(json.closed_positions).toHaveLength(1);
-    expect(mockGetExecutionSlice).not.toHaveBeenCalled();
+    expect(mockGetExecutionSlice).toHaveBeenCalledWith(FUNDER, {
+      includePriceHistory: true,
+      assets: ["token-1"],
+    });
   });
 
   it("execution marks typed winner lifecycle rows redeemable", async () => {
@@ -829,6 +832,94 @@ describe("poly wallet dashboard DB read routes", () => {
       status: "closed",
       lifecycleState: "redeemed",
       currentValue: 0,
+    });
+  });
+
+  it("execution filters Data API live positions that the ledger classified as dust", async () => {
+    mockListTenantPositions.mockResolvedValue([
+      {
+        ...row,
+        status: "filled",
+        position_lifecycle: "dust",
+        attributes: {
+          ...row.attributes,
+          token_id: "token-1",
+          filled_size_usdc: 10,
+        },
+      },
+    ]);
+    mockGetExecutionSlice.mockResolvedValue({
+      address: FUNDER,
+      capturedAt: NOW.toISOString(),
+      dailyTradeCounts: [],
+      live_positions: [
+        {
+          positionId: "condition-1:token-1",
+          conditionId:
+            "0x1111111111111111111111111111111111111111111111111111111111111111",
+          asset: "token-1",
+          marketTitle: "Sub-floor dust",
+          marketSlug: "sub-floor-dust",
+          eventSlug: "dust-event",
+          marketUrl: "https://polymarket.com/event/dust-event",
+          outcome: "YES",
+          status: "open",
+          lifecycleState: null,
+          openedAt: NOW.toISOString(),
+          closedAt: null,
+          resolvesAt: null,
+          heldMinutes: 0,
+          entryPrice: 0.5,
+          currentPrice: 0.98,
+          size: 4.898,
+          currentValue: 4.8,
+          pnlUsd: -0.1,
+          pnlPct: -2,
+          timeline: [],
+          events: [],
+        },
+        {
+          positionId: "condition-2:token-live",
+          conditionId:
+            "0x2222222222222222222222222222222222222222222222222222222222222222",
+          asset: "token-live",
+          marketTitle: "Still actionable",
+          marketSlug: "still-actionable",
+          eventSlug: "live-event",
+          marketUrl: "https://polymarket.com/event/live-event",
+          outcome: "NO",
+          status: "open",
+          lifecycleState: null,
+          openedAt: NOW.toISOString(),
+          closedAt: null,
+          resolvesAt: null,
+          heldMinutes: 0,
+          entryPrice: 0.5,
+          currentPrice: 0.5,
+          size: 5,
+          currentValue: 2.5,
+          pnlUsd: 0,
+          pnlPct: 0,
+          timeline: [],
+          events: [],
+        },
+      ],
+      closed_positions: [],
+      warnings: [],
+    });
+    const { GET } = await import("@/app/api/v1/poly/wallet/execution/route");
+
+    const response = await GET(
+      new Request("http://localhost/api/v1/poly/wallet/execution")
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.live_positions).toEqual([]);
+    expect(json.closed_positions).toHaveLength(1);
+    expect(json.closed_positions[0]).toMatchObject({
+      asset: "token-1",
+      lifecycleState: "dust",
     });
   });
 

@@ -187,14 +187,7 @@ describe("poly wallet position action routes", () => {
       tokenId: "token-1",
       client_order_id: expect.stringMatching(/^0x[a-f0-9]{64}$/),
     });
-    expect(mockMarkPositionClosedByAsset).toHaveBeenCalledWith({
-      billing_account_id: ACCOUNT.id,
-      token_id: "token-1",
-      close_order_id: "0xclose",
-      close_client_order_id: "0xclient",
-      reason: "manual_close",
-      closed_at: expect.any(Date),
-    });
+    expect(mockMarkPositionClosedByAsset).not.toHaveBeenCalled();
     expect(mockGetAddress).toHaveBeenCalledWith(ACCOUNT.id);
     expect(mockInvalidateWalletAnalysisCaches).toHaveBeenCalledWith(
       "0xAbCdEf0000000000000000000000000000000001"
@@ -249,6 +242,40 @@ describe("poly wallet position action routes", () => {
     await expect(missing.json()).resolves.toEqual({
       error: "no_position_to_close",
     });
+  });
+
+  it("close route marks sub-floor positions as dust instead of returning close_failed", async () => {
+    const belowMarketMin = new Error("share balance below market floor");
+    (belowMarketMin as { code?: string }).code = "BELOW_MARKET_MIN";
+    mockGetPolyTradeExecutorFor.mockResolvedValue({
+      exitPosition: vi.fn().mockRejectedValue(belowMarketMin),
+    });
+
+    const { POST } = await import(
+      "@/app/api/v1/poly/wallet/positions/close/route"
+    );
+    const response = await POST(
+      makeJsonRequest("http://localhost/api/v1/poly/wallet/positions/close", {
+        token_id: "token-1",
+      })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      order_id: "",
+      status: "dust",
+      client_order_id: "",
+      filled_size_usdc: 0,
+    });
+    expect(mockMarkPositionLifecycleByAsset).toHaveBeenCalledWith({
+      billing_account_id: ACCOUNT.id,
+      token_id: "token-1",
+      lifecycle: "dust",
+      updated_at: expect.any(Date),
+    });
+    expect(mockInvalidateWalletAnalysisCaches).toHaveBeenCalledWith(
+      "0xAbCdEf0000000000000000000000000000000001"
+    );
   });
 
   it("rejects invalid JSON bodies before touching the executor", async () => {

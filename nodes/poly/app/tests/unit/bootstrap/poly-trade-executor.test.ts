@@ -14,6 +14,7 @@ const listOpenOrders = vi.fn();
 const writeContract = vi.fn();
 const waitForTransactionReceipt = vi.fn();
 const multicall = vi.fn();
+const readContract = vi.fn();
 
 vi.mock("@cogni/poly-market-provider/adapters/polymarket", () => {
   class FakePolymarketClobAdapter {
@@ -44,8 +45,15 @@ vi.mock("@cogni/poly-market-provider/adapters/polymarket", () => {
 
 vi.mock("viem", () => ({
   createWalletClient: vi.fn(() => ({ writeContract })),
-  createPublicClient: vi.fn(() => ({ waitForTransactionReceipt, multicall })),
+  createPublicClient: vi.fn(() => ({
+    waitForTransactionReceipt,
+    multicall,
+    readContract,
+  })),
   http: vi.fn(() => "transport"),
+  formatUnits: vi.fn((value: bigint, decimals: number) =>
+    (Number(value) / 10 ** decimals).toString()
+  ),
   parseAbi: vi.fn(() => []),
 }));
 
@@ -139,24 +147,23 @@ describe("createPolyTradeExecutorFactory", () => {
     writeContract.mockReset();
     waitForTransactionReceipt.mockReset();
     multicall.mockReset();
+    readContract.mockReset();
     getMarketConstraints.mockResolvedValue({ minShares: 1 });
     listOpenOrders.mockResolvedValue([]);
     waitForTransactionReceipt.mockResolvedValue({ status: "success" });
   });
 
   it("exitPosition sells the wallet's full share balance via market order without grant-cap authorization", async () => {
-    listUserPositions
-      .mockResolvedValueOnce([
-        {
-          asset: "token-1",
-          size: 5,
-          curPrice: 0.25,
-          conditionId: CONDITION_ID,
-          outcome: "YES",
-          redeemable: false,
-        },
-      ])
-      .mockResolvedValueOnce([]);
+    listUserPositions.mockResolvedValue([
+      {
+        asset: "token-1",
+        size: 5,
+        curPrice: 0.25,
+        conditionId: CONDITION_ID,
+        outcome: "YES",
+        redeemable: false,
+      },
+    ]);
     const receipt: OrderReceipt = {
       order_id: "0xexit",
       client_order_id: "0xclient",
@@ -188,6 +195,8 @@ describe("createPolyTradeExecutorFactory", () => {
       client_order_id: "0xclient",
       orderType: "FAK",
     });
+    expect(sellPositionAtMarket).toHaveBeenCalledTimes(1);
+    expect(listUserPositions).toHaveBeenCalledTimes(1);
     expect(walletPort.authorizeIntent).not.toHaveBeenCalled();
   });
 
@@ -229,6 +238,48 @@ describe("createPolyTradeExecutorFactory", () => {
     expect(result).toEqual(receipt);
     expect(sellPositionAtMarket).toHaveBeenCalledTimes(1);
     expect(listUserPositions).toHaveBeenCalledTimes(1);
+  });
+
+  it("exitPosition falls back to on-chain CTF balance when Data API omits a legacy holding", async () => {
+    listUserPositions.mockResolvedValue([]);
+    readContract.mockResolvedValue(4_898_000n);
+    const receipt: OrderReceipt = {
+      order_id: "0xexit",
+      client_order_id: "0xclient",
+      status: "filled",
+      filled_size_usdc: 4.8,
+      submitted_at: "2026-04-23T00:00:00.000Z",
+    };
+    sellPositionAtMarket.mockResolvedValue(receipt);
+    const walletPort = makeWalletPort();
+
+    const factory = createPolyTradeExecutorFactory({
+      walletPort,
+      logger: makeLogger() as never,
+      metrics: makeMetrics() as never,
+      host: "https://clob.polymarket.com",
+      polygonRpcUrl: "https://polygon.example",
+    });
+    const executor = await factory.getPolyTradeExecutorFor(BILLING_ACCOUNT_ID);
+
+    const result = await executor.exitPosition({
+      tokenId: "123",
+      client_order_id: "0xclient",
+    });
+
+    expect(result).toEqual(receipt);
+    expect(readContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionName: "balanceOf",
+        args: [FUNDER, 123n],
+      })
+    );
+    expect(sellPositionAtMarket).toHaveBeenCalledWith({
+      tokenId: "123",
+      shares: 4.898,
+      client_order_id: "0xclient",
+      orderType: "FAK",
+    });
   });
 
   it("exitPosition self-heals trading approvals when the readiness stamp is missing", async () => {

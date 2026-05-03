@@ -7,7 +7,7 @@ priority: 1
 rank: 2
 estimate: 3
 created: 2026-04-23
-updated: 2026-04-23
+updated: 2026-05-02
 summary: "Fix the user exit path so Polymarket close/redeem flows are driven by authoritative provider and chain state instead of stale DB/Data-API hints. This PR ships the Phase 1 correctness fixes: live approval repair, provider balance/allowance refresh, market close, bounded reconciliation, and dashboard cache invalidation. The typed exit contract and readonly-first position-state surface are explicitly defined as follow-on design."
 outcome: "A user can click Close or Redeem and the system does not strand funds behind our own caps, stale `tradingApprovalsReadyAt` stamps, stale provider cache, one-shot lagging `/positions` reads, or stale execution-cache rows. The next design step is a readonly-first split between `live_positions`, `closed_positions`, and `pending_actions` for HTTP and MCP consumers."
 spec_refs:
@@ -17,8 +17,8 @@ spec_refs:
 assignees: []
 credit:
 project: proj.poly-copy-trading
-branch: feat/poly-exit-path-dashboard
-pr: https://github.com/Cogni-DAO/node-template/pull/999
+branch: derekg1729/fix-position-close
+pr: https://github.com/Cogni-DAO/node-template/pull/1201
 reviewer:
 revision: 0
 blocked_by:
@@ -175,11 +175,31 @@ What remains as next-step work:
 ## Plan
 
 - [ ] Add the proposed exit spec and lock the invariants
-- [ ] Evict wallet-analysis cache entries after successful close/redeem so the dashboard reflects the new holding state immediately
+- [x] Evict wallet-analysis cache entries after successful close/redeem so the dashboard reflects the new holding state immediately
 - [ ] Introduce a dedicated market-exit result type at the provider boundary
-- [ ] Rework executor close flow to run live approval readiness and bounded reconciliation
+- [x] Rework executor close flow to run live approval readiness and bounded reconciliation
 - [ ] Update close/redeem HTTP contracts and route responses to typed states
-- [ ] Add tests for allowance drift, provider cache drift, stale `/positions`, partial fills, and redeem uncapped behavior
+- [x] Add tests for allowance drift, provider cache drift, stale `/positions`, partial fills, and redeem uncapped behavior
+
+## 2026-05-02 Corrective Pass
+
+Production/preview/candidate-a Loki review shows close is still red even after PR #999 merged:
+
+| path                       | candidate-a                                                                               | preview                                                   | production                                                          | rating     |
+| -------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------- | ---------- |
+| UI `POST /positions/close` | 41x `409`, 53x `502`                                                                      | 16x `409`, 6x `502`, 1x `200`                             | 29x `409`, 21x `502`, 1x `403`                                      | red        |
+| CLOB close backend         | accepted/rejected/error events all present; stale retry commonly follows an accepted sell | same pattern at lower volume                              | accepted sells followed by `insufficient_balance` / no-match errors | red        |
+| manual redeem              | 1x `503`                                                                                  | no route traffic in window                                | 1x `200`, 7x `202`, 9x `409`                                        | yellow     |
+| auto redeem                | enqueue/submit/confirm events present, but worker errors remain                           | enqueue/submit/confirm plus worker errors and bleed event | enqueue/submit/confirm plus worker errors and bleed event           | yellow/red |
+
+Close root cause is backend split-brain, not just UI wiring: one request submitted a FAK CLOB sell, immediately re-read lagging public Data API state, retried the same full share sell with the same client order id, and then route-level code marked local ledger rows closed regardless of authoritative refresh/reconciliation.
+
+Corrective scope on `derekg1729/fix-position-close`:
+
+- `PolyTradeExecutor.exitPosition` submits one authorized FAK market sell for the current Data API share balance and returns the provider receipt. It no longer reinterprets a stale immediate `/positions` read as failure or resubmits duplicate close attempts.
+- `POST /api/v1/poly/wallet/positions/close` no longer calls `markPositionClosedByAsset(reason: "manual_close")`. The existing wallet refresh/reconcile path remains the owner of terminal local close state via `refresh_no_position`.
+- Dashboard optimistic suppression only hides a row after a filled close with positive fill or a redeem response with `tx_hash`; pending/zero-fill results keep the row visible until refresh/reconcile updates it.
+- Regression tests pin the one-shot close behavior and ensure the HTTP route does not fabricate terminal ledger state.
 
 ## Next Tasks
 

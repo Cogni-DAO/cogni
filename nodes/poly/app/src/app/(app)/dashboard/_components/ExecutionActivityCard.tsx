@@ -63,11 +63,19 @@ export function ExecutionActivityCard(): ReactElement {
       }
       return postRedeemPosition(args.position.conditionId);
     },
-    onSuccess: (_, vars) => {
+    onSuccess: (result, vars) => {
       setPositionActionError(null);
-      setRecentlyClosedIds(
-        (prev) => new Set([...prev, vars.position.positionId])
-      );
+      const shouldSuppress =
+        vars.kind === "redeem"
+          ? "tx_hash" in result
+          : "filled_size_usdc" in result &&
+            result.status === "filled" &&
+            result.filled_size_usdc > 0;
+      if (shouldSuppress) {
+        setRecentlyClosedIds(
+          (prev) => new Set([...prev, vars.position.positionId])
+        );
+      }
       void queryClient.invalidateQueries({
         queryKey: ["dashboard-wallet-execution"],
       });

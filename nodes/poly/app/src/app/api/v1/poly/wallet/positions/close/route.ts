@@ -17,7 +17,10 @@
 import { randomBytes } from "node:crypto";
 
 import { toUserId } from "@cogni/ids";
-import { noopMetrics } from "@cogni/poly-market-provider";
+import {
+  BELOW_MARKET_MIN_CODE,
+  noopMetrics,
+} from "@cogni/poly-market-provider";
 import { polyWalletClosePositionOperation } from "@cogni/poly-node-contracts";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
@@ -38,6 +41,15 @@ export const dynamic = "force-dynamic";
 
 function randomClientOrderId(): `0x${string}` {
   return `0x${randomBytes(32).toString("hex")}`;
+}
+
+function isBelowMarketMinError(err: unknown): boolean {
+  return (
+    err !== null &&
+    typeof err === "object" &&
+    "code" in err &&
+    (err as { code?: unknown }).code === BELOW_MARKET_MIN_CODE
+  );
 }
 
 export const POST = wrapRouteHandlerWithLogging(
@@ -107,35 +119,6 @@ export const POST = wrapRouteHandlerWithLogging(
       });
 
       try {
-        const closedRows =
-          await container.orderLedger.markPositionClosedByAsset({
-            billing_account_id: account.id,
-            token_id: parsed.data.token_id,
-            close_order_id: receipt.order_id,
-            close_client_order_id: receipt.client_order_id,
-            reason: "manual_close",
-            closed_at: new Date(),
-          });
-        ctx.log.info(
-          {
-            billing_account_id: account.id,
-            token_id: parsed.data.token_id,
-            closed_rows: closedRows,
-          },
-          "poly.wallet.positions.close.ledger_updated"
-        );
-      } catch (err) {
-        ctx.log.warn(
-          {
-            billing_account_id: account.id,
-            token_id: parsed.data.token_id,
-            err: err instanceof Error ? err.message : String(err),
-          },
-          "poly.wallet.positions.close.ledger_update_failed"
-        );
-      }
-
-      try {
         const address = await adapter.getAddress(account.id);
         if (address) invalidateWalletAnalysisCaches(address);
       } catch (err) {
@@ -169,6 +152,45 @@ export const POST = wrapRouteHandlerWithLogging(
         if (err.code === "no_position_to_close") {
           return NextResponse.json({ error: err.code }, { status: 409 });
         }
+      }
+      if (isBelowMarketMinError(err)) {
+        const updated =
+          await container.orderLedger.markPositionLifecycleByAsset({
+            billing_account_id: account.id,
+            token_id: parsed.data.token_id,
+            lifecycle: "dust",
+            updated_at: new Date(),
+          });
+        try {
+          const address = await adapter.getAddress(account.id);
+          if (address) invalidateWalletAnalysisCaches(address);
+        } catch (cacheErr) {
+          ctx.log.warn(
+            {
+              billing_account_id: account.id,
+              err:
+                cacheErr instanceof Error ? cacheErr.message : String(cacheErr),
+            },
+            "poly.wallet.positions.close.cache_invalidate_failed"
+          );
+        }
+        ctx.log.info(
+          {
+            billing_account_id: account.id,
+            token_id: parsed.data.token_id,
+            lifecycle: "dust",
+            ledger_rows_updated: updated,
+          },
+          "poly.wallet.positions.close.dust"
+        );
+        return NextResponse.json(
+          polyWalletClosePositionOperation.output.parse({
+            order_id: "",
+            status: "dust",
+            client_order_id: "",
+            filled_size_usdc: 0,
+          })
+        );
       }
       ctx.log.error(
         {
