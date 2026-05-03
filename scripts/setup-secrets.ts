@@ -562,6 +562,7 @@ const SECRETS: Secret[] = [
       "Administration -> Service Accounts",
       "Add service account with datasource read/query plus datasource create/write for setup runs",
       "Required permissions: datasources:read, datasources:query, datasources:create, datasources:write",
+      "Use a stack service-account token, usually prefixed glsa_; Grafana Cloud access-policy tokens prefixed glc_ do not authorize the Grafana instance HTTP API",
       "Use Grafana Cloud Private Data Source Connect (PDC) for private databases; do not expose Postgres publicly",
       "Add token, copy it",
     ],

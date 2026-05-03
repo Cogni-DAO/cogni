@@ -145,19 +145,19 @@ Deploy uses `${VAR:-}` fallback — empty = feature disabled.
 
 ### Observability (Grafana Cloud)
 
-| Secret                          | Rotated By                                                                                                                               | Status  |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| `GRAFANA_URL`                   | Human: your Grafana instance URL                                                                                                         | Set     |
-| `GRAFANA_SERVICE_ACCOUNT_TOKEN` | Human: Grafana → Administration → Service Accounts → token with datasource read/query and datasource create/write for setup provisioning | STALE   |
-| `GRAFANA_CLOUD_LOKI_URL`        | Human: [Grafana Cloud](https://grafana.com/orgs) → Loki → Data source URL                                                                | Set     |
-| `GRAFANA_CLOUD_LOKI_USER`       | Human: Grafana Cloud → Loki → User (numeric)                                                                                             | Set     |
-| `GRAFANA_CLOUD_LOKI_API_KEY`    | Human: Grafana Cloud → Access Policies → logs:write token                                                                                | STALE   |
-| `PROMETHEUS_REMOTE_WRITE_URL`   | Human: Grafana Cloud → Prometheus → Remote Write URL                                                                                     | MISSING |
-| `PROMETHEUS_USERNAME`           | Human: Grafana Cloud → Prometheus → User (numeric)                                                                                       | MISSING |
-| `PROMETHEUS_PASSWORD`           | Human: Grafana Cloud → Access Policies → metrics:write token                                                                             | MISSING |
-| `PROMETHEUS_READ_USERNAME`      | Human: same user ID                                                                                                                      | MISSING |
-| `PROMETHEUS_READ_PASSWORD`      | Human: Access Policies → metrics:read token                                                                                              | MISSING |
-| `PROMETHEUS_QUERY_URL`          | Derived from PROMETHEUS_REMOTE_WRITE_URL (strip /push)                                                                                   | MISSING |
+| Secret                          | Rotated By                                                                                                                                       | Status  |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| `GRAFANA_URL`                   | Human: your Grafana instance URL                                                                                                                 | Set     |
+| `GRAFANA_SERVICE_ACCOUNT_TOKEN` | Human: Grafana → Administration → Service Accounts → `glsa_` token with datasource read/query and datasource create/write for setup provisioning | STALE   |
+| `GRAFANA_CLOUD_LOKI_URL`        | Human: [Grafana Cloud](https://grafana.com/orgs) → Loki → Data source URL                                                                        | Set     |
+| `GRAFANA_CLOUD_LOKI_USER`       | Human: Grafana Cloud → Loki → User (numeric)                                                                                                     | Set     |
+| `GRAFANA_CLOUD_LOKI_API_KEY`    | Human: Grafana Cloud → Access Policies → logs:write token                                                                                        | STALE   |
+| `PROMETHEUS_REMOTE_WRITE_URL`   | Human: Grafana Cloud → Prometheus → Remote Write URL                                                                                             | MISSING |
+| `PROMETHEUS_USERNAME`           | Human: Grafana Cloud → Prometheus → User (numeric)                                                                                               | MISSING |
+| `PROMETHEUS_PASSWORD`           | Human: Grafana Cloud → Access Policies → metrics:write token                                                                                     | MISSING |
+| `PROMETHEUS_READ_USERNAME`      | Human: same user ID                                                                                                                              | MISSING |
+| `PROMETHEUS_READ_PASSWORD`      | Human: Access Policies → metrics:read token                                                                                                      | MISSING |
+| `PROMETHEUS_QUERY_URL`          | Derived from PROMETHEUS_REMOTE_WRITE_URL (strip /push)                                                                                           | MISSING |
 
 ### AI Observability (Langfuse)
 

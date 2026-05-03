@@ -35,6 +35,19 @@ fi
 : "${GRAFANA_POSTGRES_HOST:?GRAFANA_POSTGRES_HOST not set, expected host:port}"
 : "${GRAFANA_POSTGRES_PASSWORD:?GRAFANA_POSTGRES_PASSWORD not set}"
 
+case "$GRAFANA_SERVICE_ACCOUNT_TOKEN" in
+  glc_*)
+    cat >&2 <<EOF
+GRAFANA_SERVICE_ACCOUNT_TOKEN looks like a Grafana Cloud Access Policy token (glc_).
+
+Datasource provisioning uses the Grafana instance HTTP API, which requires a Grafana
+service-account token from the stack itself (usually glsa_), with datasource
+read/query/create/write permissions.
+EOF
+    exit 1
+    ;;
+esac
+
 COGNI_ENV="${COGNI_ENV:-candidate-a}"
 COGNI_NODE="${COGNI_NODE:-poly}"
 GRAFANA_POSTGRES_USER="${GRAFANA_POSTGRES_USER:-app_readonly}"

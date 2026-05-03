@@ -39,6 +39,8 @@ Use a Grafana service account token with datasource write permission once to cre
 
 For Grafana Cloud, deploy a PDC agent in the runtime network first, then use the internal Postgres host:port visible from that agent. The helper refuses public-looking Postgres hosts unless `GRAFANA_POSTGRES_ALLOW_PUBLIC_HOST=1` is set for a deliberate temporary experiment.
 
+Use a Grafana stack service-account token for `GRAFANA_SERVICE_ACCOUNT_TOKEN`, usually prefixed `glsa_`. Grafana Cloud access-policy tokens prefixed `glc_` are for the Cloud API and telemetry services, not the Grafana instance HTTP API that creates datasources.
+
 ```bash
 export GRAFANA_URL=https://<org>.grafana.net
 export GRAFANA_SERVICE_ACCOUNT_TOKEN=glsa_...
