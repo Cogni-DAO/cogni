@@ -61,6 +61,7 @@ const mockGetOrder = vi.fn();
 const mockListPositions = vi.fn();
 const mockUpdateStatus = vi.fn();
 const mockMarkPositionClosedByAsset = vi.fn();
+const mockMarkPositionLifecycleByAsset = vi.fn();
 const mockMarkSynced = vi.fn();
 const mockGetBalanceSlice = vi.fn();
 const mockGetExecutionSlice = vi.fn();
@@ -102,6 +103,7 @@ vi.mock("@/bootstrap/container", () => ({
       listTenantPositions: mockListTenantPositions,
       updateStatus: mockUpdateStatus,
       markPositionClosedByAsset: mockMarkPositionClosedByAsset,
+      markPositionLifecycleByAsset: mockMarkPositionLifecycleByAsset,
       markSynced: mockMarkSynced,
     },
     serviceDb: mockServiceDb,
@@ -250,6 +252,8 @@ describe("poly wallet dashboard DB read routes", () => {
     mockGetPolyTradeExecutorFor.mockResolvedValue({
       getOrder: mockGetOrder,
       listPositions: mockListPositions,
+      getPositionShareBalance: vi.fn().mockResolvedValue(0),
+      getMarketConstraints: vi.fn().mockResolvedValue({ minShares: 1 }),
     });
     mockGetOrder.mockResolvedValue({
       found: {
@@ -275,6 +279,7 @@ describe("poly wallet dashboard DB read routes", () => {
     syncedAt = new Date();
     mockUpdateStatus.mockResolvedValue(undefined);
     mockMarkPositionClosedByAsset.mockResolvedValue(1);
+    mockMarkPositionLifecycleByAsset.mockResolvedValue(1);
     mockMarkSynced.mockResolvedValue(undefined);
     mockCurrentPositionModel();
     mockGetExecutionSlice.mockRejectedValue(new Error("data api unavailable"));
@@ -1402,11 +1407,11 @@ describe("poly wallet dashboard DB read routes", () => {
       filled_size_usdc: 10,
       order_id: "0xorder",
     });
-    expect(mockMarkPositionClosedByAsset).toHaveBeenCalledWith({
+    expect(mockMarkPositionLifecycleByAsset).toHaveBeenCalledWith({
       billing_account_id: ACCOUNT.id,
       token_id: "token-1",
-      reason: "refresh_no_position",
-      closed_at: expect.any(Date),
+      lifecycle: "closed",
+      updated_at: expect.any(Date),
     });
     expect(mockMarkSynced).toHaveBeenCalledWith(["0xclient"]);
     expect(mockInvalidateWalletAnalysisCaches).toHaveBeenCalledWith(FUNDER);
@@ -1436,11 +1441,44 @@ describe("poly wallet dashboard DB read routes", () => {
       expect.objectContaining({ code: "ledger_refresh_unavailable" })
     );
     expect(mockRefreshCurrentPositionsForWallet).toHaveBeenCalled();
-    expect(mockMarkPositionClosedByAsset).toHaveBeenCalledWith({
+    expect(mockMarkPositionLifecycleByAsset).toHaveBeenCalledWith({
       billing_account_id: ACCOUNT.id,
       token_id: "token-1",
-      reason: "refresh_no_position",
-      closed_at: expect.any(Date),
+      lifecycle: "closed",
+      updated_at: expect.any(Date),
+    });
+  });
+
+  it("refresh marks Data API-omitted sub-floor chain balances as dust", async () => {
+    mockRefreshCurrentPositionsForWallet.mockResolvedValue({
+      positions: [],
+      positionRows: 0,
+      complete: true,
+    });
+    const getPositionShareBalance = vi.fn().mockResolvedValue(0.67);
+    const getMarketConstraints = vi.fn().mockResolvedValue({ minShares: 1 });
+    mockGetPolyTradeExecutorFor.mockResolvedValue({
+      getOrder: mockGetOrder,
+      listPositions: mockListPositions,
+      getPositionShareBalance,
+      getMarketConstraints,
+    });
+    const { POST } = await import("@/app/api/v1/poly/wallet/refresh/route");
+
+    const response = await POST(
+      new Request("http://localhost/api/v1/poly/wallet/refresh", {
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(getPositionShareBalance).toHaveBeenCalledWith("token-1");
+    expect(getMarketConstraints).toHaveBeenCalledWith("token-1");
+    expect(mockMarkPositionLifecycleByAsset).toHaveBeenCalledWith({
+      billing_account_id: ACCOUNT.id,
+      token_id: "token-1",
+      lifecycle: "dust",
+      updated_at: expect.any(Date),
     });
   });
 
@@ -1467,7 +1505,7 @@ describe("poly wallet dashboard DB read routes", () => {
       filled_size_usdc: 10,
       order_id: "0xorder",
     });
-    expect(mockMarkPositionClosedByAsset).not.toHaveBeenCalled();
+    expect(mockMarkPositionLifecycleByAsset).not.toHaveBeenCalled();
   });
 
   it("refresh keeps stale DB rows active when the current-position poll is partial", async () => {

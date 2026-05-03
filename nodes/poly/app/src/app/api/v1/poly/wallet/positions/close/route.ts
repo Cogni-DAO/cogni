@@ -25,6 +25,7 @@ import { polyWalletClosePositionOperation } from "@cogni/poly-node-contracts";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import {
+  classifyClobCredentialRotationError,
   createPolyTradeExecutorFactory,
   PolyTradeExecutorError,
 } from "@/bootstrap/capabilities/poly-trade-executor";
@@ -150,6 +151,47 @@ export const POST = wrapRouteHandlerWithLogging(
           );
         }
         if (err.code === "no_position_to_close") {
+          const updated =
+            await container.orderLedger.markPositionLifecycleByAsset({
+              billing_account_id: account.id,
+              token_id: parsed.data.token_id,
+              lifecycle: "closed",
+              updated_at: new Date(),
+            });
+          if (updated > 0) {
+            try {
+              const address = await adapter.getAddress(account.id);
+              if (address) invalidateWalletAnalysisCaches(address);
+            } catch (cacheErr) {
+              ctx.log.warn(
+                {
+                  billing_account_id: account.id,
+                  err:
+                    cacheErr instanceof Error
+                      ? cacheErr.message
+                      : String(cacheErr),
+                },
+                "poly.wallet.positions.close.cache_invalidate_failed"
+              );
+            }
+            ctx.log.info(
+              {
+                billing_account_id: account.id,
+                token_id: parsed.data.token_id,
+                lifecycle: "closed",
+                ledger_rows_updated: updated,
+              },
+              "poly.wallet.positions.close.stale"
+            );
+            return NextResponse.json(
+              polyWalletClosePositionOperation.output.parse({
+                order_id: "",
+                status: "closed",
+                client_order_id: "",
+                filled_size_usdc: 0,
+              })
+            );
+          }
           return NextResponse.json({ error: err.code }, { status: 409 });
         }
       }
@@ -190,6 +232,26 @@ export const POST = wrapRouteHandlerWithLogging(
             client_order_id: "",
             filled_size_usdc: 0,
           })
+        );
+      }
+      const clobError = classifyClobCredentialRotationError(err);
+      if (clobError.httpStatus !== undefined) {
+        ctx.log.warn(
+          {
+            billing_account_id: account.id,
+            token_id: parsed.data.token_id,
+            reason: clobError.reasonCode,
+            http_status: clobError.httpStatus,
+            error_class: clobError.errorClass,
+          },
+          "poly.wallet.positions.close.clob_upstream_error"
+        );
+        return NextResponse.json(
+          {
+            error: clobError.reasonCode,
+            httpStatus: clobError.httpStatus,
+          },
+          { status: 502 }
         );
       }
       ctx.log.error(

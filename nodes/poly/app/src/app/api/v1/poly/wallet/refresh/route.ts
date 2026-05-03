@@ -232,16 +232,13 @@ export const POST = wrapRouteHandlerWithLogging(
               "Current positions were fetched up to the configured page cap; missing DB rows were not deactivated.",
           });
         }
-        const currentValueByAsset = new Map(
+        const currentPositionByAsset = new Map(
           currentPositionsResult.result.positions
             .filter((position) => position.size > 0)
-            .map((position) => [
-              position.asset,
-              roundToCents(position.currentValue),
-            ])
+            .map((position) => [position.asset, position])
         );
 
-        const closedAssets = new Set<string>();
+        const classifiedAssets = new Set<string>();
         const exposureRows = rows.filter(hasPositionExposure);
         const exposureUpdateCounts = await mapConcurrent(
           exposureRows,
@@ -250,24 +247,40 @@ export const POST = wrapRouteHandlerWithLogging(
             const tokenId = readTokenId(row);
             if (tokenId === null) return 0;
             syncedIds.add(row.client_order_id);
-            const currentValue = currentValueByAsset.get(tokenId);
-            if (currentValue !== undefined && currentValue > 0) {
+            const currentPosition = currentPositionByAsset.get(tokenId);
+            if (
+              currentPosition !== undefined &&
+              currentPosition.currentValue > 0
+            ) {
               await container.orderLedger.updateStatus({
                 client_order_id: row.client_order_id,
                 status: row.status,
-                filled_size_usdc: currentValue,
+                filled_size_usdc: roundToCents(currentPosition.currentValue),
               });
               return 1;
             }
             if (!currentPositionsResult.result.complete) return 0;
-            if (closedAssets.has(tokenId)) return 0;
-            closedAssets.add(tokenId);
-            return container.orderLedger.markPositionClosedByAsset({
-              billing_account_id: account.id,
-              token_id: tokenId,
-              reason: "refresh_no_position",
-              closed_at: new Date(),
-            });
+            if (classifiedAssets.has(tokenId)) return 0;
+            classifiedAssets.add(tokenId);
+            const shares = await executor.getPositionShareBalance(tokenId);
+            if (shares <= 0) {
+              return container.orderLedger.markPositionLifecycleByAsset({
+                billing_account_id: account.id,
+                token_id: tokenId,
+                lifecycle: "closed",
+                updated_at: new Date(),
+              });
+            }
+            const constraints = await executor.getMarketConstraints(tokenId);
+            if (shares < constraints.minShares) {
+              return container.orderLedger.markPositionLifecycleByAsset({
+                billing_account_id: account.id,
+                token_id: tokenId,
+                lifecycle: "dust",
+                updated_at: new Date(),
+              });
+            }
+            return 0;
           }
         );
         ledgerRowsUpdated += exposureUpdateCounts.reduce<number>(

@@ -173,6 +173,8 @@ export interface PolyTradeExecutor {
   }>;
   /** Per-tenant live open orders from the CLOB. */
   listOpenOrders: () => Promise<OpenOrderSummary[]>;
+  /** CTF ERC-1155 share balance for the tenant wallet and token id. */
+  getPositionShareBalance: (tokenId: string) => Promise<number>;
   /** The tenant's current EOA address (used for profile URLs + position queries). */
   readonly funderAddress: `0x${string}`;
 }
@@ -489,13 +491,7 @@ async function buildExecutor(
     let shares = position?.size ?? 0;
     let shareSource: "data_api" | "onchain_balance" = "data_api";
     if (shares <= 0) {
-      const rawBalance = await publicClient.readContract({
-        address: POLYGON_CONDITIONAL_TOKENS,
-        abi: conditionalTokensAbi,
-        functionName: "balanceOf",
-        args: [funderAddress, BigInt(params.tokenId)],
-      });
-      shares = Number(formatUnits(rawBalance, 6));
+      shares = await getPositionShareBalance(params.tokenId);
       shareSource = "onchain_balance";
     }
     if (shares <= 0) {
@@ -538,6 +534,16 @@ async function buildExecutor(
     await adapter.cancelOrder(orderId);
   }
 
+  async function getPositionShareBalance(tokenId: string): Promise<number> {
+    const rawBalance = await publicClient.readContract({
+      address: POLYGON_CONDITIONAL_TOKENS,
+      abi: conditionalTokensAbi,
+      functionName: "balanceOf",
+      args: [funderAddress, BigInt(tokenId)],
+    });
+    return Number(formatUnits(rawBalance, 6));
+  }
+
   const executor: PolyTradeExecutor = {
     billingAccountId,
     placeIntent: authorizedPlace,
@@ -549,6 +555,7 @@ async function buildExecutor(
     getMarketConstraints: adapter.getMarketConstraints.bind(adapter),
     listOpenOrders: async () =>
       (await adapter.listOpenOrders()).map(mapOpenOrderSummary),
+    getPositionShareBalance,
     funderAddress,
   };
 
