@@ -44,7 +44,7 @@ PRIVY_WALLET_ID=<new-wallet-id> \
 tsx scripts/experiments/derive-polymarket-api-keys.ts
 ```
 
-Produces `{ apiKey, apiSecret, passphrase }` signed by the NEW wallet. Save to a gitignored note, NOT committed. Confirm the signer recovered from the api-key matches step 1's address.
+Produces canonical clob-client credentials `{ key, secret, passphrase }` signed by the NEW wallet. Save to a gitignored note, NOT committed. Confirm the signer recovered from the API key matches step 1's address.
 
 ### 5. Place BUY — reuse `privy-polymarket-order.ts`
 

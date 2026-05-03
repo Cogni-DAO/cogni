@@ -1045,6 +1045,134 @@ describe("PrivyPolyTraderWalletAdapter.authorizeIntent + provisionWithGrant (com
     expect(connection?.tradingApprovalsReadyAt).toBeInstanceOf(Date);
   });
 
+  it("ensureTradingApprovals restores USDC.e onramp allowance after wrapping to pUSD", async () => {
+    const V2_EXCHANGE = "0xe111180000d2663c0091e4f400237545b87b996b";
+    const V2_NEG_RISK_EXCHANGE = "0xe2222d279d744050d28e00520010520000310f59";
+    const NEG_RISK_ADAPTER = "0xd91e80cf2e7be2e162c6513ced06f1dd0da35296";
+    const COLLATERAL_ONRAMP = "0x93070a847efef7f70739046a929d47a521f5b8ee";
+    const USDC_E = "0x2791bca1f2de4661ed88a30c99a7a9449aa84174";
+
+    const approvalState = {
+      usdcEOnramp: 0n,
+      usdcEBalance: 6_000_000n,
+    };
+    const approveHash1 =
+      "0x1111111111111111111111111111111111111111111111111111111111111111";
+    const wrapHash =
+      "0x2222222222222222222222222222222222222222222222222222222222222222";
+    const approveHash2 =
+      "0x3333333333333333333333333333333333333333333333333333333333333333";
+    const submitted: string[] = [];
+
+    const walletWriteContract = vi.fn(
+      async (input: {
+        address: string;
+        functionName: string;
+        args: readonly unknown[];
+      }) => {
+        if (
+          input.functionName === "approve" &&
+          input.address.toLowerCase() === USDC_E
+        ) {
+          const spender = String(input.args[0]).toLowerCase();
+          if (spender !== COLLATERAL_ONRAMP) {
+            throw new Error(`unexpected USDC.e spender ${spender}`);
+          }
+          approvalState.usdcEOnramp = maxUint256;
+          submitted.push("approve_usdc_e_onramp");
+          return submitted.length === 1 ? approveHash1 : approveHash2;
+        }
+        if (input.functionName === "wrap") {
+          approvalState.usdcEOnramp = 0n;
+          approvalState.usdcEBalance = 0n;
+          submitted.push("wrap");
+          return wrapHash;
+        }
+        throw new Error(`unexpected write ${input.functionName}`);
+      }
+    );
+
+    createPublicClientMock.mockReturnValue({
+      getBalance: vi.fn().mockResolvedValue(100000000000000000n),
+      readContract: vi.fn(
+        async (input: { functionName: string; args: readonly unknown[] }) => {
+          if (input.functionName === "allowance") {
+            const spender = String(input.args[1]).toLowerCase();
+            if (spender === COLLATERAL_ONRAMP) {
+              return approvalState.usdcEOnramp;
+            }
+            if (
+              spender === V2_EXCHANGE ||
+              spender === V2_NEG_RISK_EXCHANGE ||
+              spender === NEG_RISK_ADAPTER
+            ) {
+              return maxUint256;
+            }
+          }
+          if (input.functionName === "balanceOf") {
+            return approvalState.usdcEBalance;
+          }
+          if (input.functionName === "isApprovedForAll") {
+            return true;
+          }
+          throw new Error(`unexpected read ${input.functionName}`);
+        }
+      ),
+      waitForTransactionReceipt: vi.fn().mockResolvedValue({
+        status: "success",
+        blockNumber: 123n,
+      }),
+    });
+    createWalletClientMock.mockReturnValue({
+      writeContract: walletWriteContract,
+    });
+
+    const { adapter } = makeAdapter(USER_WALLET_A, {
+      polygonRpcUrl: "https://polygon.example",
+    });
+    await adapter.provisionWithGrant({
+      billingAccountId: tenant.billingAccountId,
+      createdByUserId: tenant.userId,
+      custodialConsent: { ...consent, actorId: tenant.userId },
+      defaultGrant: { perOrderUsdcCap: 5, dailyUsdcCap: 20 },
+    });
+
+    const result = await adapter.ensureTradingApprovals(
+      tenant.billingAccountId
+    );
+
+    expect(result.ready).toBe(true);
+    expect(submitted).toEqual([
+      "approve_usdc_e_onramp",
+      "wrap",
+      "approve_usdc_e_onramp",
+    ]);
+    expect(walletWriteContract).toHaveBeenCalledTimes(3);
+    expect(
+      result.steps.find(
+        (step) => step.label === "USDC.e → Onramp" && step.state === "set"
+      )
+    ).toEqual(
+      expect.objectContaining({
+        txHash: approveHash2,
+      })
+    );
+
+    const [connection] = await seedDb
+      .select({
+        tradingApprovalsReadyAt: polyWalletConnections.tradingApprovalsReadyAt,
+      })
+      .from(polyWalletConnections)
+      .where(
+        and(
+          eq(polyWalletConnections.billingAccountId, tenant.billingAccountId),
+          isNull(polyWalletConnections.revokedAt)
+        )
+      )
+      .limit(1);
+    expect(connection?.tradingApprovalsReadyAt).toBeInstanceOf(Date);
+  });
+
   it("withdraw unwraps pUSD through the pinned CollateralOfframp", async () => {
     const approveHash =
       "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";

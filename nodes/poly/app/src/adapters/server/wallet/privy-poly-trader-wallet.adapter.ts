@@ -1361,6 +1361,20 @@ export class PrivyPolyTraderWalletAdapter implements PolyTraderWalletPort {
         );
         steps.push(step);
         if (step.state !== "set") allOk = false;
+        if (allOk) {
+          // Wrapping consumes the USDC.e Onramp allowance; restore max so the
+          // readiness check remains true after the wallet's first wrap.
+          const restoreStep = await this.submitErc20Approve(
+            publicClient,
+            walletClient,
+            signingContext,
+            billingAccountId,
+            USDC_E_POLYGON,
+            USDC_E_SPENDERS[0]!
+          );
+          steps[0] = restoreStep;
+          if (restoreStep.state !== "set") allOk = false;
+        }
       }
     }
 
