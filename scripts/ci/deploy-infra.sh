@@ -903,6 +903,12 @@ else
 fi
 if $pdc_enabled; then
   COMPOSE_PROFILES=pdc $RUNTIME_COMPOSE up -d --remove-orphans $INFRA_SERVICES
+  sleep 5
+  if ! $RUNTIME_COMPOSE ps --status running pdc-agent 2>/dev/null | grep -q 'pdc-agent'; then
+    log_warn "Grafana PDC agent is not running after compose up; recent logs follow"
+    $RUNTIME_COMPOSE logs --tail=80 pdc-agent || true
+    exit 1
+  fi
 else
   $RUNTIME_COMPOSE up -d --remove-orphans $INFRA_SERVICES
 fi

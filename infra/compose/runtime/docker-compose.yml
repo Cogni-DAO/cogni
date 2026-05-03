@@ -412,14 +412,13 @@ services:
       - pdc
     networks:
       - internal
+    environment:
+      - GCLOUD_PDC_SIGNING_TOKEN=${GRAFANA_PDC_SIGNING_TOKEN:-}
+      - GCLOUD_HOSTED_GRAFANA_ID=${GRAFANA_PDC_HOSTED_GRAFANA_ID:-}
+      - GCLOUD_PDC_CLUSTER=${GRAFANA_PDC_CLUSTER:-}
     command:
-      - -token
-      - ${GRAFANA_PDC_SIGNING_TOKEN:-}
-      - -cluster
-      - ${GRAFANA_PDC_CLUSTER:-}
-      - -gcloud-hosted-grafana-id
-      - ${GRAFANA_PDC_HOSTED_GRAFANA_ID:-}
-      - -ssh-flag=-o PermitRemoteOpen=postgres:5432
+      - -ssh-flag
+      - -o PermitRemoteOpen=postgres:5432
 
   # =============================================================================
   # Temporal Services (from temporalio/docker-compose v1.29.1, postgres-only)

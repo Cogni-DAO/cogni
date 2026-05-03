@@ -182,8 +182,14 @@ for db_name in "${grafana_dbs[@]}"; do
     }' > "$query_file"
 
   log "validating ${uid}"
-  curl -fsS -X POST "${grafana_base}/api/ds/query" \
+  validate_response_file="${tmpdir}/${uid}.validate.response.json"
+  validate_status=$(curl -sS -o "$validate_response_file" -w "%{http_code}" -X POST "${grafana_base}/api/ds/query" \
     -H "Authorization: Bearer ${GRAFANA_SERVICE_ACCOUNT_TOKEN}" \
     -H "content-type: application/json" \
-    --data @"$query_file" >/dev/null
+    --data @"$query_file")
+  if [[ "$validate_status" != "200" ]]; then
+    echo "Grafana datasource validation failed for ${uid}: HTTP ${validate_status}" >&2
+    jq . "$validate_response_file" >&2 || cat "$validate_response_file" >&2 || true
+    exit 1
+  fi
 done
