@@ -31,7 +31,7 @@ Service configuration files for runtime stack services (LiteLLM proxy, Grafana A
 
 - **Exports:** none
 - **Env/Config keys:** `LITELLM_MASTER_KEY`, `OPENROUTER_API_KEY`, `LITELLM_DATABASE_URL`, `COGNI_NODE_ENDPOINTS` (per-node billing callback routing), `BILLING_INGEST_TOKEN` (billing callback auth), `GRAFANA_CLOUD_LOKI_URL`, `GRAFANA_CLOUD_LOKI_USER`, `GRAFANA_CLOUD_LOKI_API_KEY`, `METRICS_TOKEN`, `PROMETHEUS_REMOTE_WRITE_URL`, `PROMETHEUS_USERNAME`, `PROMETHEUS_PASSWORD`
-- **Files considered API:** litellm.config.yaml, alloy-config.alloy, alloy-config.metrics.alloy, grafana-provisioning/datasources/loki.yaml
+- **Files considered API:** litellm.config.yaml, alloy-config.alloy, alloy-config.metrics.alloy, grafana-provisioning/datasources/loki.yaml, grafana-provisioning/datasources/postgres.yaml
 
 ## Responsibilities
 

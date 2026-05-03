@@ -40,6 +40,10 @@ APP_PASS="${APP_DB_PASSWORD:-}"
 # Service role: explicit name + separate password (never present in web runtime env)
 APP_SERVICE_USER="${APP_DB_SERVICE_USER:-}"
 APP_SERVICE_PASS="${APP_DB_SERVICE_PASSWORD:-}"
+# Read-only role for Grafana/agent debugging. Defaults keep existing envs working;
+# operators may override both values when rotating the Postgres root secret.
+APP_READONLY_USER="${APP_DB_READONLY_USER:-app_readonly}"
+APP_READONLY_PASS="${APP_DB_READONLY_PASSWORD:-}"
 
 if [ -z "$APP_USER" ] || [ -z "$APP_PASS" ]; then
   echo "❌ ERROR: APP_DB_USER and APP_DB_PASSWORD are required"
@@ -53,6 +57,16 @@ if [ -z "$APP_SERVICE_PASS" ]; then
   echo "❌ ERROR: APP_DB_SERVICE_PASSWORD is required (service role credential, separate from APP_DB_PASSWORD)"
   exit 1
 fi
+if [ -z "$APP_READONLY_PASS" ]; then
+  if command -v sha256sum >/dev/null 2>&1; then
+    APP_READONLY_PASS=$(printf 'postgres-readonly:%s' "$PG_PASS" | sha256sum | cut -c1-32)
+  elif command -v shasum >/dev/null 2>&1; then
+    APP_READONLY_PASS=$(printf 'postgres-readonly:%s' "$PG_PASS" | shasum -a 256 | cut -c1-32)
+  else
+    echo "❌ ERROR: APP_DB_READONLY_PASSWORD is required when no SHA-256 utility is available"
+    exit 1
+  fi
+fi
 
 # Validate identifiers (strict allowlist: alphanumeric + underscore only)
 if ! [[ "$APP_USER" =~ ^[a-zA-Z0-9_]+$ ]]; then
@@ -61,6 +75,10 @@ if ! [[ "$APP_USER" =~ ^[a-zA-Z0-9_]+$ ]]; then
 fi
 if ! [[ "$APP_SERVICE_USER" =~ ^[a-zA-Z0-9_]+$ ]]; then
   echo "❌ ERROR: APP_DB_SERVICE_USER contains invalid characters (allowed: a-zA-Z0-9_)"
+  exit 1
+fi
+if ! [[ "$APP_READONLY_USER" =~ ^[a-zA-Z0-9_]+$ ]]; then
+  echo "❌ ERROR: APP_DB_READONLY_USER contains invalid characters (allowed: a-zA-Z0-9_)"
   exit 1
 fi
 if ! [[ "$LITELLM_DB" =~ ^[a-zA-Z0-9_]+$ ]]; then
@@ -134,6 +152,27 @@ else
   echo "   -> Service role '$APP_SERVICE_USER' already exists."
 fi
 
+# Read-only role (BYPASSRLS for cross-tenant support/debugging reads, no write grants)
+echo "🔧 Checking read-only role '$APP_READONLY_USER'..."
+readonly_role_exists=$(run_sql_as_root "postgres" "SELECT 1 FROM pg_roles WHERE rolname = '$APP_READONLY_USER'" | grep -c 1 || true)
+if [ "$readonly_role_exists" -eq 0 ]; then
+  echo "   -> Creating read-only role '$APP_READONLY_USER' with BYPASSRLS..."
+  PGPASSWORD="$PG_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "postgres" -v ON_ERROR_STOP=1 \
+    -v readonly_pass="$APP_READONLY_PASS" <<SQL
+CREATE ROLE "$APP_READONLY_USER" WITH LOGIN PASSWORD :'readonly_pass' BYPASSRLS;
+ALTER ROLE "$APP_READONLY_USER" SET default_transaction_read_only = on;
+ALTER ROLE "$APP_READONLY_USER" SET statement_timeout = '30s';
+SQL
+else
+  echo "   -> Read-only role '$APP_READONLY_USER' already exists. Ensuring password/settings..."
+  PGPASSWORD="$PG_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "postgres" -v ON_ERROR_STOP=1 \
+    -v readonly_pass="$APP_READONLY_PASS" <<SQL
+ALTER ROLE "$APP_READONLY_USER" WITH LOGIN PASSWORD :'readonly_pass' BYPASSRLS;
+ALTER ROLE "$APP_READONLY_USER" SET default_transaction_read_only = on;
+ALTER ROLE "$APP_READONLY_USER" SET statement_timeout = '30s';
+SQL
+fi
+
 # ── Per-Node Database Provisioning (DB_PER_NODE) ──────────────────────────
 # Each node gets its own database. The database IS the node boundary.
 
@@ -176,6 +215,14 @@ function provision_node_db() {
   run_sql_as_root "$db_name" "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO \"$APP_SERVICE_USER\";"
   run_sql_as_root "$db_name" "ALTER DEFAULT PRIVILEGES FOR ROLE \"$APP_USER\" IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO \"$APP_SERVICE_USER\";"
   run_sql_as_root "$db_name" "ALTER DEFAULT PRIVILEGES FOR ROLE \"$APP_USER\" IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO \"$APP_SERVICE_USER\";"
+
+  # Read-only role grants — Grafana/agent support reads across tenants, writes denied by SQL privileges.
+  run_sql_as_root "$db_name" "GRANT CONNECT ON DATABASE \"$db_name\" TO \"$APP_READONLY_USER\";"
+  run_sql_as_root "$db_name" "GRANT USAGE ON SCHEMA public TO \"$APP_READONLY_USER\";"
+  run_sql_as_root "$db_name" "GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"$APP_READONLY_USER\";"
+  run_sql_as_root "$db_name" "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO \"$APP_READONLY_USER\";"
+  run_sql_as_root "$db_name" "ALTER DEFAULT PRIVILEGES FOR ROLE \"$APP_USER\" IN SCHEMA public GRANT SELECT ON TABLES TO \"$APP_READONLY_USER\";"
+  run_sql_as_root "$db_name" "ALTER DEFAULT PRIVILEGES FOR ROLE \"$APP_USER\" IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO \"$APP_READONLY_USER\";"
 
   echo "   ✅ Node database '$db_name' provisioned."
 }

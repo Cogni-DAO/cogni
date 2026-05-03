@@ -368,6 +368,25 @@ const SECRETS: Secret[] = [
     generate: () => randHex(24),
   },
   {
+    name: "APP_DB_READONLY_USER",
+    required: false,
+    category: "Database",
+    source: "agent",
+    description: "Read-only Postgres user for Grafana/agent support queries",
+    steps: ['Convention: "app_readonly"'],
+    generate: () => "app_readonly",
+  },
+  {
+    name: "APP_DB_READONLY_PASSWORD",
+    required: false,
+    category: "Database",
+    source: "agent",
+    description:
+      "Read-only Postgres password; deploy-infra derives one from POSTGRES_ROOT_PASSWORD when unset",
+    steps: ["Optional override for the derived read-only credential"],
+    generate: () => randHex(24),
+  },
+  {
     name: "TEMPORAL_DB_USER",
     required: true,
     category: "Database",

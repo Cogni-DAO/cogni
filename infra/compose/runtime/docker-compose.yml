@@ -245,6 +245,8 @@ services:
       APP_DB_PASSWORD: ${APP_DB_PASSWORD}
       APP_DB_SERVICE_USER: ${APP_DB_SERVICE_USER}
       APP_DB_SERVICE_PASSWORD: ${APP_DB_SERVICE_PASSWORD}
+      APP_DB_READONLY_USER: ${APP_DB_READONLY_USER:-app_readonly}
+      APP_DB_READONLY_PASSWORD: ${APP_DB_READONLY_PASSWORD:-}
       LITELLM_DB_NAME: litellm
     volumes:
       - ./postgres-init/provision.sh:/app/provision.sh:ro

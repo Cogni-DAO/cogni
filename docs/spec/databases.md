@@ -68,7 +68,7 @@ In `docker-compose.dev.yml`, the `db-provision` service handles:
 
 1. **Per-node database creation**: Iterates over `COGNI_NODE_DBS` (comma-separated), creates each database with `app_user` ownership and RLS role hardening.
 2. **LiteLLM database creation**: Creates `LITELLM_DB_NAME` (root-owned, shared across nodes).
-3. **Role provisioning**: Creates `app_user` (RLS enforced) and `app_service` (BYPASSRLS) roles, shared across all node databases.
+3. **Role provisioning**: Creates `app_user` (RLS enforced), `app_service` (BYPASSRLS), and `app_readonly` (SELECT-only, BYPASSRLS for Grafana/agent debugging) roles, shared across all node databases.
 
 Both `COGNI_NODE_DBS` and `LITELLM_DB_NAME` are required — `provision.sh` fails immediately if either is missing.
 
@@ -76,8 +76,8 @@ This service is gated behind the `bootstrap` profile and runs only when explicit
 
 ### Development vs. Production Roles
 
-- **Development:** Local dev connects via `app_user` (RLS enforced) and `app_service` (BYPASSRLS). `provision.sh` applies RLS role hardening to all node databases.
-- **Production:** Same two-user model. The application user should NOT have `DROP` or `TRUNCATE` permissions on the schema in production.
+- **Development:** Local dev connects via `app_user` (RLS enforced), `app_service` (BYPASSRLS), and local Grafana can read through `app_readonly`. `provision.sh` applies RLS role hardening to all node databases.
+- **Production:** Same role model. The application user should NOT have `DROP` or `TRUNCATE` permissions on the schema in production. Grafana/agent DB access must use the read-only role, not `app_service`.
 
 ## Current Schema Baseline (Phase 0)
 
@@ -112,32 +112,35 @@ Per [Database RLS Spec](database-rls.md) design decision 7, the runtime app requ
 
 ## Database Security Architecture
 
-**Three-Role Model**: Production deployments use separate PostgreSQL roles:
+**Four-Role Model**: Production deployments use separate PostgreSQL roles:
 
 - **Root User** (`POSTGRES_ROOT_USER`): Database server administration, user/database creation
 - **Application User** (`app_user` via `APP_DB_USER`): Runtime web app connections, RLS enforced
-- **Service User** (`app_service` via `APP_DB_SERVICE_PASSWORD`): Priviledged system users, avoid using. Scheduler workers and pre-auth lookups, BYPASSRLS. Connects via `DATABASE_SERVICE_URL`.
+- **Service User** (`app_service` via `APP_DB_SERVICE_PASSWORD`): Privileged system user. Scheduler workers and pre-auth lookups, BYPASSRLS. Connects via `DATABASE_SERVICE_URL`.
+- **Read-Only User** (`app_readonly` via `APP_DB_READONLY_USER`): Grafana/agent support queries, BYPASSRLS for v0 cross-tenant reads, no write grants.
 
 See [Database RLS Spec](database-rls.md) for the dual-client architecture and static import enforcement.
 
 **Container Configuration**: The `db-provision` service runs `provision.sh`:
 
-- Creates roles: `app_user` (RLS), `app_service` (BYPASSRLS)
+- Creates roles: `app_user` (RLS), `app_service` (BYPASSRLS), `app_readonly` (SELECT-only, BYPASSRLS)
 - Iterates `COGNI_NODE_DBS`: creates each database with ownership + RLS hardening
 - Creates `LITELLM_DB_NAME`: root-owned, shared LiteLLM database
 
 **Provisioning Variables** (used by `provision.sh`, not by runtime app):
 
-| Variable                  | Purpose                             | Required         |
-| ------------------------- | ----------------------------------- | ---------------- |
-| `POSTGRES_ROOT_USER`      | Superuser for role/DB creation      | Yes              |
-| `POSTGRES_ROOT_PASSWORD`  | Superuser password                  | Yes              |
-| `COGNI_NODE_DBS`          | Comma-separated node database names | Yes (no default) |
-| `LITELLM_DB_NAME`         | LiteLLM database name               | Yes (no default) |
-| `APP_DB_USER`             | Application role name               | Yes              |
-| `APP_DB_PASSWORD`         | Application role password           | Yes              |
-| `APP_DB_SERVICE_USER`     | Service role name                   | Yes              |
-| `APP_DB_SERVICE_PASSWORD` | Service role password               | Yes              |
+| Variable                   | Purpose                             | Required            |
+| -------------------------- | ----------------------------------- | ------------------- |
+| `POSTGRES_ROOT_USER`       | Superuser for role/DB creation      | Yes                 |
+| `POSTGRES_ROOT_PASSWORD`   | Superuser password                  | Yes                 |
+| `COGNI_NODE_DBS`           | Comma-separated node database names | Yes (no default)    |
+| `LITELLM_DB_NAME`          | LiteLLM database name               | Yes (no default)    |
+| `APP_DB_USER`              | Application role name               | Yes                 |
+| `APP_DB_PASSWORD`          | Application role password           | Yes                 |
+| `APP_DB_SERVICE_USER`      | Service role name                   | Yes                 |
+| `APP_DB_SERVICE_PASSWORD`  | Service role password               | Yes                 |
+| `APP_DB_READONLY_USER`     | Read-only Grafana role name         | No (`app_readonly`) |
+| `APP_DB_READONLY_PASSWORD` | Read-only Grafana role password     | No (derived)        |
 
 **Runtime Variables** (used by app, never by provisioning):
 

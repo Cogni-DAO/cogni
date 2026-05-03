@@ -1,0 +1,45 @@
+apiVersion: 1
+
+datasources:
+  - name: Postgres - local operator
+    uid: cogni-local-operator-postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: ${APP_DB_READONLY_USER}
+    editable: false
+    jsonData:
+      database: cogni_operator
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
+    secureJsonData:
+      password: ${APP_DB_READONLY_PASSWORD}
+  - name: Postgres - local poly
+    uid: cogni-local-poly-postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: ${APP_DB_READONLY_USER}
+    editable: false
+    jsonData:
+      database: cogni_poly
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
+    secureJsonData:
+      password: ${APP_DB_READONLY_PASSWORD}
+  - name: Postgres - local resy
+    uid: cogni-local-resy-postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: ${APP_DB_READONLY_USER}
+    editable: false
+    jsonData:
+      database: cogni_resy
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
+    secureJsonData:
+      password: ${APP_DB_READONLY_PASSWORD}
