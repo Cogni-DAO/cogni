@@ -34,7 +34,7 @@ import {
   type PolymarketDataApiClient,
   type PolymarketUserPosition,
 } from "@cogni/poly-market-provider/adapters/polymarket";
-import { and, eq, isNull, notInArray, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, notInArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
@@ -447,7 +447,7 @@ async function observePositionsIfDue(
         and(
           eq(polyTraderCurrentPositions.traderWalletId, deps.wallet.id),
           eq(polyTraderCurrentPositions.active, true),
-          sql`${polyTraderCurrentPositions.lastObservedAt} < ${capturedAt}`
+          lt(polyTraderCurrentPositions.lastObservedAt, capturedAt)
         )
       );
   }
