@@ -584,15 +584,6 @@ describe("mirror-pipeline.runMirrorTick — BUY fill smoke", () => {
           max_target_usdc: 5453,
         },
       },
-      position_followup: {
-        enabled: true,
-        min_mirror_position_usdc: 5,
-        market_floor_multiple: 5,
-        min_target_hedge_ratio: 0.02,
-        min_target_hedge_usdc: 5,
-        max_hedge_fraction_of_position: 0.25,
-        max_layer_fraction_of_position: 0.5,
-      },
     } satisfies MirrorTargetConfig;
     const getTargetConditionPosition = vi.fn().mockResolvedValue({
       condition_id: fill.market_id,

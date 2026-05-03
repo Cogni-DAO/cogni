@@ -5,7 +5,7 @@
  * Module: `@tests/unit/features/copy-trade/plan-mirror-position-followups`
  * Purpose: Cover position-aware mirror follow-up branches: same-token layers
  * and opposite-token hedges ignore tiny trigger orders only when both
- * mirror and target total-position thresholds make market-min sizing sane.
+ * mirror and target token-position thresholds make market-min sizing sane.
  * Scope: Pure planner tests. No DB, no Data API, no CLOB.
  * Invariants: PLAN_IS_PURE, HEDGE_PREDICATE_NOOPS_ON_UNKNOWN_OPPOSITE,
  * DECISION_LOG_NAMES_VIEW.

@@ -376,7 +376,7 @@ async function fetchTargetConditionPosition(args: {
   log: LoggerPort;
 }): Promise<TargetConditionPositionView | undefined> {
   const { deps, fill, log } = args;
-  if (!deps.target.position_followup?.enabled) return undefined;
+  if (!needsTargetPosition(deps.target)) return undefined;
   if (!deps.getTargetConditionPosition) return undefined;
   if (fill.side !== "BUY") return undefined;
   if (typeof fill.attributes?.asset !== "string") return undefined;
@@ -397,6 +397,12 @@ async function fetchTargetConditionPosition(args: {
     );
     return undefined;
   }
+}
+
+function needsTargetPosition(target: MirrorTargetConfig): boolean {
+  return (
+    target.position_followup?.enabled === true || target.sizing.kind !== "min_bet"
+  );
 }
 
 function buildPositionLogFields(

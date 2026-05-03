@@ -371,13 +371,14 @@ export const MirrorReasonSchema = z.enum([
    */
   "position_cap_reached",
   /**
-   * Target fill is below the configured wallet-stat percentile threshold, so
-   * the mirror treats it as low-conviction noise and does not place.
+   * Target token position is below the configured wallet-stat percentile
+   * threshold, so the mirror treats the trigger as low-conviction noise and
+   * does not place.
    */
   "below_target_percentile",
-  /** Existing same-token mirror position is being scaled in below the pXX order gate. */
+  /** Existing same-token mirror position is being scaled in after the token-position pXX gate. */
   "layer_scale_in",
-  /** Existing mirror position is being hedged with the binary opposite token below pXX. */
+  /** Existing mirror position is being hedged with the binary opposite token after the token-position pXX gate. */
   "hedge_followup",
   /** Market-min follow-up would be too chunky for the current mirror position. */
   "followup_position_too_small",
