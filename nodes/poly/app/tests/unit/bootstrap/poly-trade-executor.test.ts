@@ -75,6 +75,7 @@ vi.mock("viem/chains", () => ({
 }));
 
 import {
+  classifyClobCredentialRotationError,
   createOrDerivePolymarketApiKeyForSigner,
   normalizePolymarketApiKeyCreds,
 } from "@/bootstrap/capabilities/poly-clob-creds";
@@ -420,6 +421,7 @@ describe("createOrDerivePolymarketApiKeyForSigner", () => {
       createOrDerivePolymarketApiKeyForSigner({
         signer: { address: FUNDER } as never,
         polygonRpcUrl: "https://polygon.example",
+        geoBlockToken: "geo-token",
         host: "https://clob.polymarket.com",
       })
     ).resolves.toEqual({
@@ -435,7 +437,7 @@ describe("createOrDerivePolymarketApiKeyForSigner", () => {
       undefined,
       undefined,
       undefined,
-      undefined,
+      "geo-token",
       true,
       undefined,
       undefined,
@@ -444,6 +446,24 @@ describe("createOrDerivePolymarketApiKeyForSigner", () => {
       true
     );
     expect(createOrDeriveApiKey).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("classifyClobCredentialRotationError", () => {
+  it("classifies Polymarket Cloudflare blocks distinctly from normal 403s", () => {
+    const err = Object.assign(
+      new Error(
+        'Sorry, you have been blocked. Cloudflare Ray ID: <strong class="font-semibold">9f63041f8df7cc1e</strong>'
+      ),
+      { status: 403 }
+    );
+
+    expect(classifyClobCredentialRotationError(err)).toEqual({
+      reasonCode: "clob_cloudflare_blocked",
+      httpStatus: 403,
+      errorClass: "Error",
+      cloudflareRayId: "9f63041f8df7cc1e",
+    });
   });
 });
 

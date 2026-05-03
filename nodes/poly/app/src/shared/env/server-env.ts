@@ -268,6 +268,10 @@ export const serverSchema = z.object({
   // (https://clob.polymarket.com). Used by the per-tenant
   // `PolyTradeExecutor` factory + CLOB L2 cred derivation at provision time.
   POLY_CLOB_HOST: optionalUrl,
+  // Optional Polymarket geo-block token. The v1 CLOB SDK appends this as
+  // `geo_block_token` on auth requests; needed when upstream Cloudflare blocks
+  // the candidate runtime before CLOB API-key derivation can complete.
+  POLY_CLOB_GEO_BLOCK_TOKEN: optionalString,
 
   // Reconciler not-found grace window (task.0328 CP2). If CLOB returns
   // not_found for a row whose age (now − created_at) exceeds this many ms,

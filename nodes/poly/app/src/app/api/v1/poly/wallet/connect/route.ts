@@ -39,6 +39,21 @@ import {
 
 export const dynamic = "force-dynamic";
 
+function readErrorCode(err: unknown): string | null {
+  if (!err || typeof err !== "object" || !("code" in err)) return null;
+  const code = (err as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
+}
+
+function clobProvisioningStatus(code: string): number {
+  if (code === "clob_upstream_rate_limited") return 429;
+  if (code === "clob_upstream_unauthorized") return 502;
+  if (code === "clob_upstream_forbidden") return 502;
+  if (code === "clob_cloudflare_blocked") return 502;
+  if (code.startsWith("clob_upstream_")) return 502;
+  return 500;
+}
+
 export const POST = wrapRouteHandlerWithLogging(
   {
     routeId: "poly.wallet.connect",
@@ -125,19 +140,45 @@ export const POST = wrapRouteHandlerWithLogging(
       throw err;
     }
 
-    const result = await adapter.provisionWithGrant({
-      billingAccountId: account.id,
-      createdByUserId: sessionUser.id,
-      custodialConsent: {
-        acceptedAt: new Date(),
-        actorKind: parsed.data.custodialConsentActorKind,
-        actorId: parsed.data.custodialConsentActorId,
-      },
-      defaultGrant: {
-        perOrderUsdcCap: parsed.data.defaultGrant.perOrderUsdcCap,
-        dailyUsdcCap: parsed.data.defaultGrant.dailyUsdcCap,
-      },
-    });
+    let result: Awaited<ReturnType<typeof adapter.provisionWithGrant>>;
+    try {
+      result = await adapter.provisionWithGrant({
+        billingAccountId: account.id,
+        createdByUserId: sessionUser.id,
+        custodialConsent: {
+          acceptedAt: new Date(),
+          actorKind: parsed.data.custodialConsentActorKind,
+          actorId: parsed.data.custodialConsentActorId,
+        },
+        defaultGrant: {
+          perOrderUsdcCap: parsed.data.defaultGrant.perOrderUsdcCap,
+          dailyUsdcCap: parsed.data.defaultGrant.dailyUsdcCap,
+        },
+      });
+    } catch (err) {
+      const errorCode = readErrorCode(err);
+      if (errorCode?.startsWith("clob_")) {
+        ctx.log.warn(
+          {
+            billing_account_id: account.id,
+            user_id: sessionUser.id,
+            error_code: errorCode,
+          },
+          "poly.wallet.connect rejected — CLOB credential provisioning unavailable"
+        );
+        return NextResponse.json(
+          {
+            error:
+              errorCode === "clob_cloudflare_blocked"
+                ? "Polymarket CLOB blocked this deployment while creating trading credentials"
+                : "Polymarket CLOB could not create trading credentials",
+            error_code: errorCode,
+          },
+          { status: clobProvisioningStatus(errorCode) }
+        );
+      }
+      throw err;
+    }
 
     const payload: PolyWalletConnectOutput = {
       connection_id: result.connectionId,

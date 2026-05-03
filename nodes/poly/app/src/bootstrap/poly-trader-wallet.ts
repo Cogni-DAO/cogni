@@ -43,14 +43,17 @@ let cached: PrivyPolyTraderWalletAdapter | null = null;
 export function createRealClobCredsFactory({
   logger,
   polygonRpcUrl,
+  geoBlockToken,
   deriveCreds = createOrDerivePolymarketApiKeyForSigner,
   rotateCreds = rotatePolymarketApiKeyForSigner,
 }: {
   logger: Logger;
   polygonRpcUrl?: string | undefined;
+  geoBlockToken?: string | undefined;
   deriveCreds?: (input: {
     signer: LocalAccount;
     polygonRpcUrl?: string | undefined;
+    geoBlockToken?: string | undefined;
   }) => Promise<{
     key: string;
     secret: string;
@@ -70,7 +73,7 @@ export function createRealClobCredsFactory({
     derive: async (signer: LocalAccount) => {
       try {
         return normalizePolymarketApiKeyCreds(
-          await deriveCreds({ signer, polygonRpcUrl })
+          await deriveCreds({ signer, polygonRpcUrl, geoBlockToken })
         );
       } catch (err) {
         const failure = classifyClobCredentialRotationError(err);
@@ -81,6 +84,7 @@ export function createRealClobCredsFactory({
             reason_code: failure.reasonCode,
             http_status: failure.httpStatus,
             error_class: failure.errorClass,
+            cloudflare_ray_id: failure.cloudflareRayId,
           },
           "poly.wallet.provision failed to derive live CLOB creds"
         );
@@ -109,6 +113,7 @@ export function createRealClobCredsFactory({
             reason_code: failure.reasonCode,
             http_status: failure.httpStatus,
             error_class: failure.errorClass,
+            cloudflare_ray_id: failure.cloudflareRayId,
           },
           "poly.wallet.rotate failed to rotate live CLOB creds"
         );
@@ -172,6 +177,7 @@ export function getPolyTraderWalletAdapter(
   const clobCreds = createRealClobCredsFactory({
     logger,
     polygonRpcUrl: env.POLYGON_RPC_URL,
+    geoBlockToken: env.POLY_CLOB_GEO_BLOCK_TOKEN,
   });
 
   cached = new PrivyPolyTraderWalletAdapter({

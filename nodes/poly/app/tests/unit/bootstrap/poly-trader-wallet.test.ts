@@ -21,6 +21,7 @@ describe("createRealClobCredsFactory", () => {
     const factory = createRealClobCredsFactory({
       logger: makeNoopLogger(),
       polygonRpcUrl: "https://polygon.example",
+      geoBlockToken: "geo-token",
       deriveCreds,
     });
 
@@ -33,6 +34,7 @@ describe("createRealClobCredsFactory", () => {
     expect(deriveCreds).toHaveBeenCalledWith({
       signer: SIGNER,
       polygonRpcUrl: "https://polygon.example",
+      geoBlockToken: "geo-token",
     });
   });
 

@@ -45,12 +45,33 @@ export function classifyClobCredentialRotationError(err: unknown): {
   readonly reasonCode: string;
   readonly httpStatus?: number | undefined;
   readonly errorClass?: string | undefined;
+  readonly cloudflareRayId?: string | undefined;
 } {
   const httpStatus = readClobHttpStatus(err);
   const errorClass =
     err && typeof err === "object" && err.constructor?.name
       ? err.constructor.name
       : undefined;
+  const message =
+    typeof (err as ClobHttpErrorLike | null)?.message === "string"
+      ? String((err as ClobHttpErrorLike).message)
+      : "";
+  const cloudflareRayId =
+    /Cloudflare Ray ID:\s*<strong[^>]*>([^<]+)<\/strong>/i.exec(message)?.[1] ??
+    /Cloudflare Ray ID:\s*([a-z0-9]+)/i.exec(message)?.[1] ??
+    undefined;
+  if (
+    httpStatus === 403 &&
+    (message.includes("Cloudflare") ||
+      message.includes("Sorry, you have been blocked"))
+  ) {
+    return {
+      reasonCode: "clob_cloudflare_blocked",
+      httpStatus,
+      errorClass,
+      cloudflareRayId,
+    };
+  }
   if (httpStatus === 401) {
     return { reasonCode: "clob_upstream_unauthorized", httpStatus, errorClass };
   }
@@ -118,10 +139,12 @@ export function normalizePolymarketApiKeyCreds(
 export async function createOrDerivePolymarketApiKeyForSigner({
   signer,
   polygonRpcUrl,
+  geoBlockToken,
   host = DEFAULT_CLOB_HOST,
 }: {
   signer: LocalAccount;
   polygonRpcUrl?: string | undefined;
+  geoBlockToken?: string | undefined;
   host?: string | undefined;
 }): Promise<PolymarketApiKeyCreds> {
   const { ClobClient } = await import("@polymarket/clob-client");
@@ -151,7 +174,7 @@ export async function createOrDerivePolymarketApiKeyForSigner({
     undefined,
     undefined,
     undefined,
-    undefined,
+    geoBlockToken,
     true,
     undefined,
     undefined,
