@@ -39,11 +39,13 @@ const OPERATOR_NODE = "operator";
  * - `work/**`: per-task work items, projects, charters; high merge-conflict +
  *   index-regen churn. Ride-along until task tracking moves to Dolt.
  * - `docs/**`: cross-cutting prose updates that accompany a node change.
+ * - `.claude/skills/poly-dev-manager/SKILL.md`: poly-node manager status card.
  */
 const RIDE_ALONG_PATTERNS: ReadonlyArray<(p: string) => boolean> = [
   (p) => p === "pnpm-lock.yaml",
   (p) => p.startsWith("work/"),
   (p) => p.startsWith("docs/"),
+  (p) => p === ".claude/skills/poly-dev-manager/SKILL.md",
 ];
 
 function isRideAlong(path: string): boolean {

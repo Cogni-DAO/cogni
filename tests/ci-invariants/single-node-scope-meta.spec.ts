@@ -172,5 +172,10 @@ describe("single-node-scope workflow gate · structural pins", () => {
       "ride-along whitelist must include docs/ prefix in the inline run: block " +
         "(must mirror RIDE_ALONG_PATTERNS in tests/ci-invariants/classify.ts)"
     ).toContain('startswith("docs/")');
+    expect(
+      enforce.run,
+      "ride-along whitelist must include the exact poly manager skill path " +
+        "(must mirror RIDE_ALONG_PATTERNS in tests/ci-invariants/classify.ts)"
+    ).toContain('".claude/skills/poly-dev-manager/SKILL.md"');
   });
 });

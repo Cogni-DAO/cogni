@@ -1,0 +1,12 @@
+{
+  "name": "ride-along: poly node files + poly manager skill status card",
+  "paths": [
+    "nodes/poly/app/src/foo.ts",
+    ".claude/skills/poly-dev-manager/SKILL.md"
+  ],
+  "expected": {
+    "domains": ["poly"],
+    "pass": true,
+    "rideAlongApplied": true
+  }
+}
