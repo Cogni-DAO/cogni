@@ -53,7 +53,10 @@ vi.mock("viem/chains", () => ({
   polygon: { id: 137 },
 }));
 
-import { createPolyTradeExecutorFactory } from "@/bootstrap/capabilities/poly-trade-executor";
+import {
+  classifyClobCredentialRotationError,
+  createPolyTradeExecutorFactory,
+} from "@/bootstrap/capabilities/poly-trade-executor";
 
 const BILLING_ACCOUNT_ID = "billing-account-1";
 const FUNDER = "0x1111111111111111111111111111111111111111" as const;
@@ -142,6 +145,19 @@ describe("createPolyTradeExecutorFactory", () => {
     getMarketConstraints.mockResolvedValue({ minShares: 1 });
     listOpenOrders.mockResolvedValue([]);
     waitForTransactionReceipt.mockResolvedValue({ status: "success" });
+  });
+
+  it("classifies Cloudflare HTML 403s without exposing response bodies", () => {
+    const result = classifyClobCredentialRotationError({
+      status: 403,
+      data: "<html><title>Cloudflare</title></html>",
+    });
+
+    expect(result).toEqual({
+      reasonCode: "clob_upstream_forbidden_cloudflare",
+      httpStatus: 403,
+      errorClass: "Object",
+    });
   });
 
   it("exitPosition sells the wallet's full share balance via market order without grant-cap authorization", async () => {

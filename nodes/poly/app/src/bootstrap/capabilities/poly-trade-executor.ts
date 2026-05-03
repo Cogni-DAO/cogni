@@ -77,6 +77,7 @@ type ClobHttpErrorLike = {
   readonly response?: {
     readonly status?: unknown;
   };
+  readonly data?: unknown;
   readonly message?: unknown;
 };
 
@@ -91,6 +92,18 @@ function readClobHttpStatus(err: unknown): number | undefined {
   return undefined;
 }
 
+function readClobErrorMarker(err: unknown): string {
+  const data = (err as ClobHttpErrorLike | null)?.data;
+  if (typeof data === "string") return data.toLowerCase();
+  if (!data || typeof data !== "object") return "";
+  const record = data as Record<string, unknown>;
+  for (const key of ["error", "message", "reason"]) {
+    const value = record[key];
+    if (typeof value === "string") return value.toLowerCase();
+  }
+  return "";
+}
+
 export function classifyClobCredentialRotationError(err: unknown): {
   readonly reasonCode: string;
   readonly httpStatus?: number | undefined;
@@ -101,10 +114,18 @@ export function classifyClobCredentialRotationError(err: unknown): {
     err && typeof err === "object" && err.constructor?.name
       ? err.constructor.name
       : undefined;
+  const errorMarker = readClobErrorMarker(err);
   if (httpStatus === 401) {
     return { reasonCode: "clob_upstream_unauthorized", httpStatus, errorClass };
   }
   if (httpStatus === 403) {
+    if (errorMarker.includes("cloudflare") || errorMarker.includes("<html")) {
+      return {
+        reasonCode: "clob_upstream_forbidden_cloudflare",
+        httpStatus,
+        errorClass,
+      };
+    }
     return { reasonCode: "clob_upstream_forbidden", httpStatus, errorClass };
   }
   if (httpStatus === 429) {
@@ -169,6 +190,7 @@ export async function createOrDerivePolymarketApiKeyForSigner({
     host,
     chain: POLYGON_CHAIN_ID,
     signer: clobSignerAny,
+    useServerTime: true,
   });
   return withSanitizedClobSdkConsoleErrors(() => clob.createOrDeriveApiKey());
 }
@@ -206,6 +228,7 @@ export async function rotatePolymarketApiKeyForSigner({
     chain: POLYGON_CHAIN_ID,
     signer: clobSignerAny,
     throwOnError: true,
+    useServerTime: true,
   });
   const oldCredsClient = new ClobClient({
     host,
@@ -213,6 +236,7 @@ export async function rotatePolymarketApiKeyForSigner({
     signer: clobSignerAny,
     creds: currentCreds,
     throwOnError: true,
+    useServerTime: true,
   });
 
   return withSanitizedClobSdkConsoleErrors(async () => {
