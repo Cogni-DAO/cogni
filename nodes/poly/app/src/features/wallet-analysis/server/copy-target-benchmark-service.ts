@@ -105,7 +105,7 @@ async function readBenchmark(
 
   const wallet = walletRows[0];
   const computedAt = new Date().toISOString();
-  const windowStart = windowStartFor(interval);
+  const windowStartIso = windowStartFor(interval).toISOString();
   const comparisonWallet = opts.comparisonWalletAddress
     ? await readObservedWallet(db, opts.comparisonWalletAddress.toLowerCase())
     : null;
@@ -120,9 +120,14 @@ async function readBenchmark(
   }
 
   const [summaryRows, marketRows, gapRows] = await Promise.all([
-    readSummary(db, wallet.id, comparisonWallet?.id ?? null, windowStart),
+    readSummary(db, wallet.id, comparisonWallet?.id ?? null, windowStartIso),
     wallet.kind === "copy_target"
-      ? readMarketRows(db, wallet.id, comparisonWallet?.id ?? null, windowStart)
+      ? readMarketRows(
+          db,
+          wallet.id,
+          comparisonWallet?.id ?? null,
+          windowStartIso
+        )
       : Promise.resolve([]),
     wallet.kind === "copy_target"
       ? readActiveGaps(db, wallet.id, comparisonWallet?.id ?? null)
@@ -246,7 +251,7 @@ async function readSummary(
   db: Db,
   targetWalletId: string,
   comparisonWalletId: string | null,
-  windowStart: Date
+  windowStartIso: string
 ): Promise<SummaryRow[]> {
   return (await db.execute(sql`
     WITH latest_positions AS (
@@ -262,8 +267,8 @@ async function readSummary(
       SELECT
         COALESCE(SUM(current_value_usdc) FILTER (WHERE trader_wallet_id = ${targetWalletId}), 0) AS target_open_value_usdc,
         COALESCE(SUM(current_value_usdc) FILTER (WHERE trader_wallet_id = ${comparisonWalletId}), 0) AS cogni_open_value_usdc,
-        (SELECT COUNT(*) FROM poly_trader_fills WHERE trader_wallet_id = ${targetWalletId} AND observed_at >= ${windowStart}) AS target_trades,
-        (SELECT COUNT(*) FROM poly_trader_fills WHERE trader_wallet_id = ${comparisonWalletId} AND observed_at >= ${windowStart}) AS cogni_trades
+        (SELECT COUNT(*) FROM poly_trader_fills WHERE trader_wallet_id = ${targetWalletId} AND observed_at >= ${windowStartIso}::timestamptz) AS target_trades,
+        (SELECT COUNT(*) FROM poly_trader_fills WHERE trader_wallet_id = ${comparisonWalletId} AND observed_at >= ${windowStartIso}::timestamptz) AS cogni_trades
       FROM latest_positions
   `)) as unknown as SummaryRow[];
 }
@@ -272,7 +277,7 @@ async function readMarketRows(
   db: Db,
   targetWalletId: string,
   comparisonWalletId: string | null,
-  windowStart: Date
+  windowStartIso: string
 ): Promise<BenchmarkMarketRow[]> {
   return (await db.execute(sql`
     WITH target AS (
@@ -284,7 +289,7 @@ async function readMarketRows(
         SUM(size_usdc::numeric) / NULLIF(SUM(shares::numeric), 0) AS vwap
       FROM poly_trader_fills
       WHERE trader_wallet_id = ${targetWalletId}
-        AND observed_at >= ${windowStart}
+        AND observed_at >= ${windowStartIso}::timestamptz
       GROUP BY condition_id, token_id
     ),
     cogni AS (
@@ -296,7 +301,7 @@ async function readMarketRows(
         SUM(f.size_usdc::numeric) / NULLIF(SUM(f.shares::numeric), 0) AS vwap
       FROM poly_trader_fills f
       WHERE f.trader_wallet_id = ${comparisonWalletId}
-        AND f.observed_at >= ${windowStart}
+        AND f.observed_at >= ${windowStartIso}::timestamptz
       GROUP BY f.condition_id, f.token_id
     )
     SELECT
