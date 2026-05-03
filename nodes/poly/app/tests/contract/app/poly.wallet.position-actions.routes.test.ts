@@ -58,6 +58,8 @@ vi.mock("@/bootstrap/http", () => ({
     async (request: Request) =>
       handler(
         {
+          reqId: "req-test",
+          routeId: "poly.wallet.positions.action",
           log: {
             info: vi.fn(),
             warn: vi.fn(),

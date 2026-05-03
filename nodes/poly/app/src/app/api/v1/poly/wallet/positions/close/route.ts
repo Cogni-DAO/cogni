@@ -37,6 +37,7 @@ import {
 } from "@/bootstrap/poly-trader-wallet";
 import { invalidateWalletAnalysisCaches } from "@/features/wallet-analysis/server/wallet-analysis-service";
 import { serverEnv } from "@/shared/env/server-env";
+import { EVENT_NAMES, logEvent } from "@/shared/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,7 @@ export const POST = wrapRouteHandlerWithLogging(
     auth: { mode: "required", getSessionUser },
   },
   async (ctx, request, sessionUser) => {
+    const startedAtMs = performance.now();
     if (!sessionUser) throw new Error("sessionUser required");
 
     let body: unknown;
@@ -133,14 +135,11 @@ export const POST = wrapRouteHandlerWithLogging(
         );
       }
 
-      ctx.log.info(
-        {
-          billing_account_id: account.id,
-          token_id: parsed.data.token_id,
-          order_id: receipt.order_id,
-        },
-        "poly.wallet.positions.close.ok"
-      );
+      logWalletCloseComplete(ctx, startedAtMs, {
+        status: "order",
+        ordersPlaced: 1,
+        ledgerRowsUpdated: 0,
+      });
 
       return NextResponse.json(payload);
     } catch (err) {
@@ -175,15 +174,11 @@ export const POST = wrapRouteHandlerWithLogging(
                 "poly.wallet.positions.close.cache_invalidate_failed"
               );
             }
-            ctx.log.info(
-              {
-                billing_account_id: account.id,
-                token_id: parsed.data.token_id,
-                lifecycle: "closed",
-                ledger_rows_updated: updated,
-              },
-              "poly.wallet.positions.close.stale"
-            );
+            logWalletCloseComplete(ctx, startedAtMs, {
+              status: "stale_zero_balance",
+              ordersPlaced: 0,
+              ledgerRowsUpdated: updated,
+            });
             return NextResponse.json(
               polyWalletClosePositionOperation.output.parse({
                 kind: "classified",
@@ -217,15 +212,11 @@ export const POST = wrapRouteHandlerWithLogging(
             "poly.wallet.positions.close.cache_invalidate_failed"
           );
         }
-        ctx.log.info(
-          {
-            billing_account_id: account.id,
-            token_id: parsed.data.token_id,
-            lifecycle: "dust",
-            ledger_rows_updated: updated,
-          },
-          "poly.wallet.positions.close.dust"
-        );
+        logWalletCloseComplete(ctx, startedAtMs, {
+          status: "below_market_min",
+          ordersPlaced: 0,
+          ledgerRowsUpdated: updated,
+        });
         return NextResponse.json(
           polyWalletClosePositionOperation.output.parse({
             kind: "classified",
@@ -272,3 +263,27 @@ export const POST = wrapRouteHandlerWithLogging(
     }
   }
 );
+
+function logWalletCloseComplete(
+  ctx: {
+    log: Parameters<typeof logEvent>[0];
+    reqId: string;
+    routeId: string;
+  },
+  startedAtMs: number,
+  fields: {
+    status: "order" | "stale_zero_balance" | "below_market_min";
+    ordersPlaced: number;
+    ledgerRowsUpdated: number;
+  }
+): void {
+  logEvent(ctx.log, EVENT_NAMES.POLY_WALLET_POSITIONS_CLOSE_COMPLETE, {
+    reqId: ctx.reqId,
+    routeId: ctx.routeId,
+    status: fields.status,
+    durationMs: Math.round(performance.now() - startedAtMs),
+    outcome: "success",
+    orders_placed: fields.ordersPlaced,
+    ledger_rows_updated: fields.ledgerRowsUpdated,
+  });
+}

@@ -44,6 +44,7 @@ import {
   invalidateWalletAnalysisCaches,
 } from "@/features/wallet-analysis/server/wallet-analysis-service";
 import { serverEnv } from "@/shared/env/server-env";
+import { EVENT_NAMES, logEvent } from "@/shared/observability";
 import {
   DASHBOARD_LEDGER_POSITION_LIMIT,
   hasPositionExposure,
@@ -92,6 +93,7 @@ export const POST = wrapRouteHandlerWithLogging(
     auth: { mode: "required", getSessionUser },
   },
   async (ctx, _request, sessionUser) => {
+    const startedAtMs = performance.now();
     if (!sessionUser) throw new Error("sessionUser required");
 
     const container = getContainer();
@@ -116,6 +118,19 @@ export const POST = wrapRouteHandlerWithLogging(
             },
           ],
         };
+        logWalletRefreshComplete(ctx, startedAtMs, {
+          status: "wallet_adapter_unconfigured",
+          ledgerRowsRead: 0,
+          ledgerRowsUpdated: 0,
+          currentPositionsRows: 0,
+          currentPositionsComplete: false,
+          warningCount: payload.warnings.length,
+          dataApiCurrent: 0,
+          onchainZero: 0,
+          onchainDust: 0,
+          onchainActionable: 0,
+          upstreamError: 0,
+        });
         return NextResponse.json(
           polyWalletRefreshOperation.output.parse(payload)
         );
@@ -137,6 +152,19 @@ export const POST = wrapRouteHandlerWithLogging(
           },
         ],
       };
+      logWalletRefreshComplete(ctx, startedAtMs, {
+        status: "no_trading_wallet",
+        ledgerRowsRead: 0,
+        ledgerRowsUpdated: 0,
+        currentPositionsRows: 0,
+        currentPositionsComplete: false,
+        warningCount: payload.warnings.length,
+        dataApiCurrent: 0,
+        onchainZero: 0,
+        onchainDust: 0,
+        onchainActionable: 0,
+        upstreamError: 0,
+      });
       return NextResponse.json(
         polyWalletRefreshOperation.output.parse(payload)
       );
@@ -150,6 +178,11 @@ export const POST = wrapRouteHandlerWithLogging(
     let ledgerRowsUpdated = 0;
     let currentPositionsRows = 0;
     let currentPositionsComplete = false;
+    let dataApiCurrentCount = 0;
+    let onchainZeroCount = 0;
+    let onchainDustCount = 0;
+    let onchainActionableCount = 0;
+    let upstreamErrorCount = 0;
 
     try {
       const env = serverEnv();
@@ -265,6 +298,7 @@ export const POST = wrapRouteHandlerWithLogging(
             syncedIds.add(row.client_order_id);
             const actionability = await classifyAsset(tokenId);
             if (actionability.kind === "data_api_current") {
+              dataApiCurrentCount += 1;
               await container.orderLedger.updateStatus({
                 client_order_id: row.client_order_id,
                 status: row.status,
@@ -273,6 +307,7 @@ export const POST = wrapRouteHandlerWithLogging(
               return 1;
             }
             if (actionability.kind === "onchain_zero") {
+              onchainZeroCount += 1;
               if (lifecycleClassifiedAssets.has(tokenId)) return 0;
               lifecycleClassifiedAssets.add(tokenId);
               return container.orderLedger.markPositionLifecycleByAsset({
@@ -283,6 +318,7 @@ export const POST = wrapRouteHandlerWithLogging(
               });
             }
             if (actionability.kind === "onchain_dust") {
+              onchainDustCount += 1;
               if (lifecycleClassifiedAssets.has(tokenId)) return 0;
               lifecycleClassifiedAssets.add(tokenId);
               return container.orderLedger.markPositionLifecycleByAsset({
@@ -293,9 +329,11 @@ export const POST = wrapRouteHandlerWithLogging(
               });
             }
             if (actionability.kind === "upstream_error") {
+              upstreamErrorCount += 1;
               positionActionabilityFailures.push(actionability.message);
               return 0;
             }
+            onchainActionableCount += 1;
             return 0;
           }
         );
@@ -333,21 +371,19 @@ export const POST = wrapRouteHandlerWithLogging(
       });
     }
 
-    ctx.log.info(
-      {
-        billing_account_id: account.id,
-        funder_address: address,
-        execution_captured_at: executionCapturedAt,
-        current_positions_rows: currentPositionsRows,
-        current_positions_complete: currentPositionsComplete,
-        ledger_rows_read: ledgerRowsRead,
-        ledger_rows_updated: ledgerRowsUpdated,
-        warning_count: warnings.length,
-        event: "poly.wallet.refresh",
-        phase: "complete",
-      },
-      "poly.wallet.refresh"
-    );
+    logWalletRefreshComplete(ctx, startedAtMs, {
+      status: "ok",
+      ledgerRowsRead,
+      ledgerRowsUpdated,
+      currentPositionsRows,
+      currentPositionsComplete,
+      warningCount: warnings.length,
+      dataApiCurrent: dataApiCurrentCount,
+      onchainZero: onchainZeroCount,
+      onchainDust: onchainDustCount,
+      onchainActionable: onchainActionableCount,
+      upstreamError: upstreamErrorCount,
+    });
 
     const payload: PolyWalletRefreshOutput = {
       address: address.toLowerCase() as PolyWalletRefreshOutput["address"],
@@ -358,6 +394,46 @@ export const POST = wrapRouteHandlerWithLogging(
     return NextResponse.json(polyWalletRefreshOperation.output.parse(payload));
   }
 );
+
+function logWalletRefreshComplete(
+  ctx: {
+    log: Parameters<typeof logEvent>[0];
+    reqId: string;
+    routeId: string;
+  },
+  startedAtMs: number,
+  fields: {
+    status: string;
+    ledgerRowsRead: number;
+    ledgerRowsUpdated: number;
+    currentPositionsRows: number;
+    currentPositionsComplete: boolean;
+    warningCount: number;
+    dataApiCurrent: number;
+    onchainZero: number;
+    onchainDust: number;
+    onchainActionable: number;
+    upstreamError: number;
+  }
+): void {
+  logEvent(ctx.log, EVENT_NAMES.POLY_WALLET_REFRESH_COMPLETE, {
+    reqId: ctx.reqId,
+    routeId: ctx.routeId,
+    status: fields.status,
+    durationMs: Math.round(performance.now() - startedAtMs),
+    outcome: "success",
+    ledger_rows_read: fields.ledgerRowsRead,
+    ledger_rows_updated: fields.ledgerRowsUpdated,
+    current_positions_rows: fields.currentPositionsRows,
+    current_positions_complete: fields.currentPositionsComplete,
+    warning_count: fields.warningCount,
+    actionability_data_api_current: fields.dataApiCurrent,
+    actionability_onchain_zero: fields.onchainZero,
+    actionability_onchain_dust: fields.onchainDust,
+    actionability_onchain_actionable: fields.onchainActionable,
+    actionability_upstream_error: fields.upstreamError,
+  });
+}
 
 function isRefreshableOrderRow(row: LedgerRow): boolean {
   return (
