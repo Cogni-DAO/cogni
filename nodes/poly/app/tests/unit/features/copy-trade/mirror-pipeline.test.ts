@@ -550,7 +550,7 @@ describe("mirror-pipeline.runMirrorTick — BUY fill smoke", () => {
 
     expect(getTargetConditionPosition).toHaveBeenCalledWith({
       targetWallet: TARGET_WALLET,
-      conditionId: fill.market_id,
+      conditionId: fill.attributes?.condition_id,
     });
     expect(placeIntent).toHaveBeenCalledTimes(1);
     expect(placeIntent.mock.calls[0]?.[0].client_order_id).toBe(cid);
@@ -612,7 +612,7 @@ describe("mirror-pipeline.runMirrorTick — BUY fill smoke", () => {
 
     expect(getTargetConditionPosition).toHaveBeenCalledWith({
       targetWallet: TARGET_WALLET,
-      conditionId: fill.market_id,
+      conditionId: fill.attributes?.condition_id,
     });
     expect(placeIntent).toHaveBeenCalledTimes(1);
     expect(placeIntent.mock.calls[0]?.[0].attributes?.position_branch).toBe(

@@ -380,10 +380,12 @@ async function fetchTargetConditionPosition(args: {
   if (!deps.getTargetConditionPosition) return undefined;
   if (fill.side !== "BUY") return undefined;
   if (typeof fill.attributes?.asset !== "string") return undefined;
+  const conditionId = targetConditionIdForFill(fill);
+  if (!conditionId) return undefined;
   try {
     return await deps.getTargetConditionPosition({
       targetWallet: deps.target.target_wallet,
-      conditionId: fill.market_id,
+      conditionId,
     });
   } catch (err) {
     log.warn(
@@ -403,6 +405,19 @@ function needsTargetPosition(target: MirrorTargetConfig): boolean {
   return (
     target.position_followup?.enabled === true || target.sizing.kind !== "min_bet"
   );
+}
+
+function targetConditionIdForFill(
+  fill: import("@cogni/poly-market-provider").Fill
+): string | undefined {
+  if (typeof fill.attributes?.condition_id === "string") {
+    return fill.attributes.condition_id;
+  }
+  const prefix = "prediction-market:polymarket:";
+  if (fill.market_id.startsWith(prefix)) {
+    return fill.market_id.slice(prefix.length);
+  }
+  return fill.market_id || undefined;
 }
 
 function buildPositionLogFields(
