@@ -7,9 +7,8 @@
  *          counts) for the caller's own Polymarket trading wallet. Powers the dashboard's
  *          `OperatorWalletChartsRow` + `ExecutionActivityCard`.
  * Scope: Session-auth, tenant-scoped. Resolves the caller's billing account,
- *   asks `PolyTraderWalletPort` for its `funder_address`, reads the DB
- *   execution read model first, and optionally enriches current holdings from
- *   Polymarket Data API.
+ *   asks `PolyTraderWalletPort` for its `funder_address`, reads the local
+ *   position read model, and optionally overlays live timeline enrichment.
  * Invariants:
  *   - TENANT_SCOPED: the caller's own wallet is the only thing this route
  *     ever reads. The route has no query-parameter escape hatch.
@@ -21,7 +20,7 @@
  *   - EXECUTION_ONLY: current wallet totals live on
  *     `/api/v1/poly/wallet/overview`; this route stays focused on positions
  *     and trade cadence only.
- * Side-effects: IO (DB read, optional Polymarket Data API).
+ * Side-effects: IO (DB read, optional Polymarket Data API + CLOB public reads).
  * Links: nodes/poly/packages/node-contracts/src/poly.wallet.execution.v1.contract.ts,
  *        docs/spec/poly-trader-wallet-port.md,
  *        work/items/task.0354.poly-trading-hardening-followups.md
@@ -44,6 +43,7 @@ import {
 } from "@/bootstrap/poly-trader-wallet";
 import { getExecutionSlice } from "@/features/wallet-analysis/server/wallet-analysis-service";
 import { EVENT_NAMES, logEvent } from "@/shared/observability";
+import { enrichWalletExecutionPositions } from "../_lib/enrich-positions";
 import {
   DASHBOARD_LEDGER_POSITION_LIMIT,
   DASHBOARD_LEDGER_POSITION_STATUSES,
@@ -141,7 +141,6 @@ export const GET = wrapRouteHandlerWithLogging(
 
     const capturedAt = new Date();
     const warnings: Array<{ code: string; message: string }> = [];
-    let livePositions: PolyWalletExecutionOutput["live_positions"] = [];
     let dbLivePositions: PolyWalletExecutionOutput["live_positions"] = [];
     let closedPositions: PolyWalletExecutionOutput["closed_positions"] = [];
     let dailyTradeCounts: ReturnType<typeof summarizeDailyTradeCounts> = [];
@@ -168,15 +167,27 @@ export const GET = wrapRouteHandlerWithLogging(
       });
     }
 
-    livePositions = dbLivePositions;
-    if (freshness === "live") {
+    let livePositions = dbLivePositions;
+    if (
+      freshness === "live" &&
+      (dbLivePositions.length > 0 || closedPositions.length > 0)
+    ) {
       try {
         const currentExecution = await getExecutionSlice(address, {
-          includeTrades: false,
+          includePriceHistory: true,
+          assets: [...dbLivePositions, ...closedPositions].map(
+            (position) => position.asset
+          ),
         });
-        livePositions = mergeCurrentPositions(
+        livePositions = enrichWalletExecutionPositions(
           dbLivePositions,
-          currentExecution.live_positions.filter(hasActionableCurrentPosition)
+          currentExecution.live_positions.filter(hasActionableCurrentPosition),
+          capturedAt
+        );
+        closedPositions = enrichWalletExecutionPositions(
+          closedPositions,
+          currentExecution.closed_positions,
+          capturedAt
         );
         warnings.push(...currentExecution.warnings);
       } catch (err) {
@@ -226,52 +237,4 @@ function hasActionableCurrentPosition(
   position: PolyWalletExecutionOutput["live_positions"][number]
 ): boolean {
   return position.status !== "closed" && position.currentValue > 0;
-}
-
-function mergeCurrentPositions(
-  dbPositions: PolyWalletExecutionOutput["live_positions"],
-  currentPositions: PolyWalletExecutionOutput["live_positions"]
-): PolyWalletExecutionOutput["live_positions"] {
-  const currentByAsset = new Map(
-    currentPositions.map((position) => [position.asset, position] as const)
-  );
-  const merged = dbPositions.map((dbPosition) => {
-    const current = currentByAsset.get(dbPosition.asset);
-    if (!current) return dbPosition;
-    currentByAsset.delete(dbPosition.asset);
-    return {
-      ...dbPosition,
-      status: current.status,
-      marketSlug: current.marketSlug ?? dbPosition.marketSlug,
-      eventSlug: current.eventSlug ?? dbPosition.eventSlug,
-      marketUrl: current.marketUrl ?? dbPosition.marketUrl,
-      closedAt: current.closedAt ?? dbPosition.closedAt,
-      resolvesAt: current.resolvesAt ?? dbPosition.resolvesAt,
-      currentPrice: current.currentPrice,
-      size: current.size,
-      currentValue: current.currentValue,
-      pnlUsd: current.pnlUsd,
-      pnlPct: current.pnlPct,
-      timeline: chooseTimeline(dbPosition.timeline, current.timeline),
-      events:
-        current.events.length > dbPosition.events.length
-          ? current.events
-          : dbPosition.events,
-    };
-  });
-  return [...merged, ...currentByAsset.values()];
-}
-
-function chooseTimeline(
-  dbTimeline: PolyWalletExecutionOutput["live_positions"][number]["timeline"],
-  currentTimeline: PolyWalletExecutionOutput["live_positions"][number]["timeline"]
-): PolyWalletExecutionOutput["live_positions"][number]["timeline"] {
-  if (currentTimeline.length > dbTimeline.length) return currentTimeline;
-  if (
-    currentTimeline.length === dbTimeline.length &&
-    currentTimeline.some((point) => point.price !== currentTimeline[0]?.price)
-  ) {
-    return currentTimeline;
-  }
-  return dbTimeline;
 }

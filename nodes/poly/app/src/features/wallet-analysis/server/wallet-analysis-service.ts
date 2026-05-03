@@ -297,6 +297,8 @@ export async function getExecutionSlice(
     includePriceHistory?: boolean;
     /** Skip the expensive `/trades` read when the caller only needs current holdings. */
     includeTrades?: boolean;
+    /** Optional asset allowlist for DB-row enrichment callers. */
+    assets?: readonly string[];
   } = {}
 ): Promise<PolyWalletExecutionOutput> {
   const capturedAt = new Date().toISOString();
@@ -365,12 +367,21 @@ export async function getExecutionSlice(
     asOfIso: capturedAt,
   });
 
-  const livePreview = allMapped
+  const allowedAssets = opts.assets !== undefined ? new Set(opts.assets) : null;
+  const liveCandidates = allMapped
     .filter((p) => p.status === "open" || p.status === "redeemable")
-    .slice(0, EXECUTION_OPEN_LIMIT);
-  const closedPreview = allMapped
+    .filter((p) => allowedAssets === null || allowedAssets.has(p.asset));
+  const livePreview =
+    allowedAssets === null
+      ? liveCandidates.slice(0, EXECUTION_OPEN_LIMIT)
+      : liveCandidates;
+  const closedCandidates = allMapped
     .filter((p) => p.status === "closed")
-    .slice(0, EXECUTION_HISTORY_LIMIT);
+    .filter((p) => allowedAssets === null || allowedAssets.has(p.asset));
+  const closedPreview =
+    allowedAssets === null
+      ? closedCandidates.slice(0, EXECUTION_HISTORY_LIMIT)
+      : closedCandidates;
 
   let liveForResponse = livePreview;
   if (opts.includePriceHistory ?? true) {

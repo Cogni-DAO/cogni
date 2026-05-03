@@ -158,7 +158,7 @@ export const polyWalletExecutionOperation = {
   description:
     "Returns the signed-in user's DB-backed daily trade counts, open positions (live_positions), and closed position history (closed_positions) for the trading-wallet dashboard.",
   input: z.object({
-    freshness: PolyWalletDataFreshnessSchema.optional().default("live"),
+    freshness: PolyWalletDataFreshnessSchema.optional().default("read_model"),
   }),
   output: PolyWalletExecutionOutputSchema,
 } as const;

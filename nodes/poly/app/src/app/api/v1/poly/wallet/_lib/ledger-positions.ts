@@ -166,10 +166,7 @@ export function toWalletExecutionPosition(
     syncStale:
       row.synced_at === null ||
       capturedAt.getTime() - row.synced_at.getTime() > POSITION_STALE_MS,
-    timeline: [
-      { ts: observed, price, size },
-      { ts: captured, price, size },
-    ],
+    timeline: [],
     events: [
       { ts: observed, kind: "entry", price, shares: size },
       ...terminalEvent,

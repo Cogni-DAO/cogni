@@ -356,6 +356,7 @@ describe("poly wallet dashboard DB read routes", () => {
       syncedAt: syncedAt.toISOString(),
       syncStale: false,
     });
+    expect(json.live_positions[0].timeline).toEqual([]);
     expect(json.dailyTradeCounts).toEqual([
       ...EMPTY_14_DAY_COUNTS.slice(0, -1),
       { day: "2026-05-02", n: 1 },
@@ -455,7 +456,7 @@ describe("poly wallet dashboard DB read routes", () => {
     });
   });
 
-  it("execution renders current Data API holdings and filters zero-value resolved rows", async () => {
+  it("execution drops live-only rows and preserves DB row identity during live enrichment", async () => {
     mockGetExecutionSlice.mockResolvedValue({
       address: FUNDER,
       capturedAt: NOW.toISOString(),
@@ -518,35 +519,30 @@ describe("poly wallet dashboard DB read routes", () => {
     const { GET } = await import("@/app/api/v1/poly/wallet/execution/route");
 
     const response = await GET(
-      new Request("http://localhost/api/v1/poly/wallet/execution")
+      new Request(
+        "http://localhost/api/v1/poly/wallet/execution?freshness=live"
+      )
     );
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.live_positions).toHaveLength(2);
-    expect(json.live_positions).toContainEqual(
-      expect.objectContaining({
-        asset: "token-1",
-        marketTitle: "Will CLOB stay up?",
-        currentValue: 10,
-      })
-    );
-    expect(json.live_positions).toContainEqual(
-      expect.objectContaining({
-        asset: "token-live",
-        status: "redeemable",
-        currentValue: 7,
-      })
-    );
+    expect(json.live_positions).toHaveLength(1);
+    expect(json.live_positions[0]).toMatchObject({
+      asset: "token-1",
+      positionId: "0xorder",
+      marketTitle: "Will CLOB stay up?",
+      currentValue: 10,
+    });
     expect(
       json.live_positions.map((p: { asset: string }) => p.asset)
-    ).not.toContain("token-loser");
+    ).not.toEqual(expect.arrayContaining(["token-live", "token-loser"]));
     expect(json.dailyTradeCounts).toEqual([
       ...EMPTY_14_DAY_COUNTS.slice(0, -1),
       { day: "2026-05-02", n: 1 },
     ]);
     expect(mockGetExecutionSlice).toHaveBeenCalledWith(FUNDER, {
-      includeTrades: false,
+      includePriceHistory: true,
+      assets: ["token-1"],
     });
   });
 
@@ -606,7 +602,9 @@ describe("poly wallet dashboard DB read routes", () => {
     const { GET } = await import("@/app/api/v1/poly/wallet/execution/route");
 
     const response = await GET(
-      new Request("http://localhost/api/v1/poly/wallet/execution")
+      new Request(
+        "http://localhost/api/v1/poly/wallet/execution?freshness=live"
+      )
     );
     const json = await response.json();
 
@@ -628,6 +626,10 @@ describe("poly wallet dashboard DB read routes", () => {
         { ts: "2026-05-02T02:59:00.000Z", price: 0.5, size: 20 },
         { ts: "2026-05-02T03:00:00.000Z", price: 0.7, size: 20 },
       ],
+    });
+    expect(mockGetExecutionSlice).toHaveBeenCalledWith(FUNDER, {
+      includePriceHistory: true,
+      assets: ["token-1", "token-older"],
     });
   });
 
@@ -769,9 +771,7 @@ describe("poly wallet dashboard DB read routes", () => {
     expect(response.status).toBe(200);
     expect(json.live_positions).toEqual([]);
     expect(json.closed_positions).toHaveLength(1);
-    expect(mockGetExecutionSlice).toHaveBeenCalledWith(FUNDER, {
-      includeTrades: false,
-    });
+    expect(mockGetExecutionSlice).not.toHaveBeenCalled();
   });
 
   it("execution marks typed winner lifecycle rows redeemable", async () => {
