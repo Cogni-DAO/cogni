@@ -43,6 +43,29 @@ GRAFANA_PDC_SIGNING_TOKEN=<GCLOUD_PDC_SIGNING_TOKEN from Grafana>
 
 Do not store this token in `.env.cogni`. It is a deploy secret and belongs in the GitHub `candidate-a` environment. `setup-secrets` writes it there.
 
+If the candidate-a run shows this PDC agent error:
+
+```text
+key signing request failed: invalid credentials
+```
+
+the token is not usable by PDC. Per Grafana troubleshooting, generate a fresh token from the same **Configuration Details** screen and replace `GRAFANA_PDC_SIGNING_TOKEN`; do not debug Postgres or Grafana datasource JSON first.
+
+When the human gives the agent a replacement token directly, the agent must write it to both places:
+
+```bash
+gh secret set GRAFANA_PDC_SIGNING_TOKEN \
+  --repo Cogni-DAO/node-template \
+  --env candidate-a \
+  --body "$GRAFANA_PDC_SIGNING_TOKEN"
+
+{
+  rg -v '^GRAFANA_PDC_SIGNING_TOKEN=' .env.candidate-a 2>/dev/null || true
+  printf "GRAFANA_PDC_SIGNING_TOKEN='%s'\n" "$GRAFANA_PDC_SIGNING_TOKEN"
+} > .env.candidate-a.tmp
+mv .env.candidate-a.tmp .env.candidate-a
+```
+
 Then tell the agent:
 
 ```text
