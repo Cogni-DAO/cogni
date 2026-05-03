@@ -16,8 +16,14 @@
 
 "use client";
 
-import { ArrowLeft, CheckCircle2, Send } from "lucide-react";
-import { type ReactElement, useMemo, useState } from "react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ExternalLink,
+  Loader2,
+  Send,
+} from "lucide-react";
+import { type ReactElement, useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +41,12 @@ export interface WithdrawalAssetOption<AssetId extends string = string> {
   helperText?: string;
   allowMax?: boolean;
   balanceFractionDigits?: number;
+  walletAsset?: {
+    address: `0x${string}`;
+    symbol: string;
+    decimals: number;
+    image?: string;
+  };
 }
 
 export interface WithdrawalSubmitInput<AssetId extends string = string> {
@@ -60,7 +72,7 @@ export interface WithdrawalFlowDialogProps<AssetId extends string = string> {
   getTransactionHref: (hash: string) => string;
 }
 
-type Step = "edit" | "confirm" | "done";
+type Step = "edit" | "confirm" | "submitting" | "done";
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 
@@ -108,8 +120,11 @@ export function WithdrawalFlowDialog<AssetId extends string = string>({
   const [confirmDestination, setConfirmDestination] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
   const [result, setResult] = useState<WithdrawalSubmitResult | null>(null);
-  const [pending, setPending] = useState(false);
+  const [submitSeconds, setSubmitSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [walletAssetStatus, setWalletAssetStatus] = useState<
+    "idle" | "adding" | "added" | "error"
+  >("idle");
 
   const selected =
     assets.find((candidate) => candidate.id === asset) ?? assets[0];
@@ -131,6 +146,7 @@ export function WithdrawalFlowDialog<AssetId extends string = string>({
     selected.balance,
     selected.balanceFractionDigits ?? selected.decimals
   );
+  const deliveredWalletAsset = selected.walletAsset;
 
   function reset(): void {
     setStep("edit");
@@ -140,13 +156,15 @@ export function WithdrawalFlowDialog<AssetId extends string = string>({
     setConfirmDestination("");
     setAcknowledged(false);
     setResult(null);
-    setPending(false);
+    setSubmitSeconds(0);
     setError(null);
+    setWalletAssetStatus("idle");
   }
 
   async function submit(): Promise<void> {
     if (!amountAtomic || !confirmValid) return;
-    setPending(true);
+    setStep("submitting");
+    setSubmitSeconds(0);
     setError(null);
     try {
       const payload = await onSubmit({
@@ -157,11 +175,68 @@ export function WithdrawalFlowDialog<AssetId extends string = string>({
       });
       setResult(payload);
       setStep("done");
+      setWalletAssetStatus("idle");
       onSubmitted?.(payload);
     } catch (err) {
       setError(err instanceof Error ? err.message : "withdraw_failed");
-    } finally {
-      setPending(false);
+      setStep("confirm");
+    }
+  }
+
+  useEffect(() => {
+    if (step !== "submitting") return;
+
+    const interval = window.setInterval(() => {
+      setSubmitSeconds((value) => value + 1);
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [step]);
+
+  const submittingMessage =
+    submitSeconds < 8
+      ? "Submitting withdrawal..."
+      : submitSeconds < 25
+        ? "Waiting for Polygon confirmation..."
+        : "Still confirming on-chain. pUSD unwraps can take around 30 seconds.";
+
+  async function addDeliveredAssetToWallet(): Promise<void> {
+    if (!deliveredWalletAsset || walletAssetStatus === "adding") return;
+    const ethereum = (
+      window as Window & {
+        ethereum?: {
+          request?: (args: {
+            method: "wallet_watchAsset";
+            params: {
+              type: "ERC20";
+              options: {
+                address: `0x${string}`;
+                symbol: string;
+                decimals: number;
+                image?: string;
+              };
+            };
+          }) => Promise<unknown>;
+        };
+      }
+    ).ethereum;
+    if (!ethereum?.request) {
+      setWalletAssetStatus("error");
+      return;
+    }
+
+    setWalletAssetStatus("adding");
+    try {
+      const accepted = await ethereum.request({
+        method: "wallet_watchAsset",
+        params: {
+          type: "ERC20",
+          options: deliveredWalletAsset,
+        },
+      });
+      setWalletAssetStatus(accepted ? "added" : "idle");
+    } catch {
+      setWalletAssetStatus("error");
     }
   }
 
@@ -169,8 +244,9 @@ export function WithdrawalFlowDialog<AssetId extends string = string>({
     <Dialog
       open={open}
       onOpenChange={(next) => {
+        if (!next && step === "submitting") return;
         setOpen(next);
-        if (!next && !pending) reset();
+        if (!next) reset();
       }}
     >
       <DialogTrigger asChild>
@@ -333,12 +409,61 @@ export function WithdrawalFlowDialog<AssetId extends string = string>({
 
             <button
               type="button"
-              disabled={!confirmValid || pending}
+              disabled={!confirmValid}
               onClick={() => void submit()}
               className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground text-sm disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {pending ? "Submitting..." : "Submit withdrawal"}
+              Submit withdrawal
             </button>
+          </div>
+        ) : null}
+
+        {step === "submitting" ? (
+          <div className="flex flex-col gap-4">
+            <div className="grid gap-2 rounded-md bg-muted/40 p-3 text-sm">
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">Withdraw</span>
+                <span className="font-medium">
+                  {amount} {selected.label}
+                </span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">Receives</span>
+                <span className="font-medium">{selected.deliveredLabel}</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-muted-foreground">Destination</span>
+                <span className="break-all font-mono text-xs">
+                  {destination}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center gap-3 rounded-md border border-border px-4 py-6 text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <div className="space-y-1">
+                <p className="font-medium text-sm">{submittingMessage}</p>
+                <p className="text-muted-foreground text-xs">
+                  Keep this dialog open. The receipt appears after the on-chain
+                  transaction is confirmed.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-2 text-xs">
+              <div className="flex items-center gap-2 rounded-md bg-muted/40 px-3 py-2">
+                <CheckCircle2 className="h-4 w-4 text-primary" />
+                <span>Destination confirmed</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-md bg-muted/40 px-3 py-2">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <span>
+                  {selected.id === "pusd"
+                    ? "Approving pUSD if needed, then unwrapping to USDC.e"
+                    : "Submitting withdrawal transaction"}
+                </span>
+              </div>
+            </div>
           </div>
         ) : null}
 
@@ -346,7 +471,7 @@ export function WithdrawalFlowDialog<AssetId extends string = string>({
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2 rounded-md bg-primary/10 px-3 py-2 text-primary text-sm">
               <CheckCircle2 size={16} />
-              Withdrawal submitted
+              Withdrawal submitted. {selected.deliveredLabel} sent.
             </div>
             <div className="grid gap-2 text-sm">
               {result.txHashes.map((hash, index) => (
@@ -355,15 +480,51 @@ export function WithdrawalFlowDialog<AssetId extends string = string>({
                   href={getTransactionHref(hash)}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="break-all rounded-md border border-border px-3 py-2 font-mono text-xs hover:bg-muted/50"
+                  className="flex items-start justify-between gap-3 rounded-md border border-border px-3 py-2 text-xs hover:bg-muted/50"
                 >
-                  {index === result.txHashes.length - 1
-                    ? "Withdrawal"
-                    : "Approval"}{" "}
-                  {hash}
+                  <span className="min-w-0 break-all font-mono">
+                    {index === result.txHashes.length - 1
+                      ? "Withdrawal"
+                      : "Approval"}{" "}
+                    {hash}
+                  </span>
+                  <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 </a>
               ))}
             </div>
+
+            {selected.walletAsset ? (
+              <div className="grid gap-2 rounded-md bg-muted/40 p-3 text-xs">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Delivered token</span>
+                  <span className="font-medium">
+                    {selected.walletAsset.symbol}
+                  </span>
+                </div>
+                <div className="break-all font-mono text-muted-foreground">
+                  {selected.walletAsset.address}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void addDeliveredAssetToWallet()}
+                  disabled={walletAssetStatus === "adding"}
+                  className="inline-flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 font-medium text-sm disabled:cursor-not-allowed disabled:text-muted-foreground"
+                >
+                  {walletAssetStatus === "adding" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : null}
+                  {walletAssetStatus === "added"
+                    ? `${selected.walletAsset.symbol} added`
+                    : `Add ${selected.walletAsset.symbol} to wallet`}
+                </button>
+                {walletAssetStatus === "error" ? (
+                  <p className="text-muted-foreground">
+                    Add this token manually in MetaMask on Polygon if the wallet
+                    does not show it automatically.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </DialogContent>

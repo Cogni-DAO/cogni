@@ -63,6 +63,12 @@ function polygonScanTx(hash: string): string {
   return `https://polygonscan.com/tx/${hash}`;
 }
 
+const USDC_E_WALLET_ASSET = {
+  address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+  symbol: "USDC.e",
+  decimals: 6,
+} as const;
+
 function polyWithdrawalAssets(
   balances: PolyWalletBalancesOutput | undefined
 ): readonly WithdrawalAssetOption<PolyWalletWithdrawalAsset>[] {
@@ -73,6 +79,7 @@ function polyWithdrawalAssets(
       deliveredLabel: "USDC.e",
       decimals: 6,
       balance: balances?.usdc_e,
+      walletAsset: USDC_E_WALLET_ASSET,
     },
     {
       id: "pusd",
@@ -82,6 +89,7 @@ function polyWithdrawalAssets(
       balance: balances?.pusd,
       helperText:
         "pUSD withdrawals unwrap on Polygon and deliver USDC.e to the destination.",
+      walletAsset: USDC_E_WALLET_ASSET,
     },
     {
       id: "pol",
