@@ -621,6 +621,17 @@ describe("mirror-pipeline.runMirrorTick — BUY fill smoke", () => {
     const placedDec = ledger.decisions.find((d) => d.outcome === "placed");
     expect(placedDec?.reason).toBe("ok");
     expect(placedDec?.intent.position_branch).toBe("new_entry");
+    expect(placedDec?.intent).toEqual(
+      expect.objectContaining({
+        sizing_policy_kind: "target_percentile_scaled",
+        sizing_percentile: 75,
+        sizing_min_target_usdc: 199,
+        sizing_max_target_usdc: 5453,
+        mirror_max_usdc_per_trade: 10,
+        target_token_cost_usdc: 300,
+        target_position_usdc: 300,
+      })
+    );
   });
 });
 

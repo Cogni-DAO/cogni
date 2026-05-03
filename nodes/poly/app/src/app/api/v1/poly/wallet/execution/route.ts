@@ -45,6 +45,7 @@ import { getExecutionSlice } from "@/features/wallet-analysis/server/wallet-anal
 import { EVENT_NAMES, logEvent } from "@/shared/observability";
 import { enrichWalletExecutionPositions } from "../_lib/enrich-positions";
 import {
+  coalesceWalletExecutionPositions,
   DASHBOARD_LEDGER_POSITION_LIMIT,
   DASHBOARD_LEDGER_POSITION_STATUSES,
   summarizeDailyTradeCounts,
@@ -154,11 +155,13 @@ export const GET = wrapRouteHandlerWithLogging(
       const positions = rows.map((row) =>
         toWalletExecutionPosition(row, capturedAt)
       );
-      dbLivePositions = positions
-        .filter((position) => position.status !== "closed")
-        .filter((position) => position.currentValue > 0);
-      closedPositions = positions.filter(
-        (position) => position.status === "closed"
+      dbLivePositions = coalesceWalletExecutionPositions(
+        positions
+          .filter((position) => position.status !== "closed")
+          .filter((position) => position.currentValue > 0)
+      );
+      closedPositions = coalesceWalletExecutionPositions(
+        positions.filter((position) => position.status === "closed")
       );
     } catch (err) {
       warnings.push({

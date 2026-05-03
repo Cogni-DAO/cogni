@@ -174,6 +174,22 @@ export function toWalletExecutionPosition(
   };
 }
 
+export function coalesceWalletExecutionPositions(
+  positions: readonly WalletExecutionPosition[]
+): WalletExecutionPosition[] {
+  const byKey = new Map<string, WalletExecutionPosition>();
+  for (const position of positions) {
+    const key = `${position.conditionId}:${position.asset}`;
+    const existing = byKey.get(key);
+    if (existing === undefined) {
+      byKey.set(key, position);
+      continue;
+    }
+    byKey.set(key, mergeWalletExecutionPosition(existing, position));
+  }
+  return [...byKey.values()];
+}
+
 export function hasPositionExposure(row: LedgerRow): boolean {
   return ledgerHasPositionExposure(row);
 }
@@ -245,6 +261,43 @@ function deriveExecutionStatus(
   return "open";
 }
 
+function mergeWalletExecutionPosition(
+  left: WalletExecutionPosition,
+  right: WalletExecutionPosition
+): WalletExecutionPosition {
+  const size = roundToPrecision(left.size + right.size, 4);
+  const currentValue = roundToCents(left.currentValue + right.currentValue);
+  const costBasis =
+    left.currentValue - left.pnlUsd + (right.currentValue - right.pnlUsd);
+  const pnlUsd = roundToCents(left.pnlUsd + right.pnlUsd);
+  const pnlPct = costBasis > 0 ? roundToCents((pnlUsd / costBasis) * 100) : 0;
+  const entryPrice = size > 0 ? roundToPrecision(costBasis / size, 4) : 0;
+  const currentPrice = size > 0 ? roundToPrecision(currentValue / size, 4) : 0;
+  const openedAt = earliestIso(left.openedAt, right.openedAt) ?? left.openedAt;
+  const closedAt = latestNullableIso(left.closedAt, right.closedAt);
+  const heldUntil =
+    closedAt ?? latestNullableIso(left.openedAt, right.openedAt) ?? openedAt;
+
+  return {
+    ...left,
+    positionId: `${left.conditionId}:${left.asset}`,
+    openedAt,
+    closedAt,
+    heldMinutes: minutesBetween(openedAt, heldUntil),
+    entryPrice,
+    currentPrice,
+    size,
+    currentValue,
+    pnlUsd,
+    pnlPct,
+    syncedAt: latestNullableIso(left.syncedAt ?? null, right.syncedAt ?? null),
+    syncAgeMs: minNullable(left.syncAgeMs ?? null, right.syncAgeMs ?? null),
+    syncStale: left.syncStale || right.syncStale,
+    timeline: [...left.timeline, ...right.timeline].sort(compareTimeline),
+    events: [...left.events, ...right.events].sort(compareEvent),
+  };
+}
+
 function readMarketUrl(row: LedgerRow): string | null {
   const explicit = readLedgerNullableString(row, "market_url");
   if (explicit !== null) return explicit;
@@ -265,4 +318,62 @@ function readLedgerIso(row: LedgerRow, key: string): string | null {
 
 function roundToCents(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function roundToPrecision(value: number, precision: number): number {
+  const scale = 10 ** precision;
+  return Math.round(value * scale) / scale;
+}
+
+function earliestIso(left: string, right: string): string | null {
+  return pickIso(left, right, (a, b) => a <= b);
+}
+
+function latestNullableIso(
+  left: string | null,
+  right: string | null
+): string | null {
+  if (left === null) return right;
+  if (right === null) return left;
+  return pickIso(left, right, (a, b) => a >= b);
+}
+
+function pickIso(
+  left: string,
+  right: string,
+  chooseLeft: (leftMs: number, rightMs: number) => boolean
+): string | null {
+  const leftMs = Date.parse(left);
+  const rightMs = Date.parse(right);
+  if (!Number.isFinite(leftMs) && !Number.isFinite(rightMs)) return null;
+  if (!Number.isFinite(leftMs)) return right;
+  if (!Number.isFinite(rightMs)) return left;
+  return chooseLeft(leftMs, rightMs) ? left : right;
+}
+
+function minutesBetween(startIso: string, endIso: string): number {
+  const startMs = Date.parse(startIso);
+  const endMs = Date.parse(endIso);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return 0;
+  return Math.max(0, Math.floor((endMs - startMs) / 60_000));
+}
+
+function minNullable(left: number | null, right: number | null): number | null {
+  if (left === null) return right;
+  if (right === null) return left;
+  return Math.min(left, right);
+}
+
+function compareTimeline(
+  left: WalletExecutionPosition["timeline"][number],
+  right: WalletExecutionPosition["timeline"][number]
+): number {
+  return Date.parse(left.ts) - Date.parse(right.ts);
+}
+
+function compareEvent(
+  left: WalletExecutionPosition["events"][number],
+  right: WalletExecutionPosition["events"][number]
+): number {
+  return Date.parse(left.ts) - Date.parse(right.ts);
 }

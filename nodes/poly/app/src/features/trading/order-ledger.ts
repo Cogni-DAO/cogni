@@ -51,6 +51,7 @@ import {
   type MarkPositionLifecycleByConditionIdInput,
   type OpenOrderRow,
   type OrderLedger,
+  PositionCapReachedError,
   type PositionIntentAggregate,
   type RecordDecisionInput,
   type StateSnapshot,
@@ -360,25 +361,83 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
             : undefined,
       };
 
-      try {
-        await deps.db
+      const values = {
+        billingAccountId: input.billing_account_id,
+        createdByUserId: input.created_by_user_id,
+        targetId: input.target_id,
+        fillId: input.fill_id,
+        marketId: input.intent.market_id,
+        observedAt: input.observed_at,
+        clientOrderId: input.intent.client_order_id,
+        orderId: null,
+        status: "pending" as const,
+        positionLifecycle: null,
+        attributes: attrs,
+      };
+
+      const insert = async (db: Pick<NodePgDatabase, "insert">) => {
+        await db
           .insert(polyCopyTradeFills)
-          .values({
-            billingAccountId: input.billing_account_id,
-            createdByUserId: input.created_by_user_id,
-            targetId: input.target_id,
-            fillId: input.fill_id,
-            marketId: input.intent.market_id,
-            observedAt: input.observed_at,
-            clientOrderId: input.intent.client_order_id,
-            orderId: null,
-            status: "pending",
-            positionLifecycle: null,
-            attributes: attrs,
-          })
+          .values(values)
           .onConflictDoNothing({
             target: [polyCopyTradeFills.targetId, polyCopyTradeFills.fillId],
           });
+      };
+
+      try {
+        if (
+          input.max_market_intent_usdc !== undefined &&
+          input.intent.side === "BUY"
+        ) {
+          const maxMarketIntentUsdc = input.max_market_intent_usdc;
+          await deps.db.transaction(async (tx) => {
+            await tx.execute(
+              sql`SELECT pg_advisory_xact_lock(hashtext(${`${input.billing_account_id}:${input.intent.market_id}`}))`
+            );
+            const rows = await tx
+              .select({
+                sum: sum(
+                  sql<string>`COALESCE((${polyCopyTradeFills.attributes}->>'size_usdc')::numeric, 0)`
+                ),
+              })
+              .from(polyCopyTradeFills)
+              .where(
+                and(
+                  eq(
+                    polyCopyTradeFills.billingAccountId,
+                    input.billing_account_id
+                  ),
+                  eq(polyCopyTradeFills.marketId, input.intent.market_id),
+                  activeRestingPosition,
+                  or(
+                    inArray(polyCopyTradeFills.status, [
+                      "pending",
+                      "open",
+                      "filled",
+                      "partial",
+                    ]),
+                    and(
+                      eq(polyCopyTradeFills.status, "error"),
+                      sql`${polyCopyTradeFills.attributes}->>'placement' = 'market_fok'`
+                    )
+                  )
+                )
+              );
+            const currentIntent = Number(rows[0]?.sum ?? 0);
+            if (currentIntent + input.intent.size_usdc > maxMarketIntentUsdc) {
+              throw new PositionCapReachedError(
+                input.billing_account_id,
+                input.intent.market_id,
+                currentIntent,
+                input.intent.size_usdc,
+                maxMarketIntentUsdc
+              );
+            }
+            await insert(tx);
+          });
+        } else {
+          await insert(deps.db);
+        }
       } catch (err: unknown) {
         // Partial unique index rejection → typed AlreadyRestingError. task.5001.
         if (

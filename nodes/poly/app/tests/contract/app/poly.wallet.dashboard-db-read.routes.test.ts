@@ -637,6 +637,79 @@ describe("poly wallet dashboard DB read routes", () => {
     });
   });
 
+  it("execution coalesces duplicate ledger rows before live enrichment", async () => {
+    const duplicateRow = {
+      ...row,
+      fill_id: "data-api:fill-duplicate",
+      client_order_id: "0xclient-duplicate",
+      order_id: "0xorder-duplicate",
+      observed_at: new Date(Date.now() - 30_000),
+      attributes: {
+        ...row.attributes,
+        size_usdc: 12,
+        filled_size_usdc: 12,
+      },
+    };
+    mockListTenantPositions.mockResolvedValue([row, duplicateRow]);
+    mockGetExecutionSlice.mockResolvedValue({
+      address: FUNDER,
+      capturedAt: NOW.toISOString(),
+      dailyTradeCounts: [],
+      live_positions: [
+        {
+          positionId:
+            "0x1111111111111111111111111111111111111111111111111111111111111111:token-1",
+          conditionId:
+            "0x1111111111111111111111111111111111111111111111111111111111111111",
+          asset: "token-1",
+          marketTitle: "Will CLOB stay up?",
+          marketSlug: "will-clob-stay-up",
+          eventSlug: "clob-health",
+          marketUrl:
+            "https://polymarket.com/event/clob-health/will-clob-stay-up",
+          outcome: "YES",
+          status: "open",
+          lifecycleState: null,
+          openedAt: NOW.toISOString(),
+          closedAt: null,
+          resolvesAt: "2026-05-03T00:00:00.000Z",
+          heldMinutes: 0,
+          entryPrice: 0.5,
+          currentPrice: 0.7,
+          size: 42.2571,
+          currentValue: 29.58,
+          pnlUsd: -1.12,
+          pnlPct: -3.66,
+          timeline: [],
+          events: [],
+        },
+      ],
+      closed_positions: [],
+      warnings: [],
+    });
+    const { GET } = await import("@/app/api/v1/poly/wallet/execution/route");
+
+    const response = await GET(
+      new Request(
+        "http://localhost/api/v1/poly/wallet/execution?freshness=live"
+      )
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.live_positions).toHaveLength(1);
+    expect(json.live_positions[0]).toMatchObject({
+      asset: "token-1",
+      currentValue: 29.58,
+      pnlUsd: -1.12,
+      pnlPct: -3.66,
+    });
+    expect(mockGetExecutionSlice).toHaveBeenCalledWith(FUNDER, {
+      includePriceHistory: true,
+      assets: ["token-1"],
+    });
+  });
+
   it("overview does not double-count unfilled resting BUY orders as position MTM", async () => {
     mockCurrentPositionsMtm(0);
     mockListTenantPositions.mockResolvedValue([

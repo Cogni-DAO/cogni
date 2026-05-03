@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from "vitest";
 import { FakeOrderLedger } from "@/adapters/test/trading/fake-order-ledger";
-import type { LedgerRow } from "@/features/trading";
+import { type LedgerRow, PositionCapReachedError } from "@/features/trading";
 
 const TENANT_A = "00000000-0000-4000-b000-00000000000a";
 const TENANT_B = "00000000-0000-4000-b000-00000000000b";
@@ -501,6 +501,39 @@ describe("FakeOrderLedger.cumulativeIntentForMarket", () => {
         market_id: MARKET_X,
       })
     ).resolves.toBe(true);
+  });
+
+  it("rejects same-market inserts across targets when the tenant cap is reached", async () => {
+    const ledger = new FakeOrderLedger({
+      initial: [
+        makeRow({
+          target_id: "target-1",
+          fill_id: "fill-existing",
+          attributes: { market_id: MARKET_X, size_usdc: 4 },
+        }),
+      ],
+    });
+
+    await expect(
+      ledger.insertPending({
+        billing_account_id: TENANT_A,
+        created_by_user_id: "user-1",
+        target_id: "target-2",
+        fill_id: "new-fill",
+        observed_at: new Date(),
+        max_market_intent_usdc: 5,
+        intent: {
+          provider: "polymarket",
+          market_id: MARKET_X,
+          outcome: "YES",
+          side: "BUY",
+          size_usdc: 2,
+          limit_price: 0.5,
+          client_order_id: "0xnew",
+          attributes: {},
+        },
+      })
+    ).rejects.toBeInstanceOf(PositionCapReachedError);
   });
 
   it("excludes rows for a different market", async () => {

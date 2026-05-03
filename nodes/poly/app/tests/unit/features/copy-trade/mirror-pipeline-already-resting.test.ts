@@ -29,6 +29,7 @@ import {
   AlreadyRestingError,
   type LedgerRow,
   type OrderLedger,
+  PositionCapReachedError,
 } from "@/features/trading";
 import type { WalletActivitySource } from "@/features/wallet-watch";
 
@@ -176,5 +177,61 @@ describe("runMirrorTick — already_resting", () => {
       (d) => d.outcome === "skipped" && d.reason === "already_resting"
     );
     expect(skipDec).toBeDefined();
+  });
+
+  it("DB PositionCapReachedError thrown by insertPending converts to skip/position_cap_reached", async () => {
+    const baseLedger = new FakeOrderLedger({});
+    const ledger: OrderLedger = {
+      ...baseLedger,
+      hasOpenForMarket: async () => false,
+      insertPending: async () => {
+        throw new PositionCapReachedError(
+          COGNI_SYSTEM_BILLING_ACCOUNT_ID,
+          MARKET_ID,
+          4,
+          2,
+          5
+        );
+      },
+      snapshotState: baseLedger.snapshotState.bind(baseLedger),
+      cumulativeIntentForMarket:
+        baseLedger.cumulativeIntentForMarket.bind(baseLedger),
+      recordDecision: baseLedger.recordDecision.bind(baseLedger),
+    };
+    const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
+    const metrics = createRecordingMetrics();
+    let cursor: number | undefined;
+
+    await runMirrorTick({
+      source: makeSource([makeFill("data-api:0xnew:0xasset:BUY:1713301000")]),
+      ledger,
+      placeIntent,
+      target: TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
+      getCursor: () => cursor,
+      setCursor: (n) => {
+        cursor = n;
+      },
+      logger: noopLogger,
+      metrics,
+    });
+
+    expect(placeIntent).not.toHaveBeenCalled();
+    const skipDec = baseLedger.decisions.find(
+      (d) => d.outcome === "skipped" && d.reason === "position_cap_reached"
+    );
+    expect(skipDec?.intent).toMatchObject({
+      current_intent_usdc: 4,
+      proposed_intent_usdc: 2,
+      max_intent_usdc: 5,
+    });
+    const skipMetric = metrics.emissions.find(
+      (e) =>
+        e.name === "poly_mirror_decisions_total" &&
+        e.labels?.outcome === "skipped" &&
+        e.labels?.reason === "position_cap_reached" &&
+        e.labels?.placement === "limit"
+    );
+    expect(skipMetric).toBeDefined();
   });
 });

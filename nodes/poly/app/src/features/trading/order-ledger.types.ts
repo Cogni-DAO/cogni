@@ -134,6 +134,28 @@ export class AlreadyRestingError extends Error {
   }
 }
 
+/**
+ * Thrown by `insertPending` when the tenant's active intent for a market would
+ * exceed the caller-provided per-market cap. Unlike the target-scoped
+ * `AlreadyRestingError`, this protects aggregate exposure across all copy
+ * targets for the same billing account.
+ */
+export class PositionCapReachedError extends Error {
+  readonly code = "position_cap_reached" as const;
+  constructor(
+    readonly billing_account_id: string,
+    readonly market_id: string,
+    readonly current_intent_usdc: number,
+    readonly proposed_intent_usdc: number,
+    readonly max_intent_usdc: number
+  ) {
+    super(
+      `PositionCapReachedError: active intent ${current_intent_usdc} + ${proposed_intent_usdc} exceeds ${max_intent_usdc} for (${billing_account_id}, ${market_id})`
+    );
+    this.name = "PositionCapReachedError";
+  }
+}
+
 /** Subset of `LedgerRow` returned by `findOpenForMarket` / `findStaleOpen`. */
 export interface OpenOrderRow {
   client_order_id: string;
@@ -160,6 +182,14 @@ export interface InsertPendingInput extends TenantBinding {
   fill_id: string;
   observed_at: Date;
   intent: OrderIntent;
+  /**
+   * Optional atomic cap for active tenant × market intent. When present, the
+   * DB adapter locks `(billing_account_id, market_id)`, re-sums active intent,
+   * and rejects the insert with `PositionCapReachedError` if it would exceed
+   * this bound. Copy-trading passes `max_usdc_per_trade` here so concurrent
+   * target pollers cannot race through the read-side pre-check.
+   */
+  max_market_intent_usdc?: number;
 }
 
 /** Input to `recordDecision` — one row per `decide()` outcome, including skips. */

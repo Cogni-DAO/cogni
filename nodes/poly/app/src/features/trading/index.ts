@@ -50,6 +50,7 @@ export {
   type ListRecentOptions,
   type OpenOrderRow,
   type OrderLedger,
+  PositionCapReachedError,
   type PositionIntentAggregate,
   type RecordDecisionInput,
   type StateSnapshot,

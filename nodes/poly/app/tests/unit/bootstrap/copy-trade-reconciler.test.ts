@@ -38,9 +38,18 @@ const WALLET_B = "0xCCCCddddCCCCddddCCCCddddCCCCddddCCCCdddd" as const;
 function target(
   billingAccountId: string,
   createdByUserId: string,
-  targetWallet: `0x${string}`
+  targetWallet: `0x${string}`,
+  overrides?: Partial<
+    Pick<EnumeratedTarget, "mirrorFilterPercentile" | "mirrorMaxUsdcPerTrade">
+  >
 ): EnumeratedTarget {
-  return { billingAccountId, createdByUserId, targetWallet };
+  return {
+    billingAccountId,
+    createdByUserId,
+    targetWallet,
+    mirrorFilterPercentile: overrides?.mirrorFilterPercentile ?? 75,
+    mirrorMaxUsdcPerTrade: overrides?.mirrorMaxUsdcPerTrade ?? 5,
+  };
 }
 
 function makeLogger(): LoggerPort {
@@ -216,6 +225,55 @@ describe("copy-trade-reconciler", () => {
 
     expect(startPollForTarget).toHaveBeenCalledTimes(1);
     stopReconciler();
+  });
+
+  it("restarts a running poll when target policy changes", async () => {
+    const stopP75 = vi.fn();
+    const stopP85 = vi.fn();
+    const startPollForTarget = vi
+      .fn<(t: EnumeratedTarget) => () => void>()
+      .mockImplementationOnce(() => stopP75)
+      .mockImplementationOnce(() => stopP85);
+    const p75 = target(TENANT_A, USER_A, WALLET_A, {
+      mirrorFilterPercentile: 75,
+      mirrorMaxUsdcPerTrade: 5,
+    });
+    const p85 = target(TENANT_A, USER_A, WALLET_A, {
+      mirrorFilterPercentile: 85,
+      mirrorMaxUsdcPerTrade: 20,
+    });
+    const listAllActive = vi
+      .fn()
+      .mockResolvedValueOnce([p75])
+      .mockResolvedValueOnce([p85])
+      .mockResolvedValueOnce([p85]);
+
+    const { timers, fireNextTick } = makeTimers();
+    const stopReconciler = startCopyTradeReconciler({
+      targetSource: { listAllActive },
+      startPollForTarget,
+      logger: makeLogger(),
+      timers,
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(startPollForTarget).toHaveBeenCalledTimes(1);
+    expect(startPollForTarget).toHaveBeenLastCalledWith(p75);
+    expect(stopP75).not.toHaveBeenCalled();
+
+    await fireNextTick();
+    expect(stopP75).toHaveBeenCalledTimes(1);
+    expect(startPollForTarget).toHaveBeenCalledTimes(2);
+    expect(startPollForTarget).toHaveBeenLastCalledWith(p85);
+    expect(stopP85).not.toHaveBeenCalled();
+
+    await fireNextTick();
+    expect(startPollForTarget).toHaveBeenCalledTimes(2);
+    expect(stopP85).not.toHaveBeenCalled();
+
+    stopReconciler();
+    expect(stopP85).toHaveBeenCalledTimes(1);
   });
 
   it("KEY_STABILITY — wallet case variance collapses to one key", async () => {

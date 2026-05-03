@@ -70,9 +70,21 @@ export interface CopyTradeReconcilerDeps {
  *  target's stop handle. Idempotent. */
 export type ReconcilerStopFn = () => void;
 
+interface RunningPoll {
+  stop: StopFn;
+  fingerprint: string;
+}
+
 /** Key a running poll by `${billingAccountId}:${targetWallet.toLowerCase()}`. */
 function keyFor(t: EnumeratedTarget): string {
   return `${t.billingAccountId}:${t.targetWallet.toLowerCase()}`;
+}
+
+function policyFingerprint(t: EnumeratedTarget): string {
+  return [
+    t.mirrorFilterPercentile,
+    Number(t.mirrorMaxUsdcPerTrade).toFixed(2),
+  ].join(":");
 }
 
 /**
@@ -91,7 +103,7 @@ export function startCopyTradeReconciler(
   };
   const log = deps.logger.child({ component: "copy-trade-reconciler" });
 
-  const running = new Map<string, StopFn>();
+  const running = new Map<string, RunningPoll>();
   let stopped = false;
 
   async function tick(): Promise<void> {
@@ -119,10 +131,14 @@ export function startCopyTradeReconciler(
     let removed = 0;
 
     // Stop polls for keys no longer in the desired set.
-    for (const [key, stop] of running.entries()) {
-      if (!desired.has(key)) {
+    for (const [key, poll] of running.entries()) {
+      const desiredTarget = desired.get(key);
+      if (
+        desiredTarget === undefined ||
+        poll.fingerprint !== policyFingerprint(desiredTarget)
+      ) {
         try {
-          stop();
+          poll.stop();
         } catch (err: unknown) {
           log.error(
             {
@@ -145,7 +161,10 @@ export function startCopyTradeReconciler(
       if (running.has(key)) continue;
       try {
         const stop = deps.startPollForTarget(target);
-        running.set(key, stop);
+        running.set(key, {
+          stop,
+          fingerprint: policyFingerprint(target),
+        });
         added += 1;
       } catch (err: unknown) {
         log.error(
@@ -184,9 +203,9 @@ export function startCopyTradeReconciler(
     if (stopped) return;
     stopped = true;
     timers.clearInterval(handle);
-    for (const [key, stopPoll] of running.entries()) {
+    for (const [key, poll] of running.entries()) {
       try {
-        stopPoll();
+        poll.stop();
       } catch {
         // Best-effort cleanup; nothing to do beyond dropping the handle.
       }

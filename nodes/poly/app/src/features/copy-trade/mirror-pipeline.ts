@@ -29,7 +29,11 @@ import {
   type OrderReceipt,
 } from "@cogni/poly-market-provider";
 
-import { AlreadyRestingError, type OrderLedger } from "@/features/trading";
+import {
+  AlreadyRestingError,
+  type OrderLedger,
+  PositionCapReachedError,
+} from "@/features/trading";
 import type { WalletActivitySource } from "@/features/wallet-watch";
 
 import { planMirrorFromFill } from "./plan-mirror";
@@ -284,11 +288,13 @@ async function processFill(
     min_usdc_notional,
   });
 
-  const positionLogFields = buildPositionLogFields(
-    plan.position_branch,
+  const decisionLogFields = buildDecisionLogFields({
+    branch: plan.position_branch,
+    fill,
     position,
-    targetPosition
-  );
+    target: deps.target,
+    targetPosition,
+  });
 
   if (plan.kind === "skip") {
     emitDecisionMetric(deps.metrics, "skipped", plan.reason, source, placement);
@@ -296,9 +302,12 @@ async function processFill(
       ...decisionBase,
       outcome: "skipped",
       reason: plan.reason,
-      intent: buildDecisionIntentBlob(fill, deps.target, client_order_id, {
-        position_branch: plan.position_branch,
-      }),
+      intent: buildDecisionIntentBlob(
+        fill,
+        deps.target,
+        client_order_id,
+        decisionLogFields
+      ),
       receipt: null,
     });
     log.info(
@@ -309,7 +318,7 @@ async function processFill(
         source,
         fill_id: fill.fill_id,
         client_order_id,
-        ...positionLogFields,
+        ...decisionLogFields,
       },
       "mirror pipeline: skip"
     );
@@ -334,9 +343,12 @@ async function processFill(
       ...decisionBase,
       outcome: "skipped",
       reason: "already_resting",
-      intent: buildDecisionIntentBlob(fill, deps.target, client_order_id, {
-        position_branch: plan.position_branch,
-      }),
+      intent: buildDecisionIntentBlob(
+        fill,
+        deps.target,
+        client_order_id,
+        decisionLogFields
+      ),
       receipt: null,
     });
     log.info(
@@ -348,7 +360,7 @@ async function processFill(
         fill_id: fill.fill_id,
         client_order_id,
         market_id: fill.market_id,
-        ...positionLogFields,
+        ...decisionLogFields,
       },
       "mirror pipeline: skip (already resting on market)"
     );
@@ -366,7 +378,7 @@ async function processFill(
     plan.reason,
     log,
     undefined,
-    positionLogFields
+    decisionLogFields
   );
 }
 
@@ -421,24 +433,60 @@ function targetConditionIdForFill(
   return fill.market_id || undefined;
 }
 
-function buildPositionLogFields(
-  branch: PositionBranch,
-  position: MirrorPositionView | undefined,
-  targetPosition: TargetConditionPositionView | undefined
-): Record<string, unknown> {
+function buildDecisionLogFields(args: {
+  branch: PositionBranch;
+  fill: import("@cogni/poly-market-provider").Fill;
+  position: MirrorPositionView | undefined;
+  target: MirrorTargetConfig;
+  targetPosition: TargetConditionPositionView | undefined;
+}): Record<string, unknown> {
+  const { branch, fill, position, target, targetPosition } = args;
+  const tokenId =
+    typeof fill.attributes?.asset === "string" ? fill.attributes.asset : "";
   return {
     position_branch: branch,
     position_qty_shares: position?.our_qty_shares ?? 0,
     position_token_id: position?.our_token_id ?? null,
-    target_position_usdc: targetPosition
-      ? Number(
-          targetPosition.tokens
-            .reduce((sum, token) => sum + token.cost_usdc, 0)
-            .toFixed(2)
-        )
-      : null,
+    target_token_cost_usdc: targetTokenCostUsdc(targetPosition, tokenId),
+    target_position_usdc: targetPositionTotalUsdc(targetPosition),
     target_hedge_ratio: targetHedgeRatio(position, targetPosition),
+    sizing_policy_kind: target.sizing.kind,
+    mirror_max_usdc_per_trade: target.sizing.max_usdc_per_trade,
+    sizing_percentile:
+      "statistic" in target.sizing ? target.sizing.statistic.percentile : null,
+    sizing_min_target_usdc:
+      "statistic" in target.sizing
+        ? target.sizing.statistic.min_target_usdc
+        : null,
+    sizing_max_target_usdc:
+      "statistic" in target.sizing
+        ? target.sizing.statistic.max_target_usdc
+        : null,
   };
+}
+
+function targetPositionTotalUsdc(
+  targetPosition: TargetConditionPositionView | undefined
+): number | null {
+  if (!targetPosition) return null;
+  return Number(
+    targetPosition.tokens
+      .reduce((sum, token) => sum + token.cost_usdc, 0)
+      .toFixed(2)
+  );
+}
+
+function targetTokenCostUsdc(
+  targetPosition: TargetConditionPositionView | undefined,
+  tokenId: string | undefined
+): number | null {
+  if (!targetPosition || !tokenId) return null;
+  return Number(
+    targetPosition.tokens
+      .filter((token) => token.token_id === tokenId)
+      .reduce((sum, token) => sum + token.cost_usdc, 0)
+      .toFixed(2)
+  );
 }
 
 function targetHedgeRatio(
@@ -732,6 +780,9 @@ async function executeMirrorOrder(
       fill_id: fill.fill_id,
       observed_at: new Date(fill.observed_at),
       intent,
+      ...(intent.side === "BUY"
+        ? { max_market_intent_usdc: deps.target.sizing.max_usdc_per_trade }
+        : {}),
     });
   } catch (err: unknown) {
     // DB partial unique index races past the app-level gate → same skip outcome.
@@ -748,6 +799,7 @@ async function executeMirrorOrder(
         outcome: "skipped",
         reason: "already_resting",
         intent: buildDecisionIntentBlob(fill, deps.target, client_order_id, {
+          ...decisionLogFields,
           position_branch: decisionLogFields?.position_branch ?? "new_entry",
         }),
         receipt: null,
@@ -768,6 +820,46 @@ async function executeMirrorOrder(
       );
       return;
     }
+    if (err instanceof PositionCapReachedError) {
+      emitDecisionMetric(
+        deps.metrics,
+        "skipped",
+        "position_cap_reached",
+        source,
+        placement
+      );
+      await deps.ledger.recordDecision({
+        ...decisionBase,
+        outcome: "skipped",
+        reason: "position_cap_reached",
+        intent: buildDecisionIntentBlob(fill, deps.target, client_order_id, {
+          ...decisionLogFields,
+          position_branch: decisionLogFields?.position_branch ?? "new_entry",
+          current_intent_usdc: err.current_intent_usdc,
+          proposed_intent_usdc: err.proposed_intent_usdc,
+          max_intent_usdc: err.max_intent_usdc,
+        }),
+        receipt: null,
+      });
+      log.info(
+        {
+          event: EVENT_NAMES.POLY_MIRROR_DECISION,
+          outcome: "skipped",
+          reason: "position_cap_reached",
+          source,
+          fill_id: fill.fill_id,
+          client_order_id,
+          market_id: fill.market_id,
+          current_intent_usdc: err.current_intent_usdc,
+          proposed_intent_usdc: err.proposed_intent_usdc,
+          max_intent_usdc: err.max_intent_usdc,
+          detail: "DB tenant-market intent cap backstop fired",
+          ...decisionLogFields,
+        },
+        "mirror pipeline: skip (position cap reached; DB backstop)"
+      );
+      return;
+    }
     emitDecisionMetric(
       deps.metrics,
       "error",
@@ -780,6 +872,7 @@ async function executeMirrorOrder(
       outcome: "error",
       reason: "pending_insert_failed",
       intent: buildDecisionIntentBlob(fill, deps.target, client_order_id, {
+        ...decisionLogFields,
         position_branch: decisionLogFields?.position_branch ?? "new_entry",
       }),
       receipt: null,
@@ -811,6 +904,7 @@ async function executeMirrorOrder(
       outcome: "placed",
       reason,
       intent: buildDecisionIntentBlob(fill, deps.target, client_order_id, {
+        ...decisionLogFields,
         side: intent.side,
         close: intent.side === "SELL",
         position_branch: decisionLogFields?.position_branch ?? "new_entry",
@@ -857,6 +951,7 @@ async function executeMirrorOrder(
       outcome: "error",
       reason: "placement_failed",
       intent: buildDecisionIntentBlob(fill, deps.target, client_order_id, {
+        ...decisionLogFields,
         position_branch: decisionLogFields?.position_branch ?? "new_entry",
       }),
       receipt: null,

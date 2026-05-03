@@ -31,6 +31,7 @@ import {
   type MarkPositionLifecycleByConditionIdInput,
   type OpenOrderRow,
   type OrderLedger,
+  PositionCapReachedError,
   type PositionIntentAggregate,
   type RecordDecisionInput,
   type StateSnapshot,
@@ -224,6 +225,27 @@ export class FakeOrderLedger implements OrderLedger {
         input.target_id,
         input.intent.market_id
       );
+    }
+    if (
+      input.max_market_intent_usdc !== undefined &&
+      input.intent.side === "BUY"
+    ) {
+      const currentIntent = await this.cumulativeIntentForMarket(
+        input.billing_account_id,
+        input.intent.market_id
+      );
+      if (
+        currentIntent + input.intent.size_usdc >
+        input.max_market_intent_usdc
+      ) {
+        throw new PositionCapReachedError(
+          input.billing_account_id,
+          input.intent.market_id,
+          currentIntent,
+          input.intent.size_usdc,
+          input.max_market_intent_usdc
+        );
+      }
     }
     const attrs: Record<string, unknown> = {
       size_usdc: input.intent.size_usdc,
