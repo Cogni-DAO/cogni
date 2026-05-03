@@ -260,48 +260,43 @@ export const POST = wrapRouteHandlerWithLogging(
           exposureRows,
           REFRESH_CONCURRENCY,
           async (row) => {
-            try {
-              const tokenId = readTokenId(row);
-              if (tokenId === null) return 0;
-              syncedIds.add(row.client_order_id);
-              const actionability = await classifyAsset(tokenId);
-              if (actionability.kind === "data_api_current") {
-                await container.orderLedger.updateStatus({
-                  client_order_id: row.client_order_id,
-                  status: row.status,
-                  filled_size_usdc: roundToCents(
-                    actionability.currentValueUsdc
-                  ),
-                });
-                return 1;
-              }
-              if (actionability.kind === "stale_zero_balance") {
-                if (lifecycleClassifiedAssets.has(tokenId)) return 0;
-                lifecycleClassifiedAssets.add(tokenId);
-                return container.orderLedger.markPositionLifecycleByAsset({
-                  billing_account_id: account.id,
-                  token_id: tokenId,
-                  lifecycle: "closed",
-                  updated_at: new Date(),
-                });
-              }
-              if (actionability.kind === "dust") {
-                if (lifecycleClassifiedAssets.has(tokenId)) return 0;
-                lifecycleClassifiedAssets.add(tokenId);
-                return container.orderLedger.markPositionLifecycleByAsset({
-                  billing_account_id: account.id,
-                  token_id: tokenId,
-                  lifecycle: "dust",
-                  updated_at: new Date(),
-                });
-              }
-              return 0;
-            } catch (err) {
-              positionActionabilityFailures.push(
-                err instanceof Error ? err.message : String(err)
-              );
+            const tokenId = readTokenId(row);
+            if (tokenId === null) return 0;
+            syncedIds.add(row.client_order_id);
+            const actionability = await classifyAsset(tokenId);
+            if (actionability.kind === "data_api_current") {
+              await container.orderLedger.updateStatus({
+                client_order_id: row.client_order_id,
+                status: row.status,
+                filled_size_usdc: roundToCents(actionability.currentValueUsdc),
+              });
+              return 1;
+            }
+            if (actionability.kind === "onchain_zero") {
+              if (lifecycleClassifiedAssets.has(tokenId)) return 0;
+              lifecycleClassifiedAssets.add(tokenId);
+              return container.orderLedger.markPositionLifecycleByAsset({
+                billing_account_id: account.id,
+                token_id: tokenId,
+                lifecycle: "closed",
+                updated_at: new Date(),
+              });
+            }
+            if (actionability.kind === "onchain_dust") {
+              if (lifecycleClassifiedAssets.has(tokenId)) return 0;
+              lifecycleClassifiedAssets.add(tokenId);
+              return container.orderLedger.markPositionLifecycleByAsset({
+                billing_account_id: account.id,
+                token_id: tokenId,
+                lifecycle: "dust",
+                updated_at: new Date(),
+              });
+            }
+            if (actionability.kind === "upstream_error") {
+              positionActionabilityFailures.push(actionability.message);
               return 0;
             }
+            return 0;
           }
         );
         ledgerRowsUpdated += exposureUpdateCounts.reduce<number>(

@@ -38,8 +38,8 @@ describe("classifyPositionActionability", () => {
     expect(readOnchainShares).not.toHaveBeenCalled();
   });
 
-  it("classifies Data API current shares below the CLOB market floor as dust", async () => {
-    const readOnchainShares = vi.fn();
+  it("checks chain before classifying Data API current shares below the CLOB market floor as dust", async () => {
+    const readOnchainShares = vi.fn().mockResolvedValue(0.67);
     const readMarketConstraints = vi.fn().mockResolvedValue({ minShares: 1 });
 
     await expect(
@@ -52,11 +52,11 @@ describe("classifyPositionActionability", () => {
         readMarketConstraints,
       })
     ).resolves.toEqual({
-      kind: "dust",
+      kind: "onchain_dust",
       shares: 0.67,
       minShares: 1,
     });
-    expect(readOnchainShares).not.toHaveBeenCalled();
+    expect(readOnchainShares).toHaveBeenCalledWith("token-1");
   });
 
   it("reads on-chain balance when Data API omits the ledger token", async () => {
@@ -77,7 +77,7 @@ describe("classifyPositionActionability", () => {
     });
   });
 
-  it("classifies omitted zero-balance tokens as stale", async () => {
+  it("classifies omitted zero-balance tokens as on-chain zero", async () => {
     await expect(
       classifyPositionActionability({
         tokenId: "token-stale",
@@ -86,8 +86,22 @@ describe("classifyPositionActionability", () => {
         readMarketConstraints: vi.fn(),
       })
     ).resolves.toEqual({
-      kind: "stale_zero_balance",
+      kind: "onchain_zero",
       shares: 0,
+    });
+  });
+
+  it("keeps positions unclassified when an authority read fails", async () => {
+    await expect(
+      classifyPositionActionability({
+        tokenId: "token-rpc-failure",
+        dataApiPositions: [],
+        readOnchainShares: vi.fn().mockRejectedValue(new Error("rpc down")),
+        readMarketConstraints: vi.fn(),
+      })
+    ).resolves.toEqual({
+      kind: "upstream_error",
+      message: "rpc down",
     });
   });
 });

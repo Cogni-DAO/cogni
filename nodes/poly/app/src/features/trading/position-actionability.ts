@@ -13,7 +13,7 @@
  *     is stale.
  *   - CTF_BALANCE_IS_EXIT_AUTHORITY — when Data API omits a ledger token, the
  *     wallet's CTF ERC-1155 balance decides whether a close attempt is
- *     possible.
+ *     possible; failed authority reads do not classify a position terminal.
  *   - CLOB_MIN_IS_SELLABILITY_FLOOR — non-zero balances below market minimum
  *     are classified as dust, not actionable close buttons.
  * Side-effects: injected reads only.
@@ -34,11 +34,11 @@ export type PositionActionability =
       currentValueUsdc: number;
     }
   | {
-      kind: "stale_zero_balance";
+      kind: "onchain_zero";
       shares: number;
     }
   | {
-      kind: "dust";
+      kind: "onchain_dust";
       shares: number;
       minShares: number;
     }
@@ -46,6 +46,10 @@ export type PositionActionability =
       kind: "onchain_actionable";
       shares: number;
       minShares: number;
+    }
+  | {
+      kind: "upstream_error";
+      message: string;
     };
 
 export interface ClassifyPositionActionabilityParams {
@@ -63,41 +67,58 @@ export async function classifyPositionActionability({
   readOnchainShares,
   readMarketConstraints,
 }: ClassifyPositionActionabilityParams): Promise<PositionActionability> {
-  const currentPosition = dataApiPositions.find(
-    (position) => position.asset === tokenId && position.size > 0
-  );
-  if (
-    currentPosition !== undefined &&
-    Number.isFinite(currentPosition.currentValue) &&
-    currentPosition.currentValue > 0
-  ) {
-    const constraints = await readMarketConstraints(tokenId);
-    if (currentPosition.size < constraints.minShares) {
+  try {
+    let constraints:
+      | Awaited<
+          ReturnType<
+            ClassifyPositionActionabilityParams["readMarketConstraints"]
+          >
+        >
+      | undefined;
+    const getConstraints = async () => {
+      constraints ??= await readMarketConstraints(tokenId);
+      return constraints;
+    };
+    const currentPosition = dataApiPositions.find(
+      (position) => position.asset === tokenId && position.size > 0
+    );
+    if (
+      currentPosition !== undefined &&
+      Number.isFinite(currentPosition.currentValue) &&
+      currentPosition.currentValue > 0
+    ) {
+      const marketConstraints = await getConstraints();
+      if (currentPosition.size >= marketConstraints.minShares) {
+        return {
+          kind: "data_api_current",
+          currentValueUsdc: currentPosition.currentValue,
+        };
+      }
+    }
+
+    const shares = await readOnchainShares(tokenId);
+    if (shares <= 0) {
+      return { kind: "onchain_zero", shares };
+    }
+
+    const marketConstraints = await getConstraints();
+    if (shares < marketConstraints.minShares) {
       return {
-        kind: "dust",
-        shares: currentPosition.size,
-        minShares: constraints.minShares,
+        kind: "onchain_dust",
+        shares,
+        minShares: marketConstraints.minShares,
       };
     }
+
     return {
-      kind: "data_api_current",
-      currentValueUsdc: currentPosition.currentValue,
+      kind: "onchain_actionable",
+      shares,
+      minShares: marketConstraints.minShares,
+    };
+  } catch (err) {
+    return {
+      kind: "upstream_error",
+      message: err instanceof Error ? err.message : String(err),
     };
   }
-
-  const shares = await readOnchainShares(tokenId);
-  if (shares <= 0) {
-    return { kind: "stale_zero_balance", shares };
-  }
-
-  const constraints = await readMarketConstraints(tokenId);
-  if (shares < constraints.minShares) {
-    return { kind: "dust", shares, minShares: constraints.minShares };
-  }
-
-  return {
-    kind: "onchain_actionable",
-    shares,
-    minShares: constraints.minShares,
-  };
 }
