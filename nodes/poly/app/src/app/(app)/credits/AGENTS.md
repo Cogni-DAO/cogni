@@ -12,7 +12,8 @@
 Protected Money page (served from the `/credits` route — URL is stable; the page is relabelled, not renamed). Composes two panels:
 
 - `AiCreditsPanel` — AI credits balance + USDC top-up flow (unchanged behaviour from the single-column credits page).
-- `TradingWalletPanel` — per-tenant Polymarket trading-wallet lifecycle. When disconnected, renders `TradingWalletConnectFlow` inline (first-time wallet provisioning via `/api/v1/poly/wallet/connect`); when connected, shows USDC.e + POL balances from `/api/v1/poly/wallet/status` + `/api/v1/poly/wallet/balances`, the Enable Trading CTA (`TradingReadinessSection`, task.0355), and stubbed fund/withdraw buttons linked to [task.0352](../../../../../../work/items/task.0352.poly-trading-wallet-fund-flow.md) and [task.0351](../../../../../../work/items/task.0351.poly-trading-wallet-withdrawal.md).
+- `TradingWalletPanel` — per-tenant Polymarket trading-wallet lifecycle. When disconnected, renders `TradingWalletConnectFlow` inline (first-time wallet provisioning via `/api/v1/poly/wallet/connect`); when connected, shows USDC.e + POL balances from `/api/v1/poly/wallet/status` + `/api/v1/poly/wallet/balances`, the Enable Trading CTA (`TradingReadinessSection`, task.0355), auto-wrap consent, the withdraw dialog, and a stubbed fund button linked to [task.0352](../../../../../../work/items/task.0352.poly-trading-wallet-fund-flow.md).
+- `TradingWalletWithdrawDialog` — two-step withdrawal UI for USDC.e transfer, pUSD unwrap to USDC.e, or native POL transfer via `/api/v1/poly/wallet/withdraw`. Destination is pasted and re-entered in v0; SIWE-wallet defaulting is future work.
 - `TradingWalletConnectFlow` — the per-tenant create-wallet UI (caps sliders + custodial-consent CTA). Moved here from `/profile` in task.0361 so wallet creation, funding, and approvals all live on one page.
 
 Desktop renders both panels as a two-column grid; mobile uses an **AI Credits** / **Trading wallet** pill toggle above a single-column stack.
@@ -48,12 +49,12 @@ When approvals are signed but USDC.e=0, `TradingReadinessSection` recolors the c
 
 - **Exports:** none
 - **Route:** `/credits` (server page + client composition; label in nav is "Money", Lucide `Coins` icon)
-- **Files considered API:** `page.tsx`, `CreditsPage.client.tsx`, `AiCreditsPanel.tsx`, `TradingWalletPanel.tsx`, `TradingWalletConnectFlow.tsx`, `TradingReadinessSection.tsx`
+- **Files considered API:** `page.tsx`, `CreditsPage.client.tsx`, `AiCreditsPanel.tsx`, `TradingWalletPanel.tsx`, `TradingWalletConnectFlow.tsx`, `TradingWalletWithdrawDialog.tsx`, `TradingReadinessSection.tsx`
 
 ## Responsibilities
 
 - **Does:** Fetch widget config server-side via `@/shared/config` (repo-spec), render the Money page shell, compose `AiCreditsPanel` (payments) + `TradingWalletPanel` (poly wallet) as a responsive two-column grid with a mobile toggle.
-- **Does not:** Read env vars or repo-spec on the client; hardcode wallets or chain IDs; perform trading-wallet withdrawal or fund writes (those land via task.0351 / task.0352).
+- **Does not:** Read env vars or repo-spec on the client; hardcode source wallets or chain IDs; perform trading-wallet fund writes (task.0352).
 
 ## Usage
 

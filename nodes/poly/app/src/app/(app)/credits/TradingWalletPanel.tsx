@@ -6,8 +6,8 @@
  * Purpose: Money page panel hosting the whole trading-wallet lifecycle —
  *   create (inline `TradingWalletConnectFlow` when `configured && !connected`),
  *   fund (USDC.e / POL readout + Polygon bridge link), enable trading
- *   (`TradingReadinessSection`, task.0355), and stubbed fund/withdraw
- *   (task.0351 / task.0352).
+ *   (`TradingReadinessSection`, task.0355), withdraw dialog, and stubbed fund
+ *   button (task.0352).
  * Scope: Client component. React Query fetches `/wallet/status` + `/wallet/balances`;
  *   reads the session via `next-auth/react` only to surface `userId` to the
  *   inline connect flow. On `onConnected`, invalidates `poly-wallet-status`
@@ -48,6 +48,7 @@ import { AddressChip, Card, HintText } from "@/components";
 import { AutoWrapToggle } from "./AutoWrapToggle";
 import { TradingReadinessSection } from "./TradingReadinessSection";
 import { TradingWalletConnectFlow } from "./TradingWalletConnectFlow";
+import { TradingWalletWithdrawDialog } from "./TradingWalletWithdrawDialog";
 
 async function fetchWalletStatus(): Promise<PolyWalletStatusOutput> {
   const res = await fetch("/api/v1/poly/wallet/status", {
@@ -206,14 +207,7 @@ export function TradingWalletPanel(): ReactElement {
             >
               Fund
             </button>
-            <button
-              type="button"
-              disabled
-              title="Coming soon — task.0351"
-              className={stubBtn}
-            >
-              Withdraw
-            </button>
+            <TradingWalletWithdrawDialog balances={balances} />
           </div>
 
           {balances && balances.errors.length > 0 ? (

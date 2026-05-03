@@ -129,7 +129,7 @@ function makeWalletPort(): PolyTraderWalletPort {
         },
       },
     }),
-    withdrawUsdc: vi.fn(),
+    withdraw: vi.fn(),
     rotateClobCreds: vi.fn(),
     ensureTradingApprovals: vi.fn(),
   } as unknown as PolyTraderWalletPort;

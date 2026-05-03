@@ -161,6 +161,28 @@ export type EnableTradingPreflightError =
   | "polygon_rpc_unconfigured"
   | "backend_unreachable";
 
+export type PolyWalletWithdrawalAsset = "usdc_e" | "pusd" | "pol";
+
+export interface PolyWalletWithdrawalInput {
+  readonly billingAccountId: string;
+  readonly asset: PolyWalletWithdrawalAsset;
+  readonly destination: `0x${string}`;
+  /** Atomic units. USDC.e/pUSD use 6 decimals; POL uses 18 decimals. */
+  readonly amountAtomic: bigint;
+  readonly requestedByUserId: string;
+}
+
+export interface PolyWalletWithdrawalResult {
+  readonly asset: PolyWalletWithdrawalAsset;
+  /** pUSD withdrawals unwrap and deliver USDC.e. */
+  readonly deliveredAsset: "usdc_e" | "pol";
+  readonly sourceAddress: `0x${string}`;
+  readonly destination: `0x${string}`;
+  readonly amountAtomic: bigint;
+  readonly primaryTxHash: `0x${string}`;
+  readonly txHashes: readonly `0x${string}`[];
+}
+
 /**
  * CUSTODIAL_CONSENT envelope. Every `provision` call MUST carry an explicit
  * consent record; the adapter persists it on the row as an audit trail.
@@ -296,18 +318,14 @@ export interface PolyTraderWalletPort {
   ): Promise<AuthorizeIntentResult>;
 
   /**
-   * Move USDC.e from the tenant's trading wallet to an external address.
-   * Intent-typed (token locked to USDC.e on Polygon for v0); the adapter
-   * encodes the ERC-20 `transfer` calldata so the port's `NO_GENERIC_SIGNING`
-   * invariant is preserved.
+   * Move typed funds from the tenant's trading wallet to an external address.
+   * Intent-typed only: USDC.e uses ERC-20 transfer, pUSD uses the pinned
+   * Polymarket CollateralOfframp unwrap into USDC.e, and POL uses a native
+   * Polygon transfer. No generic signing surface is exposed.
    */
-  withdrawUsdc(input: {
-    billingAccountId: string;
-    destination: `0x${string}`;
-    /** Atomic units (USDC.e has 6 decimals). */
-    amountAtomic: bigint;
-    requestedByUserId: string;
-  }): Promise<{ txHash: `0x${string}` }>;
+  withdraw(
+    input: PolyWalletWithdrawalInput
+  ): Promise<PolyWalletWithdrawalResult>;
 
   /**
    * Rotate the Polymarket CLOB L2 API credentials for a tenant.

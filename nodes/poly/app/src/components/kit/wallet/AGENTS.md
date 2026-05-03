@@ -9,7 +9,7 @@
 
 ## Purpose
 
-Shared presentational primitives for rendering wallet addresses across wallet-facing surfaces (dashboard operator card, Money page trading-wallet panel, profile page). Pure UI. No fetching, no address validation beyond render-time trimming.
+Shared presentational primitives for wallet-facing surfaces (dashboard operator card, Money page trading-wallet panel, profile page): address display/copy helpers and reusable wallet interaction flows. Pure UI. No fetching, no source-wallet ownership, no chain-specific business logic.
 
 ## Pointers
 
@@ -39,6 +39,7 @@ Shared presentational primitives for rendering wallet addresses across wallet-fa
   - `AddressChip` — short-form address + copy + explorer link.
   - `CopyAddressButton` — standalone copy-to-clipboard button.
   - `formatShortWallet(addr)` — 0x1234…abcd helper.
+  - `WithdrawalFlowDialog` — generic two-step pasted-destination withdrawal flow. Callers supply asset metadata, submit callback, and explorer URL formatting.
 
 ## Conventions
 
@@ -48,8 +49,8 @@ Shared presentational primitives for rendering wallet addresses across wallet-fa
 
 ## Responsibilities
 
-- **Does:** render a wallet address in short form; copy it on click; link to a block explorer; expose a tiny compositional API so wallet-facing panels (dashboard, money page, profile) don't each reinvent the trio.
-- **Does not:** fetch balances, resolve ENS, validate addresses beyond the render-time trim, own toasts or global UI state.
+- **Does:** render wallet addresses in short form; copy them on click; link to block explorers; expose tiny compositional APIs so wallet-facing panels don't each reinvent address or withdrawal mechanics.
+- **Does not:** fetch balances, resolve ENS, choose chain contracts, own source-wallet lookup, own toasts, or own global UI state.
 
 ## Notes
 

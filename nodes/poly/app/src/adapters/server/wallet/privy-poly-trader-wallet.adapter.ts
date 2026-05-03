@@ -11,14 +11,14 @@
  *   `getBalances` (DB address + optional Polygon RPC via `POLYGON_RPC_URL`
  *   for USDC.e + POL display on the Money page), `authorizeIntent` (trading-
  *   readiness + scope + cap + active-grant checks; mints the branded
- *   `AuthorizedSigningContext`), `ensureTradingApprovals` (idempotent 6-step
+ *   `AuthorizedSigningContext`), `withdraw` (typed USDC.e / pUSD unwrap / POL
+ *   withdrawals), `ensureTradingApprovals` (idempotent 6-step
  *   Polymarket onboarding: 3× USDC.e `approve` + 3× CTF `setApprovalForAll`
  *   signed by Privy HSM; stamps the `trading_approvals_ready_at` readiness
  *   column on success), `revoke` (cascades across `poly_wallet_grants` in
  *   the same tx + clears `trading_approvals_ready_at` so the next connection
  *   re-runs the approvals flow).
- *   `withdrawUsdc` + `rotateClobCreds` remain stubbed until the Money-page
- *   withdraw + CLOB-rotation items land.
+ *   `rotateClobCreds` remains stubbed until the CLOB-rotation item lands.
  * Invariants:
  *   - SEPARATE_PRIVY_APP: constructor takes a PrivyClient built from
  *     PRIVY_USER_WALLETS_* env. The operator-wallet triple is never read here.
@@ -54,7 +54,7 @@
  *   `rotateClobCreds` deletes the current Polymarket L2 API key, creates a
  *   fresh one for the same tenant wallet, and updates only the encrypted
  *   credential envelope.
- *   `withdrawUsdc` remains stubbed until the Money-page withdraw item lands.
+ *   `withdraw` is intentionally typed and limited to pinned Polygon assets.
  *   - APPROVALS_BEFORE_PLACE: `authorizeIntent` reads
  *     `trading_approvals_ready_at` AFTER the active-grant check and fails
  *     closed with `trading_not_ready` when null. Prevents silent CLOB
@@ -88,6 +88,8 @@ import type {
   PolyClobApiKeyCreds,
   PolyTraderSigningContext,
   PolyTraderWalletPort,
+  PolyWalletWithdrawalInput,
+  PolyWalletWithdrawalResult,
   TradingApprovalStep,
   TradingApprovalsState,
   WrapIdleUsdcEResult,
@@ -146,6 +148,8 @@ const NEG_RISK_ADAPTER_POLYMARKET =
 const PUSD_POLYGON = POLYMARKET_CONTRACTS.collateral as Address;
 const COLLATERAL_ONRAMP_POLYGON =
   "0x93070a847efEf7F70739046A929D47a521F5B8ee" as Address;
+const COLLATERAL_OFFRAMP_POLYGON =
+  "0x2957922Eb93258b93368531d39fAcCA3B4dC5854" as Address;
 
 const USDC_E_SPENDERS: readonly { label: string; address: Address }[] = [
   { label: "USDC.e → Onramp", address: COLLATERAL_ONRAMP_POLYGON },
@@ -171,6 +175,9 @@ const CTF_OPERATORS: readonly { label: string; address: Address }[] = [
 
 const COLLATERAL_ONRAMP_WRAP_ABI = parseAbi([
   "function wrap(address asset, address to, uint256 amount)",
+]);
+const COLLATERAL_OFFRAMP_UNWRAP_ABI = parseAbi([
+  "function unwrap(address asset, address to, uint256 amount)",
 ]);
 
 const CTF_SET_APPROVAL_ABI = parseAbi([
@@ -1791,19 +1798,308 @@ export class PrivyPolyTraderWalletAdapter implements PolyTraderWalletPort {
   }
 
   // ────────────────────────────────────────────────────────────────────────
-  // Deferred methods — follow-up ops slices.
+  // Typed withdrawal surface.
   // ────────────────────────────────────────────────────────────────────────
 
-  async withdrawUsdc(_input: {
+  async withdraw(
+    input: PolyWalletWithdrawalInput
+  ): Promise<PolyWalletWithdrawalResult> {
+    const signingContext = await this.resolve(input.billingAccountId);
+    if (!signingContext) {
+      throw Object.assign(
+        new Error("withdraw: no active connection for tenant"),
+        { code: "no_connection" }
+      );
+    }
+    if (!this.polygonRpcUrl) {
+      throw Object.assign(
+        new Error("withdraw: POLYGON_RPC_URL is not configured on this pod"),
+        { code: "polygon_rpc_unconfigured" }
+      );
+    }
+
+    const destination = getAddress(input.destination) as Address;
+    const publicClient = createPublicClient({
+      chain: polygon,
+      transport: http(this.polygonRpcUrl),
+    });
+    const walletClient: WalletClient = createWalletClient({
+      // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
+      account: signingContext.account as any,
+      chain: polygon,
+      transport: http(this.polygonRpcUrl),
+    });
+
+    if (input.asset === "usdc_e") {
+      return this.withdrawErc20({
+        publicClient,
+        walletClient,
+        signingContext,
+        billingAccountId: input.billingAccountId,
+        requestedByUserId: input.requestedByUserId,
+        token: USDC_E_POLYGON,
+        asset: "usdc_e",
+        deliveredAsset: "usdc_e",
+        destination,
+        amountAtomic: input.amountAtomic,
+      });
+    }
+
+    if (input.asset === "pusd") {
+      return this.withdrawPusdViaOfframp({
+        publicClient,
+        walletClient,
+        signingContext,
+        billingAccountId: input.billingAccountId,
+        requestedByUserId: input.requestedByUserId,
+        destination,
+        amountAtomic: input.amountAtomic,
+      });
+    }
+
+    return this.withdrawNativePol({
+      publicClient,
+      walletClient,
+      signingContext,
+      billingAccountId: input.billingAccountId,
+      requestedByUserId: input.requestedByUserId,
+      destination,
+      amountAtomic: input.amountAtomic,
+    });
+  }
+
+  private async withdrawErc20(input: {
+    publicClient: PublicClient;
+    walletClient: WalletClient;
+    signingContext: PolyTraderSigningContext;
     billingAccountId: string;
+    requestedByUserId: string;
+    token: Address;
+    asset: "usdc_e";
+    deliveredAsset: "usdc_e";
+    destination: Address;
+    amountAtomic: bigint;
+  }): Promise<PolyWalletWithdrawalResult> {
+    const balance = await input.publicClient.readContract({
+      address: input.token,
+      abi: ERC20_BALANCEOF_ABI,
+      functionName: "balanceOf",
+      args: [input.signingContext.funderAddress],
+    });
+    if (balance < input.amountAtomic) {
+      throw Object.assign(new Error("withdraw: insufficient token balance"), {
+        code: "insufficient_balance",
+      });
+    }
+
+    // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
+    const txHash: Hex = await (input.walletClient.writeContract as any)({
+      address: input.token,
+      abi: erc20Abi,
+      functionName: "transfer",
+      args: [input.destination, input.amountAtomic],
+    });
+    await this.confirmWithdrawalTx(input.publicClient, txHash);
+    this.logWithdrawal({
+      billingAccountId: input.billingAccountId,
+      connectionId: input.signingContext.connectionId,
+      requestedByUserId: input.requestedByUserId,
+      asset: input.asset,
+      deliveredAsset: input.deliveredAsset,
+      sourceAddress: input.signingContext.funderAddress,
+      destination: input.destination,
+      amountAtomic: input.amountAtomic,
+      txHashes: [txHash],
+    });
+    return {
+      asset: input.asset,
+      deliveredAsset: input.deliveredAsset,
+      sourceAddress: input.signingContext.funderAddress,
+      destination: input.destination,
+      amountAtomic: input.amountAtomic,
+      primaryTxHash: txHash,
+      txHashes: [txHash],
+    };
+  }
+
+  private async withdrawPusdViaOfframp(input: {
+    publicClient: PublicClient;
+    walletClient: WalletClient;
+    signingContext: PolyTraderSigningContext;
+    billingAccountId: string;
+    requestedByUserId: string;
+    destination: Address;
+    amountAtomic: bigint;
+  }): Promise<PolyWalletWithdrawalResult> {
+    const [balance, allowance] = await Promise.all([
+      input.publicClient.readContract({
+        address: PUSD_POLYGON,
+        abi: ERC20_BALANCEOF_ABI,
+        functionName: "balanceOf",
+        args: [input.signingContext.funderAddress],
+      }),
+      input.publicClient.readContract({
+        address: PUSD_POLYGON,
+        abi: erc20Abi,
+        functionName: "allowance",
+        args: [input.signingContext.funderAddress, COLLATERAL_OFFRAMP_POLYGON],
+      }),
+    ]);
+    if (balance < input.amountAtomic) {
+      throw Object.assign(new Error("withdraw: insufficient pUSD balance"), {
+        code: "insufficient_balance",
+      });
+    }
+
+    const txHashes: `0x${string}`[] = [];
+    if (allowance < input.amountAtomic) {
+      // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
+      const approveHash: Hex = await (input.walletClient.writeContract as any)({
+        address: PUSD_POLYGON,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [COLLATERAL_OFFRAMP_POLYGON, input.amountAtomic],
+      });
+      await this.confirmWithdrawalTx(input.publicClient, approveHash);
+      txHashes.push(approveHash);
+    }
+
+    // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
+    const unwrapHash: Hex = await (input.walletClient.writeContract as any)({
+      address: COLLATERAL_OFFRAMP_POLYGON,
+      abi: COLLATERAL_OFFRAMP_UNWRAP_ABI,
+      functionName: "unwrap",
+      args: [USDC_E_POLYGON, input.destination, input.amountAtomic],
+    });
+    await this.confirmWithdrawalTx(input.publicClient, unwrapHash);
+    txHashes.push(unwrapHash);
+
+    this.logWithdrawal({
+      billingAccountId: input.billingAccountId,
+      connectionId: input.signingContext.connectionId,
+      requestedByUserId: input.requestedByUserId,
+      asset: "pusd",
+      deliveredAsset: "usdc_e",
+      sourceAddress: input.signingContext.funderAddress,
+      destination: input.destination,
+      amountAtomic: input.amountAtomic,
+      txHashes,
+    });
+    return {
+      asset: "pusd",
+      deliveredAsset: "usdc_e",
+      sourceAddress: input.signingContext.funderAddress,
+      destination: input.destination,
+      amountAtomic: input.amountAtomic,
+      primaryTxHash: unwrapHash,
+      txHashes,
+    };
+  }
+
+  private async withdrawNativePol(input: {
+    publicClient: PublicClient;
+    walletClient: WalletClient;
+    signingContext: PolyTraderSigningContext;
+    billingAccountId: string;
+    requestedByUserId: string;
+    destination: Address;
+    amountAtomic: bigint;
+  }): Promise<PolyWalletWithdrawalResult> {
+    const balance = await input.publicClient.getBalance({
+      address: input.signingContext.funderAddress,
+    });
+    const [gas, gasPrice] = await Promise.all([
+      input.publicClient.estimateGas({
+        account: input.signingContext.funderAddress,
+        to: input.destination,
+        value: input.amountAtomic,
+      }),
+      input.publicClient.getGasPrice(),
+    ]);
+    const required = input.amountAtomic + gas * gasPrice;
+    if (balance < required) {
+      throw Object.assign(
+        new Error("withdraw: insufficient POL for value plus gas"),
+        {
+          code: "insufficient_balance",
+        }
+      );
+    }
+
+    // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
+    const txHash: Hex = await (input.walletClient.sendTransaction as any)({
+      to: input.destination,
+      value: input.amountAtomic,
+    });
+    await this.confirmWithdrawalTx(input.publicClient, txHash);
+    this.logWithdrawal({
+      billingAccountId: input.billingAccountId,
+      connectionId: input.signingContext.connectionId,
+      requestedByUserId: input.requestedByUserId,
+      asset: "pol",
+      deliveredAsset: "pol",
+      sourceAddress: input.signingContext.funderAddress,
+      destination: input.destination,
+      amountAtomic: input.amountAtomic,
+      txHashes: [txHash],
+    });
+    return {
+      asset: "pol",
+      deliveredAsset: "pol",
+      sourceAddress: input.signingContext.funderAddress,
+      destination: input.destination,
+      amountAtomic: input.amountAtomic,
+      primaryTxHash: txHash,
+      txHashes: [txHash],
+    };
+  }
+
+  private async confirmWithdrawalTx(
+    publicClient: PublicClient,
+    txHash: Hex
+  ): Promise<void> {
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash: txHash,
+      confirmations: 1,
+    });
+    if (receipt.status !== "success") {
+      throw Object.assign(new Error(`withdraw: tx reverted ${txHash}`), {
+        code: "tx_reverted",
+      });
+    }
+  }
+
+  private logWithdrawal(input: {
+    billingAccountId: string;
+    connectionId: string;
+    requestedByUserId: string;
+    asset: "usdc_e" | "pusd" | "pol";
+    deliveredAsset: "usdc_e" | "pol";
+    sourceAddress: `0x${string}`;
     destination: `0x${string}`;
     amountAtomic: bigint;
-    requestedByUserId: string;
-  }): Promise<{ txHash: `0x${string}` }> {
-    throw new Error(
-      "PrivyPolyTraderWalletAdapter.withdrawUsdc: not implemented (follow-up B3 slice)"
+    txHashes: readonly `0x${string}`[];
+  }): void {
+    this.log.info(
+      {
+        billing_account_id: input.billingAccountId,
+        connection_id: input.connectionId,
+        requested_by_user_id: input.requestedByUserId,
+        asset: input.asset,
+        delivered_asset: input.deliveredAsset,
+        source_address: input.sourceAddress,
+        destination: input.destination,
+        amount_atomic: input.amountAtomic.toString(),
+        primary_tx_hash: input.txHashes[input.txHashes.length - 1] ?? null,
+        tx_hashes: input.txHashes,
+      },
+      "poly.wallet.withdraw.confirmed"
     );
   }
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Deferred methods — follow-up ops slices.
+  // ────────────────────────────────────────────────────────────────────────
 
   async rotateClobCreds(input: {
     billingAccountId: string;
