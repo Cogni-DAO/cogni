@@ -78,8 +78,7 @@ async function fetchWalletStatus(): Promise<PolyWalletStatusOutput> {
 
 export function TradingWalletCard(): ReactElement {
   const [interval, setInterval] = useState<PolyWalletOverviewInterval>("1W");
-  const { data, isLoading, isError, isLiveEnriching } =
-    useTradingWalletOverview(interval);
+  const { data, isLoading, isError } = useTradingWalletOverview(interval);
   // Shares the "poly-wallet-status" key with /credits, so navigating between
   // pages hits the cache rather than refetching.
   const { data: statusData } = useQuery({
@@ -204,7 +203,6 @@ export function TradingWalletCard(): ReactElement {
               history={data.pnlHistory}
               interval={interval}
               onIntervalChange={setInterval}
-              isLoading={isLiveEnriching}
             />
           </div>
         )}

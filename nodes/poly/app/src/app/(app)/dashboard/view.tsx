@@ -217,8 +217,8 @@ export function DashboardView(): ReactElement {
   });
 
   const polymarketFetches =
-    useIsFetching({ queryKey: ["dashboard-trading-wallet"] }) +
-    useIsFetching({ queryKey: ["dashboard-wallet-execution"] }) +
+    useIsFetching({ queryKey: ["dashboard-trading-wallet", "read_model"] }) +
+    useIsFetching({ queryKey: ["dashboard-wallet-execution", "read_model"] }) +
     useIsFetching({ queryKey: ["poly-wallet-status"] });
   const refreshPolymarket = useMutation({
     mutationFn: postPolymarketRefresh,
