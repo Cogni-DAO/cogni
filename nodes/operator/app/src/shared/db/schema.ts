@@ -22,3 +22,4 @@ export * from "@cogni/db-schema/profile";
 // Core FK targets (users, billingAccounts)
 export * from "@cogni/db-schema/refs";
 export * from "@cogni/db-schema/scheduling";
+export * from "./work-item-sessions";

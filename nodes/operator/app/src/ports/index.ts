@@ -203,3 +203,9 @@ export type {
   TreasurySettlementOutcome,
   TreasurySettlementPort,
 } from "./treasury-settlement.port";
+export type {
+  ClaimWorkItemSessionResult,
+  WorkItemSessionPort,
+  WorkItemSessionRecord,
+  WorkItemSessionStatus,
+} from "./work-item-session.port";

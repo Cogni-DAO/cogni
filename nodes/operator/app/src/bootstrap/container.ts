@@ -99,6 +99,7 @@ import {
   getDoltgresWorkItemsAdapter,
 } from "@/adapters/server/db/doltgres/client";
 import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
+import { DrizzleWorkItemSessionAdapter } from "@/adapters/server/db/work-item-session.adapter";
 import { ServiceDrizzlePaymentAttemptRepository } from "@/adapters/server/payments/drizzle-payment-attempt.adapter";
 import { OpenRouterFundingAdapter } from "@/adapters/server/treasury/openrouter-funding.adapter";
 import { SplitTreasurySettlementAdapter } from "@/adapters/server/treasury/split-treasury-settlement.adapter";
@@ -143,6 +144,7 @@ import type {
   ThreadPersistencePort,
   TreasuryReadPort,
   TreasurySettlementPort,
+  WorkItemSessionPort,
 } from "@/ports";
 import type {
   ExecutionGrantUserPort,
@@ -222,6 +224,8 @@ export interface Container {
   workItemQuery: WorkItemQueryPort;
   /** Doltgres-backed work-items API surface — task.0423 v0. Throws if DOLTGRES_URL is unset. */
   doltgresWorkItems: WorkItemsDoltgresPort;
+  /** Operator-local active work-item coordination sessions. */
+  workItemSessions: WorkItemSessionPort;
   /** Run event streaming — publish/subscribe via Redis Streams */
   runStream: RunStreamPort;
   /** Node-level event streaming — undefined when REDIS_URL not set */
@@ -514,6 +518,7 @@ function createContainer(): Container {
   const serviceDb = getServiceDb();
   const paymentAttemptServiceRepository =
     new ServiceDrizzlePaymentAttemptRepository(serviceDb);
+  const workItemSessions = new DrizzleWorkItemSessionAdapter(serviceDb);
 
   // User-facing scheduling (appDb, RLS enforced)
   const executionGrantPort = new DrizzleExecutionGrantUserAdapter(
@@ -802,6 +807,7 @@ function createContainer(): Container {
     attributionStore: new DrizzleAttributionAdapter(serviceDb, getScopeId()),
     workItemQuery: workItemAdapter,
     doltgresWorkItems,
+    workItemSessions,
     runStream,
     nodeStream,
     get webhookRegistrations() {
