@@ -22,7 +22,7 @@ You are done when **all** of the following are true — not before:
 2. **Validation block committed** — `## Validation` section with `exercise:` + `observability:` is on the work item before `/closeout` creates the PR. (Invariant `VALIDATION_REQUIRED`.)
 3. **Code gate green** — PR merged to `main`. `status: done`. _This is only the code gate._
 4. **Flight gate green** — promoted to [`candidate-a`](docs/spec/ci-cd.md#environment-model) via flight. Argo `Healthy`, rollout clean, `/version.buildSha` matches the source-sha map (per promoted apps).
-5. **Feature gate green — by your own hand** — you (or qa-agent) have hit the real candidate-a URL with the `exercise:` from your validation block, got the expected response, and queried Loki for the observability signal at the deployed SHA and seen _your own request_ in the logs. Then set `deploy_verified: true` on the work item.
+5. **Feature gate green — by your own hand** — you (or qa-agent) have hit the real candidate-a URL with the `exercise:` from your validation block, got the expected response, and queried Loki for the observability signal at the deployed SHA and seen _your own request_ in the logs. Post the `/validate-candidate` scorecard on the PR; that scorecard is the source evidence for flipping `deploy_verified: true`.
 
 `status: done` = code gate. `deploy_verified: true` = real gate. Never conflate.
 
@@ -30,6 +30,17 @@ Reference interaction patterns:
 
 - HTTP / API surfaces → [Agent-First API Validation](docs/guides/agent-api-validation.md) (discover → register → auth → execute → list → stream, no browser session)
 - Other surfaces (CLI, graph, scheduler, infra) → [Development Lifecycle § Feature Validation Contract](docs/spec/development-lifecycle.md#feature-validation-contract)
+
+## Required Agent Loop
+
+For code contributions, follow this sequence unless a human explicitly narrows the task to local analysis only:
+
+1. **Discover + register** — `GET /.well-known/agent.json`, then `POST /api/v1/agent/register` for a Bearer token.
+2. **Adopt one work item** — list/create through `/api/v1/work/items`; keep one work item ≈ one PR.
+3. **Coordinate execution** — claim/heartbeat/link PR through the operator work-item session endpoints while you work.
+4. **Implement + prove locally** — run the smallest targeted lint/type/test/db checks that cover the edited surface.
+5. **Open PR + flight** — push, open the PR, wait for CI, then request/dispatch `candidate-a` flight for the exact head SHA.
+6. **Validate with `/validate-candidate`** — hit the real candidate-a URL, query Loki for feature-specific logs from your own request, and post the scorecard on the PR.
 
 ## Workflow Guiding Principles
 
@@ -54,7 +65,7 @@ Each stage is a real signal, not a ceremony. Skipping a stage does not save time
 - **During iteration:** `pnpm check:fast:fix` auto-fixes lint/format and runs typecheck + unit; `pnpm check:fast` is the strict (verify-only) variant the pre-push hook runs. If `check:fast` fails with drift, run `check:fast:fix`, commit the result, and retry.
 - **Pre-commit:** `pnpm check` — once per session, never repeated. The full static gate.
 - **Pre-merge (CI):** `pnpm check:full` (~20 min). Stack-test success is the required CI gate. Check PR status after push.
-- **Post-merge:** flight to `candidate-a` → exercise the feature on the live URL → read your own request back out of Loki → `deploy_verified: true`. This is the gate that actually proves the feature exists.
+- **Post-flight:** run `/validate-candidate` → exercise the feature on the live URL → read your own request back out of Loki → post the scorecard used to flip `deploy_verified: true`. This is the gate that actually proves the feature exists.
 
 ## Pull Request Discipline
 
@@ -95,6 +106,7 @@ PRs are the durable artifact of a work item. [`/closeout`](.claude/commands/clos
 
 - [Development Lifecycle](docs/spec/development-lifecycle.md) — status-driven flow, `/command` dispatch, invariants
 - [CI/CD Pipeline](docs/spec/ci-cd.md) — trunk-based model, candidate-a flight, promotion, source-sha map
+- [Agentic Contribution Loop](docs/spec/agentic-contribution-loop.md) — machine-executable contribution flow from discovery through merge request
 - [Agent-First API Validation](docs/guides/agent-api-validation.md) — reference interaction flow for API features
 
 **Architecture & development**

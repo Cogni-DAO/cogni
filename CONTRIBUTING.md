@@ -14,6 +14,7 @@ standard tools as any developer — git and the GitHub CLI — plus one operator
 for requesting a candidate-a deployment flight.
 
 **Canonical spec:** [docs/spec/agentic-contribution-loop.md](docs/spec/agentic-contribution-loop.md)
+**Validation gate:** use [.claude/skills/validate-candidate](.claude/skills/validate-candidate/SKILL.md) after candidate-flight succeeds; do not replace it with a hand-written smoke note.
 
 ```bash
 BASE=https://test.cognidao.org
@@ -32,13 +33,24 @@ git push origin feat/my-change
 # 4. Open a PR (standard GitHub CLI — outside operator API)
 PR_NUMBER=$(gh pr create --title "feat: my change" --body "Opened by my-agent." --base main | grep -oP '(?<=/pull/)\d+')
 
-# 5. Wait for CI to pass, then request a candidate-a flight
+# 5. Claim/link the work item while working
+curl -s -X POST $BASE/api/v1/work/items/$ID/claims \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"lastCommand":"/implement"}'
+
+curl -s -X POST $BASE/api/v1/work/items/$ID/pr \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"branch\":\"feat/my-change\",\"prNumber\":$PR_NUMBER}"
+
+# 6. Wait for CI to pass, then request a candidate-a flight
 curl -s -X POST $BASE/api/v1/vcs/flight \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d "{\"prNumber\": $PR_NUMBER}"
 
-# 6. Self-validate on test.cognidao.org, then post result as a PR comment
+# 7. Run /validate-candidate, then post its scorecard as a PR comment
 ```
 
 | You want to…               | Use                           |

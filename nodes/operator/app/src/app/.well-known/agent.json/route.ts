@@ -3,9 +3,10 @@
 
 /**
  * Module: `@app/.well-known/agent.json`
- * Purpose: Discovery document for machine agents — publishes the register,
- *   runs, runStream, completions, and flight URLs plus the auth scheme so
- *   external clients can bootstrap without hard-coding paths or reading docs.
+ * Purpose: Discovery document for machine agents — publishes register,
+ *   work-item, coordination, completions, run, validation, and flight URLs
+ *   plus the auth scheme so external clients can bootstrap without hard-coding
+ *   paths or reading docs.
  * Scope: Single GET handler. Honors `x-forwarded-host`/`x-forwarded-proto`
  *   from Caddy / k8s ingress so the published URLs are externally reachable
  *   (falling back to the raw Host header then request.url for local dev).
@@ -14,7 +15,7 @@
  *   - NO_INTERNAL_BIND_ADDR: URLs must never expose `0.0.0.0:3000` or other
  *     in-pod addresses. Always derive origin from forwarded headers first.
  * Side-effects: none
- * Links: docs/guides/agent-api-validation.md
+ * Links: docs/spec/agentic-contribution-loop.md, docs/guides/agent-api-validation.md
  * @public
  */
 
@@ -53,9 +54,29 @@ export async function GET(request: Request) {
     endpoints: {
       completions: `${origin}/api/v1/chat/completions`,
       graphs: `${origin}/api/v1/ai/agents`,
+      workItems: `${origin}/api/v1/work/items`,
+      workItem: `${origin}/api/v1/work/items/{id}`,
+      workItemClaim: `${origin}/api/v1/work/items/{id}/claims`,
+      workItemHeartbeat: `${origin}/api/v1/work/items/{id}/heartbeat`,
+      workItemPr: `${origin}/api/v1/work/items/{id}/pr`,
+      workItemCoordination: `${origin}/api/v1/work/items/{id}/coordination`,
       runs: `${origin}/api/v1/agent/runs`,
       runStream: `${origin}/api/v1/agent/runs/{runId}/stream`,
       flight: `${origin}/api/v1/vcs/flight`,
+    },
+    process: {
+      contributionSpec: "docs/spec/agentic-contribution-loop.md",
+      validationGuide: "docs/guides/agent-api-validation.md",
+      validationSkill: ".claude/skills/validate-candidate",
+      requiredLoop: [
+        "discover",
+        "register",
+        "adopt_work_item",
+        "claim_or_heartbeat",
+        "push_pr",
+        "flight_candidate_a",
+        "validate_candidate_with_loki",
+      ],
     },
     defaults: {
       model: "gpt-4o-mini",

@@ -1,22 +1,26 @@
 ---
 id: agent-api-validation-guide
 type: guide
-title: Agent-First API Validation (Canary + Local)
+title: Agent-First API Validation (Candidate-A + Local)
 status: draft
 trust: draft
-summary: Explicit validation checklist for proving machine-agent registration, auth, run list/stream access, and metered graph execution behavior.
-read_when: Validating the new machine-agent API surface locally or against canary.
+summary: API proof recipe for machine-agent discovery, auth, work-item coordination, route exercise, and graph run validation.
+read_when: Validating an HTTP/API surface locally or against candidate-a, especially inside /validate-candidate.
 owner: derekg1729
 created: 2026-04-08
 verified: 2026-04-08
-tags: [agent-api, validation, canary, billing]
+tags: [agent-api, validation, candidate-a, billing]
 ---
 
-# Agent-First API Validation (Canary + Local)
+# Agent-First API Validation (Candidate-A + Local)
+
+This guide is a **route exercise recipe**, not the full contribution lifecycle.
+For the lifecycle, use [`docs/spec/agentic-contribution-loop.md`](../spec/agentic-contribution-loop.md).
+For post-flight PR validation, use [`.claude/skills/validate-candidate`](../../.claude/skills/validate-candidate/SKILL.md); it owns the scorecard and Loki evidence format.
 
 ## Prereqs
 
-- [ ] Running target: `pnpm dev:stack` (local) **or** live canary URL.
+- [ ] Running target: `pnpm dev:stack` (local) **or** live candidate-a URL.
 - [ ] Funded wallet + funded billing account for the node under test.
 - [ ] `curl`, `jq`, and SSE-capable client (`curl -N` is enough).
 
@@ -67,6 +71,33 @@ curl -X PATCH $BASE/api/v1/work/items/$ID \
 
 **Lifecycle close gate:** PATCH `status=done` only after PR merges to `main`. Pre-merge stays `needs_merge`; rejected review flips back to `needs_implement`.
 
+## Work-item sessions — active execution coordination
+
+Use these routes when an agent is actively working a PR. They are operator-owned coordination surfaces, not shared node primitives.
+
+```bash
+# Claim while you work
+curl -X POST $BASE/api/v1/work/items/$ID/claims \
+  -H "Authorization: Bearer $API_KEY" -H "content-type: application/json" \
+  -d '{"ttlSeconds":1800,"lastCommand":"/implement"}'
+
+# Keep the claim fresh
+curl -X POST $BASE/api/v1/work/items/$ID/heartbeat \
+  -H "Authorization: Bearer $API_KEY" -H "content-type: application/json" \
+  -d '{"ttlSeconds":1800,"lastCommand":"/implement"}'
+
+# Link code artifact
+curl -X POST $BASE/api/v1/work/items/$ID/pr \
+  -H "Authorization: Bearer $API_KEY" -H "content-type: application/json" \
+  -d '{"branch":"feat/my-change","prNumber":1204}'
+
+# Read current coordination status
+curl -H "Authorization: Bearer $API_KEY" \
+  $BASE/api/v1/work/items/$ID/coordination
+```
+
+Proof criteria for these routes: claim returns `201`, competing claim returns `200` with `conflict: true`, heartbeat returns `200`, PR link returns `200`, coordination echoes the session, and the durable work item reads back the linked `branch` / `pr`.
+
 ## Available graphs (vNext registry)
 
 Graphs are currently discoverable only via session auth (`GET /api/v1/ai/agents`). Machine agents
@@ -115,6 +146,7 @@ Pass the short name (without `langgraph:` prefix) as `graph_name` in completions
 - Agent completes **discover → register → auth → execute → list runs → stream events** with no browser session.
 - Graph execution produced a successful run (`status: "success"`).
 - Metering path recorded downstream (charge receipt / billing telemetry) for the run.
+- For contribution/API route changes, the live candidate-a call must have a feature-specific Loki marker from the same exercise window. Generic traffic to the pod is not enough for a green validation.
 
 ## Configs that matter most
 

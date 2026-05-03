@@ -18,6 +18,7 @@ tags: [agent-api, vcs, contribution, flight, agentic]
 > Single source of truth for the as-built, machine-executable contribution lifecycle.
 > Human-focused development lifecycle lives in [development-lifecycle.md](./development-lifecycle.md).
 > Validation flow detail lives in [docs/guides/agent-api-validation.md](../guides/agent-api-validation.md).
+> Post-flight PR proof lives in [`.claude/skills/validate-candidate`](../../.claude/skills/validate-candidate/SKILL.md); do not hand-roll the scorecard/Loki step.
 
 ## Goal
 
@@ -39,8 +40,10 @@ external agent
   │
   ├─ GET  /.well-known/agent.json          ← discover all endpoints
   ├─ POST /api/v1/agent/register           ← get Bearer token
+  ├─ POST /api/v1/work/items/:id/claims    ← claim active execution
   ├─ git push origin feat/my-branch        ← push branch (standard git)
   ├─ gh pr create ...                      ← open PR (standard GitHub CLI)
+  ├─ POST /api/v1/work/items/:id/pr        ← link branch/PR to work item
   ├─ POST /api/v1/vcs/flight { prNumber }  ← CI-gated flight request → workflowUrl
   └─ GET  /api/v1/agent/runs/{id}/stream   ← optional: stream pr-manager result
 ```
@@ -70,7 +73,20 @@ API_KEY=$(curl -s -X POST $BASE/api/v1/agent/register \
   -d '{"name": "my-agent"}' | jq -r .apiKey)
 ```
 
-**Step 3 — Push branch (standard git)**
+**Step 3 — Adopt and claim one work item**
+
+Adopt exactly one work item before coding. While active, claim it through the operator coordination API:
+
+```bash
+curl -s -X POST $BASE/api/v1/work/items/$ID/claims \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"lastCommand":"/implement"}'
+```
+
+Heartbeat long-running sessions through `/api/v1/work/items/$ID/heartbeat`.
+
+**Step 4 — Push branch (standard git)**
 
 ```bash
 git push origin feat/my-change
@@ -78,7 +94,7 @@ git push origin feat/my-change
 
 The operator does not accept patches or diffs. The agent pushes its own branch via standard git.
 
-**Step 4 — Open PR (standard GitHub CLI)**
+**Step 5 — Open PR (standard GitHub CLI)**
 
 ```bash
 gh pr create --title "feat: my change" --body "Opened by my-agent." --base main
@@ -87,11 +103,20 @@ PR_NUMBER=<number from gh output>
 
 Agents use `gh pr create` directly. The operator does not proxy PR creation — agents already have git push access to the repo and can use standard OSS tools.
 
-**Step 5 — Wait for CI to pass**
+Link the code artifact back to the work item once the PR exists:
+
+```bash
+curl -s -X POST $BASE/api/v1/work/items/$ID/pr \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"branch\":\"feat/my-change\",\"prNumber\":$PR_NUMBER}"
+```
+
+**Step 6 — Wait for CI to pass**
 
 Poll `GET /api/v1/agent/runs` or watch the PR on GitHub until all required CI checks are green.
 
-**Step 6 — Request flight**
+**Step 7 — Request flight**
 
 ```bash
 curl -s -X POST $BASE/api/v1/vcs/flight \
@@ -115,11 +140,11 @@ Returns:
 
 The endpoint rejects with `422` if CI is not green. The candidate-flight workflow handles slot lease acquisition.
 
-**Step 7 — Self-validate on candidate-a**
+**Step 8 — Self-validate on candidate-a**
 
-After a successful flight, hit your own feature endpoint on `test.cognidao.org` and confirm behavior. Post the result as a PR comment — this is the real validation gate. The `/validate-candidate` skill is the canonical procedure (agent or human).
+After a successful flight, hit your own feature endpoint on `test.cognidao.org` and confirm behavior. Post the result as a PR comment — this is the real validation gate. The `/validate-candidate` skill is the canonical procedure (agent or human). It must find a feature-specific Loki marker from the same exercise window; generic pod traffic is not sufficient proof.
 
-**Step 8 — Request merge**
+**Step 9 — Request merge**
 
 When validation passes, request merge. GitHub Merge Queue is enabled on `main` (see `infra/github/`):
 
@@ -139,6 +164,7 @@ The merge queue's load-bearing guarantee in our pipeline is **anchoring preview-
 | Acquire slot lease        | ❌ (workflow owns it)     | ❌ (workflow owns)    |
 | Monitor Argo rollout      | ❌                        | ✅                    |
 | Verify deployed SHA       | ❌                        | ✅                    |
+| Exercise feature + Loki   | ❌                        | ✅ via validate step  |
 | Request merge (enqueue)   | ❌                        | ✅                    |
 | Rebase + retest + merge   | ❌ (merge queue owns)     | ❌ (merge queue owns) |
 
@@ -171,5 +197,6 @@ All `POST /api/v1/vcs/flight` calls require auth.
 - `PRIMITIVE_OVER_POLICY` — `/api/v1/vcs/flight` is a primitive action; pr-manager is the policy layer; do not add flight logic to the REST endpoint
 - `OSS_FOR_CODE_WORK` — agents use standard git + `gh pr create` for code contribution; the operator provides only the flight gate
 - `SELF_VALIDATE` — agents are expected to validate their own changes on candidate-a; `deploy_verified: true` is the real gate, not `status: done`
+- `FEATURE_LOG_PROOF` — post-flight validation must tie Loki evidence to the exercised feature route/tool/graph, not ambient pod traffic
 - `MERGE_QUEUE_DETERMINISM` — the rebase + retest + merge step is owned by GitHub Merge Queue (a deterministic vendor primitive), not by an agent or operator code path; agents only request merge, never rebase
 - `NO_AGENTIC_REBASE` — no LLM is in the merge path; rebase logic must remain a vendor primitive (GH Merge Queue, GitLab Merge Trains) so the merge sequence is auditable and reproducible
