@@ -5,20 +5,18 @@ status: needs_implement
 created: 2026-05-04
 updated: 2026-05-04
 tags: [poly, redeem, dashboard, lifecycle, read-model, observability]
-implements: poly-redeem-data-incongruity-2026-05-04
+implements: bug.5008
 ---
 
 # Poly Redeem — Chain Authority Alignment
 
 ## Outcome
 
-Success is when **every "Redeem" button shown on the poly dashboard succeeds when clicked, and every row whose chain-policy decision is `losing_outcome / zero_balance / unresolved` is classified into the correct dashboard bucket without a separate manual click ever returning `no_redeemable_position`.** A user sees one consistent label, status, and action across `Open`, `Markets`, and `History`, and the manual-redeem 409 path always logs the condition + reason so future drift is debuggable in Loki.
+Success is when **every "Redeem" button shown on the poly dashboard succeeds when clicked, every losing/unresolved row is classified into the right dashboard bucket without a Polymarket Data-API call per dashboard request, and every 409 from the manual-redeem route emits a structured Loki log with `condition_id` + `reason`.**
 
 ## Problem (observed 2026-05-04 in production)
 
-Production user clicks `Redeem` on rows the dashboard labels `redeemable`, and the manual-redeem route returns `409 not_redeemable / no_redeemable_position` or `losing_outcome` on rows with positive PnL. The dashboard also renders `Redeem` as the button label for rows whose `lifecycleState` disqualifies them from being redeemable, and the 409 path logs nothing useful (no `condition_id`, no `reason`).
-
-Confirmed in Loki: `poly.wallet.positions.redeem` has 5 distinct user clicks at 22:26–22:32 UTC, each `status=409`, `durationMs<400ms`, and **no observability beyond `request received` / `request complete`**.
+Production user clicks `Redeem` on rows the dashboard labels `redeemable`; manual-redeem route returns `409 not_redeemable / no_redeemable_position` or `losing_outcome` on rows with positive PnL. UI also renders `Redeem` for rows whose `lifecycleState` disqualifies them, and the 409 path logs nothing useful (no `condition_id`, no `reason`). Confirmed in Loki: 5 distinct user clicks at 22:26–22:32 UTC, each `status=409, durationMs<400ms`, no observability beyond `request received` / `request complete`.
 
 ## Root cause: split-brain on "redeemable"
 
@@ -29,115 +27,137 @@ Two independent authorities decide whether a position is redeemable, and they di
 | Read-model (display)  | `nodes/poly/app/src/features/wallet-analysis/server/current-position-read-model.ts:238-257` | DB-cached Polymarket Data-API `raw.redeemable` flag **OR** ledger `lifecycleState="winner"` | Dashboard `status="redeemable"` and Action button |
 | Redeem route (action) | `nodes/poly/app/src/features/redeem/resolve-redeem-decision.ts`     | Live Data-API `/positions` + on-chain CTF `payoutNumerator/Denominator/balanceOf`   | What actually executes                          |
 
-`raw.redeemable=true` from Polymarket Data API means **"market resolved AND you held shares at snapshot time"** — *not* "you have a winner." Loser shares are technically `redeemable` for $0 in CTF terms (`payoutNumerator=0`). The Polymarket UI shows a "Redeem" button on losing positions too; we mistook that signal for actionability.
+`raw.redeemable=true` from Polymarket Data API means **"market resolved AND you held shares at snapshot time"** — *not* "you have a winner." Loser shares are technically `redeemable` for $0 in CTF terms (`payoutNumerator=0`). Polymarket's UI shows a "Redeem" button on losing positions too; we mistook that signal for actionability. This violates `docs/spec/poly-order-position-lifecycle.md` § Required Matrix, which makes `lifecycle="winner"` the only redeemable signal.
 
-This violates `docs/spec/poly-order-position-lifecycle.md` § Required Matrix, which states `lifecycle="winner"` is the **only** axis that produces a `Redeemable asset / Actionable redeem row` classification.
+## Approach: `poly_market_outcomes` becomes the single chain-resolution authority
 
-## Symptom map
+The `poly_market_outcomes` table already exists in `nodes/poly/packages/db-schema/src/trader-activity.ts:304` with the right shape: PK `(condition_id, token_id)`, `outcome IN ('winner','loser','unknown')`, `payout`, `resolved_at`, `raw`, `updated_at`. It is currently unpopulated. PR #1235's follow-ups #1 + #2 already plan to populate it and read-join it. **This PR fulfills both.**
 
-1. **`Redeem` button → `no_redeemable_position`**: `raw.redeemable=true` in DB, but live `listUserPositions(funder)` returns `[]` for that condition (already-redeemed elsewhere, or wallet/funder mismatch via Safe-proxy, or Data-API delisted post-resolution).
-2. **`losing_outcome` on positive PnL**: Polymarket flags both winner and loser sides as `redeemable=true` once resolved; on-chain `payoutNumerator=0` for the loser side. Positive PnL is stale Data-API mid-pricing on a resolved-loser side.
-3. **Disabled `Redeem` button on non-redeemable rows**: `columns.tsx:467-471` falls through to `actionLabel("redeemable") = "Redeem"` when `isRedeemable=false` and `isCloseable=false`, leaving a disabled button labeled `Redeem` — visual lie.
-4. **Held=0m on recovered rows**: `openedAt = last_observed_at` (sync time), not entry time.
-5. **Zero observability on the 409 path**: route returns `{error:"not_redeemable", reason}` and logs only the request envelope.
+The `redeem-subscriber` already receives every Polygon `ConditionResolution` chain event with `conditionId, outcomeSlotCount, payoutNumerators[]`. The catchup replays the same events from a cursor. Both paths already invoke `resolveRedeemCandidatesForCondition()` per funder; we simply add **one DB UPSERT per chain event** (not per funder) into `poly_market_outcomes`. Then the read-model JOINs on `(condition_id, token_id)` and derives `winner | loser` purely from DB.
 
-## Approach
-
-**Solution**: Make `lifecycleState` the **sole** redeemable authority — comply with the existing spec — and add one new pipeline trigger so observation-derived resolutions mirror to ledger lifecycle automatically.
+**Net effect**: zero Data-API calls and zero RPC calls on the dashboard read path. Read-model lifecycle is computed from `poly_market_outcomes.outcome` directly. `raw.redeemable` is no longer consulted anywhere.
 
 **Reuses**:
 
-- `resolveRedeemCandidatesForCondition()` (existing) — already runs `decideRedeem` policy (the route uses this)
-- `decisionToEnqueueInput()` + `mirrorRedeemLifecycleToLedger()` (existing) — already correctly translate `RedeemDecision → poly_redeem_jobs` row + `position_lifecycle` mirror
-- `RedeemSubscriber.handleConditionResolution()` (existing) — same handler pattern; we just add a fourth invocation path
-- `wrapRouteHandlerWithLogging` (existing) — already gives `ctx.log`; route 409 path just needs to call it
-- accent-color utility classes already present in homepage `Connect` button (`Button` variant) — reuse, no new design tokens
+- `poly_market_outcomes` table (existing, unpopulated — `db-schema/src/trader-activity.ts:304`)
+- `RedeemSubscriber.handleConditionResolution` (existing handler — adds one UPSERT, no new method)
+- `redeem-catchup.ts` event replay (existing — same UPSERT runs during replay → backfills past resolutions automatically)
+- `decideRedeem` policy (unchanged — still authoritative for the manual-redeem write path; the dashboard read path no longer needs it)
+- Homepage `Connect` button styling (find via grep, reuse for accent color — no new design tokens)
 
 **Rejected alternatives**:
 
-- **Live multicall on every dashboard read** (164 chain calls per page-load): correct but slow (~2-3s P95 added) and chatty against the public Polygon RPC. Rejected.
-- **New `chain_redeem_*` columns on `poly_trader_current_positions`** (cache the chain decision per row): tempting, but we already have `poly_redeem_jobs` keyed by `(funder, condition_id)` carrying `lifecycle_state`. Adding a parallel cache column would be a third authority and re-introduce the split-brain we are killing. Rejected.
-- **Sweep on `raw.redeemable` change** (enumerate all `raw.redeemable=true` rows in a cron tick and fire policy): violates `SWEEP_IS_NOT_AN_ARCHITECTURE` in `redeem-subscriber.ts`. Rejected. The accepted variant below is *event-driven on observation upsert*, not a sweep.
+- **Observation-driven trigger** — calling `decideRedeem` from `trader-observation-service` whenever Data-API `raw.redeemable` flips `false→true`. Re-introduces per-tick Data-API + RPC traffic. Wrong direction relative to PR #1235. Rejected.
+- **Live multicall on every dashboard read** — correct but slow (~2-3s P95) and chatty against public Polygon RPC. Rejected.
+- **New `chain_redeem_*` columns on `poly_trader_current_positions`** — would be a third authority parallel to `poly_market_outcomes`. Rejected; we have the right table already.
+- **Lower `redeem-catchup.ts:initialFromBlock` only** — fixes backfill but does nothing if the read-model still trusts `raw.redeemable`. Necessary but insufficient. Folded into the design.
 
 ## Files
 
-### Read-model: drop the `raw.redeemable` backdoor
+### 1. Persist resolution into `poly_market_outcomes` (subscriber + catchup)
 
-- **Modify**: `nodes/poly/app/src/features/wallet-analysis/server/current-position-read-model.ts`
-  - In `deriveCurrentPositionStatus()`, drop `|| input.redeemable` from line 253. Only `lifecycleState === "winner"` produces `status="redeemable"`. The function no longer needs the `redeemable` parameter.
-  - When `lifecycleState === null` and the Data-API `raw.endDate` is in the past **and** `raw.redeemable === true`, classify as `status="resolving"` (visible, not actionable, no Redeem button) until the lifecycle write lands. This is the bridge state the spec already names but the code did not emit.
-  - Add `firstObservedAt` to the row select; use it for `openedAt` and `heldMinutes` instead of `last_observed_at`.
+- **Modify** `nodes/poly/app/src/features/redeem/redeem-subscriber.ts`
+  - In `handleConditionResolution(logs)`, after decoding each log, derive `outcomeSlotCount = payoutNumerators.length` and for each `outcomeIndex` compute `tokenId = positionId(conditionId, indexSet)` matching CTF math (already used elsewhere — find existing helper or use viem `keccak256` per Polymarket docs).
+  - UPSERT into `poly_market_outcomes` one row per `(condition_id, token_id)`: `outcome = payoutNumerators[i] > 0 ? 'winner' : 'loser'`, `payout = payoutNumerators[i] / payoutDenominator`, `resolved_at = now()`, `raw = log payload`, `updated_at = now()`. `ON CONFLICT (condition_id, token_id) DO UPDATE SET outcome=EXCLUDED.outcome, payout=EXCLUDED.payout, resolved_at=EXCLUDED.resolved_at, raw=EXCLUDED.raw, updated_at=now()`.
+  - Add new `MarketOutcomesPort` interface (constructor-injected) — keeps subscriber pure of DB access. Adapter lives in `nodes/poly/app/src/adapters/server/db/`.
+  - Idempotent: re-receiving the same chain log produces the same UPSERT result.
 
-### Schema: add first-observed timestamp (no migration of existing rows)
+- **Modify** `nodes/poly/app/src/features/redeem/redeem-catchup.ts`
+  - The catchup decodes the same `ConditionResolution` events during replay and currently calls `subscriber.handleConditionResolution()`. The new UPSERT therefore runs automatically during catchup → past resolutions back-fill on next pod boot / daily cron. Lower `initialFromBlock` in bootstrap to a generous historical floor (e.g. `BLOCK_AT_2025_06_01` — pre-launch of the poly node) so first-deploy scan covers all funder-relevant resolutions.
 
-- **Modify**: `nodes/poly/packages/db-schema/src/<poly-trader-current-positions schema file>`
-  - Add `first_observed_at TIMESTAMPTZ NOT NULL DEFAULT now()` column.
-- **Create**: `nodes/poly/app/src/adapters/server/db/migrations/0040_poly_trader_current_positions_first_observed_at.sql`
+- **Modify** `nodes/poly/app/src/bootstrap/redeem-pipeline.ts`
+  - Wire `MarketOutcomesPort` into the subscriber + catchup.
+
+### 2. Read-model JOIN + drop `raw.redeemable` backdoor
+
+- **Modify** `nodes/poly/app/src/features/wallet-analysis/server/current-position-read-model.ts`
+  - Add `LEFT JOIN poly_market_outcomes pmo ON pmo.condition_id = p.condition_id AND pmo.token_id = p.token_id` to the existing query (line ~84).
+  - Add `pmo.outcome AS market_outcome` and `pmo.resolved_at AS market_resolved_at` to the SELECT.
+  - Update `deriveCurrentPositionStatus` signature: replace the `redeemable: boolean` parameter with `marketOutcome: 'winner'|'loser'|'unknown'|null`.
+  - New status logic (precedence):
+    1. `marketOutcome === 'loser'` → `closed` (currentValue forced to 0 in returned position).
+    2. `marketOutcome === 'winner'` → `redeemable`.
+    3. terminal lifecycle (`redeemed/loser/dust/abandoned/closed`) → `closed`.
+    4. lifecycle `winner` → `redeemable` (kept as fallback for the rare race where `poly_redeem_jobs` was written before `poly_market_outcomes`).
+    5. `currentValue <= 0` → `closed`.
+    6. else → `open`.
+  - **`raw.redeemable` is dead in this codebase.** `readBoolean(raw, "redeemable")` and the parameter pass-through are removed.
+
+### 3. UI: action label + accent color
+
+- **Modify** `nodes/poly/app/src/app/(app)/_components/positions-table/columns.tsx`
+  - In `PositionActionButton`, when `!isRedeemable && !isCloseable`: set label to `"Settled"` (matches `actionLabel("closed")`). Never fall through to `"Redeem"` for a disabled button.
+  - When `isRedeemable && actionable && !busy`: swap to the homepage Connect button styling. **First** grep for the homepage Connect button to find the exact classes; reuse without creating new tokens. If the homepage uses `<Button variant="default">`, use the same here.
+
+### 4. Manual-redeem route: 409 / 503 observability
+
+- **Modify** `nodes/poly/app/src/app/api/v1/poly/wallet/positions/redeem/route.ts`
+  - Before each error response (`pipeline_unavailable`, `wallet_adapter_unconfigured`, `not_redeemable`, `redeem_failed`, `invalid_condition_id`), call `ctx.log.info({ event: "poly.wallet.positions.redeem.<reason>", condition_id, reason, candidates: candidates?.map(c => ({ outcomeIndex: c.outcomeIndex, kind: c.decision.kind, ...(c.decision.kind!=="redeem" ? {reason: c.decision.reason}: {}) })), funder_address, billing_account_id, status_code }, "manual redeem rejected")`. The 409 path is the most important — it must log all candidate decisions so future drift is debuggable in Loki without database access.
+
+### 5. `first_observed_at` column + Held column fix
+
+- **Create** `nodes/poly/app/src/adapters/server/db/migrations/0041_poly_trader_current_positions_first_observed_at.sql`
   - `ALTER TABLE poly_trader_current_positions ADD COLUMN first_observed_at TIMESTAMPTZ NOT NULL DEFAULT now();`
-  - Backfill existing rows with `first_observed_at = COALESCE(last_observed_at, now())` in same migration.
-- **Modify**: `nodes/poly/app/src/features/wallet-analysis/server/trader-observation-service.ts` `persistObservedCurrentPositions()` — set `first_observed_at` only on `INSERT`, never on `UPDATE` (`ON CONFLICT (...) DO UPDATE SET ... -- exclude first_observed_at`).
+  - `UPDATE poly_trader_current_positions SET first_observed_at = COALESCE(last_observed_at, now()) WHERE first_observed_at = (SELECT MIN(first_observed_at) FROM poly_trader_current_positions);` — backfill existing rows from `last_observed_at`.
+- **Modify** `nodes/poly/packages/db-schema/src/trader-activity.ts`
+  - Add `firstObservedAt: timestamp("first_observed_at", { withTimezone: true }).notNull().defaultNow()` to `polyTraderCurrentPositions`.
+- **Modify** `nodes/poly/app/src/features/wallet-analysis/server/trader-observation-service.ts:persistObservedCurrentPositions()`
+  - On `INSERT ... ON CONFLICT ... DO UPDATE`: explicitly **exclude** `first_observed_at` from the SET clause so it stays at its insert-time value.
+- **Modify** `nodes/poly/app/src/features/wallet-analysis/server/current-position-read-model.ts`
+  - SELECT `p.first_observed_at`. In `rowToExecutionPosition`: `openedAt = first_observed_at ?? last_observed_at` (fallback for pre-migration rows). `heldMinutes = capturedAt - openedAt`.
 
-### Observation → redeem pipeline trigger (the alignment piece)
+### 6. Migration journal
 
-- **Modify**: `nodes/poly/app/src/features/wallet-analysis/server/trader-observation-service.ts`
-  - After `persistObservedCurrentPositions()` upserts a wallet's positions, collect each `(funder, conditionId)` whose **observation delta** is `raw.redeemable: false→true OR first-insert with raw.redeemable=true`, and which has no existing `poly_redeem_jobs` row for that pair.
-  - Pass the resulting set to a new `notifyResolutionsObserved(conditionIds: string[])` method on `RedeemSubscriber`, which delegates to the existing `handleConditionResolution` path. This is event-driven on a real observation transition, not a Data-API enumerate-and-fire — it matches the catchup pattern (`redeem-catchup.ts`) where the source of "this condition resolved" is just a different cursor (Data-API observation instead of chain getLogs).
-  - Update `redeem-subscriber.ts` `SWEEP_IS_NOT_AN_ARCHITECTURE` invariant note: clarify that *observation-of-resolved-flag transition* is allowed; *Data-API enumerate-and-fire on every tick* is still forbidden.
+- **Update** `nodes/poly/app/src/adapters/server/db/migrations/meta/_journal.json` — add 0041 entry per existing convention.
 
-### UI: action button label + accent color
+### 7. Spec update
 
-- **Modify**: `nodes/poly/app/src/app/(app)/_components/positions-table/columns.tsx`
-  - In `PositionActionButton`, when `!isRedeemable && !isCloseable`, set label to `"Settled"` (status is closed) or hide button entirely (lifecycle is `redeem_pending` / `resolving`) — never fall through to `"Redeem"` for a disabled button.
-  - When `isRedeemable && actionable && !busy`, swap the outline `<Button>` for the homepage Connect button styling: `variant="default"` with the same accent classes the homepage uses (find via grep on the connect button before implementing — single source of truth, no new tokens).
+- **Modify** `docs/spec/poly-order-position-lifecycle.md`
+  - § Dashboard Classification: replace ledger-only flowchart with the new model — `poly_trader_current_positions` is current inventory, `poly_market_outcomes` is chain-resolution authority for `winner | loser`, `poly_copy_trade_fills` is closed history.
+  - § Redeem State Machine: document `poly_market_outcomes` UPSERT as a fourth event in the redeem mirror table, sourced from `ConditionResolution`.
 
-### Manual-redeem route: 409 observability
+### 8. Tests (targeted; CI runs full)
 
-- **Modify**: `nodes/poly/app/src/app/api/v1/poly/wallet/positions/redeem/route.ts`
-  - Before `return NextResponse.json({ error: "not_redeemable", reason }, { status: 409 })`, call `ctx.log.info({event:"poly.wallet.positions.redeem.not_redeemable", condition_id: conditionId, reason, candidates: candidates.map(c => ({outcomeIndex: c.outcomeIndex, kind: c.decision.kind, ...(c.decision.kind!=="redeem" ? {reason: c.decision.reason}: {})})), funder_address: pipeline.funderAddress, billing_account_id: account.id}, "manual redeem rejected")`.
-  - Add the same structured log to the `pipeline_unavailable` and `wallet_adapter_unconfigured` 503 paths.
-
-### Tests
-
-- **Modify**: `nodes/poly/app/tests/component/features/wallet-analysis/current-position-read-model.test.ts` (or create unit if no component test exists)
-  - Add cases: `lifecycle=null + raw.redeemable=true` → `status="resolving"`, **not** `redeemable`. `lifecycle="winner"` → `status="redeemable"`. `lifecycle="loser" + currentValue>0` → `status="closed"`.
-- **Modify**: `nodes/poly/app/tests/contract/app/poly.wallet.positions.redeem.routes.test.ts` (or wherever the route is contract-tested)
-  - Assert the new 409 log line shape (`event=poly.wallet.positions.redeem.not_redeemable`, `condition_id`, `reason`, `candidates`).
-- **Create**: `nodes/poly/app/tests/component/features/redeem/notify-resolutions-observed.test.ts`
-  - Drive `RedeemSubscriber.notifyResolutionsObserved([cid])` against in-memory ports; assert `mirrorRedeemLifecycleToLedger` is called with `lifecycle="winner" | "loser" | "redeemed"` matching `decideRedeem` decision.
-
-### Spec update (out-of-date with task.5007)
-
-- **Modify**: `docs/spec/poly-order-position-lifecycle.md`
-  - Update § Dashboard Classification to reflect `poly_trader_current_positions` (current inventory) + `poly_copy_trade_fills` (history). The current text references `execution/route.ts reading all ledger statuses for live/history rows` which is no longer how current positions are read after the task.5007 reconciler shipped.
-  - Document the new observation-driven trigger as a fourth lifecycle source under § Redeem State Machine.
+- **Create** `nodes/poly/app/tests/component/features/redeem/condition-resolution-outcomes-upsert.test.ts`
+  - Drive `RedeemSubscriber.handleConditionResolution` with a synthetic 2-outcome `ConditionResolution` log (`payoutNumerators=[1,0], payoutDenominator=1`); assert `poly_market_outcomes` has rows for both `(condition_id, token_id)` pairs with `outcome='winner'` for index 0, `outcome='loser'` for index 1.
+  - Re-drive with the same log; assert one row per `(condition_id, token_id)` (UPSERT idempotent).
+- **Create** `nodes/poly/app/tests/unit/features/wallet-analysis/derive-current-position-status.test.ts` (or add to existing)
+  - Cases: `marketOutcome='loser'` + `currentValue=10` → `status="closed"`. `marketOutcome='winner'` → `status="redeemable"`. `marketOutcome=null` + `lifecycleState='winner'` → `status="redeemable"`. `marketOutcome=null` + lifecycle=null + `currentValue>0` → `status="open"`. **Ensure no test passes when only `raw.redeemable=true` is given** — the param is gone.
+- **Modify** `nodes/poly/app/tests/contract/app/poly.wallet.positions.redeem.routes.test.ts` (or wherever the route is contract-tested)
+  - Assert log line shape for `not_redeemable` 409 path: `event="poly.wallet.positions.redeem.not_redeemable"`, `condition_id`, `reason`, `candidates[]`.
 
 ## Invariants
 
 <!-- CODE REVIEW CRITERIA -->
 
-- [ ] **REDEEMABLE_AUTHORITY_IS_LIFECYCLE**: Read-model and UI never read `raw.redeemable` to decide if a row is `status="redeemable"`. Only `lifecycleState="winner"` produces redeemable. (spec: poly-order-position-lifecycle § Required Matrix)
-- [ ] **DECIDE_REDEEM_IS_AUTHORITY**: `nodes/poly/packages/market-provider/src/policy/redeem.ts:decideRedeem` is the only function that decides whether a redeem job enqueues; no caller may inline a substitute. (spec: existing in `resolve-redeem-decision.ts`)
-- [ ] **SWEEP_IS_NOT_AN_ARCHITECTURE**: `notifyResolutionsObserved` fires only on observation transition deltas, not on every tick of a population. Reviewer must verify the writer computes a delta from current vs prior `raw.redeemable`. (spec: existing in `redeem-subscriber.ts`)
-- [ ] **REDEEM_409_IS_DEBUGGABLE**: every `not_redeemable` / `pipeline_unavailable` / `wallet_adapter_unconfigured` response from `/api/v1/poly/wallet/positions/redeem` emits a structured log line with `condition_id` and `reason`. No silent 409.
-- [ ] **FIRST_OBSERVED_IS_IMMUTABLE**: `poly_trader_current_positions.first_observed_at` is set once on insert; subsequent upserts must not touch it. Reviewer must read the upsert SQL.
-- [ ] **SIMPLE_SOLUTION**: Reuses `resolveRedeemCandidatesForCondition`, `decisionToEnqueueInput`, `mirrorRedeemLifecycleToLedger`, existing `RedeemSubscriber` handler. No new policy, no new state machine, no new authority column.
-- [ ] **ARCHITECTURE_ALIGNMENT**: Brings the read-model into compliance with the existing `poly-order-position-lifecycle` spec; updates the spec where the task.5007 inventory shift left it stale.
+- [ ] **REDEEMABLE_AUTHORITY_IS_DB**: Read-model derives `redeemable` from `poly_market_outcomes.outcome` and `poly_redeem_jobs.lifecycle_state` only. `raw.redeemable` is not read by any dashboard code path. (spec: poly-order-position-lifecycle § Required Matrix; PR #1235 direction)
+- [ ] **MARKET_OUTCOMES_IS_CHAIN_AUTHORITY**: `poly_market_outcomes` is written **only** from chain `ConditionResolution` events (subscriber live + catchup replay). No Data-API path writes to it.
+- [ ] **DECIDE_REDEEM_IS_AUTHORITY**: For the manual-redeem **write** path, `@cogni/poly-market-provider/policy:decideRedeem` remains the only function deciding whether a redeem job enqueues. Unchanged. (spec: existing in `resolve-redeem-decision.ts`)
+- [ ] **REDEEM_409_IS_DEBUGGABLE**: Every error response from `/api/v1/poly/wallet/positions/redeem` emits a structured Loki line with `condition_id`, `reason`, and (when applicable) all candidate decisions. No silent 4xx/5xx.
+- [ ] **FIRST_OBSERVED_IS_IMMUTABLE**: `poly_trader_current_positions.first_observed_at` set once on insert; subsequent upserts must not touch it. Reviewer must read the upsert SQL.
+- [ ] **SWEEP_IS_NOT_AN_ARCHITECTURE**: No new Data-API `enumerate-and-fire` path. Resolution discovery is chain-event-driven (subscriber + catchup). Unchanged. (spec: existing in `redeem-subscriber.ts`)
+- [ ] **SIMPLE_SOLUTION**: Reuses existing `poly_market_outcomes` table, existing `handleConditionResolution` path, existing catchup replay, existing `Connect` button styling. New surface area: 1 port interface, 1 adapter, 1 migration.
+- [ ] **ARCHITECTURE_ALIGNMENT**: DB-as-truth aligned with PR #1235; brings read-model into compliance with `poly-order-position-lifecycle` spec; updates the spec where task.5007 left it stale.
 
 ## Validation
 
-- **exercise**: On candidate-a, render the dashboard for the multi-tenant test wallet that has ≥1 row showing `Redeem` today. Click `Redeem` on each. Every click must either (a) succeed end-to-end (`tx_submitted` → `confirmed`), or (b) **never appear in the first place** because the row was reclassified as `Settled` / `Resolving` / `Closed`. Spot-check a previously-positive-PnL `losing_outcome` row: it must now show `Settled` with `currentValue=0`, no Redeem button.
+- **exercise**: On candidate-a after merge + flight, render the dashboard for the multi-tenant test wallet that has ≥1 row showing `Redeem` today. Confirm:
+  1. Rows previously showing `Redeem` on positive-PnL `losing_outcome` now show `Settled` with `currentValue=0`.
+  2. Rows truly redeemable (winner side, balance > 0) show the accent-color `Redeem` button; clicking it succeeds end-to-end (`tx_submitted` → `confirmed`).
+  3. `Held` column shows true entry-time durations, not zeros, after a fresh sync.
 - **observability**: Loki queries must show:
-  1. `event="poly.ctf.redeem.policy_decision"` lines emitted from observation-triggered evaluations (new fourth source) for newly-resolved conditions, with the new `source="observation"` label.
-  2. `event="poly.wallet.positions.redeem.not_redeemable"` lines (zero in the steady state — every previously-failing click is now either gone or succeeds; one or two during transition while ledger lifecycle catches up).
-  3. `feature.poly_wallet_execution.complete` line shows `live_positions` count drops to the count of true-open + lifecycle=winner rows; `closed_positions` absorbs the previously-misclassified loser rows.
+  1. `event="poly.ctf.subscriber.condition_resolution"` lines with new `outcomes_persisted=N` field.
+  2. `event="poly.wallet.positions.redeem.not_redeemable"` lines for any rejected click — the field must include `condition_id`, `reason`, `candidates[]`.
+  3. `feature.poly_wallet_execution.complete` shows `live_positions` drops to true-actionable rows; `closed_positions` absorbs the previously-misclassified loser rows.
+  4. No new Data-API HTTP traffic on the dashboard read path (compare 24h request counts to the `polymarket-data-api` adapter pre/post deploy).
 
 ## Out of scope
 
-- Replacing Polymarket Data API with on-chain or Gamma API as the inventory source (separate effort, `task.0426` resolves column).
+- Replacing Polymarket Data API as the *position-inventory* source (`poly_trader_current_positions` reconciler still pulls `/positions`; that's task.0426).
 - Changing the redeem worker / reaper flow.
-- Adding multicall caching for `decideRedeem` chain reads.
-- Moving `lifecycle` storage off `poly_copy_trade_fills`.
+- Migrating `lifecycle_state` storage off `poly_copy_trade_fills`.
+- Funder-vs-wallet identity reconciliation (Safe-proxy mismatch). The 409 observability added here will surface this if it's still happening post-fix; follow-up bug at that point.
 
 ## Estimated PR size
 
-~6-8 files modified, 1 new migration, 1 new test file, ~200-300 LOC delta. Single PR.
+~8 files modified, 1 migration, 1 new port + adapter, 2 new test files. ~350 LOC delta. Single PR.
