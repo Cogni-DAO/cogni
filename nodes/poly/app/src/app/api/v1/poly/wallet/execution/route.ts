@@ -51,6 +51,7 @@ import {
   summarizeDailyTradeCounts,
   toWalletExecutionPosition,
 } from "../_lib/ledger-positions";
+import { buildMarketExposureGroups } from "../_lib/market-exposure";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,7 @@ function emptyPayload(
     capturedAt: new Date().toISOString(),
     dailyTradeCounts: [],
     live_positions: [],
+    market_groups: [],
     closed_positions: [],
     warnings: [warning],
   });
@@ -200,6 +202,18 @@ export const GET = wrapRouteHandlerWithLogging(
         });
       }
     }
+    const marketGroups = await buildMarketExposureGroups({
+      db: container.serviceDb,
+      billingAccountId: account.id,
+      walletAddress: address,
+      livePositions,
+    }).catch((err: unknown) => {
+      warnings.push({
+        code: "market_exposure_unavailable",
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return [];
+    });
 
     logEvent(ctx.log, EVENT_NAMES.POLY_WALLET_EXECUTION_COMPLETE, {
       reqId: ctx.reqId,
@@ -217,6 +231,7 @@ export const GET = wrapRouteHandlerWithLogging(
       outcome: "success",
       freshness,
       live_positions: livePositions.length,
+      market_groups: marketGroups.length,
       closed_positions: closedPositions.length,
       daily_trade_days: dailyTradeCounts.length,
       warnings: warnings.length,
@@ -229,6 +244,7 @@ export const GET = wrapRouteHandlerWithLogging(
         capturedAt: capturedAt.toISOString(),
         dailyTradeCounts,
         live_positions: livePositions,
+        market_groups: marketGroups,
         closed_positions: closedPositions,
         warnings,
       })

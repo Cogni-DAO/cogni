@@ -19,6 +19,7 @@
 
 "use client";
 
+import type { WalletExecutionMarketGroup } from "@cogni/poly-node-contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { PositionsTable } from "@/app/(app)/_components/positions-table";
@@ -38,7 +39,7 @@ import {
 } from "../_api/fetchPositionActions";
 import { useDashboardExecution } from "../_hooks/useDashboardExecution";
 
-type ExecutionView = "open" | "history";
+type ExecutionView = "open" | "markets" | "history";
 
 export function ExecutionActivityCard(): ReactElement {
   const queryClient = useQueryClient();
@@ -177,6 +178,9 @@ export function ExecutionActivityCard(): ReactElement {
             <ToggleGroupItem value="open" className="px-3 text-xs">
               Open
             </ToggleGroupItem>
+            <ToggleGroupItem value="markets" className="px-3 text-xs">
+              Markets
+            </ToggleGroupItem>
             <ToggleGroupItem value="history" className="px-3 text-xs">
               History
             </ToggleGroupItem>
@@ -195,6 +199,13 @@ export function ExecutionActivityCard(): ReactElement {
             pendingActionPositionId={pendingActionPositionId}
             positionActionError={positionActionError}
           />
+        ) : view === "markets" ? (
+          <MarketGroupsPanel
+            groups={executionData?.market_groups ?? []}
+            warnings={executionData?.warnings ?? []}
+            isLoading={isExecutionLoading}
+            isError={isExecutionError}
+          />
         ) : (
           <ClosedPositionsPanel
             positions={closedPositions}
@@ -204,6 +215,165 @@ export function ExecutionActivityCard(): ReactElement {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function MarketGroupsPanel({
+  groups,
+  warnings,
+  isLoading,
+  isError,
+}: {
+  groups: readonly WalletExecutionMarketGroup[];
+  warnings: readonly { code: string; message: string }[];
+  isLoading: boolean;
+  isError: boolean;
+}): ReactElement {
+  if (isError) {
+    return (
+      <p className="px-5 py-6 text-center text-muted-foreground text-sm">
+        Failed to load market exposure. Try again shortly.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3 px-5 pb-4">
+      <div className="space-y-2">
+        <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+          Markets
+        </h3>
+        {warnings.some(
+          (warning) => warning.code === "market_exposure_unavailable"
+        ) ? (
+          <p className="text-muted-foreground text-xs">
+            Copy-target overlays are temporarily unavailable.
+          </p>
+        ) : null}
+        {isLoading ? (
+          <p className="rounded border px-4 py-6 text-center text-muted-foreground text-sm">
+            Loading market exposure…
+          </p>
+        ) : groups.length === 0 ? (
+          <p className="rounded border px-4 py-6 text-center text-muted-foreground text-sm">
+            No open market exposure.
+          </p>
+        ) : (
+          <div className="overflow-hidden rounded-md border">
+            {groups.map((group, index) => (
+              <details
+                key={group.groupKey}
+                open={index === 0}
+                className="border-border border-b last:border-b-0"
+              >
+                <summary className="cursor-pointer px-4 py-3 hover:bg-muted/40">
+                  <div className="grid gap-3 lg:grid-cols-2 lg:items-center">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-sm">
+                        {group.eventTitle ??
+                          group.eventSlug ??
+                          group.lines[0]?.marketTitle ??
+                          "Market"}
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        {group.marketCount} line
+                        {group.marketCount === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+                      <MarketStat
+                        label="Our value"
+                        value={formatUsd(group.ourValueUsdc)}
+                      />
+                      <MarketStat
+                        label="Targets"
+                        value={formatUsd(group.targetValueUsdc)}
+                      />
+                      <MarketStat
+                        label="P/L"
+                        value={formatSignedUsd(group.pnlUsd)}
+                        valueClassName={pnlClass(group.pnlUsd)}
+                      />
+                      <MarketStat
+                        label="Hedges"
+                        value={String(group.hedgeCount)}
+                      />
+                    </div>
+                  </div>
+                </summary>
+                <div className="space-y-3 border-border border-t bg-muted/10 px-4 py-3">
+                  {group.lines.map((line) => (
+                    <div key={line.conditionId} className="space-y-2">
+                      <div className="grid gap-2 text-sm lg:grid-cols-2 lg:items-end">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">
+                            {line.marketTitle}
+                          </p>
+                          <p className="text-muted-foreground text-xs">
+                            VWAP our {formatPrice(line.ourVwap)} · targets{" "}
+                            {formatPrice(line.targetVwap)}
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <MarketStat
+                            label="Our line"
+                            value={formatUsd(line.ourValueUsdc)}
+                          />
+                          <MarketStat
+                            label="Target line"
+                            value={formatUsd(line.targetValueUsdc)}
+                          />
+                          <MarketStat
+                            label="Hedges"
+                            value={String(line.hedgeCount)}
+                          />
+                        </div>
+                      </div>
+                      <div className="divide-y rounded-md border bg-background">
+                        {line.positions.map((position) => (
+                          <div
+                            key={`${position.side}:${position.walletAddress}:${position.tokenId}`}
+                            className="grid gap-2 px-3 py-2 text-sm md:grid-cols-5 md:items-center"
+                          >
+                            <div className="min-w-0 md:col-span-2">
+                              <p className="truncate font-medium">
+                                {position.side === "our_wallet"
+                                  ? "Our position"
+                                  : position.label}
+                              </p>
+                              <p className="text-muted-foreground text-xs">
+                                {position.outcome}
+                                {position.hedgeRole === "hedge"
+                                  ? " · hedge"
+                                  : position.hedgeRole === "primary"
+                                    ? " · primary"
+                                    : ""}
+                              </p>
+                            </div>
+                            <MarketStat
+                              label="Value"
+                              value={formatUsd(position.currentValueUsdc)}
+                            />
+                            <MarketStat
+                              label="VWAP"
+                              value={formatPrice(position.vwap)}
+                            />
+                            <MarketStat
+                              label="Shares"
+                              value={formatShares(position.shares)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -262,6 +432,50 @@ function OpenPositionsPanel({
       </div>
     </div>
   );
+}
+
+function MarketStat({
+  label,
+  value,
+  valueClassName = "",
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}): ReactElement {
+  return (
+    <div className="min-w-0">
+      <p className="truncate text-muted-foreground">{label}</p>
+      <p className={`truncate font-mono tabular-nums ${valueClassName}`}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function formatUsd(value: number): string {
+  return `$${value.toLocaleString(undefined, {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+  })}`;
+}
+
+function formatSignedUsd(value: number): string {
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  return `${sign}${formatUsd(Math.abs(value))}`;
+}
+
+function formatPrice(value: number | null): string {
+  if (value === null) return "—";
+  return value.toFixed(3);
+}
+
+function formatShares(value: number): string {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function pnlClass(value: number): string {
+  return value >= 0 ? "text-success" : "text-destructive";
 }
 
 function ClosedPositionsPanel({

@@ -631,6 +631,7 @@ export async function getExecutionSlice(
     capturedAt,
     dailyTradeCounts: dailyTradeCountsResult,
     live_positions: liveForResponse.map(toExecutionContractPosition),
+    market_groups: [],
     closed_positions: closedPreview.map(toExecutionContractPosition),
     warnings,
   };
