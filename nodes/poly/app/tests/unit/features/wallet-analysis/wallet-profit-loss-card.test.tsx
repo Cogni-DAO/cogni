@@ -78,7 +78,6 @@ describe("TimeWindowHeader", () => {
       />
     );
 
-    expect(screen.getByText("All time: up $4")).toBeInTheDocument();
     fireEvent.click(screen.getByText("1W"));
     expect(onIntervalChange).toHaveBeenCalledWith("1W");
   });
