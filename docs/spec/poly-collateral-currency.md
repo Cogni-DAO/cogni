@@ -5,12 +5,21 @@ title: "Poly trading currency — USDC.e ↔ pUSD lifecycle on Polymarket V2"
 status: active
 spec_state: as-built
 trust: reviewed
+<<<<<<< docs/poly-v1-v2-clarification
+summary: "Visual reference for which token does what in our Polymarket V2 trade path. USDC.e is the public Polygon stablecoin used for wallet deposits and withdrawals; pUSD is Polymarket's protocol-internal 1:1 wrapper that V2 exchanges spend. CollateralOnramp is the 1:1 airlock between them. V2 cutover (2026-04-28) introduced pUSD-collateralized markets alongside the legacy V1 USDC.e markets — both vintages coexist on Polygon CTF, and the per-position collateralToken is pinned at mint time. Enable Trading wraps a wallet's full USDC.e balance to pUSD on click; redeem path picks vintage via chain probe (bug.0428)."
+read_when: Reasoning about user funds on Polymarket, debugging insufficient_balance errors, designing UI that shows trading balance, adding new trade or deposit code paths, onboarding a new env's operator wallet.
+owner: derekg1729
+created: 2026-04-28
+verified: 2026-04-30
+tags: [poly, polymarket, v2, collateral, pUSD, USDC, onboarding]
+=======
 summary: "Visual reference for which token does what in our Polymarket V2 trade path. USDC.e is the public Polygon stablecoin used for wallet deposits and withdrawals; pUSD is Polymarket's protocol-internal 1:1 wrapper that V2 exchanges actually spend. CollateralOnramp is the 1:1 airlock between them. After V2 cutover (2026-04-28), USDC.e is phased out of the trade-execution path but remains the medium for incoming deposits. Enable Trading wraps a wallet's full USDC.e balance to pUSD on click; with task.0429 the auto-wrap consent loop keeps the wallet wrapped on a 60s scan cycle so deposits, V1 redeems, and external transfers no longer strand cash."
 read_when: Reasoning about user funds on Polymarket, debugging insufficient_balance errors, designing UI that shows trading balance, adding new trade or deposit code paths, onboarding a new env's operator wallet, deciding whether the user needs a manual Enable Trading click after a deposit.
 owner: derekg1729
 created: 2026-04-28
 verified: 2026-04-30
 tags: [poly, polymarket, v2, collateral, pUSD, USDC, onboarding, auto-wrap]
+>>>>>>> main
 ---
 
 # Polymarket V2 collateral lifecycle
@@ -68,6 +77,29 @@ Single visual reference for which token does what in our Polymarket V2 trade pat
 - **CollateralOnramp** = the airlock between them. 1:1 in either direction, no fee.
 
 Pre-V2 there was no airlock — V1 exchanges spent USDC.e directly. V2 introduced pUSD to give Polymarket protocol-level control of the trade collateral (cross-chain, fee mechanics, accounting). The wrap step is a one-time-per-deposit cost, not a per-trade cost.
+
+### V1 vs V2 is a per-POSITION property, not a date
+
+**This is the easiest thing to get wrong.** The 2026-04-28 cutover was when Polymarket _introduced_ V2 (pUSD-collateralized markets); it was not a hard switch that converted existing positions. The two systems coexist on Polygon CTF indefinitely. A wallet can hold a mix of V1-vintage and V2-vintage CTF positions at the same time.
+
+What "vintage" means concretely: the ERC-1155 `positionId` is `keccak256(abi.encodePacked(collateralToken, collectionId))`. So a CTF position is _physically distinct_ depending on whether it was minted with USDC.e or pUSD — different positionIds, different balances, no fungibility between them. Vintage is pinned to the position at mint time and cannot change.
+
+| Property                            | V1-vintage position                                | V2-vintage position             |
+| ----------------------------------- | -------------------------------------------------- | ------------------------------- |
+| Collateral that minted it           | USDC.e                                             | pUSD                            |
+| `positionId` derivation             | `keccak256(USDC.e, collectionId)`                  | `keccak256(pUSD, collectionId)` |
+| Redeem dispatch arg                 | `redeemPositions(USDC.e, …)`                       | `redeemPositions(pUSD, …)`      |
+| Mismatched dispatch                 | silently zero-burns, no payout                     | silently zero-burns, no payout  |
+| Payout currency                     | USDC.e                                             | pUSD                            |
+| Required to recycle into next trade | **wrap USDC.e → pUSD** (auto-wrap loop, task.0429) | already pUSD, no extra step     |
+
+How we determine vintage at runtime: chain probe in `nodes/poly/app/src/features/redeem/infer-collateral-token.ts` (bug.0428). It calls `CTF.getCollectionId(zero, conditionId, indexSet)` then `CTF.getPositionId(token, collectionId)` for both candidate tokens (`pUSD`, `USDC.e`) and returns whichever hashes to the funder's known positionId. Falls back to USDC.e on RPC failure or non-match (legacy-safe default).
+
+**Implications for the unattended copy-trade loop:**
+
+- **bug.0428** (per-job collateralToken capture) closes the V2 redeem cycle: V2 wins now correctly redeem to pUSD instead of silently zero-burning against the pre-fix `POLYGON_USDC_E` hardcode.
+- **task.0429** (auto-wrap USDC.e → pUSD) closes the V1 redeem cycle: V1 wins pay out USDC.e, which would otherwise sit idle and stall the wallet on the next placement (V2 exchanges only spend pUSD).
+- **Both** are required for unattended operation — copy targets historically trade across both vintages, and a wallet that holds a single V1-vintage position to settlement will still need wrap-back even on a system where every new mint is V2.
 
 ### Is USDC.e phased out?
 
