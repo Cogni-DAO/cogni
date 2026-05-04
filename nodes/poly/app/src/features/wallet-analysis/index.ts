@@ -19,6 +19,7 @@ export { EdgeHypothesis } from "./components/EdgeHypothesis";
 export { PositionTimelineChart } from "./components/PositionTimelineChart";
 export { RecentTradesTable } from "./components/RecentTradesTable";
 export { StatGrid } from "./components/StatGrid";
+export { TargetOverlapBlock } from "./components/TargetOverlapBlock";
 export { TimeWindowHeader } from "./components/TimeWindowHeader";
 export { TopMarketsList } from "./components/TopMarketsList";
 export { TradesPerDayChart } from "./components/TradesPerDayChart";

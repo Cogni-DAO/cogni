@@ -28,6 +28,8 @@
 import type { WalletTimePeriod } from "@cogni/poly-ai-tools";
 import {
   PolyAddressSchema,
+  type PolyResearchTargetOverlapResponse,
+  type PolyWalletOverviewInterval,
   type PolyWalletStatusOutput,
   type WalletAnalysisDistributions,
   type WalletAnalysisResponse,
@@ -52,6 +54,7 @@ import { Input, ToggleGroup, ToggleGroupItem } from "@/components";
 import {
   DistributionComparisonBlock,
   type DistributionComparisonSeries,
+  TargetOverlapBlock,
   WalletDetailDrawer,
   WalletQuickJump,
 } from "@/features/wallet-analysis";
@@ -71,6 +74,7 @@ const PERIOD_OPTIONS: readonly WalletTimePeriod[] = [
   "MONTH",
   "ALL",
 ] as const;
+const OVERLAP_INTERVAL_OPTIONS = ["1D", "1W", "1M", "ALL"] as const;
 const TOP_N = 100;
 const PRIMARY_RESEARCH_WALLETS = [
   {
@@ -114,6 +118,22 @@ async function fetchWalletDistributions(
   }
   const json = (await res.json()) as WalletAnalysisResponse;
   return json.distributions;
+}
+
+async function fetchTargetOverlap(
+  interval: PolyWalletOverviewInterval
+): Promise<PolyResearchTargetOverlapResponse> {
+  const params = new URLSearchParams({ interval });
+  const res = await fetch(
+    `/api/v1/poly/research/target-overlap?${params.toString()}`,
+    {
+      credentials: "include",
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`target overlap failed: ${res.status}`);
+  }
+  return (await res.json()) as PolyResearchTargetOverlapResponse;
 }
 
 export function ResearchView() {
@@ -424,10 +444,19 @@ function ResearchBenchmarkBoard({
   userWalletConnected: boolean;
   targets: readonly { target_wallet: string }[];
 }) {
+  const [overlapInterval, setOverlapInterval] =
+    useState<PolyWalletOverviewInterval>("ALL");
   const comparisonWallets = useMemo(
     () => buildComparisonWallets(userWalletAddress, targets),
     [userWalletAddress, targets]
   );
+  const overlapQuery = useQuery({
+    queryKey: ["research-target-overlap", overlapInterval],
+    queryFn: () => fetchTargetOverlap(overlapInterval),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
   const distributionQueries = useQueries({
     queries: comparisonWallets.map((wallet) => ({
       queryKey: [
@@ -459,7 +488,30 @@ function ResearchBenchmarkBoard({
         </div>
       ) : null}
 
-      <div className="rounded-lg border border-primary/20 bg-card p-4">
+      <div className="flex flex-col gap-4">
+        <div className="flex justify-end">
+          <div className="inline-flex rounded border bg-muted p-0.5 text-xs">
+            {OVERLAP_INTERVAL_OPTIONS.map((interval) => (
+              <button
+                key={interval}
+                type="button"
+                onClick={() => setOverlapInterval(interval)}
+                className={
+                  overlapInterval === interval
+                    ? "rounded bg-background px-2.5 py-1 font-medium text-foreground shadow-sm"
+                    : "rounded px-2.5 py-1 font-medium text-muted-foreground hover:text-foreground"
+                }
+              >
+                {interval}
+              </button>
+            ))}
+          </div>
+        </div>
+        <TargetOverlapBlock
+          data={overlapQuery.data}
+          isLoading={overlapQuery.isLoading}
+          isError={overlapQuery.isError}
+        />
         <DistributionComparisonBlock series={distributionSeries} />
         {!userWalletAddress ? (
           <p className="mt-3 text-muted-foreground text-xs">

@@ -43,6 +43,7 @@ The 13 `poly.*.v1.contract.ts` files re-exported via `src/index.ts`:
 - `poly.copy-trade.orders.v1.contract`
 - `poly.copy-trade.targets.v1.contract`
 - `poly.research-report.v1.contract`
+- `poly.research-target-overlap.v1.contract`
 - `poly.sync-health.v1.contract`
 - `poly.wallet.balance.v1.contract`
 - `poly.wallet.balances.v1.contract`

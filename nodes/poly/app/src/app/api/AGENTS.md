@@ -65,6 +65,7 @@ HTTP API endpoints using Next.js App Router. Contract-validated entry points tha
   - `/api/v1/work/items` [GET] - list work items with optional filters (SIWE auth)
   - `/api/v1/work/items/[id]` [GET] - get single work item by ID (SIWE auth)
   - `/api/v1/poly/copy-trade/orders` [GET] - recent order ledger rows with `synced_at` + `staleness_ms` (session auth)
+  - `/api/v1/poly/research/target-overlap` [GET] - RN1/swisstony shared-vs-solo active-market overlap from saved observed trader facts (session auth)
   - `/api/v1/poly/wallet/connect` [POST] - provision the calling user's dedicated Polymarket trading wallet (session auth)
   - `/api/v1/poly/wallet/status` [GET] - read whether the calling user already has a resolvable dedicated Polymarket trading wallet (session auth)
   - `/api/v1/poly/wallet/balances` [GET] - read USDC.e + POL balances on the calling user's dedicated Polymarket trading wallet (session auth, distinct from legacy operator-only `/balance`)
