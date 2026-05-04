@@ -45,12 +45,28 @@ At each phase: search the resource roots below for the relevant guides, specs, a
      # → { "id": "task.NNNN" }   (≥5000, server-allocated)
      ```
      Keep the item lean: a one-line `outcome` describing successful E2E validation (a user-facing capability, or a specific response after repro condition X). Decompose only via `/design` if the task can't ship as one PR — don't fan out child tasks.
-4. Claim/heartbeat the work item while active, then link your branch/PR once opened:
+4. Claim the work item, heartbeat while active, link your branch/PR once opened, and poll coordination for the operator's next-action text:
    ```bash
+   # Claim — once per session
    curl -X POST "$BASE/api/v1/work/items/$ID/claims" \
      -H "Authorization: Bearer $API_KEY" -H "content-type: application/json" \
      -d '{"lastCommand":"/implement"}'
+
+   # Heartbeat — every 5–10 min while active; deadline is 30 min
+   curl -X POST "$BASE/api/v1/work/items/$ID/heartbeat" \
+     -H "Authorization: Bearer $API_KEY" -H "content-type: application/json" \
+     -d '{"lastCommand":"/implement"}'
+
+   # Link PR after `gh pr create`
+   curl -X POST "$BASE/api/v1/work/items/$ID/pr" \
+     -H "Authorization: Bearer $API_KEY" -H "content-type: application/json" \
+     -d '{"branch":"<branch>","prNumber":<N>}'
+
+   # Poll coordination — `nextAction` is the operator's pushback channel; obey it
+   curl "$BASE/api/v1/work/items/$ID/coordination" \
+     -H "Authorization: Bearer $API_KEY" | jq .nextAction
    ```
+   The operator uses `coordination.nextAction` to push back when your work doesn't match scorecard requirements (e.g., demanding `/validate-candidate` before `/review-implementation` when `deployVerified` is false). Treat that text as authoritative — re-read it after each phase.
 5. Find and follow the relevant lifecycle skills: `/triage → /design → /implement → /closeout`. PATCH the work item with `branch` + `pr` + `status` as you progress so `dolt_log` reflects state.
 6. Run the smallest checks that cover your edited surface; normally `pnpm check:fast` must pass unless a human explicitly narrows verification. Push branch. `gh pr create` with a conventional commit title.
 

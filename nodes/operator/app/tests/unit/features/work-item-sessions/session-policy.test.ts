@@ -111,4 +111,35 @@ describe("work-item session policy", () => {
       })
     ).toContain("already claimed by agent-one");
   });
+
+  it("demands /validate-candidate for needs_merge items without deployVerified", () => {
+    const text = nextActionForWorkItem({
+      workItem: { ...WORK_ITEM, status: "needs_merge", deployVerified: false },
+      session: session({ prNumber: 1204 }),
+      now: NOW,
+    });
+    expect(text).toContain("/validate-candidate");
+    expect(text).toContain("PR #1204");
+    expect(text).toContain("deployVerified");
+  });
+
+  it("clears to /review-implementation once deployVerified is true", () => {
+    const text = nextActionForWorkItem({
+      workItem: { ...WORK_ITEM, status: "needs_merge", deployVerified: true },
+      session: session({ prNumber: 1204 }),
+      now: NOW,
+    });
+    expect(text).toContain("/review-implementation");
+    expect(text).not.toContain("/validate-candidate");
+  });
+
+  it("flags done work items still missing deployVerified", () => {
+    const text = nextActionForWorkItem({
+      workItem: { ...WORK_ITEM, status: "done", deployVerified: false, pr: "1204" },
+      session: session({ prNumber: 1204 }),
+      now: NOW,
+    });
+    expect(text).toContain("deployVerified is false");
+    expect(text).toContain("/validate-candidate");
+  });
 });

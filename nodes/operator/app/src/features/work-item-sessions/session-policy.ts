@@ -80,14 +80,23 @@ export function nextActionForWorkItem(input: {
     return `Continue ${workItem.status} for ${workItem.id}, then link the branch or PR with POST /pr.`;
   }
 
+  const prRef = session.prNumber ?? workItem.pr ?? null;
+  const prTag = prRef ? `PR #${prRef}` : "the linked PR";
+
   switch (workItem.status) {
     case "needs_implement":
       return `Continue /implement for ${workItem.id}; heartbeat until code is ready for closeout.`;
     case "needs_closeout":
       return `Run /closeout for ${workItem.id}; keep the linked PR current.`;
     case "needs_merge":
+      if (!workItem.deployVerified) {
+        return `Run /validate-candidate for ${prTag} (${workItem.id}); post the scorecard and flip deployVerified before /review-implementation.`;
+      }
       return `Run /review-implementation for ${workItem.id}; use the linked PR as review context.`;
     case "done":
+      if (!workItem.deployVerified) {
+        return `${workItem.id} merged but deployVerified is false. Run /validate-candidate against ${prTag} and post the scorecard to close the loop.`;
+      }
       return `${workItem.id} is done. No active implementation action is required.`;
     case "blocked":
       return `${workItem.id} is blocked. Resolve blocked_by before continuing.`;
