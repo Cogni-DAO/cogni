@@ -20,6 +20,11 @@ import { getSessionUser } from "@/app/_lib/auth/session";
 import { resolveServiceDb } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { getTraderComparison } from "@/features/wallet-analysis/server/trader-comparison-service";
+import {
+  EVENT_NAMES,
+  logEvent,
+  type RequestContext,
+} from "@/shared/observability";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +33,8 @@ export const GET = wrapRouteHandlerWithLogging(
     routeId: "poly.research-trader-comparison",
     auth: { mode: "required", getSessionUser },
   },
-  async (_ctx, request, sessionUser) => {
+  async (ctx, request, sessionUser) => {
+    const startedAt = performance.now();
     if (!sessionUser) throw new Error("sessionUser required");
     const url = new URL(request.url);
     const queryParse = PolyResearchTraderComparisonQuerySchema.safeParse({
@@ -37,6 +43,15 @@ export const GET = wrapRouteHandlerWithLogging(
       interval: url.searchParams.get("interval") ?? undefined,
     });
     if (!queryParse.success) {
+      logTraderComparisonComplete(ctx, {
+        startedAt,
+        status: 400,
+        outcome: "error",
+        errorCode: "invalid_query",
+        walletCount: 0,
+        traderCount: 0,
+        warningCount: 0,
+      });
       return NextResponse.json(
         { error: "invalid_query", message: queryParse.error.message },
         { status: 400 }
@@ -47,17 +62,83 @@ export const GET = wrapRouteHandlerWithLogging(
       resolveServiceDb() as unknown as import("drizzle-orm/node-postgres").NodePgDatabase<
         Record<string, unknown>
       >;
-    const response = await getTraderComparison(
-      db,
-      queryParse.data.wallet.map((address, index) => ({
-        address,
-        label: queryParse.data.label[index],
-      })),
-      queryParse.data.interval
-    );
+    let response: Awaited<ReturnType<typeof getTraderComparison>>;
+    try {
+      response = await getTraderComparison(
+        db,
+        queryParse.data.wallet.map((address, index) => ({
+          address,
+          label: queryParse.data.label[index],
+        })),
+        queryParse.data.interval
+      );
+    } catch {
+      logTraderComparisonComplete(ctx, {
+        startedAt,
+        status: 500,
+        outcome: "error",
+        errorCode: "service_failed",
+        walletCount: queryParse.data.wallet.length,
+        traderCount: 0,
+        warningCount: 0,
+      });
+      return NextResponse.json(
+        { error: "Internal server error" },
+        { status: 500 }
+      );
+    }
 
-    return NextResponse.json(
-      PolyResearchTraderComparisonResponseSchema.parse(response)
-    );
+    const parsed =
+      PolyResearchTraderComparisonResponseSchema.safeParse(response);
+    if (!parsed.success) {
+      logTraderComparisonComplete(ctx, {
+        startedAt,
+        status: 500,
+        outcome: "error",
+        errorCode: "response_validation_failed",
+        walletCount: queryParse.data.wallet.length,
+        traderCount: response.traders.length,
+        warningCount: response.warnings.length,
+      });
+      return NextResponse.json(
+        { error: "Internal server error" },
+        { status: 500 }
+      );
+    }
+
+    logTraderComparisonComplete(ctx, {
+      startedAt,
+      status: 200,
+      outcome: "success",
+      walletCount: queryParse.data.wallet.length,
+      traderCount: parsed.data.traders.length,
+      warningCount: parsed.data.warnings.length,
+    });
+    return NextResponse.json(parsed.data);
   }
 );
+
+function logTraderComparisonComplete(
+  ctx: RequestContext,
+  fields: {
+    startedAt: number;
+    status: number;
+    outcome: "success" | "error";
+    walletCount: number;
+    traderCount: number;
+    warningCount: number;
+    errorCode?: string | undefined;
+  }
+): void {
+  logEvent(ctx.log, EVENT_NAMES.POLY_RESEARCH_TRADER_COMPARISON_COMPLETE, {
+    reqId: ctx.reqId,
+    routeId: ctx.routeId,
+    status: fields.status,
+    durationMs: Math.round(performance.now() - fields.startedAt),
+    outcome: fields.outcome,
+    walletCount: fields.walletCount,
+    traderCount: fields.traderCount,
+    warningCount: fields.warningCount,
+    ...(fields.errorCode ? { errorCode: fields.errorCode } : {}),
+  });
+}

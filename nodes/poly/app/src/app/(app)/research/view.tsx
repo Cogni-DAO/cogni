@@ -55,7 +55,6 @@ import { Input, ToggleGroup, ToggleGroupItem } from "@/components";
 import {
   DistributionComparisonBlock,
   type DistributionComparisonSeries,
-  TargetOverlapBlock,
   WalletDetailDrawer,
   WalletQuickJump,
 } from "@/features/wallet-analysis";
@@ -75,7 +74,6 @@ const PERIOD_OPTIONS: readonly WalletTimePeriod[] = [
   "MONTH",
   "ALL",
 ] as const;
-const OVERLAP_INTERVAL_OPTIONS = ["1D", "1W", "1M", "ALL"] as const;
 const TOP_N = 100;
 const PRIMARY_RESEARCH_WALLETS = [
   {
@@ -92,8 +90,6 @@ type ResearchComparisonWallet = {
   label: string;
   address: string;
 };
-
-type ResearchChartKey = "targetOverlap" | "traderComparison";
 
 async function fetchWalletStatus(): Promise<PolyWalletStatusOutput> {
   const res = await fetch("/api/v1/poly/wallet/status", {
@@ -133,7 +129,10 @@ async function fetchTraderComparison(params: {
     search.append("label", wallet.label);
   }
   const res = await fetch(
-    `/api/v1/poly/research/trader-comparison?${search.toString()}`
+    `/api/v1/poly/research/trader-comparison?${search.toString()}`,
+    {
+      credentials: "include",
+    }
   );
   if (!res.ok) {
     throw new Error(`trader comparison failed: ${res.status}`);
@@ -467,8 +466,6 @@ function ResearchBenchmarkBoard({
 }) {
   const [overlapInterval, setOverlapInterval] =
     useState<PolyWalletOverviewInterval>("ALL");
-  const [activeChart, setActiveChart] =
-    useState<ResearchChartKey>("targetOverlap");
   const comparisonWallets = useMemo(
     () => buildComparisonWallets(userWalletAddress, targets),
     [userWalletAddress, targets]
@@ -538,59 +535,19 @@ function ResearchBenchmarkBoard({
       ) : null}
 
       <div className="rounded-lg border bg-card p-4">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex rounded border bg-muted p-0.5 text-xs">
-            {RESEARCH_CHART_TABS.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveChart(tab.key)}
-                className={
-                  activeChart === tab.key
-                    ? "rounded bg-background px-3 py-1.5 font-medium text-foreground shadow-sm"
-                    : "rounded px-3 py-1.5 font-medium text-muted-foreground hover:text-foreground"
-                }
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          {activeChart === "targetOverlap" ? (
-            <div className="inline-flex rounded border bg-muted p-0.5 text-xs">
-              {OVERLAP_INTERVAL_OPTIONS.map((interval) => (
-                <button
-                  key={interval}
-                  type="button"
-                  onClick={() => setOverlapInterval(interval)}
-                  className={
-                    overlapInterval === interval
-                      ? "rounded bg-background px-2.5 py-1 font-medium text-foreground shadow-sm"
-                      : "rounded px-2.5 py-1 font-medium text-muted-foreground hover:text-foreground"
-                  }
-                >
-                  {interval}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-
-        {activeChart === "targetOverlap" ? (
-          <TargetOverlapBlock
-            data={overlapQuery.data}
-            isLoading={overlapQuery.isLoading}
-            isError={overlapQuery.isError}
-          />
-        ) : (
-          <DistributionComparisonBlock
-            series={distributionSeries}
-            traderComparison={traderComparison}
-            traderComparisonLoading={traderComparisonLoading}
-            traderComparisonError={traderComparisonError}
-            traderInterval={comparisonInterval}
-            onTraderIntervalChange={setComparisonInterval}
-          />
-        )}
+        <DistributionComparisonBlock
+          series={distributionSeries}
+          targetOverlap={overlapQuery.data}
+          targetOverlapLoading={overlapQuery.isLoading}
+          targetOverlapError={overlapQuery.isError}
+          targetOverlapInterval={overlapInterval}
+          onTargetOverlapIntervalChange={setOverlapInterval}
+          traderComparison={traderComparison}
+          traderComparisonLoading={traderComparisonLoading}
+          traderComparisonError={traderComparisonError}
+          traderInterval={comparisonInterval}
+          onTraderIntervalChange={setComparisonInterval}
+        />
         {!userWalletAddress ? (
           <p className="mt-3 text-muted-foreground text-xs">
             {userWalletConnected
@@ -602,11 +559,6 @@ function ResearchBenchmarkBoard({
     </section>
   );
 }
-
-const RESEARCH_CHART_TABS = [
-  { key: "targetOverlap", label: "Target overlap" },
-  { key: "traderComparison", label: "Trader comparison" },
-] satisfies readonly { key: ResearchChartKey; label: string }[];
 
 function buildComparisonWallets(
   userWalletAddress: string | null,

@@ -18,6 +18,7 @@
 import type {
   FlatHistogram,
   Histogram,
+  PolyResearchTargetOverlapResponse,
   PolyResearchTraderComparisonResponse,
   PolyWalletOverviewInterval,
   WalletAnalysisDistributions,
@@ -26,6 +27,7 @@ import { type ReactElement, type ReactNode, useState } from "react";
 
 import { cn } from "@/shared/util/cn";
 import type { WalletDistributionsViewMode } from "../types/wallet-analysis";
+import { TargetOverlapBlock } from "./TargetOverlapBlock";
 import {
   TRADER_COMPARISON_INTERVALS,
   TraderComparisonChart,
@@ -139,6 +141,11 @@ export function DistributionsBlock({
 
 export function DistributionComparisonBlock({
   series,
+  targetOverlap,
+  targetOverlapLoading,
+  targetOverlapError,
+  targetOverlapInterval,
+  onTargetOverlapIntervalChange,
   traderComparison,
   traderComparisonLoading,
   traderComparisonError,
@@ -146,6 +153,11 @@ export function DistributionComparisonBlock({
   onTraderIntervalChange,
 }: {
   series: readonly DistributionComparisonSeries[];
+  targetOverlap?: PolyResearchTargetOverlapResponse | undefined;
+  targetOverlapLoading?: boolean | undefined;
+  targetOverlapError?: boolean | undefined;
+  targetOverlapInterval: PolyWalletOverviewInterval;
+  onTargetOverlapIntervalChange: (interval: PolyWalletOverviewInterval) => void;
   traderComparison?: PolyResearchTraderComparisonResponse | undefined;
   traderComparisonLoading?: boolean | undefined;
   traderComparisonError?: boolean | undefined;
@@ -155,7 +167,7 @@ export function DistributionComparisonBlock({
   const [viewMode, setViewMode] =
     useState<WalletDistributionsViewMode>("count");
   const [activeView, setActiveView] =
-    useState<ResearchComparisonViewKey>("traderPnl");
+    useState<ResearchComparisonViewKey>("targetOverlap");
   const readySeries = series.filter(
     (
       s
@@ -170,6 +182,7 @@ export function DistributionComparisonBlock({
     DISTRIBUTION_COMPARISON_VIEWS_BY_KEY[
       activeView as DistributionComparisonViewKey
     ];
+  const isTargetOverlapView = activeView === "targetOverlap";
 
   if (isLoading && traderComparisonLoading && !traderComparison) {
     return (
@@ -216,9 +229,17 @@ export function DistributionComparisonBlock({
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            {isTargetOverlapView ? (
+              <IntervalToggle
+                interval={targetOverlapInterval}
+                intervals={TARGET_OVERLAP_INTERVALS}
+                onChange={onTargetOverlapIntervalChange}
+              />
+            ) : null}
             {activeTraderView ? (
-              <TraderIntervalToggle
+              <IntervalToggle
                 interval={traderInterval}
+                intervals={TRADER_COMPARISON_INTERVALS}
                 onChange={onTraderIntervalChange}
               />
             ) : null}
@@ -232,6 +253,13 @@ export function DistributionComparisonBlock({
         </div>
 
         <ResearchChartViewport>
+          {isTargetOverlapView ? (
+            <TargetOverlapBlock
+              data={targetOverlap}
+              isLoading={targetOverlapLoading}
+              isError={targetOverlapError}
+            />
+          ) : null}
           {activeTraderView ? (
             <TraderComparisonChart
               data={traderComparison}
@@ -339,16 +367,18 @@ function ViewModeToggle({
   );
 }
 
-function TraderIntervalToggle({
+function IntervalToggle({
   interval,
+  intervals,
   onChange,
 }: {
   interval: PolyWalletOverviewInterval;
+  intervals: readonly PolyWalletOverviewInterval[];
   onChange: (interval: PolyWalletOverviewInterval) => void;
 }): ReactElement {
   return (
     <div className="inline-flex rounded border bg-muted p-0.5 text-xs">
-      {TRADER_COMPARISON_INTERVALS.map((option) => (
+      {intervals.map((option) => (
         <button
           key={option}
           type="button"
@@ -465,6 +495,7 @@ function totalUsdc(data: WalletAnalysisDistributions): number {
 }
 
 type TraderComparisonViewKey = "traderPnl" | "traderFills" | "traderFlow";
+type TargetOverlapViewKey = "targetOverlap";
 
 type DistributionComparisonViewKey =
   | "tradeSize"
@@ -475,6 +506,7 @@ type DistributionComparisonViewKey =
   | "betsPerMarket";
 
 type ResearchComparisonViewKey =
+  | TargetOverlapViewKey
   | TraderComparisonViewKey
   | DistributionComparisonViewKey;
 
@@ -498,6 +530,13 @@ const TRADER_COMPARISON_VIEWS = [
   { key: "traderFills", label: "Fills", mode: "count" },
   { key: "traderFlow", label: "USDC", mode: "flow" },
 ] satisfies readonly TraderComparisonView[];
+
+const TARGET_OVERLAP_INTERVALS = [
+  "1D",
+  "1W",
+  "1M",
+  "ALL",
+] satisfies readonly PolyWalletOverviewInterval[];
 
 const DISTRIBUTION_COMPARISON_VIEWS = [
   {
@@ -540,6 +579,7 @@ const DISTRIBUTION_COMPARISON_VIEWS = [
 ] satisfies readonly DistributionComparisonView[];
 
 const RESEARCH_COMPARISON_VIEWS = [
+  { key: "targetOverlap", label: "Target overlap" },
   ...TRADER_COMPARISON_VIEWS,
   ...DISTRIBUTION_COMPARISON_VIEWS,
 ] satisfies readonly { key: ResearchComparisonViewKey; label: string }[];
