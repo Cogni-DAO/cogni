@@ -669,6 +669,11 @@ LITELLM_NODE_ENDPOINTS="4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://${LITELLM_NO
 printf '%s=%s\n' COGNI_NODE_ENDPOINTS "$LITELLM_NODE_ENDPOINTS" >> "$RUNTIME_ENV"
 # Multi-node DB provisioning
 append_env_if_set "$RUNTIME_ENV" COGNI_NODE_DBS "${COGNI_NODE_DBS-}"
+# Database backup cadence. A systemd timer runs the Compose db-backup profile as
+# a one-shot container; defaults avoid requiring new GitHub Environment secrets.
+printf '%s=%s\n' DB_BACKUP_INTERVAL_SECONDS "${DB_BACKUP_INTERVAL_SECONDS:-86400}" >> "$RUNTIME_ENV"
+printf '%s=%s\n' DB_BACKUP_RETENTION_DAYS "${DB_BACKUP_RETENTION_DAYS:-14}" >> "$RUNTIME_ENV"
+printf '%s=%s\n' DB_BACKUP_OBSERVABILITY_GRACE_SECONDS "${DB_BACKUP_OBSERVABILITY_GRACE_SECONDS:-90}" >> "$RUNTIME_ENV"
 
 # ── Doltgres (knowledge data plane) credentials ──────────────────────────
 # Derived deterministically from POSTGRES_ROOT_PASSWORD + salt so no new GitHub
@@ -836,7 +841,7 @@ emit_deployment_event "infra_deployment.stack_up_started" "in_progress" "Startin
 # (autoheal can restart a container between compose stop and remove)
 $RUNTIME_COMPOSE stop autoheal 2>/dev/null || true
 
-# Infra services only — excludes app, scheduler-worker, db-migrate
+# Infra services only — excludes app, scheduler-worker, db-migrate, and one-shot backup jobs
 INFRA_SERVICES="postgres litellm redis alloy temporal-postgres temporal temporal-ui autoheal repo-init git-sync"
 # Doltgres is optional — only include if it's in the compose file for this env.
 if $RUNTIME_COMPOSE config --services 2>/dev/null | grep -q '^doltgres$'; then
@@ -848,6 +853,80 @@ $RUNTIME_COMPOSE up -d --remove-orphans $INFRA_SERVICES
 
 log_info "[$(date -u +%H:%M:%S)] Infra stack up complete"
 emit_deployment_event "infra_deployment.stack_up_complete" "success" "Infrastructure services started"
+
+ALLOY_CONFIG="/opt/cogni-template-runtime/configs/alloy-config.metrics.alloy"
+ALLOY_HASH_FILE="/var/lib/cogni/alloy-config.sha256"
+if [[ -f "$ALLOY_CONFIG" ]]; then
+  mkdir -p /var/lib/cogni
+  NEW_ALLOY_HASH=$(hash_file "$ALLOY_CONFIG")
+  OLD_ALLOY_HASH=$(cat "$ALLOY_HASH_FILE" 2>/dev/null || echo "none")
+  if [[ "$NEW_ALLOY_HASH" != "$OLD_ALLOY_HASH" && "$NEW_ALLOY_HASH" != "no-hash-tool" ]]; then
+    log_info "Alloy config changed (hash: ${NEW_ALLOY_HASH:0:12}...), restarting container..."
+    $RUNTIME_COMPOSE restart alloy
+    echo "$NEW_ALLOY_HASH" > "$ALLOY_HASH_FILE"
+    log_info "Alloy restarted with new config"
+  else
+    log_info "Alloy config unchanged (hash: ${NEW_ALLOY_HASH:0:12}...), no restart needed"
+  fi
+else
+  log_warn "Alloy config missing at $ALLOY_CONFIG, skipping restart check"
+fi
+
+log_info "[$(date -u +%H:%M:%S)] Installing db-backup systemd timer..."
+$RUNTIME_COMPOSE --profile backup stop db-backup 2>/dev/null || true
+$RUNTIME_COMPOSE --profile backup rm -f db-backup 2>/dev/null || true
+DOCKER_BIN=$(command -v docker)
+BACKUP_INTERVAL_SECONDS="${DB_BACKUP_INTERVAL_SECONDS:-86400}"
+cat >/etc/systemd/system/cogni-db-backup.service <<SYSTEMD_SERVICE_EOF
+[Unit]
+Description=Cogni runtime Postgres logical backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/cogni-template-runtime
+ExecStart=${DOCKER_BIN} compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml --profile backup up --force-recreate --no-deps --abort-on-container-exit --exit-code-from db-backup db-backup
+TimeoutStartSec=2h
+SYSTEMD_SERVICE_EOF
+
+cat >/etc/systemd/system/cogni-db-backup.timer <<SYSTEMD_TIMER_EOF
+[Unit]
+Description=Run Cogni runtime Postgres logical backup
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=${BACKUP_INTERVAL_SECONDS}s
+AccuracySec=5min
+RandomizedDelaySec=5min
+Persistent=true
+Unit=cogni-db-backup.service
+
+[Install]
+WantedBy=timers.target
+SYSTEMD_TIMER_EOF
+
+systemctl daemon-reload
+systemctl enable --now cogni-db-backup.timer
+systemctl reset-failed cogni-db-backup.service 2>/dev/null || true
+log_info "db-backup timer installed with interval ${BACKUP_INTERVAL_SECONDS}s"
+
+log_info "Running db-backup validation backup..."
+$RUNTIME_COMPOSE --profile backup up --force-recreate --no-deps --abort-on-container-exit --exit-code-from db-backup db-backup
+$RUNTIME_COMPOSE --profile backup run --rm --no-deps --entrypoint bash db-backup -lc '
+  set -euo pipefail
+  for cluster in app temporal; do
+    latest=$(find "/backups/${cluster}" -mindepth 1 -maxdepth 1 -type d | sort | tail -1)
+    test -n "$latest"
+    test -s "${latest}/MANIFEST.sha256"
+    echo "db-backup manifest verified: ${latest}/MANIFEST.sha256"
+  done
+'
+$RUNTIME_COMPOSE --profile backup logs --tail 80 db-backup | grep 'db_backup.completed' || {
+  log_error "db-backup completed logs missing after validation backup"
+  exit 1
+}
+emit_deployment_event "infra_deployment.db_backup_scheduled" "success" "db-backup timer installed and validation backup completed"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 6.6a: Checksum-gated restart for LiteLLM config changes
@@ -1186,7 +1265,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
     echo "    $REPO_ROOT/infra/compose/runtime/             → root@$VM_HOST:/opt/cogni-template-runtime/"
     echo "    $REPO_ROOT/infra/k8s/argocd/image-updater/    → root@$VM_HOST:/opt/cogni-template-argocd-updater/  (bug.0344)"
     echo "Remote script:      $ARTIFACT_DIR/deploy-infra-remote.sh → /tmp/deploy-infra-remote.sh"
-    echo "Infra services managed by remote script: postgres, litellm, temporal, alloy, caddy (plus healthchecks)"
+    echo "Infra services managed by remote script: postgres, litellm, temporal, alloy, caddy (plus db-backup timer and healthchecks)"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     log_info "Dry run complete — exiting before any VM contact"
     exit 0

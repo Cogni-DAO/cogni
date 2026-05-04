@@ -14,6 +14,7 @@ Navigation aid for database schema, migrations, and DSN plumbing. Per-node schem
 - [docs/spec/database-url-alignment.md](../../../docs/spec/database-url-alignment.md) — explicit-DSN invariant, no component-piece fallback at runtime.
 - [docs/spec/multi-node-tenancy.md](../../../docs/spec/multi-node-tenancy.md) — DB-per-node boundary (the database IS the tenant, not a column).
 - [docs/guides/multi-node-dev.md](../../../docs/guides/multi-node-dev.md) — per-node dev commands + local setup.
+- `infra/compose/runtime/docker-compose.yml` + `infra/compose/runtime/db-backup/backup.sh` — runtime Postgres backup job for app Postgres + Temporal Postgres; candidate-flight-infra validates health, manifests, and Loki logs.
 - [work/items/task.0324…md](../../../work/items/task.0324.per-node-db-schema-independence.md) — why the current shape exists; task body has design history.
 - [work/items/task.0325…md](../../../work/items/task.0325.atlas-gitops-migrations.md) — Atlas spike intel, deferred.
 - `nodes/poly/packages/db-schema/AGENTS.md` — reference example for the per-node db-schema package pattern (fork it for new nodes).
@@ -127,6 +128,24 @@ import { polyCopyTradeFills } from "@cogni/poly-db-schema/copy-trade";
 
 `infra/k8s/overlays/production/{poly,resy}/kustomization.yaml:95` deliberately short-circuits. Un-no-opping is task.0324 Phase 3 — gated on `pg_dump` inspection of each prod DB first (current state unverified). **Do not flip these flags** without the snapshot-restore rehearsal.
 
+## Runtime backups — candidate-a/preview/prod Compose infra
+
+App Postgres and Temporal Postgres are backed up by the Compose `db-backup` profile service in `infra/compose/runtime/docker-compose.yml` (dev parity in `docker-compose.dev.yml`). It uses the official `postgres:15` image and the script at `infra/compose/runtime/db-backup/backup.sh`. On deployed VMs, `scripts/ci/deploy-infra.sh` installs `cogni-db-backup.timer`, which runs the service as a one-shot container instead of keeping a privileged DB client idle on the network.
+
+What it does:
+
+- Backs up app Postgres (`postgres:5432`) and Temporal Postgres (`temporal-postgres:5432`).
+- Runs only when invoked: candidate-flight-infra forces one validation run, and the host systemd timer runs it every `DB_BACKUP_INTERVAL_SECONDS` (default 86400 = 24h).
+- Waits `DB_BACKUP_OBSERVABILITY_GRACE_SECONDS` (default 90) before exit so Alloy can scrape one-shot container logs.
+- Retains backups for `DB_BACKUP_RETENTION_DAYS` (default 14).
+- Writes timestamped directories under the persistent Docker volume `db_backups`.
+- Each backup dir contains `globals.sql`, one custom-format `pg_dump` file per database, and `MANIFEST.sha256`.
+- Emits JSON logs with `event="db_backup.completed"` and `cluster="app"` / `cluster="temporal"`.
+
+The candidate-a infra lever proves this path. `scripts/ci/deploy-infra.sh` installs/enables the timer, restarts Alloy when the log allowlist changes, forces a validation backup, verifies both latest manifests, and prints `db_backup.completed` logs. `.github/workflows/candidate-flight-infra.yml` then queries Loki for `{env="candidate-a",service="db-backup"} | json | event="db_backup.completed"` and requires hits for both clusters.
+
+Known scope: this is same-VM persistent-volume backup. It protects against logical DB damage and operator mistakes, not full VM loss. Do not claim disaster recovery until an off-host object store sink and restore drill exist. The next hardening step is S3-compatible storage (or equivalent OSS object store) plus a scheduled restore rehearsal.
+
 ### Per-node app image ≠ per-node migrator image
 
 They share a Dockerfile (`nodes/<node>/app/Dockerfile`) but use different stages. `cogni-template:TAG-poly` = app runtime (`runner`). `cogni-template:TAG-poly-migrate` = migrator (`migrator`). The k8s overlay uses both — the Job targets `-migrate`, the Deployment targets the app tag.
@@ -214,3 +233,5 @@ Atlas + Drizzle official integration; `atlas migrate diff`, destructive-change l
 - New Doltgres table per domain or feature when it could be rows in the existing `knowledge` table with a different `domain` + `tags` — violates syntropy, fragments AI retrieval across tables
 - Operational/human-sourced data added to Doltgres — auth events, billing, user activity, ingestion receipts belong in Postgres; Doltgres is for AI-written compounding knowledge
 - AI-written/refined knowledge added to Postgres — strategy notes, research, confidence-scored observations belong in Doltgres; Postgres lacks the version history those edits deserve
+- Database or Temporal Postgres changes that are not considered against the `db-backup` contract — new runtime DB services need either inclusion in `backup.sh` or an explicit documented reason they are ephemeral/reconstructable
+- Calling same-VM `db_backups` disaster recovery — it is a local backup tier only until off-host storage and restore drills are wired and flight-validated

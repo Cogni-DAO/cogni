@@ -13,12 +13,16 @@ export { useWalletAnalysis } from "./client/use-wallet-analysis";
 export { BalanceBar } from "./components/BalanceBar";
 export { BalanceOverTimeChart } from "./components/BalanceOverTimeChart";
 export { CopyWalletButton } from "./components/CopyWalletButton";
-export type { DistributionComparisonSeries } from "./components/DistributionsBlock";
+export type {
+  DistributionComparisonSeries,
+  ResearchComparisonViewKey,
+} from "./components/DistributionsBlock";
 export { DistributionComparisonBlock } from "./components/DistributionsBlock";
 export { EdgeHypothesis } from "./components/EdgeHypothesis";
 export { PositionTimelineChart } from "./components/PositionTimelineChart";
 export { RecentTradesTable } from "./components/RecentTradesTable";
 export { StatGrid } from "./components/StatGrid";
+export { TargetOverlapBlock } from "./components/TargetOverlapBlock";
 export { TimeWindowHeader } from "./components/TimeWindowHeader";
 export { TopMarketsList } from "./components/TopMarketsList";
 export { TraderComparisonBlock } from "./components/TraderComparisonBlock";

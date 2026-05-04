@@ -378,6 +378,39 @@ services:
       postgres:
         condition: service_healthy
 
+  db-backup:
+    image: postgres:15
+    container_name: db-backup
+    profiles: ["backup"]
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    networks:
+      - cogni-edge
+    environment:
+      POSTGRES_ROOT_USER: ${POSTGRES_ROOT_USER}
+      POSTGRES_ROOT_PASSWORD: ${POSTGRES_ROOT_PASSWORD}
+      TEMPORAL_DB_USER: ${TEMPORAL_DB_USER:-temporal}
+      TEMPORAL_DB_PASSWORD: ${TEMPORAL_DB_PASSWORD:-temporal}
+      DB_BACKUP_INTERVAL_SECONDS: ${DB_BACKUP_INTERVAL_SECONDS:-86400}
+      DB_BACKUP_RETENTION_DAYS: ${DB_BACKUP_RETENTION_DAYS:-14}
+      DB_BACKUP_OBSERVABILITY_GRACE_SECONDS: ${DB_BACKUP_OBSERVABILITY_GRACE_SECONDS:-90}
+    volumes:
+      - ./db-backup/backup.sh:/usr/local/bin/db-backup.sh:ro
+      - db_backups:/backups
+    command: ["/usr/local/bin/db-backup.sh", "once"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal-postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+
   db-migrate:
     # task.0370 step 1: db-migrate runs the same runtime image as the app, invoking
     # the bundled migrate.mjs runner. No more separate migrator image / target.
@@ -885,6 +918,8 @@ volumes:
     name: grafana_data
   temporal_postgres_data:
     name: temporal_postgres_data
+  db_backups:
+    name: db_backups
   repo_data:
     name: repo_data
   pnpm_store:

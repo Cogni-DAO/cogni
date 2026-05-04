@@ -180,14 +180,36 @@ jobs:
         if: env.VM_HOST != ''
         run: bash scripts/ci/deploy-infra.sh --ref "$COGNI_REPO_REF"
 
+      - name: Verify db-backup Loki logs
+        if: env.VM_HOST != '' && env.GRAFANA_URL != '' && env.GRAFANA_SERVICE_ACCOUNT_TOKEN != ''
+        run: |
+          set -euo pipefail
+          query='{env="candidate-a",service="db-backup"} | json | event="db_backup.completed"'
+          for attempt in $(seq 1 12); do
+            result=$(scripts/loki-query.sh "$query" 600 200)
+            app_count=$(jq '[.data.result[].values[][1] | fromjson? | select(.cluster == "app")] | length' <<<"$result")
+            temporal_count=$(jq '[.data.result[].values[][1] | fromjson? | select(.cluster == "temporal")] | length' <<<"$result")
+            if [ "$app_count" -gt 0 ] && [ "$temporal_count" -gt 0 ]; then
+              echo "db-backup Loki verification passed: app=${app_count}, temporal=${temporal_count}"
+              exit 0
+            fi
+            echo "db-backup Loki logs not visible yet (attempt ${attempt}/12): app=${app_count}, temporal=${temporal_count}"
+            sleep 15
+          done
+          echo "::error::db-backup.completed logs did not appear in Loki for both app and temporal clusters"
+          exit 1
+
       - name: Trigger work-items Notion sync
         if: env.VM_HOST != '' && env.WORK_ITEMS_NOTION_TOKEN != ''
+        timeout-minutes: 2
         env:
           DOMAIN: ${{ vars.DOMAIN }}
           INTERNAL_OPS_TOKEN: ${{ secrets.INTERNAL_OPS_TOKEN }}
         run: |
           set -euo pipefail
-          curl -fsS -X POST "https://${DOMAIN}/api/internal/work/notion/sync" \
+          if ! curl -fsS --max-time 90 -X POST "https://${DOMAIN}/api/internal/work/notion/sync" \
             -H "Authorization: Bearer ${INTERNAL_OPS_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d '{"limit":500}' | jq .
+            -d '{"limit":500}' | jq .; then
+            echo "::warning::work-items Notion sync did not complete after infra deploy; infra reconciliation already finished"
+          fi

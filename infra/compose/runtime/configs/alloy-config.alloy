@@ -19,7 +19,7 @@ discovery.relabel "docker_logs" {
   // Drop containers that don't match our allowlist
   rule {
     source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
-    regex         = "(app|litellm|caddy|scheduler-worker|temporal|openclaw-gateway|llm-proxy-openclaw|autoheal)"
+    regex         = "(app|litellm|caddy|scheduler-worker|temporal|db-backup|openclaw-gateway|llm-proxy-openclaw|autoheal)"
     action        = "keep"
   }
 
@@ -45,14 +45,14 @@ discovery.relabel "docker_logs" {
 
   rule {
     target_label = "env"
-    replacement  = sys.env("DEPLOY_ENVIRONMENT")  // local | canary | preview | production
+    replacement  = sys.env("DEPLOY_ENVIRONMENT")  // local | candidate-a | preview | production
   }
 
   // Fail-closed: Drop logs if DEPLOY_ENVIRONMENT is not valid
   // Prevents mislabeling if env var is unset or invalid
   rule {
     source_labels = ["env"]
-    regex         = "^(local|canary|preview|production)$"
+    regex         = "^(local|candidate-a|preview|production)$"
     action        = "keep"
   }
 }

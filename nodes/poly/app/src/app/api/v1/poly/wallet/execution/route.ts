@@ -218,7 +218,6 @@ export const GET = wrapRouteHandlerWithLogging(
         message: err instanceof Error ? err.message : String(err),
       });
     }
-
     const marketGroups = await buildMarketExposureGroups({
       db: container.serviceDb,
       billingAccountId: account.id,

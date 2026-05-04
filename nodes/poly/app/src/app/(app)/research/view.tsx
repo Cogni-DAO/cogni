@@ -28,6 +28,7 @@
 import type { WalletTimePeriod } from "@cogni/poly-ai-tools";
 import {
   PolyAddressSchema,
+  type PolyResearchTargetOverlapResponse,
   type PolyResearchTraderComparisonResponse,
   type PolyWalletOverviewInterval,
   type PolyWalletStatusOutput,
@@ -54,6 +55,7 @@ import { Input, ToggleGroup, ToggleGroupItem } from "@/components";
 import {
   DistributionComparisonBlock,
   type DistributionComparisonSeries,
+  type ResearchComparisonViewKey,
   WalletDetailDrawer,
   WalletQuickJump,
 } from "@/features/wallet-analysis";
@@ -128,12 +130,31 @@ async function fetchTraderComparison(params: {
     search.append("label", wallet.label);
   }
   const res = await fetch(
-    `/api/v1/poly/research/trader-comparison?${search.toString()}`
+    `/api/v1/poly/research/trader-comparison?${search.toString()}`,
+    {
+      credentials: "include",
+    }
   );
   if (!res.ok) {
     throw new Error(`trader comparison failed: ${res.status}`);
   }
   return (await res.json()) as PolyResearchTraderComparisonResponse;
+}
+
+async function fetchTargetOverlap(
+  interval: PolyWalletOverviewInterval
+): Promise<PolyResearchTargetOverlapResponse> {
+  const params = new URLSearchParams({ interval });
+  const res = await fetch(
+    `/api/v1/poly/research/target-overlap?${params.toString()}`,
+    {
+      credentials: "include",
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`target overlap failed: ${res.status}`);
+  }
+  return (await res.json()) as PolyResearchTargetOverlapResponse;
 }
 
 export function ResearchView() {
@@ -444,6 +465,10 @@ function ResearchBenchmarkBoard({
   userWalletConnected: boolean;
   targets: readonly { target_wallet: string }[];
 }) {
+  const [activeResearchView, setActiveResearchView] =
+    useState<ResearchComparisonViewKey>("targetOverlap");
+  const [overlapInterval, setOverlapInterval] =
+    useState<PolyWalletOverviewInterval>("ALL");
   const comparisonWallets = useMemo(
     () => buildComparisonWallets(userWalletAddress, targets),
     [userWalletAddress, targets]
@@ -454,6 +479,9 @@ function ResearchBenchmarkBoard({
   );
   const [comparisonInterval, setComparisonInterval] =
     useState<PolyWalletOverviewInterval>("1W");
+  const traderComparisonActive = isTraderComparisonView(activeResearchView);
+  const distributionComparisonActive =
+    isDistributionComparisonView(activeResearchView);
   const {
     data: traderComparison,
     isLoading: traderComparisonLoading,
@@ -469,7 +497,14 @@ function ResearchBenchmarkBoard({
         wallets: headlineWallets,
         interval: comparisonInterval,
       }),
-    enabled: headlineWallets.length > 0,
+    enabled: traderComparisonActive && headlineWallets.length > 0,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+  const overlapQuery = useQuery({
+    queryKey: ["research-target-overlap", overlapInterval],
+    queryFn: () => fetchTargetOverlap(overlapInterval),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     retry: 1,
@@ -481,6 +516,7 @@ function ResearchBenchmarkBoard({
         wallet.address.toLowerCase(),
       ],
       queryFn: () => fetchWalletDistributions(wallet.address),
+      enabled: distributionComparisonActive,
       staleTime: 30_000,
       gcTime: 5 * 60_000,
     })),
@@ -505,9 +541,16 @@ function ResearchBenchmarkBoard({
         </div>
       ) : null}
 
-      <div className="rounded-lg border border-primary/20 bg-card p-4">
+      <div className="rounded-lg border bg-card p-4">
         <DistributionComparisonBlock
+          activeView={activeResearchView}
+          onActiveViewChange={setActiveResearchView}
           series={distributionSeries}
+          targetOverlap={overlapQuery.data}
+          targetOverlapLoading={overlapQuery.isLoading}
+          targetOverlapError={overlapQuery.isError}
+          targetOverlapInterval={overlapInterval}
+          onTargetOverlapIntervalChange={setOverlapInterval}
           traderComparison={traderComparison}
           traderComparisonLoading={traderComparisonLoading}
           traderComparisonError={traderComparisonError}
@@ -523,6 +566,25 @@ function ResearchBenchmarkBoard({
         ) : null}
       </div>
     </section>
+  );
+}
+
+function isTraderComparisonView(view: ResearchComparisonViewKey): boolean {
+  return (
+    view === "traderPnl" || view === "traderFills" || view === "traderFlow"
+  );
+}
+
+function isDistributionComparisonView(
+  view: ResearchComparisonViewKey
+): boolean {
+  return (
+    view === "tradeSize" ||
+    view === "entryPrice" ||
+    view === "timeInPosition" ||
+    view === "entriesPerOutcome" ||
+    view === "hourOfDay" ||
+    view === "betsPerMarket"
   );
 }
 
