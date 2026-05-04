@@ -22,12 +22,12 @@ Production user clicks `Redeem` on rows the dashboard labels `redeemable`; manua
 
 Two independent authorities decide whether a position is redeemable, and they disagree.
 
-| Path                  | File                                                                | Source of truth                                                                     | Drives                                          |
-| --------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------- |
+| Path                  | File                                                                                        | Source of truth                                                                             | Drives                                            |
+| --------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------- |
 | Read-model (display)  | `nodes/poly/app/src/features/wallet-analysis/server/current-position-read-model.ts:238-257` | DB-cached Polymarket Data-API `raw.redeemable` flag **OR** ledger `lifecycleState="winner"` | Dashboard `status="redeemable"` and Action button |
-| Redeem route (action) | `nodes/poly/app/src/features/redeem/resolve-redeem-decision.ts`     | Live Data-API `/positions` + on-chain CTF `payoutNumerator/Denominator/balanceOf`   | What actually executes                          |
+| Redeem route (action) | `nodes/poly/app/src/features/redeem/resolve-redeem-decision.ts`                             | Live Data-API `/positions` + on-chain CTF `payoutNumerator/Denominator/balanceOf`           | What actually executes                            |
 
-`raw.redeemable=true` from Polymarket Data API means **"market resolved AND you held shares at snapshot time"** — *not* "you have a winner." Loser shares are technically `redeemable` for $0 in CTF terms (`payoutNumerator=0`). Polymarket's UI shows a "Redeem" button on losing positions too; we mistook that signal for actionability. This violates `docs/spec/poly-order-position-lifecycle.md` § Required Matrix, which makes `lifecycle="winner"` the only redeemable signal.
+`raw.redeemable=true` from Polymarket Data API means **"market resolved AND you held shares at snapshot time"** — _not_ "you have a winner." Loser shares are technically `redeemable` for $0 in CTF terms (`payoutNumerator=0`). Polymarket's UI shows a "Redeem" button on losing positions too; we mistook that signal for actionability. This violates `docs/spec/poly-order-position-lifecycle.md` § Required Matrix, which makes `lifecycle="winner"` the only redeemable signal.
 
 ## Approach: `poly_market_outcomes` becomes the single chain-resolution authority
 
@@ -153,7 +153,7 @@ The `redeem-subscriber` already receives every Polygon `ConditionResolution` cha
 
 ## Out of scope
 
-- Replacing Polymarket Data API as the *position-inventory* source (`poly_trader_current_positions` reconciler still pulls `/positions`; that's task.0426).
+- Replacing Polymarket Data API as the _position-inventory_ source (`poly_trader_current_positions` reconciler still pulls `/positions`; that's task.0426).
 - Changing the redeem worker / reaper flow.
 - Migrating `lifecycle_state` storage off `poly_copy_trade_fills`.
 - Funder-vs-wallet identity reconciliation (Safe-proxy mismatch). The 409 observability added here will surface this if it's still happening post-fix; follow-up bug at that point.
