@@ -120,6 +120,75 @@ export type WalletExecutionPosition = z.infer<
   typeof WalletExecutionPositionSchema
 >;
 
+export const WalletExecutionMarketPositionSourceSchema = z.enum([
+  "ledger",
+  "trader_current_positions",
+]);
+export const WalletExecutionMarketPositionSideSchema = z.enum([
+  "our_wallet",
+  "copy_target",
+]);
+export const WalletExecutionHedgeRoleSchema = z.enum([
+  "single",
+  "primary",
+  "hedge",
+]);
+
+export const WalletExecutionMarketParticipantPositionSchema = z.object({
+  side: WalletExecutionMarketPositionSideSchema,
+  source: WalletExecutionMarketPositionSourceSchema,
+  label: z.string(),
+  walletAddress: PolyAddressSchema,
+  conditionId: z.string(),
+  tokenId: z.string(),
+  marketTitle: z.string(),
+  eventTitle: z.string().nullable().optional(),
+  marketSlug: z.string().nullable(),
+  eventSlug: z.string().nullable(),
+  outcome: z.string(),
+  shares: z.number().nonnegative(),
+  costBasisUsdc: z.number().nonnegative(),
+  currentValueUsdc: z.number().nonnegative(),
+  vwap: z.number().min(0).nullable(),
+  avgPrice: z.number().min(0).nullable(),
+  hedgeRole: WalletExecutionHedgeRoleSchema,
+  lastObservedAt: z.string().nullable(),
+});
+export type WalletExecutionMarketParticipantPosition = z.infer<
+  typeof WalletExecutionMarketParticipantPositionSchema
+>;
+
+export const WalletExecutionMarketLineSchema = z.object({
+  conditionId: z.string(),
+  marketTitle: z.string(),
+  marketSlug: z.string().nullable(),
+  resolvesAt: z.string().nullable(),
+  ourValueUsdc: z.number().nonnegative(),
+  targetValueUsdc: z.number().nonnegative(),
+  ourVwap: z.number().min(0).nullable(),
+  targetVwap: z.number().min(0).nullable(),
+  hedgeCount: z.number().int().nonnegative(),
+  positions: z.array(WalletExecutionMarketParticipantPositionSchema),
+});
+export type WalletExecutionMarketLine = z.infer<
+  typeof WalletExecutionMarketLineSchema
+>;
+
+export const WalletExecutionMarketGroupSchema = z.object({
+  groupKey: z.string(),
+  eventTitle: z.string().nullable(),
+  eventSlug: z.string().nullable(),
+  marketCount: z.number().int().nonnegative(),
+  ourValueUsdc: z.number().nonnegative(),
+  targetValueUsdc: z.number().nonnegative(),
+  pnlUsd: z.number(),
+  hedgeCount: z.number().int().nonnegative(),
+  lines: z.array(WalletExecutionMarketLineSchema),
+});
+export type WalletExecutionMarketGroup = z.infer<
+  typeof WalletExecutionMarketGroupSchema
+>;
+
 export const WalletExecutionWarningSchema = z.object({
   code: z.string(),
   message: z.string(),
@@ -143,6 +212,8 @@ export const PolyWalletExecutionOutputSchema = z.object({
   dailyTradeCounts: z.array(WalletExecutionDailyCountSchema),
   /** Currently held positions (status open or redeemable). Powers the Open tab. */
   live_positions: z.array(WalletExecutionPositionSchema),
+  /** Event/market grouped exposure for comparing our positions with active copy targets. */
+  market_groups: z.array(WalletExecutionMarketGroupSchema),
   /** Trade-derived closed position history. Powers the Position History tab. */
   closed_positions: z.array(WalletExecutionPositionSchema),
   warnings: z.array(WalletExecutionWarningSchema),
