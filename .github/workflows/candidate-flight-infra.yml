@@ -182,12 +182,15 @@ jobs:
 
       - name: Trigger work-items Notion sync
         if: env.VM_HOST != '' && env.WORK_ITEMS_NOTION_TOKEN != ''
+        timeout-minutes: 2
         env:
           DOMAIN: ${{ vars.DOMAIN }}
           INTERNAL_OPS_TOKEN: ${{ secrets.INTERNAL_OPS_TOKEN }}
         run: |
           set -euo pipefail
-          curl -fsS -X POST "https://${DOMAIN}/api/internal/work/notion/sync" \
+          if ! curl -fsS --max-time 90 -X POST "https://${DOMAIN}/api/internal/work/notion/sync" \
             -H "Authorization: Bearer ${INTERNAL_OPS_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d '{"limit":500}' | jq .
+            -d '{"limit":500}' | jq .; then
+            echo "::warning::work-items Notion sync did not complete after infra deploy; infra reconciliation already finished"
+          fi
