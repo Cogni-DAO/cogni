@@ -153,7 +153,9 @@ export async function refreshCurrentPositionsForWallet(params: {
     db: params.db,
     client: params.client,
     wallet,
-    positionMaxPages: params.positionMaxPages,
+    ...(params.positionMaxPages === undefined
+      ? {}
+      : { positionMaxPages: params.positionMaxPages }),
   });
 }
 
