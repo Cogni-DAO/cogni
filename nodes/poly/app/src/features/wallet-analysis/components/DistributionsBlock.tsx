@@ -18,12 +18,19 @@
 import type {
   FlatHistogram,
   Histogram,
+  PolyResearchTraderComparisonResponse,
+  PolyWalletOverviewInterval,
   WalletAnalysisDistributions,
 } from "@cogni/poly-node-contracts";
 import { type ReactElement, type ReactNode, useState } from "react";
 
 import { cn } from "@/shared/util/cn";
 import type { WalletDistributionsViewMode } from "../types/wallet-analysis";
+import {
+  TRADER_COMPARISON_INTERVALS,
+  TraderComparisonChart,
+  type TraderMetricMode,
+} from "./TraderComparisonBlock";
 
 export type DistributionsBlockProps = {
   data?: WalletAnalysisDistributions | undefined;
@@ -132,13 +139,23 @@ export function DistributionsBlock({
 
 export function DistributionComparisonBlock({
   series,
+  traderComparison,
+  traderComparisonLoading,
+  traderComparisonError,
+  traderInterval,
+  onTraderIntervalChange,
 }: {
   series: readonly DistributionComparisonSeries[];
+  traderComparison?: PolyResearchTraderComparisonResponse | undefined;
+  traderComparisonLoading?: boolean | undefined;
+  traderComparisonError?: boolean | undefined;
+  traderInterval: PolyWalletOverviewInterval;
+  onTraderIntervalChange: (interval: PolyWalletOverviewInterval) => void;
 }): ReactElement {
   const [viewMode, setViewMode] =
     useState<WalletDistributionsViewMode>("count");
   const [activeView, setActiveView] =
-    useState<DistributionComparisonViewKey>("tradeSize");
+    useState<ResearchComparisonViewKey>("traderPnl");
   const readySeries = series.filter(
     (
       s
@@ -148,8 +165,13 @@ export function DistributionComparisonBlock({
   );
   const isLoading = readySeries.length === 0 && series.some((s) => s.isLoading);
   const isError = readySeries.length === 0 && series.some((s) => s.isError);
+  const activeTraderView = TRADER_COMPARISON_VIEWS_BY_KEY[activeView];
+  const activeDistributionView =
+    DISTRIBUTION_COMPARISON_VIEWS_BY_KEY[
+      activeView as DistributionComparisonViewKey
+    ];
 
-  if (isLoading) {
+  if (isLoading && traderComparisonLoading && !traderComparison) {
     return (
       <Section title="Wallet research">
         <div className="h-80 animate-pulse rounded bg-muted" aria-hidden />
@@ -157,13 +179,16 @@ export function DistributionComparisonBlock({
     );
   }
 
-  if (isError || readySeries.length === 0) {
+  if (
+    isError &&
+    readySeries.length === 0 &&
+    traderComparisonError &&
+    !traderComparison
+  ) {
     return (
       <Section title="Wallet research">
         <div className="text-muted-foreground text-sm">
-          {isError
-            ? "Could not load distribution comparison — retrying on next refresh."
-            : "No saved distributions available for comparison yet."}
+          Could not load research charts — retrying on next refresh.
         </div>
       </Section>
     );
@@ -174,7 +199,7 @@ export function DistributionComparisonBlock({
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2">
-            {DISTRIBUTION_COMPARISON_VIEWS.map((view) => (
+            {RESEARCH_COMPARISON_VIEWS.map((view) => (
               <button
                 key={view.key}
                 type="button"
@@ -191,16 +216,45 @@ export function DistributionComparisonBlock({
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <ComparisonLegend series={readySeries} viewMode={viewMode} />
-            <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />
+            {activeTraderView ? (
+              <TraderIntervalToggle
+                interval={traderInterval}
+                onChange={onTraderIntervalChange}
+              />
+            ) : null}
+            {activeDistributionView ? (
+              <>
+                <ComparisonLegend series={readySeries} viewMode={viewMode} />
+                <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />
+              </>
+            ) : null}
           </div>
         </div>
 
-        <DistributionOverlayChart
-          series={readySeries}
-          view={DISTRIBUTION_COMPARISON_VIEWS_BY_KEY[activeView]}
-          viewMode={viewMode}
-        />
+        <ResearchChartViewport>
+          {activeTraderView ? (
+            <TraderComparisonChart
+              data={traderComparison}
+              isLoading={traderComparisonLoading}
+              isError={traderComparisonError}
+              mode={activeTraderView.mode}
+            />
+          ) : null}
+          {activeDistributionView && readySeries.length > 0 ? (
+            <DistributionOverlayChart
+              series={readySeries}
+              view={activeDistributionView}
+              viewMode={viewMode}
+            />
+          ) : null}
+          {activeDistributionView && readySeries.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              {isError
+                ? "Could not load distribution comparison — retrying on next refresh."
+                : "No saved distributions available for comparison yet."}
+            </p>
+          ) : null}
+        </ResearchChartViewport>
       </div>
     </Section>
   );
@@ -282,6 +336,44 @@ function ViewModeToggle({
         </button>
       ))}
     </div>
+  );
+}
+
+function TraderIntervalToggle({
+  interval,
+  onChange,
+}: {
+  interval: PolyWalletOverviewInterval;
+  onChange: (interval: PolyWalletOverviewInterval) => void;
+}): ReactElement {
+  return (
+    <div className="inline-flex rounded border bg-muted p-0.5 text-xs">
+      {TRADER_COMPARISON_INTERVALS.map((option) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => onChange(option)}
+          className={cn(
+            "rounded px-2 py-1 font-medium uppercase tracking-wider transition-colors",
+            interval === option
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          {option}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ResearchChartViewport({
+  children,
+}: {
+  children: ReactNode;
+}): ReactElement {
+  return (
+    <div className="min-h-80 rounded border bg-background p-3">{children}</div>
   );
 }
 
@@ -372,6 +464,8 @@ function totalUsdc(data: WalletAnalysisDistributions): number {
   );
 }
 
+type TraderComparisonViewKey = "traderPnl" | "traderFills" | "traderFlow";
+
 type DistributionComparisonViewKey =
   | "tradeSize"
   | "entryPrice"
@@ -379,6 +473,16 @@ type DistributionComparisonViewKey =
   | "entriesPerOutcome"
   | "hourOfDay"
   | "betsPerMarket";
+
+type ResearchComparisonViewKey =
+  | TraderComparisonViewKey
+  | DistributionComparisonViewKey;
+
+type TraderComparisonView = {
+  key: TraderComparisonViewKey;
+  label: string;
+  mode: TraderMetricMode;
+};
 
 type DistributionComparisonView = {
   key: DistributionComparisonViewKey;
@@ -388,6 +492,12 @@ type DistributionComparisonView = {
   histogram?: ((d: WalletAnalysisDistributions) => Histogram) | undefined;
   flat?: ((d: WalletAnalysisDistributions) => FlatHistogram) | undefined;
 };
+
+const TRADER_COMPARISON_VIEWS = [
+  { key: "traderPnl", label: "P/L", mode: "pnl" },
+  { key: "traderFills", label: "Fills", mode: "count" },
+  { key: "traderFlow", label: "USDC", mode: "flow" },
+] satisfies readonly TraderComparisonView[];
 
 const DISTRIBUTION_COMPARISON_VIEWS = [
   {
@@ -429,12 +539,18 @@ const DISTRIBUTION_COMPARISON_VIEWS = [
   },
 ] satisfies readonly DistributionComparisonView[];
 
+const RESEARCH_COMPARISON_VIEWS = [
+  ...TRADER_COMPARISON_VIEWS,
+  ...DISTRIBUTION_COMPARISON_VIEWS,
+] satisfies readonly { key: ResearchComparisonViewKey; label: string }[];
+
+const TRADER_COMPARISON_VIEWS_BY_KEY = Object.fromEntries(
+  TRADER_COMPARISON_VIEWS.map((view) => [view.key, view])
+) as Partial<Record<ResearchComparisonViewKey, TraderComparisonView>>;
+
 const DISTRIBUTION_COMPARISON_VIEWS_BY_KEY = Object.fromEntries(
   DISTRIBUTION_COMPARISON_VIEWS.map((view) => [view.key, view])
-) as unknown as Record<
-  DistributionComparisonViewKey,
-  DistributionComparisonView
->;
+) as Partial<Record<ResearchComparisonViewKey, DistributionComparisonView>>;
 
 type CurvePoint = {
   label: string;
@@ -468,7 +584,7 @@ function DistributionOverlayChart({
   const labels = curves[0]?.points.map((point) => point.label) ?? [];
 
   return (
-    <div className="rounded border bg-background p-3">
+    <div>
       <DistributionCurveSvg
         curves={curves}
         labels={labels}

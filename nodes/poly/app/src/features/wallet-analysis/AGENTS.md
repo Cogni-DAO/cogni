@@ -31,7 +31,7 @@ Shared shape `WalletAnalysisData` mirrors the v1 wallet-analysis HTTP contract t
 
 ## Public Surface
 
-- **Exports:** `WalletAnalysisView`, `WalletAnalysisSurface`, `WalletIdentityHeader`, `StatGrid`, `BalanceBar`, `BalanceOverTimeChart`, `TimeWindowHeader`, `WalletProfitLossCard`, `TradesPerDayChart`, `RecentTradesTable`, `PositionTimelineChart`, `TopMarketsList`, `EdgeHypothesis`, `DistributionsBlock`, type `WalletAnalysisData` and supporting types (`WalletDistributionsViewMode`, `WalletDistributionsRangeMode`). The `PositionsTable` organism lives at `app/(app)/_components/positions-table/` (next to the sibling `wallets-table/`); consumers import from there directly.
+- **Exports:** `WalletAnalysisView`, `WalletAnalysisSurface`, `WalletIdentityHeader`, `StatGrid`, `BalanceBar`, `BalanceOverTimeChart`, `TimeWindowHeader`, `WalletProfitLossCard`, `TradesPerDayChart`, `RecentTradesTable`, `PositionTimelineChart`, `TopMarketsList`, `EdgeHypothesis`, `DistributionsBlock`, `DistributionComparisonBlock`, `TraderComparisonBlock`, type `WalletAnalysisData` and supporting types (`WalletDistributionsViewMode`, `WalletDistributionsRangeMode`). The `PositionsTable` organism lives at `app/(app)/_components/positions-table/` (next to the sibling `wallets-table/`); consumers import from there directly.
 - **Routes:** none directly; consumed by `/research`, `/research/w/[addr]` (Checkpoint B), and the dashboard drawer (Checkpoint C).
 - **Files considered API:** `index.ts`, `types/wallet-analysis.ts`.
 

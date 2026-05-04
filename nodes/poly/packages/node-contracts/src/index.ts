@@ -16,6 +16,7 @@
 
 export * from "./poly.copy-trade.orders.v1.contract";
 export * from "./poly.copy-trade.targets.v1.contract";
+export * from "./poly.research-trader-comparison.v1.contract";
 export * from "./poly.research-report.v1.contract";
 export * from "./poly.sync-health.v1.contract";
 export * from "./poly.wallet.auto-wrap.v1.contract";

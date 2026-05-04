@@ -21,6 +21,7 @@ export { RecentTradesTable } from "./components/RecentTradesTable";
 export { StatGrid } from "./components/StatGrid";
 export { TimeWindowHeader } from "./components/TimeWindowHeader";
 export { TopMarketsList } from "./components/TopMarketsList";
+export { TraderComparisonBlock } from "./components/TraderComparisonBlock";
 export { TradesPerDayChart } from "./components/TradesPerDayChart";
 export { WalletAnalysisSurface } from "./components/WalletAnalysisSurface";
 export { WalletAnalysisView } from "./components/WalletAnalysisView";
