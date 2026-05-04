@@ -219,6 +219,9 @@ export const polyTraderCurrentPositions = pgTable(
     lastObservedAt: timestamp("last_observed_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    firstObservedAt: timestamp("first_observed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     raw: jsonb("raw").$type<Record<string, unknown>>(),
   },
   (table) => [

@@ -52,6 +52,14 @@ export interface ResolvedRedeemCandidate {
   decision: RedeemDecision;
   /** Collateral that minted this position; forwarded to `redeemPositions`. bug.0428. */
   collateralToken: `0x${string}`;
+  /**
+   * Chain-read payout numerator for this outcome. `null` when the read failed.
+   * Carried so callers can populate `poly_market_outcomes` without re-reading
+   * the chain. `> 0` ⇒ winner; `=== 0n` ⇒ loser.
+   */
+  payoutNumerator: bigint | null;
+  /** Chain-read payout denominator (same condition for all outcomes). */
+  payoutDenominator: bigint | null;
 }
 
 /**
@@ -178,6 +186,10 @@ export async function resolveRedeemCandidatesForCondition(deps: {
       negativeRisk,
       decision,
       collateralToken,
+      payoutNumerator:
+        reads[1]?.status === "success" ? (reads[1].result as bigint) : null,
+      payoutDenominator:
+        reads[2]?.status === "success" ? (reads[2].result as bigint) : null,
     });
   }
   return out;

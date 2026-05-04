@@ -437,7 +437,6 @@ function ResolvesCountdown({
 }
 
 function actionLabel(status: WalletPosition["status"]): string {
-  if (status === "redeemable") return "Redeem";
   if (status === "closed") return "Settled";
   return "Close";
 }
@@ -508,7 +507,9 @@ function PositionActionButton({
       }}
       className={
         actionable && !busy
-          ? "w-20 border-border/70 hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+          ? isRedeemable
+            ? "w-20 border-primary/40 bg-primary/10 font-semibold text-primary hover:bg-primary/20"
+            : "w-20 border-border/70 hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
           : "w-20 border-border/70 text-muted-foreground"
       }
     >

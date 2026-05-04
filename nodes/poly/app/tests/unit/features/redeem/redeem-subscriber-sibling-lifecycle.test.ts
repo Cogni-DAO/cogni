@@ -52,6 +52,8 @@ function winnerCandidate(): ResolvedRedeemCandidate {
       expectedShares: 5_000_000n,
       expectedPayoutUsdc: 5_000_000n,
     },
+    payoutNumerator: 1n,
+    payoutDenominator: 1n,
   };
 }
 
@@ -63,6 +65,8 @@ function loserCandidate(): ResolvedRedeemCandidate {
     negativeRisk: false,
     collateralToken: USDC_E,
     decision: { kind: "skip", reason: "losing_outcome" },
+    payoutNumerator: 0n,
+    payoutDenominator: 1n,
   };
 }
 
@@ -81,8 +85,10 @@ describe("RedeemSubscriber sibling lifecycle mirroring", () => {
       .mockResolvedValueOnce({ alreadyExisted: false, jobId: "job-winner" })
       .mockResolvedValueOnce({ alreadyExisted: true, jobId: "job-winner" });
     const markPositionLifecycleByAsset = vi.fn(async () => 1);
+    const marketOutcomesUpsert = vi.fn(async () => {});
     const subscriber = new RedeemSubscriber({
       redeemJobs: { enqueue } as never,
+      marketOutcomes: { upsert: marketOutcomesUpsert },
       orderLedger: { markPositionLifecycleByAsset },
       billingAccountId: "billing-account-1",
       publicClient: {} as never,
@@ -119,8 +125,10 @@ describe("RedeemSubscriber sibling lifecycle mirroring", () => {
       .fn()
       .mockResolvedValue({ alreadyExisted: true, jobId: "job-winner" });
     const markPositionLifecycleByAsset = vi.fn(async () => 1);
+    const marketOutcomesUpsert = vi.fn(async () => {});
     const subscriber = new RedeemSubscriber({
       redeemJobs: { enqueue } as never,
+      marketOutcomes: { upsert: marketOutcomesUpsert },
       orderLedger: { markPositionLifecycleByAsset },
       billingAccountId: "billing-account-1",
       publicClient: {} as never,

@@ -47,7 +47,10 @@ import {
 import { polygon } from "viem/chains";
 
 import type { Database } from "@/adapters/server/db/client";
-import { DrizzleRedeemJobsAdapter } from "@/adapters/server/redeem";
+import {
+  DrizzleMarketOutcomesAdapter,
+  DrizzleRedeemJobsAdapter,
+} from "@/adapters/server/redeem";
 import {
   RedeemSubscriber,
   RedeemWorker,
@@ -175,10 +178,12 @@ async function startOneTenantPipeline(
   const redeemJobs: RedeemJobsPort = new DrizzleRedeemJobsAdapter(
     deps.serviceDb
   );
+  const marketOutcomes = new DrizzleMarketOutcomesAdapter(deps.serviceDb);
   const dataApiClient = new PolymarketDataApiClient();
 
   const subscriber = new RedeemSubscriber({
     redeemJobs,
+    marketOutcomes,
     orderLedger: deps.orderLedger,
     billingAccountId,
     publicClient,

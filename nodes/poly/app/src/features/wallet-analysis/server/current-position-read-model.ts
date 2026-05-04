@@ -42,11 +42,13 @@ type CurrentPositionRow = {
   current_value_usdc: string | number | null;
   avg_price: string | number | null;
   last_observed_at: Date | string | null;
+  first_observed_at: Date | string | null;
   raw: Record<string, unknown> | null;
   cursor_last_success_at: Date | string | null;
   cursor_status: string | null;
   redeem_status: string | null;
   redeem_lifecycle_state: WalletExecutionLifecycleState | null;
+  market_outcome: "winner" | "loser" | "unknown" | null;
 };
 
 export interface CurrentWalletPositionReadModel {
@@ -76,11 +78,13 @@ export async function readCurrentWalletPositionModel(params: {
         p.current_value_usdc,
         p.avg_price,
         p.last_observed_at,
+        p.first_observed_at,
         p.raw,
         c.last_success_at AS cursor_last_success_at,
         c.status AS cursor_status,
         r.status AS redeem_status,
-        r.lifecycle_state AS redeem_lifecycle_state
+        r.lifecycle_state AS redeem_lifecycle_state,
+        pmo.outcome AS market_outcome
       FROM poly_trader_wallets w
       LEFT JOIN poly_trader_ingestion_cursors c
         ON c.trader_wallet_id = w.id
@@ -93,6 +97,9 @@ export async function readCurrentWalletPositionModel(params: {
         ON lower(r.funder_address) = lower(w.wallet_address)
        AND lower(r.condition_id) = lower(p.condition_id)
        AND r.position_id = p.token_id
+      LEFT JOIN poly_market_outcomes pmo
+        ON lower(pmo.condition_id) = lower(p.condition_id)
+       AND pmo.token_id = p.token_id
       WHERE lower(w.wallet_address) = lower(${params.walletAddress})
         AND w.kind = 'cogni_wallet'
         AND w.active_for_research = true
@@ -176,13 +183,17 @@ function rowToExecutionPosition(
     avgPrice ?? positiveOrNull(costBasis / shares) ?? currentPrice;
   const observedAt =
     isoOrNull(row.last_observed_at) ?? capturedAt.toISOString();
+  const openedAt =
+    isoOrNull(row.first_observed_at) ??
+    isoOrNull(row.last_observed_at) ??
+    capturedAt.toISOString();
   const endDate = isoString(readOptionalString(raw, "endDate"));
   const pnlUsd = roundToCents(currentValue - costBasis);
   const pnlPct = costBasis > 0 ? roundToCents((pnlUsd / costBasis) * 100) : 0;
   const syncAgeMs = Math.max(0, capturedAt.getTime() - Date.parse(observedAt));
   const status = deriveCurrentPositionStatus({
     currentValue,
-    redeemable: readBoolean(raw, "redeemable"),
+    marketOutcome: row.market_outcome,
     lifecycleState: row.redeem_lifecycle_state,
   });
   const terminalTs = status === "closed" ? observedAt : null;
@@ -200,13 +211,13 @@ function rowToExecutionPosition(
       outcome: readOptionalString(raw, "outcome") ?? "UNKNOWN",
       status,
       lifecycleState: row.redeem_lifecycle_state,
-      openedAt: observedAt,
+      openedAt,
       closedAt: terminalTs,
       resolvesAt: endDate,
       gameStartTime: null,
       heldMinutes: Math.max(
         0,
-        Math.floor((capturedAt.getTime() - Date.parse(observedAt)) / 60_000)
+        Math.floor((capturedAt.getTime() - Date.parse(openedAt)) / 60_000)
       ),
       entryPrice,
       currentPrice,
@@ -235,12 +246,31 @@ function rowToExecutionPosition(
   ];
 }
 
-function deriveCurrentPositionStatus(input: {
+/**
+ * Classify a current-position row into a single dashboard `status`. (bug.5008)
+ *
+ * Authority precedence:
+ *   1. `marketOutcome === 'loser'` from `poly_market_outcomes` — chain proved
+ *      `payoutNumerator === 0` for this asset → `closed`, regardless of stale
+ *      Data-API mid-pricing on the row.
+ *   2. terminal lifecycle (`redeemed/loser/dust/abandoned/closed`) → `closed`.
+ *   3. `marketOutcome === 'winner'` OR `lifecycleState === 'winner'` →
+ *      `redeemable`. Either chain outcome (preferred) or ledger lifecycle
+ *      (fallback for rare race where redeem job lifecycle was written before
+ *      the outcomes UPSERT) qualifies.
+ *   4. `currentValue <= 0` → `closed`.
+ *   5. else → `open`.
+ *
+ * Polymarket Data-API `raw.redeemable` is **never** consulted — Polymarket
+ * flags both winner AND loser sides as `redeemable=true` once a market
+ * resolves, which is what produced the original split-brain.
+ */
+export function deriveCurrentPositionStatus(input: {
   currentValue: number;
-  redeemable: boolean;
+  marketOutcome: "winner" | "loser" | "unknown" | null;
   lifecycleState: WalletExecutionLifecycleState | null;
 }): WalletExecutionPositionStatus {
-  if (input.currentValue <= 0) return "closed";
+  if (input.marketOutcome === "loser") return "closed";
   if (
     input.lifecycleState === "redeemed" ||
     input.lifecycleState === "loser" ||
@@ -250,9 +280,13 @@ function deriveCurrentPositionStatus(input: {
   ) {
     return "closed";
   }
-  if (input.lifecycleState === "winner" || input.redeemable) {
+  if (
+    input.marketOutcome === "winner" ||
+    input.lifecycleState === "winner"
+  ) {
     return "redeemable";
   }
+  if (input.currentValue <= 0) return "closed";
   return "open";
 }
 
@@ -303,10 +337,6 @@ function readNumber(record: Record<string, unknown>, key: string): number {
   const value = record[key];
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? n : 0;
-}
-
-function readBoolean(record: Record<string, unknown>, key: string): boolean {
-  return record[key] === true;
 }
 
 function readOptionalString(

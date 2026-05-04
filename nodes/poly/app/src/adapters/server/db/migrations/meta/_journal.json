@@ -288,6 +288,13 @@
       "when": 1778000400001,
       "tag": "0040_poly_trader_activity",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1778000500000,
+      "tag": "0041_poly_trader_current_positions_first_observed_at",
+      "breakpoints": true
     }
   ]
 }

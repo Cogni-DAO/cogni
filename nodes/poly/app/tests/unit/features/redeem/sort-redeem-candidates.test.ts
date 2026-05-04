@@ -30,6 +30,8 @@ function loserCandidate(outcomeIndex: number): ResolvedRedeemCandidate {
     negativeRisk: false,
     decision: { kind: "skip", reason: "losing_outcome" },
     collateralToken: USDCE,
+    payoutNumerator: 0n,
+    payoutDenominator: 1n,
   };
 }
 
@@ -49,6 +51,8 @@ function winnerCandidate(outcomeIndex: number): ResolvedRedeemCandidate {
       expectedPayoutUsdc: 9_990_000n,
     },
     collateralToken: USDCE,
+    payoutNumerator: 1n,
+    payoutDenominator: 1n,
   };
 }
 

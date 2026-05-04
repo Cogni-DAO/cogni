@@ -123,6 +123,11 @@ export type {
   TemplateQueryResult,
   TemplateSummary,
 } from "./metrics-query.port";
+export type {
+  MarketOutcomeKind,
+  MarketOutcomesPort,
+  MarketOutcomeUpsertInput,
+} from "./market-outcomes.port";
 export type { ModelCatalogPort } from "./model-catalog.port";
 export type {
   ModelOption,

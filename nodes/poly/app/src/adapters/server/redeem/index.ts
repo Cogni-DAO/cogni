@@ -7,4 +7,5 @@
  * @public
  */
 
+export { DrizzleMarketOutcomesAdapter } from "./drizzle-market-outcomes.adapter";
 export { DrizzleRedeemJobsAdapter } from "./drizzle-redeem-jobs.adapter";

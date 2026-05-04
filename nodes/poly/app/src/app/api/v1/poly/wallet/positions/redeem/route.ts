@@ -67,6 +67,13 @@ export const POST = wrapRouteHandlerWithLogging(
     try {
       conditionId = normalizePolygonConditionId(parsed.data.condition_id);
     } catch {
+      ctx.log.info(
+        {
+          event: "poly.wallet.positions.redeem.invalid_condition_id",
+          raw_condition_id: parsed.data.condition_id,
+        },
+        "manual redeem rejected: invalid condition_id"
+      );
       return NextResponse.json(
         { error: "invalid_condition_id" },
         { status: 400 }
@@ -85,8 +92,12 @@ export const POST = wrapRouteHandlerWithLogging(
       // (pipeline registry is built once at startup), or the trader-wallet
       // adapter is unconfigured.
       ctx.log.info(
-        { billing_account_id: account.id },
-        "poly.wallet.positions.redeem.pipeline_unavailable_for_tenant"
+        {
+          event: "poly.wallet.positions.redeem.pipeline_unavailable_for_tenant",
+          billing_account_id: account.id,
+          condition_id: conditionId,
+        },
+        "manual redeem rejected: tenant pipeline unavailable"
       );
       return NextResponse.json(
         { error: "redeem_pipeline_unavailable" },
@@ -98,6 +109,14 @@ export const POST = wrapRouteHandlerWithLogging(
       getPolyTraderWalletAdapter(ctx.log);
     } catch (err) {
       if (err instanceof WalletAdapterUnconfiguredError) {
+        ctx.log.info(
+          {
+            event: "poly.wallet.positions.redeem.wallet_adapter_unconfigured",
+            condition_id: conditionId,
+            billing_account_id: account.id,
+          },
+          "manual redeem rejected: wallet adapter unconfigured"
+        );
         return NextResponse.json(
           { error: "wallet_adapter_unconfigured" },
           { status: 503 }
@@ -126,6 +145,33 @@ export const POST = wrapRouteHandlerWithLogging(
         skip && skip.decision.kind !== "redeem"
           ? skip.decision.reason
           : "no_redeemable_position";
+      ctx.log.info(
+        {
+          event: "poly.wallet.positions.redeem.not_redeemable",
+          condition_id: conditionId,
+          reason,
+          funder_address: pipeline.funderAddress,
+          billing_account_id: account.id,
+          candidate_count: candidates.length,
+          candidates: candidates.map((c) => ({
+            outcome_index: c.outcomeIndex,
+            position_id: c.positionId.toString(),
+            negative_risk: c.negativeRisk,
+            kind: c.decision.kind,
+            reason:
+              c.decision.kind === "redeem" ? null : c.decision.reason,
+            payout_numerator:
+              c.payoutNumerator !== null
+                ? c.payoutNumerator.toString()
+                : null,
+            payout_denominator:
+              c.payoutDenominator !== null
+                ? c.payoutDenominator.toString()
+                : null,
+          })),
+        },
+        "manual redeem rejected: not redeemable"
+      );
       return NextResponse.json(
         { error: "not_redeemable", reason },
         { status: 409 }
