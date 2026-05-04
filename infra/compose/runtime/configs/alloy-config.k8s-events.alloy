@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2026 Cogni-DAO
+//
+// Kubernetes Event collection for k3s-backed candidate/preview/production VMs.
+// Runs in a separate host-network Alloy container so the mounted k3s kubeconfig
+// can reach its default https://127.0.0.1:6443 API server without changing the
+// main Alloy container's compose-network app and worker scrapes.
+
+loki.source.kubernetes_events "events" {
+  job_name   = "kubernetes-events"
+  log_format = "json"
+  namespaces = [
+    "argocd",
+    "kube-system",
+    "cogni-candidate-a",
+    "cogni-preview",
+    "cogni-production",
+  ]
+
+  client {
+    kubeconfig_file = "/etc/rancher/k3s/k3s.yaml"
+  }
+
+  forward_to = [loki.process.k8s_events.receiver]
+}
+
+loki.process "k8s_events" {
+  stage.json {
+    expressions = {
+      event_type = "type",
+      kind       = "kind",
+      reason     = "reason",
+    }
+  }
+
+  stage.labels {
+    values = {
+      event_type = "",
+      kind       = "",
+      reason     = "",
+    }
+  }
+
+  stage.static_labels {
+    values = {
+      app     = "cogni-template",
+      env     = sys.env("DEPLOY_ENVIRONMENT"),
+      service = "kubernetes-events",
+      source  = "k8s-events",
+    }
+  }
+
+  forward_to = [loki.write.loki.receiver]
+}
+
+loki.write "loki" {
+  endpoint {
+    url = sys.env("LOKI_WRITE_URL")
+
+    basic_auth {
+      username = sys.env("LOKI_USERNAME")
+      password = sys.env("LOKI_PASSWORD")
+    }
+  }
+}

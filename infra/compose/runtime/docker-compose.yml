@@ -442,6 +442,24 @@ services:
       - PROMETHEUS_USERNAME=${PROMETHEUS_USERNAME:-}
       - PROMETHEUS_PASSWORD=${PROMETHEUS_PASSWORD:-}
 
+  alloy-k8s-events:
+    image: grafana/alloy:v1.9.2
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./configs/alloy-config.k8s-events.alloy:/etc/alloy/config.alloy:ro
+      - alloy_k8s_events_data:/var/lib/alloy
+      - /etc/rancher/k3s/k3s.yaml:/etc/rancher/k3s/k3s.yaml:ro
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy
+    environment:
+      - DEPLOY_ENVIRONMENT=${DEPLOY_ENVIRONMENT}
+      - LOKI_WRITE_URL=${LOKI_WRITE_URL}
+      - LOKI_USERNAME=${LOKI_USERNAME}
+      - LOKI_PASSWORD=${LOKI_PASSWORD}
+
   # =============================================================================
   # Temporal Services (from temporalio/docker-compose v1.29.1, postgres-only)
   # Per SCHEDULER_SPEC.md: Required for schedule orchestration
@@ -754,6 +772,8 @@ volumes:
     name: doltgres_data
   alloy_data:
     name: alloy_data
+  alloy_k8s_events_data:
+    name: alloy_k8s_events_data
   temporal_postgres_data:
     name: temporal_postgres_data
   db_backups:

@@ -84,7 +84,7 @@ docker compose --project-name cogni-runtime logs -f app
 - Database security uses two-user model (root + app credentials)
 - Init scripts run only on first postgres container startup
 - `NEXTAUTH_URL` env var provided with shell fallback to `APP_BASE_URL`; Auth.js uses `trustHost: true` (safe behind Caddy)
-- Log collection: Alloy scrapes Docker containers (JSON stdout), applies strict label cardinality (app, env, service, stream); suppresses successful health-check/metrics-scrape log noise at pipeline level
+- Log collection: Alloy scrapes Docker containers (JSON stdout), tails k3s pod logs from `/var/log/pods`, and ships Kubernetes Events through `alloy-k8s-events`; applies strict label cardinality (app, env, service, stream/source plus low-cardinality event reason/type/kind); suppresses successful health-check/metrics-scrape log noise at pipeline level
 - Alloy infra metrics: cAdvisor (container memory/CPU/OOM/network/disk) + node exporter (host memory/CPU/filesystem/network) → Grafana Cloud Mimir via strict 18-metric allowlist
 - Alloy host mounts: `/proc:/host/proc:ro`, `/sys:/host/sys:ro`, `/:/host/root:ro` (required for node exporter)
 - Alloy UI exposed at 127.0.0.1:12345 (internal only)

@@ -71,6 +71,12 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/ports/0/containerPort
         value: 3100
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "384Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "1Gi"
       - op: add
         path: /spec/selector/matchLabels/app.kubernetes.io~1instance
         value: "poly"
