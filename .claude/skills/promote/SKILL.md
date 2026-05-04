@@ -186,6 +186,38 @@ exit 2
 
 Wrap in a `Monitor` tool call with `timeout_ms` 2400000 (40 min) and a descriptive name like `"heal preview-operator: flight {ID} → promote-deploy → all preview /version → {SHORT}"`.
 
+### When `/version.buildSha` doesn't advance — Loki, not SSH
+
+`/version.buildSha` answers "is the new app pod serving" but says nothing
+about why a host-side compose container (alloy, autoheal, db-backup,
+alloy-k8s-events) is crash-looping. Don't SSH-tail. Both layers ship to the
+same Loki:
+
+```logql
+# 1. App pod startup / env validation (k3s pod logs)
+{namespace="cogni-<env>",pod=~"<service>-.*"} |~ "Error|EnvValidation|panic|started|ready"
+
+# 2. Host-side compose container stdout (host alloy → Loki)
+{env="<env>",service="<compose-svc>"} | json | level=~"error|warn"
+# compose-svc ∈ {litellm, caddy, temporal, autoheal, db-backup, openclaw-gateway,
+#                llm-proxy-openclaw, alloy-k8s-events}
+
+# 3. Kubernetes Events stream (pod OOMKilled, probe failures, evictions, rollout)
+{env="<env>",source="k8s-events"} | json
+# Use this when a node restarted but app stderr is empty — kubelet's reason
+# (OOMKilled, ImagePullBackOff, Liveness probe failed) only lives in events,
+# not in container logs.
+```
+
+`source="k8s-events"` requires the `alloy-k8s-events` compose service from
+PR #1233 to be deployed in the env you're querying. If empty: check
+`{service="alloy-k8s-events", env="<env>"}` for crash logs first.
+
+New compose services don't ship logs until added to the host-alloy allowlist
+regex in `infra/compose/runtime/configs/alloy-config.{,metrics.}alloy`. If
+`{service=<svc>}` returns silence post-deploy, fix the regex before
+diagnosing further — it's not Loki, it's the filter.
+
 ## Lease respect (preview only)
 
 Never re-flight a sha while `.promote-state/review-state` on `deploy/preview` is `dispatching` or `reviewing`. The lease guards against double-promotion.

@@ -65,7 +65,19 @@ For CI failures, use `env="ci"`:
    list_loki_label_values(datasourceUid, labelName: "service")
    ```
 
-   Expected: `app`, `litellm`, `caddy`, `deployment`
+   App + infra (host alloy ships Compose container stdout, allow-listed via
+   `infra/compose/runtime/configs/alloy-config.{,metrics.}alloy`):
+
+   - app pods: `app`, `scheduler-worker`, `migrate`, `migrate-doltgres`
+   - infra/compose: `litellm`, `caddy`, `temporal`, `autoheal`, `db-backup`,
+     `openclaw-gateway`, `llm-proxy-openclaw`, `alloy-k8s-events`
+   - argocd controllers: `argocd-application-controller`,
+     `argocd-applicationset-controller`, `argocd-image-updater`,
+     `argocd-server`, `argocd-repo-server`, `argocd-notifications-controller`
+   - CI: `infra-deployment` (and `env="ci"` for workflow logs)
+
+   New compose services don't ship logs until added to that allowlist regex —
+   if `service=<svc>` returns nothing, check the regex first, not Loki.
 
 3. **List all queryable labels:**
    ```
@@ -75,8 +87,13 @@ For CI failures, use `env="ci"`:
 **Our Configured Labels (indexed, low-cardinality):**
 
 - `app` - Always "cogni-template"
-- `env` - Environment: local | preview | production | ci
-- `service` - Service name: app | litellm | caddy | deployment (runtime only, not CI)
+- `env` - Environment: local | candidate-a | preview | production | ci
+- `service` - Service name (see #2 above for full list — app pods, infra
+  compose containers, argocd controllers all share this label)
+- `source` - `k8s` (in-cluster pod logs from cAdvisor) | `k8s-events`
+  (kubernetes Events stream — pod OOMKilled, probe failures, evictions,
+  rollout events; shipped by `alloy-k8s-events`). Use `source="k8s-events"`
+  when investigating "why did the pod restart" / "why did probe fail".
 - `stream` - stdout | stderr (runtime only, not CI)
 
 **CI-specific labels** (when `env="ci"`):
