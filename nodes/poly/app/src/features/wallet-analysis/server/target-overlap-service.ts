@@ -10,6 +10,8 @@
  * Invariants:
  *   - ACTIVE_POSITIONS_DEFINE_OVERLAP: a market is shared when both wallets
  *     currently have any active saved position for the same condition_id.
+ *   - SOLO_BUCKET_METRICS_ARE_OWNER_ONLY: RN1-only and swisstony-only buckets
+ *     aggregate fill volume only for the wallet that currently owns the bucket.
  *   - WINDOW_ONLY_APPLIES_TO_VOLUME: active value and PnL are current-position
  *     facts; fill volume is filtered by the selected interval.
  * Side-effects: DB reads only.
@@ -152,9 +154,22 @@ async function readOverlapRows(
     volumes AS (
       SELECT
         m.bucket,
-        COALESCE(SUM(f.size_usdc::numeric), 0) AS fill_volume_usdc,
-        COALESCE(SUM(f.size_usdc::numeric) FILTER (WHERE f.trader_wallet_id = ${rn1WalletId}), 0) AS rn1_fill_volume_usdc,
-        COALESCE(SUM(f.size_usdc::numeric) FILTER (WHERE f.trader_wallet_id = ${swisstonyWalletId}), 0) AS swisstony_fill_volume_usdc
+        COALESCE(SUM(f.size_usdc::numeric) FILTER (
+          WHERE (m.bucket = 'rn1_only' OR m.bucket = 'shared')
+            AND f.trader_wallet_id = ${rn1WalletId}
+        ), 0)
+        + COALESCE(SUM(f.size_usdc::numeric) FILTER (
+          WHERE (m.bucket = 'swisstony_only' OR m.bucket = 'shared')
+            AND f.trader_wallet_id = ${swisstonyWalletId}
+        ), 0) AS fill_volume_usdc,
+        COALESCE(SUM(f.size_usdc::numeric) FILTER (
+          WHERE (m.bucket = 'rn1_only' OR m.bucket = 'shared')
+            AND f.trader_wallet_id = ${rn1WalletId}
+        ), 0) AS rn1_fill_volume_usdc,
+        COALESCE(SUM(f.size_usdc::numeric) FILTER (
+          WHERE (m.bucket = 'swisstony_only' OR m.bucket = 'shared')
+            AND f.trader_wallet_id = ${swisstonyWalletId}
+        ), 0) AS swisstony_fill_volume_usdc
       FROM markets m
       JOIN poly_trader_fills f ON f.condition_id = m.condition_id
         AND f.trader_wallet_id IN (${rn1WalletId}, ${swisstonyWalletId})
