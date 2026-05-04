@@ -28,6 +28,9 @@ export const EVENT_NAMES = {
   POLY_REDEEM_LIFECYCLE_MIRRORED: "feature.poly_redeem.lifecycle_mirrored",
   POLY_REDEEM_LIFECYCLE_MIRROR_FAILED:
     "feature.poly_redeem.lifecycle_mirror_failed",
+
+  POLY_RESEARCH_TRADER_COMPARISON_COMPLETE:
+    "feature.poly_research.trader_comparison.complete",
 } as const;
 
 export type EventName = (typeof EVENT_NAMES)[keyof typeof EVENT_NAMES];

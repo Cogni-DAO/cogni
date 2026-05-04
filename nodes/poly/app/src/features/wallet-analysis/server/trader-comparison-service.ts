@@ -38,8 +38,8 @@ type TradeSummaryRow = {
   id: string;
   label: string;
   kind: string;
-  first_observed_at: Date | null;
-  last_success_at: Date | null;
+  first_observed_at: Date | string | null;
+  last_success_at: Date | string | null;
   status: string | null;
   trade_count: string | number | null;
   buy_count: string | number | null;
@@ -149,8 +149,8 @@ function toTrader(params: {
         ? summary.kind
         : null,
     interval: params.interval,
-    observedSince: summary?.first_observed_at?.toISOString() ?? null,
-    lastObservedAt: summary?.last_success_at?.toISOString() ?? null,
+    observedSince: toIsoString(summary?.first_observed_at),
+    lastObservedAt: toIsoString(summary?.last_success_at),
     observationStatus: summary?.status ?? null,
     pnl: {
       usdc: computeWindowedPnl(params.pnlHistory),
@@ -194,6 +194,13 @@ function windowStartFor(interval: PolyWalletOverviewInterval): Date {
     case "ALL":
       return new Date(0);
   }
+}
+
+function toIsoString(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function toNumber(value: string | number | null | undefined): number {
