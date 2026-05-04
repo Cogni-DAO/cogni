@@ -227,6 +227,9 @@ async function upsertCogniObservedWallet(
       },
     })
     .returning();
+  if (!wallet) {
+    throw new Error(`failed to upsert observed wallet ${walletAddress}`);
+  }
   return wallet;
 }
 
