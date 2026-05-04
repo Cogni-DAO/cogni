@@ -168,6 +168,27 @@ describe("RedeemSubscriber poly_market_outcomes UPSERT (bug.5008)", () => {
     );
   });
 
+  it("UPSERTs 'unknown' (not 'loser') when denominator is null/0 — guards against 0/0 misclassification", async () => {
+    // numerator=0n with denominator=null|0n means the chain didn't report a
+    // resolved payout yet (multicall partial failure or unresolved market in
+    // a catchup replay). Without this guard, the outcome would be written as
+    // 'loser' from `numerator > 0n ? 'winner' : 'loser'`.
+    const cand: ResolvedRedeemCandidate = {
+      ...loserCandidate(),
+      payoutNumerator: 0n,
+      payoutDenominator: null,
+    };
+    mockResolveRedeemCandidatesForCondition.mockResolvedValue([cand]);
+    const upsert = vi.fn(async () => {});
+    const subscriber = buildSubscriber({ marketOutcomesUpsert: upsert });
+
+    await subscriber.enqueueForCondition(CONDITION_ID);
+
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "unknown", payout: null })
+    );
+  });
+
   it("writes one outcome per candidate in mixed binary market", async () => {
     mockResolveRedeemCandidatesForCondition.mockResolvedValue([
       loserCandidate(),

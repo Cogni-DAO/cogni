@@ -244,8 +244,16 @@ export class RedeemSubscriber {
   ): Promise<void> {
     const numerator = c.payoutNumerator;
     const denominator = c.payoutDenominator;
+    // denominator === null OR === 0n means the chain doesn't yet report a
+    // resolved payout for this condition (multicall partial failure or a
+    // genuinely-unresolved market replayed by catchup). Persist 'unknown'
+    // rather than writing a misleading 'loser' from a 0/0 numerator.
     const outcome =
-      numerator === null ? "unknown" : numerator > 0n ? "winner" : "loser";
+      numerator === null || denominator === null || denominator === 0n
+        ? "unknown"
+        : numerator > 0n
+          ? "winner"
+          : "loser";
     const payout =
       numerator !== null && denominator !== null && denominator > 0n
         ? (Number(numerator) / Number(denominator)).toString()
