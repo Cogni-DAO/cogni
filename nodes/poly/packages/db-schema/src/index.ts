@@ -13,5 +13,6 @@
 
 export * from "./copy-trade";
 export * from "./poly-redeem-jobs";
+export * from "./trader-activity";
 export * from "./wallet-connections";
 export * from "./wallet-grants";

@@ -12,6 +12,7 @@
  * @public
  */
 
+import { toUserId } from "@cogni/ids";
 import {
   PolyAddressSchema,
   WalletAnalysisQuerySchema,
@@ -20,7 +21,13 @@ import {
 } from "@cogni/poly-node-contracts";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
+import { getContainer, resolveServiceDb } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
+import {
+  getPolyTraderWalletAdapter,
+  WalletAdapterUnconfiguredError,
+} from "@/bootstrap/poly-trader-wallet";
+import { getBenchmarkSlice } from "@/features/wallet-analysis/server/copy-target-benchmark-service";
 import {
   getBalanceSlice,
   getDistributionsSlice,
@@ -38,7 +45,8 @@ export const GET = wrapRouteHandlerWithLogging<{
     routeId: "poly.wallet-analysis",
     auth: { mode: "required", getSessionUser },
   },
-  async (_ctx, request, _sessionUser, context) => {
+  async (ctx, request, sessionUser, context) => {
+    if (!sessionUser) throw new Error("sessionUser required");
     if (!context) {
       return NextResponse.json({ error: "missing_params" }, { status: 500 });
     }
@@ -73,15 +81,32 @@ export const GET = wrapRouteHandlerWithLogging<{
     const wantBalance = include.includes("balance");
     const wantPnl = include.includes("pnl");
     const wantDistributions = include.includes("distributions");
+    const wantBenchmark = include.includes("benchmark");
+    const serviceDb =
+      wantBenchmark || (wantDistributions && distributionMode === "historical")
+        ? (resolveServiceDb() as unknown as import("drizzle-orm/node-postgres").NodePgDatabase<
+            Record<string, unknown>
+          >)
+        : null;
+    const comparisonWalletAddress = wantBenchmark
+      ? await readComparisonWalletAddress(sessionUser.id, ctx.log)
+      : null;
 
-    const [snapshotR, tradesR, balanceR, pnlR, distributionsR] =
+    const [snapshotR, tradesR, balanceR, pnlR, distributionsR, benchmarkR] =
       await Promise.all([
         wantSnapshot ? getSnapshotSlice(addr) : null,
         wantTrades ? getTradesSlice(addr) : null,
         wantBalance ? getBalanceSlice(addr) : null,
         wantPnl ? getPnlSlice(addr, interval) : null,
         wantDistributions
-          ? getDistributionsSlice(addr, distributionMode)
+          ? getDistributionsSlice(addr, distributionMode, {
+              db: serviceDb ?? undefined,
+            })
+          : null,
+        wantBenchmark && serviceDb
+          ? getBenchmarkSlice(serviceDb, addr, interval, {
+              comparisonWalletAddress,
+            })
           : null,
       ]);
 
@@ -110,7 +135,29 @@ export const GET = wrapRouteHandlerWithLogging<{
         response.distributions = distributionsR.value;
       else response.warnings.push(distributionsR.warning);
     }
+    if (benchmarkR) {
+      if (benchmarkR.kind === "ok") response.benchmark = benchmarkR.value;
+      else response.warnings.push(benchmarkR.warning);
+    }
 
     return NextResponse.json(WalletAnalysisResponseSchema.parse(response));
   }
 );
+
+async function readComparisonWalletAddress(
+  userId: string,
+  log: Parameters<typeof getPolyTraderWalletAdapter>[0]
+): Promise<string | null> {
+  const container = getContainer();
+  const account = await container
+    .accountsForUser(toUserId(userId))
+    .getOrCreateBillingAccountForUser({ userId });
+  try {
+    const adapter = getPolyTraderWalletAdapter(log);
+    const summary = await adapter.getConnectionSummary(account.id);
+    return summary?.funderAddress.toLowerCase() ?? null;
+  } catch (err) {
+    if (err instanceof WalletAdapterUnconfiguredError) return null;
+    throw err;
+  }
+}

@@ -26,10 +26,21 @@
 "use client";
 
 import type { WalletTimePeriod } from "@cogni/poly-ai-tools";
-import { PolyAddressSchema } from "@cogni/poly-node-contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  PolyAddressSchema,
+  type PolyWalletStatusOutput,
+  type WalletAnalysisDistributions,
+  type WalletAnalysisResponse,
+} from "@cogni/poly-node-contracts";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { ColumnFiltersState, SortingState } from "@tanstack/react-table";
-import { Ban, Plus, Radio, Shield } from "lucide-react";
+import { Ban, Plus, Radio, Search, Shield } from "lucide-react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -39,6 +50,8 @@ import {
 } from "@/app/(app)/_components/wallets-table";
 import { Input, ToggleGroup, ToggleGroupItem } from "@/components";
 import {
+  DistributionComparisonBlock,
+  type DistributionComparisonSeries,
   WalletDetailDrawer,
   WalletQuickJump,
 } from "@/features/wallet-analysis";
@@ -59,6 +72,49 @@ const PERIOD_OPTIONS: readonly WalletTimePeriod[] = [
   "ALL",
 ] as const;
 const TOP_N = 100;
+const PRIMARY_RESEARCH_WALLETS = [
+  {
+    label: "RN1",
+    address: "0x2005d16a84ceefa912d4e380cd32e7ff827875ea",
+  },
+  {
+    label: "swisstony",
+    address: "0x204f72f35326db932158cba6adff0b9a1da95e14",
+  },
+] as const;
+
+type ResearchComparisonWallet = {
+  label: string;
+  address: string;
+};
+
+async function fetchWalletStatus(): Promise<PolyWalletStatusOutput> {
+  const res = await fetch("/api/v1/poly/wallet/status", {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new Error(`wallet status failed: ${res.status}`);
+  }
+  return (await res.json()) as PolyWalletStatusOutput;
+}
+
+async function fetchWalletDistributions(
+  address: string
+): Promise<WalletAnalysisDistributions | undefined> {
+  const params = new URLSearchParams({
+    include: "distributions",
+    interval: "ALL",
+    distributionMode: "historical",
+  });
+  const res = await fetch(
+    `/api/v1/poly/wallets/${address.toLowerCase()}?${params.toString()}`
+  );
+  if (!res.ok) {
+    throw new Error(`wallet distributions failed: ${res.status}`);
+  }
+  const json = (await res.json()) as WalletAnalysisResponse;
+  return json.distributions;
+}
 
 export function ResearchView() {
   const router = useRouter();
@@ -139,6 +195,14 @@ export function ResearchView() {
     queryFn: fetchCopyTargets,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  const { data: walletStatus } = useQuery({
+    queryKey: ["poly-wallet-status"],
+    queryFn: fetchWalletStatus,
+    staleTime: 10_000,
+    gcTime: 60_000,
     retry: 1,
   });
 
@@ -236,93 +300,105 @@ export function ResearchView() {
       : null;
 
   return (
-    <div className="flex flex-col gap-4 p-5 md:p-6">
+    <div className="flex flex-col gap-6 p-5 md:p-6">
       {/* Header */}
       <div className="flex flex-col gap-2">
         <h1 className="font-semibold text-xl tracking-tight md:text-2xl">
-          Wallets · Research
+          Research
         </h1>
-        <p className="max-w-2xl text-muted-foreground text-sm">
-          Browse top Polymarket wallets. Click any column header to sort,
-          filter, or hide — all controls live on the column itself.
-        </p>
       </div>
 
-      {/* Quick-jump for off-roster addresses (persistent affordance) */}
-      <WalletQuickJump className="max-w-xl" />
+      <ResearchBenchmarkBoard
+        userWalletAddress={walletStatus?.funder_address ?? null}
+        userWalletConnected={walletStatus?.connected === true}
+        targets={targetsData?.targets ?? []}
+      />
 
-      {/* Minimal toolbar: search + period (drives the leaderboard query).
-          Sort/filter/hide are in the column headers — not here. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          data-search-input
-          className="h-9 w-full sm:w-72"
-          placeholder="Search wallet address or name…"
-          value={globalFilter}
-          onChange={(e) => {
-            setGlobalFilter(e.target.value);
-            syncUrl({ q: e.target.value });
+      <section className="flex flex-col gap-4 pt-2">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
+              <Search className="size-3.5" />
+              Wallet Discovery
+            </div>
+            <h2 className="font-semibold text-lg">Search Polymarket wallets</h2>
+          </div>
+          <WalletQuickJump className="w-full max-w-xl sm:w-96" />
+        </div>
+
+        {/* Minimal toolbar: search + period (drives the leaderboard query).
+            Sort/filter/hide are in the column headers — not here. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            data-search-input
+            className="h-9 w-full sm:w-72"
+            placeholder="Search wallet address or name…"
+            value={globalFilter}
+            onChange={(e) => {
+              setGlobalFilter(e.target.value);
+              syncUrl({ q: e.target.value });
+            }}
+          />
+          <ToggleGroup
+            type="single"
+            value={period}
+            onValueChange={(v) => {
+              const next = (v as WalletTimePeriod | "") || "WEEK";
+              if (!PERIOD_OPTIONS.includes(next)) return;
+              setPeriod(next);
+              syncUrl({ period: next });
+            }}
+            className="rounded-lg border"
+          >
+            {PERIOD_OPTIONS.map((p) => (
+              <ToggleGroupItem key={p} value={p} className="px-3 text-xs">
+                {p === "ALL" ? "All" : p.charAt(0) + p.slice(1).toLowerCase()}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </div>
+
+        {/* Off-roster address hint — "you pasted a valid 0x, open its analysis" */}
+        {offRosterAddress && (
+          <button
+            type="button"
+            onClick={() => setSelectedAddr(offRosterAddress)}
+            className="self-start rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-left text-sm hover:bg-primary/10"
+          >
+            Open wallet analysis for{" "}
+            <code className="font-mono">{offRosterAddress}</code> · not in top{" "}
+            {TOP_N} for this window →
+          </button>
+        )}
+
+        {/* Grid — single shared component, same on /dashboard */}
+        <WalletsTable
+          rows={rows}
+          variant="full"
+          isLoading={walletsLoading}
+          onRowClick={(row) => setSelectedAddr(row.proxyWallet.toLowerCase())}
+          renderActions={renderActions}
+          emptyMessage={
+            walletsError
+              ? "Failed to load wallets — Polymarket may be slow. Try refreshing."
+              : "No wallets match the current filters."
+          }
+          fullState={{
+            sorting,
+            onSortingChange: (next) => {
+              setSorting(next);
+              syncUrl({ sorting: next });
+            },
+            columnFilters,
+            onColumnFiltersChange: (next) => {
+              setColumnFilters(next);
+              syncUrl({ filters: next });
+            },
+            globalFilter,
+            onGlobalFilterChange: setGlobalFilter,
           }}
         />
-        <ToggleGroup
-          type="single"
-          value={period}
-          onValueChange={(v) => {
-            const next = (v as WalletTimePeriod | "") || "WEEK";
-            if (!PERIOD_OPTIONS.includes(next)) return;
-            setPeriod(next);
-            syncUrl({ period: next });
-          }}
-          className="rounded-lg border"
-        >
-          {PERIOD_OPTIONS.map((p) => (
-            <ToggleGroupItem key={p} value={p} className="px-3 text-xs">
-              {p === "ALL" ? "All" : p.charAt(0) + p.slice(1).toLowerCase()}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      </div>
-
-      {/* Off-roster address hint — "you pasted a valid 0x, open its analysis" */}
-      {offRosterAddress && (
-        <button
-          type="button"
-          onClick={() => setSelectedAddr(offRosterAddress)}
-          className="self-start rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-left text-sm hover:bg-primary/10"
-        >
-          Open wallet analysis for{" "}
-          <code className="font-mono">{offRosterAddress}</code> · not in top{" "}
-          {TOP_N} for this window →
-        </button>
-      )}
-
-      {/* Grid — single shared component, same on /dashboard */}
-      <WalletsTable
-        rows={rows}
-        variant="full"
-        isLoading={walletsLoading}
-        onRowClick={(row) => setSelectedAddr(row.proxyWallet.toLowerCase())}
-        renderActions={renderActions}
-        emptyMessage={
-          walletsError
-            ? "Failed to load wallets — Polymarket may be slow. Try refreshing."
-            : "No wallets match the current filters."
-        }
-        fullState={{
-          sorting,
-          onSortingChange: (next) => {
-            setSorting(next);
-            syncUrl({ sorting: next });
-          },
-          columnFilters,
-          onColumnFiltersChange: (next) => {
-            setColumnFilters(next);
-            syncUrl({ filters: next });
-          },
-          globalFilter,
-          onGlobalFilterChange: setGlobalFilter,
-        }}
-      />
+      </section>
 
       {/* Compact no-fly footer */}
       <NoFlyFooter />
@@ -337,6 +413,97 @@ export function ResearchView() {
       />
     </div>
   );
+}
+
+function ResearchBenchmarkBoard({
+  userWalletAddress,
+  userWalletConnected,
+  targets,
+}: {
+  userWalletAddress: string | null;
+  userWalletConnected: boolean;
+  targets: readonly { target_wallet: string }[];
+}) {
+  const comparisonWallets = useMemo(
+    () => buildComparisonWallets(userWalletAddress, targets),
+    [userWalletAddress, targets]
+  );
+  const distributionQueries = useQueries({
+    queries: comparisonWallets.map((wallet) => ({
+      queryKey: [
+        "research-distribution-comparison",
+        wallet.address.toLowerCase(),
+      ],
+      queryFn: () => fetchWalletDistributions(wallet.address),
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+    })),
+  });
+  const distributionSeries: readonly DistributionComparisonSeries[] =
+    comparisonWallets.map((wallet, i) => ({
+      label: wallet.label,
+      data: distributionQueries[i]?.data,
+      isLoading: distributionQueries[i]?.isLoading,
+      isError: distributionQueries[i]?.isError,
+    }));
+  return (
+    <section className="flex flex-col gap-3">
+      {!userWalletAddress ? (
+        <div className="flex justify-end">
+          <Link
+            href="/credits"
+            className="rounded border px-3 py-1.5 text-sm hover:bg-muted"
+          >
+            Add your wallet
+          </Link>
+        </div>
+      ) : null}
+
+      <div className="rounded-lg border border-primary/20 bg-card p-4">
+        <DistributionComparisonBlock series={distributionSeries} />
+        {!userWalletAddress ? (
+          <p className="mt-3 text-muted-foreground text-xs">
+            {userWalletConnected
+              ? "Wallet is connected, but the funder address is not available yet."
+              : "Add your wallet to include it in overlays."}
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function buildComparisonWallets(
+  userWalletAddress: string | null,
+  targets: readonly { target_wallet: string }[]
+): readonly ResearchComparisonWallet[] {
+  const wallets: ResearchComparisonWallet[] = [];
+  const seen = new Set<string>();
+  const addWallet = (wallet: ResearchComparisonWallet) => {
+    const lower = wallet.address.toLowerCase();
+    if (seen.has(lower)) return;
+    seen.add(lower);
+    wallets.push({ ...wallet, address: lower });
+  };
+
+  if (userWalletAddress) {
+    addWallet({ label: "You", address: userWalletAddress });
+  }
+  for (const wallet of PRIMARY_RESEARCH_WALLETS) {
+    addWallet(wallet);
+  }
+  for (const target of targets) {
+    addWallet({
+      label: shortAddress(target.target_wallet),
+      address: target.target_wallet,
+    });
+  }
+
+  return wallets;
+}
+
+function shortAddress(address: string): string {
+  return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
 function NoFlyFooter() {

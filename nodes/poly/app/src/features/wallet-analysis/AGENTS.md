@@ -54,7 +54,7 @@ Shared shape `WalletAnalysisData` mirrors the v1 wallet-analysis HTTP contract t
 
 ## Notes
 
-- `useWalletAnalysis` fans out to `snapshot`, `trades`, `balance`, `pnl`, and (opt-in via `includeDistributions`) `distributions` slices; `WalletAnalysisSurface` threads the selected interval through the page and drawer and only requests `distributions` for the page variant.
+- `useWalletAnalysis` fans out to `snapshot`, `trades`, `balance`, `pnl`, and (opt-in via `includeDistributions`) `distributions` slices; `WalletAnalysisSurface` threads the selected interval through the page and drawer. Page + compact research surfaces request distributions; drawer stays light.
 - `DistributionsBlock` renders the `distributions` slice as six histograms (DCA depth, trade size, entry price, DCA window, hour-of-day; plus flat event clustering) with a count↔USDC toolbar; per-fill bars are stacked won/lost/pending. The component never recomputes buckets — it renders what the server returned.
 - **PnL is owned by the `pnl` slice only** (Polymarket `user-pnl-api`). `WalletProfitLossCard` renders the windowed delta `last.pnl − first.pnl`; `StatGrid` carries trade-derived metrics (winrate, duration, activity) and has no PnL/ROI/drawdown cell. Reintroducing bespoke realized-PnL math on this surface is a review-blocking violation (task.0389).
 - Position lifecycle visuals are reusable UI primitives first. Dashboard-specific execution fetching belongs in app routes/services, not on the wallet-analysis public barrel.

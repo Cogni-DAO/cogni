@@ -21,6 +21,7 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { TimeWindowHeader } from "@/features/wallet-analysis/components/TimeWindowHeader";
 import {
   computeWindowedPnl,
   WalletProfitLossCard,
@@ -39,9 +40,7 @@ describe("WalletProfitLossCard", () => {
     expect(screen.getByText(/no p\/l history yet/i)).toBeInTheDocument();
   });
 
-  it("shows windowed delta (last − first) and forwards interval changes", () => {
-    const onIntervalChange = vi.fn();
-
+  it("shows windowed delta (last − first)", () => {
     // Cumulative-as-of-window-start = 100, cumulative-as-of-window-end = 103.5
     // → windowed delta = +3.5. Reading `last` alone would render +$103.50
     // (the same lifetime-cumulative number for any interval). Card must show +$3.50.
@@ -52,13 +51,34 @@ describe("WalletProfitLossCard", () => {
           { ts: "2026-04-21T00:00:00.000Z", pnl: 103.5 },
         ]}
         interval="ALL"
-        onIntervalChange={onIntervalChange}
       />
     );
 
     expect(screen.getByText("+$3.50")).toBeInTheDocument();
     expect(screen.queryByText("+$103.50")).not.toBeInTheDocument();
+  });
+});
 
+describe("TimeWindowHeader", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders the shared interval selector and forwards interval changes", () => {
+    const onIntervalChange = vi.fn();
+
+    render(
+      <TimeWindowHeader
+        interval="ALL"
+        onIntervalChange={onIntervalChange}
+        pnlHistory={[
+          { ts: "2026-04-20T00:00:00.000Z", pnl: 100 },
+          { ts: "2026-04-21T00:00:00.000Z", pnl: 103.5 },
+        ]}
+      />
+    );
+
+    expect(screen.getByText("All time: up $4")).toBeInTheDocument();
     fireEvent.click(screen.getByText("1W"));
     expect(onIntervalChange).toHaveBeenCalledWith("1W");
   });

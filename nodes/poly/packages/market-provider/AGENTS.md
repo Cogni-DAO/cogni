@@ -49,6 +49,7 @@ Standalone workspace package (`@cogni/poly-market-provider`) providing a typed p
 **Subpath** (`@cogni/market-provider/adapters/polymarket`):
 
 - `PolymarketAdapter`, `PolymarketAdapterConfig` (Gamma reads; Run methods throw `OrderNotSupportedError` in CP1 baseline; CP3 lands the CLOB surface)
+- `createPolymarketActivitySource`, `WalletActivitySource`, `NextFillsResult`, `POLYMARKET_ACTIVITY_SOURCE_METRICS` for public Data-API wallet activity normalization used by copy trading and research observation.
 
 **Subpath** (`@cogni/market-provider/adapters/kalshi`):
 

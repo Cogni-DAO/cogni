@@ -360,6 +360,8 @@ let _targetsReconcilerStop: (() => void) | null = null;
 let _autoWrapHandle: AutoWrapJobHandle | null = null;
 // Resting-sweep job stop fn (task.5001). Set after the mirror reconciler boots.
 let _restingSweepStop: (() => void) | null = null;
+// Live observed-trader job stop fn (task.5005). Public Data API only.
+let _traderObservationStop: (() => void) | null = null;
 
 /**
  * Get the singleton container instance.
@@ -403,6 +405,14 @@ export function resetContainer(): void {
       // Best-effort.
     }
     _restingSweepStop = null;
+  }
+  if (_traderObservationStop) {
+    try {
+      _traderObservationStop();
+    } catch {
+      // Best-effort.
+    }
+    _traderObservationStop = null;
   }
   if (_temporalConnection) {
     void _temporalConnection.close();
@@ -1021,6 +1031,42 @@ function createContainer(): Container {
       "mirror poll + order reconciler not started (PRIVY_USER_WALLETS_* or POLY_WALLET_AEAD_* missing)"
     );
   }
+
+  // task.5005 — live-forward trader observation. Independent of copy-trade
+  // execution credentials: it observes public wallet activity for RN1,
+  // swisstony, and Cogni wallets so research query windows have stored facts.
+  void (async () => {
+    try {
+      const { startTraderObservationJob } = await import(
+        "@/bootstrap/jobs/trader-observation.job"
+      );
+      const { PolymarketDataApiClient } = await import(
+        "@cogni/poly-market-provider/adapters/polymarket"
+      );
+      const { noopMetrics: noopMetricsForObservation } = await import(
+        "@cogni/poly-market-provider"
+      );
+      const observerLogger =
+        log as unknown as import("@cogni/poly-market-provider").LoggerPort;
+      _traderObservationStop = startTraderObservationJob({
+        db: serviceDb as unknown as import("drizzle-orm/node-postgres").NodePgDatabase<
+          Record<string, unknown>
+        >,
+        client: new PolymarketDataApiClient(),
+        logger: observerLogger,
+        metrics: noopMetricsForObservation,
+      });
+    } catch (err: unknown) {
+      log.error(
+        {
+          event: "poly.trader.observe",
+          phase: "boot_failed",
+          err: err instanceof Error ? err.message : String(err),
+        },
+        "trader observation job boot failed — continuing without observed trader read model"
+      );
+    }
+  })();
 
   // task.0388 + task.0412 — event-driven redeem pipeline. Replaces the
   // deleted `runRedeemSweep` polling loop. One pipeline per active

@@ -281,6 +281,13 @@
       "when": 1778000400000,
       "tag": "0039_poly_copy_trade_closed_resting_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1778000400001,
+      "tag": "0040_poly_trader_activity",
+      "breakpoints": true
     }
   ]
 }

@@ -35,6 +35,7 @@ vi.mock("@/features/wallet-analysis", () => ({
     balance?: { total: number } | undefined;
   }): ReactElement | null =>
     balance ? <div>{`$${balance.total.toFixed(2)}`}</div> : null,
+  TimeWindowHeader: () => null,
   WalletProfitLossCard: () => null,
 }));
 

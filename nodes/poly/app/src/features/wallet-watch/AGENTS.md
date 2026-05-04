@@ -38,9 +38,9 @@ Generic Polymarket wallet observation primitive. Emits normalized `Fill[]` for a
 
 ## Public Surface
 
-- **Exports (port):** `WalletActivitySource` — `fetchSince(since?: number) → {fills, newSince}`.
-- **Exports (adapter):** `createPolymarketActivitySource({ client, wallet, logger, metrics, limit? })` — Data-API implementation.
-- **Exports (metrics):** `WALLET_WATCH_METRICS` — bounded Prom label set.
+- **Exports (port):** `WalletActivitySource` — `fetchSince(since?: number) → {fills, newSince}` from `@cogni/poly-market-provider`.
+- **Exports (adapter):** `createPolymarketActivitySource({ client, wallet, logger, metrics, limit? })` — package-owned Data-API implementation re-exported for compatibility.
+- **Exports (metrics):** `WALLET_WATCH_METRICS` — bounded Prom label set alias for the package-owned metric constants.
 - **Exports (types):** `NextFillsResult`, `PolymarketActivitySourceDeps`.
 
 ## Invariants
@@ -51,7 +51,7 @@ Generic Polymarket wallet observation primitive. Emits normalized `Fill[]` for a
 
 ## Responsibilities
 
-- Own the `WalletActivitySource` port and its Polymarket Data-API implementation.
+- Re-export the `WalletActivitySource` port and Polymarket Data-API implementation used by the mirror path.
 - Emit bounded-label skip counters for normalizer rejections (empty-tx, non-positive size/price, missing asset/conditionId, invalid side).
 - Stay observation-only — no writes, no decisions, no placements.
 

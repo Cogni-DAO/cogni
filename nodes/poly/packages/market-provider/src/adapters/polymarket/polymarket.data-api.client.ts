@@ -99,6 +99,8 @@ export interface ListTopTradersParams {
 export interface ListUserActivityParams {
   /** Rows per page (API caps at ~500). Default: 100. */
   limit?: number;
+  /** Optional offset for pagination. */
+  offset?: number;
   /** Only return trades at or after this unix-seconds timestamp. */
   sinceTs?: number;
 }
@@ -106,6 +108,8 @@ export interface ListUserActivityParams {
 export interface ListUserTradesParams {
   /** Rows per page. Default: 20. Polymarket's `/trades` cache appears to serve a stale page at limits >20 (verified 2026-05-01: limit=1000 was 2min behind limit=20 for an active trader). Callers needing deeper history should paginate or accept staleness. */
   limit?: number;
+  /** Optional offset for pagination. */
+  offset?: number;
   /** Only return trades at or after this unix-seconds timestamp. */
   sinceTs?: number;
   /** When true, only include fills where the user was the TAKER. Default: false (includes maker fills — required for position tracking). */
@@ -223,6 +227,9 @@ export class PolymarketDataApiClient {
       "takerOnly",
       params?.takerOnly === true ? "true" : "false"
     );
+    if (params?.offset !== undefined) {
+      url.searchParams.set("offset", String(params.offset));
+    }
 
     const json = await this.fetchJson(url);
     const trades = PolymarketUserTradesResponseSchema.parse(json);

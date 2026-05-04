@@ -39,6 +39,28 @@ function makeStubClient(
   } as unknown as PolymarketDataApiClient;
 }
 
+function makePagedStubClient(
+  pages: PolymarketUserTrade[][]
+): PolymarketDataApiClient & {
+  calls: Array<{ limit?: number; offset?: number; sinceTs?: number }>;
+} {
+  const calls: Array<{ limit?: number; offset?: number; sinceTs?: number }> =
+    [];
+  return {
+    calls,
+    async listUserActivity(_wallet, params) {
+      calls.push({
+        limit: params?.limit,
+        offset: params?.offset,
+        sinceTs: params?.sinceTs,
+      });
+      return pages[calls.length - 1] ?? [];
+    },
+  } as unknown as PolymarketDataApiClient & {
+    calls: Array<{ limit?: number; offset?: number; sinceTs?: number }>;
+  };
+}
+
 function makeTrade(
   overrides: Partial<PolymarketUserTrade> & { timestamp: number }
 ): PolymarketUserTrade {
@@ -142,6 +164,33 @@ describe("createPolymarketActivitySource.fetchSince", () => {
     const { fills, newSince } = await source.fetchSince(42);
     expect(fills).toHaveLength(0);
     expect(newSince).toBe(42);
+  });
+
+  it("paginates until it reaches a short page for bursty observed wallets", async () => {
+    const client = makePagedStubClient([
+      [makeTrade({ timestamp: 300 }), makeTrade({ timestamp: 290 })],
+      [makeTrade({ timestamp: 280 }), makeTrade({ timestamp: 270 })],
+      [makeTrade({ timestamp: 260 })],
+    ]);
+    const metrics = createRecordingMetrics();
+    const source = createPolymarketActivitySource({
+      client,
+      wallet: TARGET_WALLET,
+      logger: noopLogger,
+      metrics,
+      limit: 2,
+      maxPages: 10,
+    });
+
+    const { fills, newSince } = await source.fetchSince(250);
+
+    expect(fills).toHaveLength(5);
+    expect(newSince).toBe(300);
+    expect(client.calls).toEqual([
+      { limit: 2, offset: 0, sinceTs: 250 },
+      { limit: 2, offset: 2, sinceTs: 250 },
+      { limit: 2, offset: 4, sinceTs: 250 },
+    ]);
   });
 
   it("normalizer throw is caught — cursor advances, counter increments, loop not wedged", async () => {

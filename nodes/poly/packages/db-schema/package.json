@@ -21,6 +21,11 @@
       "import": "./dist/poly-redeem-jobs.js",
       "default": "./dist/poly-redeem-jobs.js"
     },
+    "./trader-activity": {
+      "types": "./dist/trader-activity.d.ts",
+      "import": "./dist/trader-activity.js",
+      "default": "./dist/trader-activity.js"
+    },
     "./wallet-connections": {
       "types": "./dist/wallet-connections.d.ts",
       "import": "./dist/wallet-connections.js",
@@ -37,7 +42,7 @@
   ],
   "scripts": {
     "build": "tsup",
-    "postbuild": "node -e \"const fs=require('fs'); for(const f of ['dist/index.js','dist/copy-trade.js','dist/poly-redeem-jobs.js','dist/wallet-connections.js','dist/wallet-grants.js']){if(!fs.existsSync(f)){console.error('ERROR: '+f+' missing'); process.exit(1)}}\"",
+    "postbuild": "node -e \"const fs=require('fs'); for(const f of ['dist/index.js','dist/copy-trade.js','dist/poly-redeem-jobs.js','dist/trader-activity.js','dist/wallet-connections.js','dist/wallet-grants.js']){if(!fs.existsSync(f)){console.error('ERROR: '+f+' missing'); process.exit(1)}}\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

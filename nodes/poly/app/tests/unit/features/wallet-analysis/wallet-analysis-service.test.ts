@@ -23,6 +23,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearTtlCache } from "@/features/wallet-analysis/server/coalesce";
 import {
   __setClientsForTests,
+  getDistributionsSlice,
   getExecutionSlice,
 } from "@/features/wallet-analysis/server/wallet-analysis-service";
 
@@ -277,5 +278,90 @@ describe("getExecutionSlice — live/closed split", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toContain("/positions");
     expect(fetchMock.mock.calls[0]?.[0]).toContain("limit=500");
+  });
+});
+
+describe("getDistributionsSlice — historical observed fills", () => {
+  afterEach(() => {
+    __setClientsForTests({});
+    clearTtlCache();
+  });
+
+  it("builds PR 1137 histograms from saved trader-fill history", async () => {
+    const addr = "0xabcdef1234567890abcdef1234567890abcdef12";
+    const rows = [
+      {
+        conditionId: "cid-a",
+        tokenId: "asset-win",
+        side: "BUY",
+        price: "0.50000000",
+        shares: "20.00000000",
+        observedAt: new Date("2026-05-01T12:00:00.000Z"),
+        raw: {
+          outcome: "YES",
+          attributes: {
+            title: "Will histograms render?",
+            slug: "histograms-render",
+            event_slug: "wallet-research",
+          },
+        },
+      },
+      {
+        conditionId: "cid-a",
+        tokenId: "asset-loss",
+        side: "BUY",
+        price: "0.25000000",
+        shares: "40.00000000",
+        observedAt: new Date("2026-05-02T18:00:00.000Z"),
+        raw: {
+          outcome: "NO",
+          attributes: {
+            title: "Will histograms render?",
+            slug: "histograms-render",
+            event_slug: "wallet-research",
+          },
+        },
+      },
+    ];
+    const fakeDb = {
+      select: () => fakeDb,
+      from: () => fakeDb,
+      innerJoin: () => fakeDb,
+      where: () => fakeDb,
+      orderBy: async () => rows,
+    };
+    __setClientsForTests({
+      clobPublic: {
+        async getMarketResolution() {
+          return {
+            closed: true,
+            tokens: [
+              { token_id: "asset-win", winner: true },
+              { token_id: "asset-loss", winner: false },
+            ],
+          };
+        },
+      } as unknown as PolymarketClobPublicClient,
+    });
+
+    const result = await getDistributionsSlice(addr, "historical", {
+      db: fakeDb as never,
+    });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.value.mode).toBe("historical");
+    expect(result.value.range.n).toBe(2);
+    expect(result.value.pendingShare.byCount).toBe(0);
+    expect(
+      result.value.tradeSize.buckets.reduce(
+        (sum, bucket) =>
+          sum +
+          bucket.values.count.won +
+          bucket.values.count.lost +
+          bucket.values.count.pending,
+        0
+      )
+    ).toBe(2);
   });
 });

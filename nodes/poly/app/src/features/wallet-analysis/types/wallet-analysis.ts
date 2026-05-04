@@ -152,6 +152,47 @@ export type WalletDistributionsViewMode = "count" | "usdc";
 
 export type WalletDistributionsRangeMode = "live" | "historical";
 
+export type WalletBenchmarkMarket = {
+  conditionId: string;
+  tokenId: string;
+  targetVwap: number | null;
+  cogniVwap: number | null;
+  targetSizeUsdc: number;
+  cogniSizeUsdc: number;
+  status: "copied" | "partial" | "missed" | "no_response_yet";
+  reason: string;
+};
+
+export type WalletBenchmarkGap = {
+  conditionId: string;
+  tokenId: string;
+  targetCurrentValueUsdc: number;
+  reason: string;
+};
+
+export type WalletBenchmark = {
+  isObserved: boolean;
+  traderKind: "copy_target" | "cogni_wallet" | null;
+  label: string | null;
+  window: "1D" | "1W" | "1M" | "1Y" | "YTD" | "ALL";
+  coverage: {
+    observedSince: string | null;
+    lastSuccessAt: string | null;
+    status: string | null;
+    targetTrades: number;
+    cogniTrades: number;
+  };
+  summary: {
+    targetSizeUsdc: number;
+    cogniSizeUsdc: number;
+    copyCaptureRatio: number | null;
+    targetOpenValueUsdc: number;
+    cogniOpenValueUsdc: number;
+  };
+  markets: readonly WalletBenchmarkMarket[];
+  activeGaps: readonly WalletBenchmarkGap[];
+};
+
 export type WalletAnalysisData = {
   address: string;
   identity: WalletIdentity;
@@ -163,6 +204,7 @@ export type WalletAnalysisData = {
   positions?: readonly WalletPosition[];
   /** Server-validated distributions slice — passed through to UI. */
   distributions?: import("@cogni/poly-node-contracts").WalletAnalysisDistributions;
+  benchmark?: WalletBenchmark;
 };
 
 export type WalletAnalysisVariant = "page" | "drawer" | "compact";

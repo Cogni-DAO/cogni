@@ -12,6 +12,13 @@
  */
 
 export {
+  createPolymarketActivitySource,
+  type NextFillsResult,
+  POLYMARKET_ACTIVITY_SOURCE_METRICS,
+  type PolymarketActivitySourceDeps,
+  type WalletActivitySource,
+} from "./polymarket.activity-source.js";
+export {
   PolymarketAdapter,
   type PolymarketAdapterConfig,
 } from "./polymarket.adapter.js";
