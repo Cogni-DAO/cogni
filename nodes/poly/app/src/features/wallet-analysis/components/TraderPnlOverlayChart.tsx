@@ -55,9 +55,10 @@ export function TraderPnlOverlayChart({
   const [mode, setMode] = useState<OverlayMode>("pct");
   const traders = data?.traders ?? [];
 
-  const { rows, seriesKeys } = useMemo(() => buildOverlayRows(traders), [
-    traders,
-  ]);
+  const { rows, seriesKeys } = useMemo(
+    () => buildOverlayRows(traders),
+    [traders]
+  );
   const config = useMemo(() => {
     const out: Record<string, { label: string; color: string }> = {};
     seriesKeys.forEach((key, i) => {
@@ -94,7 +95,10 @@ export function TraderPnlOverlayChart({
         <OverlayModeToggle mode={mode} onChange={setMode} />
       </div>
       <ChartContainer config={config} className="h-80 w-full">
-        <AreaChart data={rows} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+        <AreaChart
+          data={rows}
+          margin={{ top: 8, right: 8, left: 8, bottom: 0 }}
+        >
           <defs>
             {seriesKeys.map((key, i) => (
               <linearGradient
@@ -181,7 +185,9 @@ export function TraderPnlOverlayChart({
               type="monotone"
               dataKey={`${key}_${mode === "pct" ? "pct" : "usd"}`}
               name={key}
-              stroke={SERIES_COLORS[i % SERIES_COLORS.length] ?? SERIES_COLORS[0]}
+              stroke={
+                SERIES_COLORS[i % SERIES_COLORS.length] ?? SERIES_COLORS[0]
+              }
               strokeWidth={2.5}
               fill={`url(#trader-pnl-overlay-${i})`}
               dot={false}
