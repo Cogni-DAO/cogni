@@ -458,6 +458,11 @@ services:
       - run
       - /etc/alloy/config.alloy
       - --storage.path=/var/lib/alloy
+      # network_mode: host puts us on loopback alongside the main alloy
+      # container, which already binds the default 127.0.0.1:12345.
+      # Move our HTTP server (UI/healthcheck) + cluster advertise to 12346.
+      - --server.http.listen-addr=127.0.0.1:12346
+      - --cluster.advertise-address=127.0.0.1:12346
     environment:
       - DEPLOY_ENVIRONMENT=${DEPLOY_ENVIRONMENT}
       - LOKI_WRITE_URL=${LOKI_WRITE_URL}
