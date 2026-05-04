@@ -25,14 +25,10 @@ import type { ReactElement, ReactNode } from "react";
 import { ToggleGroup, ToggleGroupItem } from "@/components";
 import { cn } from "@/shared/util/cn";
 
-type TraderMetricMode = "pnl" | "count" | "flow";
+export type TraderMetricMode = "pnl" | "count" | "flow";
 
-const INTERVAL_OPTIONS: readonly PolyWalletOverviewInterval[] = [
-  "1D",
-  "1W",
-  "1M",
-  "ALL",
-] as const;
+export const TRADER_COMPARISON_INTERVALS: readonly PolyWalletOverviewInterval[] =
+  ["1D", "1W", "1M", "ALL"] as const;
 
 export function TraderComparisonBlock({
   data,
@@ -69,40 +65,6 @@ export function TraderComparisonBlock({
     );
   }
 
-  const traders = data?.traders ?? [];
-  if (isError && traders.length === 0) {
-    return (
-      <section className="flex flex-col gap-4">
-        <TraderComparisonHeader
-          interval={interval}
-          onIntervalChange={onIntervalChange}
-          mode={mode}
-          onModeChange={onModeChange}
-        />
-        <p className="text-muted-foreground text-sm">
-          Trader comparison is unavailable.
-        </p>
-      </section>
-    );
-  }
-
-  if (traders.length === 0) {
-    return (
-      <section className="flex flex-col gap-4">
-        <TraderComparisonHeader
-          interval={interval}
-          onIntervalChange={onIntervalChange}
-          mode={mode}
-          onModeChange={onModeChange}
-        />
-        <p className="text-muted-foreground text-sm">
-          No traders selected for comparison.
-        </p>
-      </section>
-    );
-  }
-
-  const max = maxMagnitude(traders, mode);
   return (
     <section className="flex flex-col gap-4">
       <TraderComparisonHeader
@@ -111,18 +73,66 @@ export function TraderComparisonBlock({
         mode={mode}
         onModeChange={onModeChange}
       />
+      <TraderComparisonChart
+        data={data}
+        isLoading={isLoading}
+        isError={isError}
+        mode={mode}
+      />
+    </section>
+  );
+}
 
-      <div className="divide-y rounded border bg-background">
-        {traders.map((trader) => (
-          <TraderComparisonRow
-            key={trader.address}
-            trader={trader}
-            mode={mode}
-            max={max}
-          />
+export function TraderComparisonChart({
+  data,
+  isLoading,
+  isError,
+  mode,
+}: {
+  data?: PolyResearchTraderComparisonResponse | undefined;
+  isLoading?: boolean | undefined;
+  isError?: boolean | undefined;
+  mode: TraderMetricMode;
+}): ReactElement {
+  if (isLoading && !data) {
+    return (
+      <div className="grid gap-3">
+        {["one", "two", "three"].map((key) => (
+          <div key={key} className="h-20 animate-pulse rounded bg-muted" />
         ))}
       </div>
-    </section>
+    );
+  }
+
+  const traders = data?.traders ?? [];
+  if (isError && traders.length === 0) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        Trader comparison is unavailable.
+      </p>
+    );
+  }
+
+  if (traders.length === 0) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        No traders selected for comparison.
+      </p>
+    );
+  }
+
+  const max = maxMagnitude(traders, mode);
+  return (
+    <div className="divide-y">
+      {traders.map((trader) => (
+        <TraderComparisonRow
+          key={trader.address}
+          trader={trader}
+          mode={mode}
+          max={max}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -177,14 +187,16 @@ function TraderComparisonHeader({
           value={interval}
           onValueChange={(value) => {
             if (
-              INTERVAL_OPTIONS.includes(value as PolyWalletOverviewInterval)
+              TRADER_COMPARISON_INTERVALS.includes(
+                value as PolyWalletOverviewInterval
+              )
             ) {
               onIntervalChange(value as PolyWalletOverviewInterval);
             }
           }}
           className="rounded-lg border"
         >
-          {INTERVAL_OPTIONS.map((option) => (
+          {TRADER_COMPARISON_INTERVALS.map((option) => (
             <ToggleGroupItem
               key={option}
               value={option}

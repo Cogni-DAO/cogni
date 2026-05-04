@@ -23,7 +23,7 @@ import { PolyAddressSchema } from "./poly.wallet-analysis.v1.contract";
 
 export const PolyResearchTraderComparisonQuerySchema = z.object({
   wallet: z.array(PolyAddressSchema).min(1).max(3),
-  label: z.array(z.string().trim().min(1).max(32)).default([]),
+  label: z.array(z.string().trim().min(1).max(32)).max(3).default([]),
   interval: PolyWalletOverviewIntervalSchema.optional().default("1W"),
 });
 export type PolyResearchTraderComparisonQuery = z.infer<

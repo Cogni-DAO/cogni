@@ -54,7 +54,6 @@ import { Input, ToggleGroup, ToggleGroupItem } from "@/components";
 import {
   DistributionComparisonBlock,
   type DistributionComparisonSeries,
-  TraderComparisonBlock,
   WalletDetailDrawer,
   WalletQuickJump,
 } from "@/features/wallet-analysis";
@@ -455,9 +454,6 @@ function ResearchBenchmarkBoard({
   );
   const [comparisonInterval, setComparisonInterval] =
     useState<PolyWalletOverviewInterval>("1W");
-  const [comparisonMode, setComparisonMode] = useState<
-    "pnl" | "count" | "flow"
-  >("pnl");
   const {
     data: traderComparison,
     isLoading: traderComparisonLoading,
@@ -510,19 +506,14 @@ function ResearchBenchmarkBoard({
       ) : null}
 
       <div className="rounded-lg border border-primary/20 bg-card p-4">
-        <TraderComparisonBlock
-          data={traderComparison}
-          isLoading={traderComparisonLoading}
-          isError={traderComparisonError}
-          interval={comparisonInterval}
-          onIntervalChange={setComparisonInterval}
-          mode={comparisonMode}
-          onModeChange={setComparisonMode}
+        <DistributionComparisonBlock
+          series={distributionSeries}
+          traderComparison={traderComparison}
+          traderComparisonLoading={traderComparisonLoading}
+          traderComparisonError={traderComparisonError}
+          traderInterval={comparisonInterval}
+          onTraderIntervalChange={setComparisonInterval}
         />
-      </div>
-
-      <div className="rounded-lg border border-primary/20 bg-card p-4">
-        <DistributionComparisonBlock series={distributionSeries} />
         {!userWalletAddress ? (
           <p className="mt-3 text-muted-foreground text-xs">
             {userWalletConnected

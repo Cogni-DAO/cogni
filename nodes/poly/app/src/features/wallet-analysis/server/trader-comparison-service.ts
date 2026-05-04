@@ -13,11 +13,6 @@
  * @public
  */
 
-import {
-  polyTraderFills,
-  polyTraderIngestionCursors,
-  polyTraderWallets,
-} from "@cogni/poly-db-schema/trader-activity";
 import type {
   PolyResearchTraderComparisonResponse,
   PolyResearchTraderComparisonTrader,
@@ -119,11 +114,11 @@ async function readTradeSummary(
       COALESCE(SUM(f.size_usdc::numeric) FILTER (WHERE f.side = 'BUY'), 0) AS buy_usdc,
       COALESCE(SUM(f.size_usdc::numeric) FILTER (WHERE f.side = 'SELL'), 0) AS sell_usdc,
       COALESCE(COUNT(DISTINCT f.condition_id), 0) AS market_count
-    FROM ${polyTraderWallets} w
-    LEFT JOIN ${polyTraderIngestionCursors} c
+    FROM poly_trader_wallets w
+    LEFT JOIN poly_trader_ingestion_cursors c
       ON c.trader_wallet_id = w.id
       AND c.source = 'data-api-trades'
-    LEFT JOIN ${polyTraderFills} f
+    LEFT JOIN poly_trader_fills f
       ON f.trader_wallet_id = w.id
       AND f.observed_at >= ${windowStartIso}::timestamptz
     WHERE w.wallet_address = ${address}
