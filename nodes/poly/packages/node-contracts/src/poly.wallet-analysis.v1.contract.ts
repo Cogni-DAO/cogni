@@ -245,6 +245,13 @@ export const WalletAnalysisBenchmarkSchema = z.object({
     targetOpenValueUsdc: z.number(),
     cogniOpenValueUsdc: z.number(),
   }),
+  hedgePolicy: z.object({
+    minTargetHedgeRatio: z.number(),
+    minTargetHedgeUsdc: z.number(),
+    targetHedgedConditions: z.number().int().nonnegative(),
+    targetHedgesPassingGate: z.number().int().nonnegative(),
+    lowestPassingHedgeRatio: z.number().nullable(),
+  }),
   markets: z.array(
     z.object({
       conditionId: z.string(),

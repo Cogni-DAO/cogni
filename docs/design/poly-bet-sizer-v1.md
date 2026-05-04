@@ -45,6 +45,10 @@ As-built behavior:
 - `position_followup` is enabled for these snapshot-backed wallets.
 - New-entry, layer, and hedge BUY branches all evaluate the target's current
   condition/token position cost basis against the table above.
+- Hedge threshold calibration is documented in
+  [`design.poly-hedge-followup-policy`](poly-hedge-followup-policy.md). The
+  as-built default remains `min_target_hedge_ratio=0.02` and
+  `min_target_hedge_usdc=$5`.
 
 The exact source-of-truth values are in:
 

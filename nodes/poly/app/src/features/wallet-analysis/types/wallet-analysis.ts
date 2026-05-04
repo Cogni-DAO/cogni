@@ -189,6 +189,13 @@ export type WalletBenchmark = {
     targetOpenValueUsdc: number;
     cogniOpenValueUsdc: number;
   };
+  hedgePolicy: {
+    minTargetHedgeRatio: number;
+    minTargetHedgeUsdc: number;
+    targetHedgedConditions: number;
+    targetHedgesPassingGate: number;
+    lowestPassingHedgeRatio: number | null;
+  };
   markets: readonly WalletBenchmarkMarket[];
   activeGaps: readonly WalletBenchmarkGap[];
 };
