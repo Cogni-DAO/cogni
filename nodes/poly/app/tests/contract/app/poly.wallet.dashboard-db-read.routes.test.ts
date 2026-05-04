@@ -137,12 +137,9 @@ vi.mock(
   })
 );
 
-vi.mock(
-  "@/features/wallet-analysis/server/trader-observation-service",
-  () => ({
-    refreshCurrentPositionsForWallet: mockRefreshCurrentPositionsForWallet,
-  })
-);
+vi.mock("@/features/wallet-analysis/server/trader-observation-service", () => ({
+  refreshCurrentPositionsForWallet: mockRefreshCurrentPositionsForWallet,
+}));
 
 vi.mock("@/shared/env/server-env", () => ({
   serverEnv: vi.fn(() => ({

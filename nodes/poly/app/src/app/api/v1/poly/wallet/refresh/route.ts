@@ -33,11 +33,11 @@ import {
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
 import type { LedgerRow, LedgerStatus } from "@/features/trading";
+import { refreshCurrentPositionsForWallet } from "@/features/wallet-analysis/server/trader-observation-service";
 import {
   getExecutionSlice,
   invalidateWalletAnalysisCaches,
 } from "@/features/wallet-analysis/server/wallet-analysis-service";
-import { refreshCurrentPositionsForWallet } from "@/features/wallet-analysis/server/trader-observation-service";
 import { serverEnv } from "@/shared/env/server-env";
 import {
   DASHBOARD_LEDGER_POSITION_LIMIT,
