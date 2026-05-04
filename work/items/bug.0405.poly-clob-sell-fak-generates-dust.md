@@ -15,7 +15,7 @@ assignees: [derekg1729]
 project: proj.poly-copy-trading
 branch: fix/poly-clob-sell-fak-dust
 created: 2026-04-28
-updated: 2026-04-28
+updated: 2026-05-04
 deploy_verified: false
 labels: [poly, polymarket, clob, buy, fok, gtc, dust, copy-trading, bet-sizer]
 external_refs:
@@ -25,6 +25,42 @@ external_refs:
 ---
 
 # bug.0405 — BUY GTC partial-fills below floor produce unsellable dust
+
+## 2026-05-04 Update — still critical, but not the dashboard-total bug
+
+Do not use this bug as the explanation for the `$900+` wallet summary vs much
+smaller Open table mismatch. That production issue is now tracked as
+[task.5007](./task.5007.poly-tenant-current-position-reconciler.md): dashboard
+routes were reading current exposure from `poly_copy_trade_fills` instead of the
+DB current-position inventory in `poly_trader_current_positions`.
+
+The newest production evidence does still support this bug's core execution
+concern:
+
+- Tiny displayed values like `$0.02` are usually **current value after price
+  collapse**, not necessarily sub-min order placement.
+- Separately, structurally small share balances can still be produced by
+  `mirror_limit`/GTC partial fills because the exchange enforces market floors
+  on order placement, not on every matched slice.
+- The active spec now explicitly documents the tradeoff in
+  `docs/spec/poly-copy-trade-phase1.md`: `FILL_NEVER_BELOW_FLOOR` is enforced
+  for `placement === "market_fok"` and deliberately relaxed for
+  `placement === "limit"` with TTL/cancel/redeem mitigations.
+- Therefore the stale part of this bug is the old implication that "flip every
+  mirror BUY to FOK" is an uncontested one-line fix. The real current decision
+  is policy-level: default FOK to avoid new dust, or keep limit/GTC for follow
+  rate while explicitly accepting dust risk and relying on cancellation/redeem.
+
+Before implementing this bug, re-read:
+
+- `docs/spec/poly-copy-trade-phase1.md` — execution-primitive floor section.
+- `docs/design/poly-bet-sizer-v1.md` — current `mirror_limit` default and
+  target-position pXX sizing.
+- `docs/design/poly-hedge-followup-policy.md` — hedge gates and why opposite
+  followups exist.
+- `.context/poly-dashboard-positions-reconciler-handoff.md` — production
+  current-position evidence, to avoid conflating read-model mismatch with
+  placement dust.
 
 > Surfaced 2026-04-28 during candidate-a validation of [task.0412](task.0412.poly-redeem-multi-tenant-fanout.md). Derek's tenant `0x9A9e…160A` held two stranded positions (`4.88` and `2.20` shares, both below `min_order_size = 5`) on open markets that the close button could not exit:
 >

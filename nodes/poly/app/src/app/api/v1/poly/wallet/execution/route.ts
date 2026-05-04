@@ -41,10 +41,9 @@ import {
   getPolyTraderWalletAdapter,
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
+import { readCurrentWalletPositionModel } from "@/features/wallet-analysis/server/current-position-read-model";
 import { buildMarketExposureGroups } from "@/features/wallet-analysis/server/market-exposure-service";
-import { getExecutionSlice } from "@/features/wallet-analysis/server/wallet-analysis-service";
 import { EVENT_NAMES, logEvent } from "@/shared/observability";
-import { enrichWalletExecutionPositions } from "../_lib/enrich-positions";
 import {
   coalesceWalletExecutionPositions,
   DASHBOARD_LEDGER_POSITION_LIMIT,
@@ -144,9 +143,13 @@ export const GET = wrapRouteHandlerWithLogging(
 
     const capturedAt = new Date();
     const warnings: Array<{ code: string; message: string }> = [];
-    let dbLivePositions: PolyWalletExecutionOutput["live_positions"] = [];
+    let livePositions: PolyWalletExecutionOutput["live_positions"] = [];
     let closedPositions: PolyWalletExecutionOutput["closed_positions"] = [];
     let dailyTradeCounts: ReturnType<typeof summarizeDailyTradeCounts> = [];
+    const ledgerLiveByAsset = new Map<
+      string,
+      PolyWalletExecutionOutput["live_positions"][number]
+    >();
     try {
       const rows = await container.orderLedger.listTenantPositions({
         billing_account_id: account.id,
@@ -157,11 +160,14 @@ export const GET = wrapRouteHandlerWithLogging(
       const positions = rows.map((row) =>
         toWalletExecutionPosition(row, capturedAt)
       );
-      dbLivePositions = coalesceWalletExecutionPositions(
+      const ledgerLivePositions = coalesceWalletExecutionPositions(
         positions
           .filter((position) => position.status !== "closed")
           .filter((position) => position.currentValue > 0)
       );
+      for (const position of ledgerLivePositions) {
+        ledgerLiveByAsset.set(position.asset, position);
+      }
       closedPositions = coalesceWalletExecutionPositions(
         positions.filter((position) => position.status === "closed")
       );
@@ -172,36 +178,47 @@ export const GET = wrapRouteHandlerWithLogging(
       });
     }
 
-    let livePositions = dbLivePositions;
-    if (
-      freshness === "live" &&
-      (dbLivePositions.length > 0 || closedPositions.length > 0)
-    ) {
-      try {
-        const currentExecution = await getExecutionSlice(address, {
-          includePriceHistory: true,
-          assets: [...dbLivePositions, ...closedPositions].map(
-            (position) => position.asset
-          ),
-        });
-        livePositions = enrichWalletExecutionPositions(
-          dbLivePositions,
-          currentExecution.live_positions.filter(hasActionableCurrentPosition),
-          capturedAt
-        );
-        closedPositions = enrichWalletExecutionPositions(
-          closedPositions,
-          currentExecution.closed_positions,
-          capturedAt
-        );
-        warnings.push(...currentExecution.warnings);
-      } catch (err) {
-        warnings.push({
-          code: "positions_current_unavailable",
-          message: err instanceof Error ? err.message : String(err),
-        });
-      }
+    try {
+      const currentPositions = await readCurrentWalletPositionModel({
+        db: container.serviceDb,
+        walletAddress: address,
+        capturedAt,
+      });
+      livePositions = currentPositions.positions.map((position) => {
+        const ledgerPosition = ledgerLiveByAsset.get(position.asset);
+        if (ledgerPosition === undefined) return position;
+        return {
+          ...position,
+          status: ledgerPosition.status,
+          lifecycleState: ledgerPosition.lifecycleState,
+          openedAt: ledgerPosition.openedAt,
+          closedAt: ledgerPosition.closedAt,
+          gameStartTime: position.gameStartTime ?? ledgerPosition.gameStartTime,
+          heldMinutes: ledgerPosition.heldMinutes,
+          timeline:
+            ledgerPosition.timeline.length > 0
+              ? ledgerPosition.timeline
+              : position.timeline,
+          events:
+            ledgerPosition.events.length > 0
+              ? ledgerPosition.events
+              : position.events,
+        };
+      });
+      const currentAssets = new Set(
+        currentPositions.positions.map((position) => position.asset)
+      );
+      closedPositions = closedPositions.filter(
+        (position) => !currentAssets.has(position.asset)
+      );
+      warnings.push(...currentPositions.warnings);
+    } catch (err) {
+      warnings.push({
+        code: "current_positions_read_model_unavailable",
+        message: err instanceof Error ? err.message : String(err),
+      });
     }
+
     const marketGroups = await buildMarketExposureGroups({
       db: container.serviceDb,
       billingAccountId: account.id,
@@ -223,10 +240,15 @@ export const GET = wrapRouteHandlerWithLogging(
       )
         ? "positions_read_model_unavailable"
         : warnings.some(
-              (warning) => warning.code === "positions_current_unavailable"
+              (warning) =>
+                warning.code === "current_positions_read_model_unavailable"
             )
-          ? "positions_current_unavailable"
-          : "ok",
+          ? "current_positions_read_model_unavailable"
+          : warnings.some(
+                (warning) => warning.code === "current_positions_stale"
+              )
+            ? "current_positions_stale"
+            : "ok",
       durationMs: Math.round(performance.now() - startedAtMs),
       outcome: "success",
       freshness,
@@ -251,9 +273,3 @@ export const GET = wrapRouteHandlerWithLogging(
     );
   }
 );
-
-function hasActionableCurrentPosition(
-  position: PolyWalletExecutionOutput["live_positions"][number]
-): boolean {
-  return position.status !== "closed" && position.currentValue > 0;
-}
