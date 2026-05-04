@@ -56,10 +56,53 @@ No table stores `is_hedge`.
 
 For a single wallet and condition:
 
-- one active token = `single`
-- two active tokens = smaller cost-basis token is `hedge`, the other is
-  `primary`
+- one active token → that leg becomes the participant's `primary`; `hedge` is
+  null.
+- two active tokens → the larger cost-basis leg becomes `primary`; the smaller
+  becomes `hedge`.
 
 This matches the hedge policy read model: a hedge is a relative second leg in
 the same binary condition. The classifier is intentionally current-state only;
 it says what the wallet holds now, not why the wallet got there.
+
+## Read-Model Pivot
+
+The read model emits **one row per (wallet, conditionId)** carrying both legs
+inline so the dashboard can render value/VWAP/P/L for primary, hedge, and a
+combined `net` summary on the same row:
+
+```ts
+type WalletExecutionMarketParticipantRow = {
+  side: "our_wallet" | "copy_target";
+  source: "ledger" | "trader_current_positions";
+  label: string;
+  walletAddress: string;
+  conditionId: string;
+  primary: WalletExecutionMarketLeg | null;
+  hedge: WalletExecutionMarketLeg | null;
+  net: { currentValueUsdc: number; costBasisUsdc: number; pnlUsdc: number };
+  lastObservedAt: string | null;
+};
+
+type WalletExecutionMarketLeg = {
+  tokenId: string;
+  outcome: string;
+  shares: number;
+  currentValueUsdc: number;
+  costBasisUsdc: number;
+  vwap: number | null;
+  pnlUsdc: number;
+  lifecycle:
+    | "active"
+    | "inactive"
+    | "resolved"
+    | "winner"
+    | "loser"
+    | "unknown";
+};
+```
+
+The pivot is intentionally **server-side**: the same shape is what Research
+will eventually consume once `poly_market_outcomes` is populated and joined in
+to promote `lifecycle: "unknown"` to resolved values. The client never groups
+token legs itself.

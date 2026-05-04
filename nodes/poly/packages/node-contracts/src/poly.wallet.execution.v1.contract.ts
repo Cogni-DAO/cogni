@@ -128,34 +128,69 @@ export const WalletExecutionMarketPositionSideSchema = z.enum([
   "our_wallet",
   "copy_target",
 ]);
-export const WalletExecutionHedgeRoleSchema = z.enum([
-  "single",
-  "primary",
-  "hedge",
-]);
 
-export const WalletExecutionMarketParticipantPositionSchema = z.object({
+/**
+ * Per-condition lifecycle for a single token leg. `unknown` is the v0 default
+ * until `poly_market_outcomes` is populated; once that backfill lands, joined
+ * outcome rows promote `unknown` to `winner`/`loser`/`resolved`. `inactive`
+ * means the leg dropped out of the latest complete position fetch but is
+ * retained for historical context.
+ */
+export const WalletExecutionMarketLegLifecycleSchema = z.enum([
+  "active",
+  "inactive",
+  "resolved",
+  "winner",
+  "loser",
+  "unknown",
+]);
+export type WalletExecutionMarketLegLifecycle = z.infer<
+  typeof WalletExecutionMarketLegLifecycleSchema
+>;
+
+/**
+ * One token leg of a participant's exposure to a single condition. A
+ * participant has up to two legs per condition (primary + optional hedge).
+ */
+export const WalletExecutionMarketLegSchema = z.object({
+  tokenId: z.string(),
+  outcome: z.string(),
+  shares: z.number().nonnegative(),
+  currentValueUsdc: z.number().nonnegative(),
+  costBasisUsdc: z.number().nonnegative(),
+  vwap: z.number().min(0).nullable(),
+  pnlUsdc: z.number(),
+  lifecycle: WalletExecutionMarketLegLifecycleSchema,
+});
+export type WalletExecutionMarketLeg = z.infer<
+  typeof WalletExecutionMarketLegSchema
+>;
+
+/**
+ * One row per (wallet, conditionId): the participant's primary leg + optional
+ * hedge leg pivoted onto a single shape so the dashboard can render value,
+ * VWAP, and P/L for both legs side-by-side and a `net` summary across them.
+ * Hedge classification is current-state only (smaller cost-basis leg of a
+ * two-leg condition). Server-side pivot per
+ * docs/design/poly-dashboard-market-aggregation.md.
+ */
+export const WalletExecutionMarketParticipantRowSchema = z.object({
   side: WalletExecutionMarketPositionSideSchema,
   source: WalletExecutionMarketPositionSourceSchema,
   label: z.string(),
   walletAddress: PolyAddressSchema,
   conditionId: z.string(),
-  tokenId: z.string(),
-  marketTitle: z.string(),
-  eventTitle: z.string().nullable().optional(),
-  marketSlug: z.string().nullable(),
-  eventSlug: z.string().nullable(),
-  outcome: z.string(),
-  shares: z.number().nonnegative(),
-  costBasisUsdc: z.number().nonnegative(),
-  currentValueUsdc: z.number().nonnegative(),
-  vwap: z.number().min(0).nullable(),
-  avgPrice: z.number().min(0).nullable(),
-  hedgeRole: WalletExecutionHedgeRoleSchema,
+  primary: WalletExecutionMarketLegSchema.nullable(),
+  hedge: WalletExecutionMarketLegSchema.nullable(),
+  net: z.object({
+    currentValueUsdc: z.number().nonnegative(),
+    costBasisUsdc: z.number().nonnegative(),
+    pnlUsdc: z.number(),
+  }),
   lastObservedAt: z.string().nullable(),
 });
-export type WalletExecutionMarketParticipantPosition = z.infer<
-  typeof WalletExecutionMarketParticipantPositionSchema
+export type WalletExecutionMarketParticipantRow = z.infer<
+  typeof WalletExecutionMarketParticipantRowSchema
 >;
 
 export const WalletExecutionMarketLineSchema = z.object({
@@ -168,7 +203,7 @@ export const WalletExecutionMarketLineSchema = z.object({
   ourVwap: z.number().min(0).nullable(),
   targetVwap: z.number().min(0).nullable(),
   hedgeCount: z.number().int().nonnegative(),
-  positions: z.array(WalletExecutionMarketParticipantPositionSchema),
+  participants: z.array(WalletExecutionMarketParticipantRowSchema),
 });
 export type WalletExecutionMarketLine = z.infer<
   typeof WalletExecutionMarketLineSchema

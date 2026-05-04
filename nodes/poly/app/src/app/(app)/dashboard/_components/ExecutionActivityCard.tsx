@@ -21,17 +21,10 @@
 
 import type { WalletExecutionMarketGroup } from "@cogni/poly-node-contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import {
-  type ReactElement,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { type ReactElement, useCallback, useMemo, useState } from "react";
+import { MarketsTable } from "@/app/(app)/_components/markets-table";
 import { PositionsTable } from "@/app/(app)/_components/positions-table";
 import {
-  Button,
   Card,
   CardContent,
   CardHeader,
@@ -48,7 +41,6 @@ import {
 import { useDashboardExecution } from "../_hooks/useDashboardExecution";
 
 type ExecutionView = "open" | "markets" | "history";
-const MARKET_GROUP_PAGE_SIZE = 10;
 
 export function ExecutionActivityCard(): ReactElement {
   const queryClient = useQueryClient();
@@ -238,28 +230,6 @@ function MarketGroupsPanel({
   isLoading: boolean;
   isError: boolean;
 }): ReactElement {
-  const [pageIndex, setPageIndex] = useState(0);
-  const pageCount = Math.max(
-    1,
-    Math.ceil(groups.length / MARKET_GROUP_PAGE_SIZE)
-  );
-  useEffect(() => {
-    setPageIndex((current) => Math.min(current, pageCount - 1));
-  }, [pageCount]);
-  const pageGroups = useMemo(
-    () =>
-      groups.slice(
-        pageIndex * MARKET_GROUP_PAGE_SIZE,
-        (pageIndex + 1) * MARKET_GROUP_PAGE_SIZE
-      ),
-    [groups, pageIndex]
-  );
-  const pageFrom = pageIndex * MARKET_GROUP_PAGE_SIZE + 1;
-  const pageTo = Math.min(
-    (pageIndex + 1) * MARKET_GROUP_PAGE_SIZE,
-    groups.length
-  );
-
   if (isError) {
     return (
       <p className="px-5 py-6 text-center text-muted-foreground text-sm">
@@ -281,164 +251,7 @@ function MarketGroupsPanel({
             Copy-target overlays are temporarily unavailable.
           </p>
         ) : null}
-        {isLoading ? (
-          <p className="rounded border px-4 py-6 text-center text-muted-foreground text-sm">
-            Loading market exposure…
-          </p>
-        ) : groups.length === 0 ? (
-          <p className="rounded border px-4 py-6 text-center text-muted-foreground text-sm">
-            No open market exposure.
-          </p>
-        ) : (
-          <>
-            <div className="overflow-hidden rounded-md border">
-              {pageGroups.map((group, index) => (
-                <details
-                  key={group.groupKey}
-                  open={index === 0}
-                  className="border-border border-b last:border-b-0"
-                >
-                  <summary className="cursor-pointer px-4 py-3 hover:bg-muted/40">
-                    <div className="grid gap-3 lg:grid-cols-2 lg:items-center">
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-sm">
-                          {group.eventTitle ??
-                            group.eventSlug ??
-                            group.lines[0]?.marketTitle ??
-                            "Market"}
-                        </p>
-                        <p className="text-muted-foreground text-xs">
-                          {group.marketCount} line
-                          {group.marketCount === 1 ? "" : "s"}
-                        </p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
-                        <MarketStat
-                          label="Our value"
-                          value={formatUsd(group.ourValueUsdc)}
-                        />
-                        <MarketStat
-                          label="Targets"
-                          value={formatUsd(group.targetValueUsdc)}
-                        />
-                        <MarketStat
-                          label="P/L"
-                          value={formatSignedUsd(group.pnlUsd)}
-                          valueClassName={pnlClass(group.pnlUsd)}
-                        />
-                        <MarketStat
-                          label="Hedges"
-                          value={String(group.hedgeCount)}
-                        />
-                      </div>
-                    </div>
-                  </summary>
-                  <div className="space-y-3 border-border border-t bg-muted/10 px-4 py-3">
-                    {group.lines.map((line) => (
-                      <div key={line.conditionId} className="space-y-2">
-                        <div className="grid gap-2 text-sm lg:grid-cols-2 lg:items-end">
-                          <div className="min-w-0">
-                            <p className="truncate font-medium">
-                              {line.marketTitle}
-                            </p>
-                            <p className="text-muted-foreground text-xs">
-                              VWAP our {formatPrice(line.ourVwap)} · targets{" "}
-                              {formatPrice(line.targetVwap)}
-                            </p>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2 text-xs">
-                            <MarketStat
-                              label="Our line"
-                              value={formatUsd(line.ourValueUsdc)}
-                            />
-                            <MarketStat
-                              label="Target line"
-                              value={formatUsd(line.targetValueUsdc)}
-                            />
-                            <MarketStat
-                              label="Hedges"
-                              value={String(line.hedgeCount)}
-                            />
-                          </div>
-                        </div>
-                        <div className="divide-y rounded-md border bg-background">
-                          {line.positions.map((position) => (
-                            <div
-                              key={`${position.side}:${position.walletAddress}:${position.tokenId}`}
-                              className="grid gap-2 px-3 py-2 text-sm md:grid-cols-5 md:items-center"
-                            >
-                              <div className="min-w-0 md:col-span-2">
-                                <p className="truncate font-medium">
-                                  {position.side === "our_wallet"
-                                    ? "Our position"
-                                    : position.label}
-                                </p>
-                                <p className="text-muted-foreground text-xs">
-                                  {position.outcome}
-                                  {position.hedgeRole === "hedge"
-                                    ? " · hedge"
-                                    : position.hedgeRole === "primary"
-                                      ? " · primary"
-                                      : ""}
-                                </p>
-                              </div>
-                              <MarketStat
-                                label="Value"
-                                value={formatUsd(position.currentValueUsdc)}
-                              />
-                              <MarketStat
-                                label="VWAP"
-                                value={formatPrice(position.vwap)}
-                              />
-                              <MarketStat
-                                label="Shares"
-                                value={formatShares(position.shares)}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              ))}
-            </div>
-            {groups.length > MARKET_GROUP_PAGE_SIZE ? (
-              <div className="flex flex-col items-center justify-between gap-2 text-muted-foreground text-sm sm:flex-row">
-                <span>
-                  {pageFrom} - {pageTo} of {groups.length} markets
-                </span>
-                <div className="flex items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2"
-                    disabled={pageIndex === 0}
-                    onClick={() => setPageIndex((current) => current - 1)}
-                  >
-                    <ChevronLeft className="size-4" aria-hidden="true" />
-                    <span className="sr-only">Previous market page</span>
-                  </Button>
-                  <span className="px-2 font-mono text-xs tabular-nums">
-                    {pageIndex + 1} / {pageCount}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2"
-                    disabled={pageIndex >= pageCount - 1}
-                    onClick={() => setPageIndex((current) => current + 1)}
-                  >
-                    <ChevronRight className="size-4" aria-hidden="true" />
-                    <span className="sr-only">Next market page</span>
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-          </>
-        )}
+        <MarketsTable groups={groups} isLoading={isLoading} />
       </div>
     </div>
   );
@@ -499,50 +312,6 @@ function OpenPositionsPanel({
       </div>
     </div>
   );
-}
-
-function MarketStat({
-  label,
-  value,
-  valueClassName = "",
-}: {
-  label: string;
-  value: string;
-  valueClassName?: string;
-}): ReactElement {
-  return (
-    <div className="min-w-0">
-      <p className="truncate text-muted-foreground">{label}</p>
-      <p className={`truncate font-mono tabular-nums ${valueClassName}`}>
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function formatUsd(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  })}`;
-}
-
-function formatSignedUsd(value: number): string {
-  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
-  return `${sign}${formatUsd(Math.abs(value))}`;
-}
-
-function formatPrice(value: number | null): string {
-  if (value === null) return "—";
-  return value.toFixed(3);
-}
-
-function formatShares(value: number): string {
-  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
-}
-
-function pnlClass(value: number): string {
-  return value >= 0 ? "text-success" : "text-destructive";
 }
 
 function ClosedPositionsPanel({

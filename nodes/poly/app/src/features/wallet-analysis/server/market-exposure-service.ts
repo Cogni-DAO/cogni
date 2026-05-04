@@ -4,7 +4,9 @@
 /**
  * Module: `@features/wallet-analysis/server/market-exposure-service`
  * Purpose: Build the dashboard market aggregation read model from our live
- *   execution positions plus observed active copy-target current positions.
+ *   execution positions plus observed active copy-target current positions,
+ *   pivoted into one row per (wallet, conditionId) with a primary leg + an
+ *   optional hedge leg + a `net` summary.
  * Scope: Feature service. Caller injects DB and already-fetched live positions.
  *   No upstream Polymarket calls.
  * Invariants:
@@ -12,15 +14,22 @@
  *     live position are returned.
  *   - HEDGE_IS_RELATIVE_POSITION: a hedge is the smaller cost-basis leg of a
  *     two-token active condition for one wallet, not a persisted flag.
+ *   - SERVER_SIDE_PIVOT: per-participant primary/hedge/net shape is computed
+ *     here, never client-side. Same shape will feed Research views once
+ *     `poly_market_outcomes` is populated.
+ *   - LIFECYCLE_DEFAULTS_UNKNOWN: leg `lifecycle` is `unknown` until the
+ *     outcomes backfill (handoff item #4) lands; the join slot is reserved.
  * Side-effects: DB read for copy-target current positions.
- * Links: docs/design/poly-dashboard-balance-and-positions.md,
- *        docs/design/poly-hedge-followup-policy.md
+ * Links: docs/design/poly-dashboard-market-aggregation.md,
+ *        docs/design/poly-hedge-followup-policy.md,
+ *        .context/market-aggregation-research-handoff.md
  * @internal
  */
 
 import type {
   WalletExecutionMarketGroup,
-  WalletExecutionMarketParticipantPosition,
+  WalletExecutionMarketLeg,
+  WalletExecutionMarketParticipantRow,
   WalletExecutionPosition,
 } from "@cogni/poly-node-contracts";
 import { type SQL, sql } from "drizzle-orm";
@@ -29,7 +38,29 @@ type Db = {
   execute(query: SQL): Promise<unknown>;
 };
 
-type HedgeRole = WalletExecutionMarketParticipantPosition["hedgeRole"];
+type ParticipantSide = WalletExecutionMarketParticipantRow["side"];
+type ParticipantSource = WalletExecutionMarketParticipantRow["source"];
+
+type RawLeg = {
+  side: ParticipantSide;
+  source: ParticipantSource;
+  label: string;
+  walletAddress: string;
+  conditionId: string;
+  tokenId: string;
+  marketTitle: string;
+  eventTitle: string | null;
+  marketSlug: string | null;
+  eventSlug: string | null;
+  outcome: string;
+  shares: number;
+  costBasisUsdc: number;
+  currentValueUsdc: number;
+  vwap: number | null;
+  avgPrice: number | null;
+  lifecycle: WalletExecutionMarketLeg["lifecycle"];
+  lastObservedAt: string | null;
+};
 
 type TargetPositionRow = {
   wallet_address: string | null;
@@ -45,7 +76,6 @@ type TargetPositionRow = {
   cost_basis_usdc: string | number | null;
   current_value_usdc: string | number | null;
   avg_price: string | number | null;
-  hedge_role: HedgeRole | null;
   last_observed_at: Date | string | null;
 };
 
@@ -57,33 +87,23 @@ export async function buildMarketExposureGroups(params: {
 }): Promise<WalletExecutionMarketGroup[]> {
   if (params.livePositions.length === 0) return [];
 
-  const ourPositions = buildOurMarketPositions(
-    params.livePositions,
-    params.walletAddress
-  );
-  const targetPositions = await readTargetMarketPositions({
+  const ourLegs = buildOurLegs(params.livePositions, params.walletAddress);
+  const targetLegs = await readTargetLegs({
     db: params.db,
     billingAccountId: params.billingAccountId,
-    conditions: [...new Set(ourPositions.map((p) => p.conditionId))],
+    conditions: [...new Set(ourLegs.map((leg) => leg.conditionId))],
   });
 
-  return groupMarketPositions([...ourPositions, ...targetPositions]);
+  return groupParticipants([...ourLegs, ...targetLegs]);
 }
 
-function buildOurMarketPositions(
+function buildOurLegs(
   positions: readonly WalletExecutionPosition[],
   walletAddress: string
-): WalletExecutionMarketParticipantPosition[] {
-  const roles = hedgeRolesByCondition(
-    positions.map((position) => ({
-      conditionId: position.conditionId,
-      tokenId: position.asset,
-      costBasisUsdc: costBasisFromExecutionPosition(position),
-    }))
-  );
-
+): RawLeg[] {
   return positions.map((position) => {
     const costBasisUsdc = costBasisFromExecutionPosition(position);
+    const vwap = position.entryPrice > 0 ? position.entryPrice : null;
     return {
       side: "our_wallet",
       source: "ledger",
@@ -99,20 +119,19 @@ function buildOurMarketPositions(
       shares: position.size,
       costBasisUsdc,
       currentValueUsdc: position.currentValue,
-      vwap: position.entryPrice > 0 ? position.entryPrice : null,
-      avgPrice: position.entryPrice > 0 ? position.entryPrice : null,
-      hedgeRole:
-        roles.get(`${position.conditionId}:${position.asset}`) ?? "single",
+      vwap,
+      avgPrice: vwap,
+      lifecycle: "active",
       lastObservedAt: position.openedAt,
     };
   });
 }
 
-async function readTargetMarketPositions(params: {
+async function readTargetLegs(params: {
   db: Db;
   billingAccountId: string;
   conditions: readonly string[];
-}): Promise<WalletExecutionMarketParticipantPosition[]> {
+}): Promise<RawLeg[]> {
   if (params.conditions.length === 0) return [];
 
   const conditionList = sql.join(
@@ -130,64 +149,28 @@ async function readTargetMarketPositions(params: {
       WHERE t.billing_account_id = ${params.billingAccountId}
         AND t.disabled_at IS NULL
         AND w.disabled_at IS NULL
-    ),
-    target_positions AS (
-      SELECT
-        a.wallet_address,
-        a.label,
-        p.trader_wallet_id,
-        p.condition_id,
-        p.token_id,
-        p.shares::numeric AS shares,
-        p.cost_basis_usdc::numeric AS cost_basis_usdc,
-        p.current_value_usdc::numeric AS current_value_usdc,
-        p.avg_price::numeric AS avg_price,
-        p.last_observed_at,
-        COALESCE(NULLIF(p.raw->>'title', ''), 'Polymarket') AS market_title,
-        NULLIF(p.raw->>'eventTitle', '') AS event_title,
-        NULLIF(p.raw->>'slug', '') AS market_slug,
-        NULLIF(p.raw->>'eventSlug', '') AS event_slug,
-        COALESCE(NULLIF(p.raw->>'outcome', ''), 'UNKNOWN') AS outcome
-      FROM poly_trader_current_positions p
-      JOIN active_targets a ON a.trader_wallet_id = p.trader_wallet_id
-      WHERE p.active = true
-        AND p.current_value_usdc > 0
-        AND p.condition_id IN (${conditionList})
-    ),
-    ranked AS (
-      SELECT
-        p.*,
-        COUNT(*) OVER (
-          PARTITION BY p.trader_wallet_id, p.condition_id
-        ) AS active_legs,
-        ROW_NUMBER() OVER (
-          PARTITION BY p.trader_wallet_id, p.condition_id
-          ORDER BY p.cost_basis_usdc ASC, p.token_id ASC
-        ) AS cost_rank
-      FROM target_positions p
     )
     SELECT
-      wallet_address,
-      label,
-      condition_id,
-      token_id,
-      market_title,
-      event_title,
-      market_slug,
-      event_slug,
-      outcome,
-      shares,
-      cost_basis_usdc,
-      current_value_usdc,
-      avg_price,
-      CASE
-        WHEN active_legs = 2 AND cost_rank = 1 THEN 'hedge'
-        WHEN active_legs = 2 THEN 'primary'
-        ELSE 'single'
-      END AS hedge_role,
-      last_observed_at
-    FROM ranked
-    ORDER BY current_value_usdc DESC
+      a.wallet_address,
+      a.label,
+      p.condition_id,
+      p.token_id,
+      COALESCE(NULLIF(p.raw->>'title', ''), 'Polymarket') AS market_title,
+      NULLIF(p.raw->>'eventTitle', '') AS event_title,
+      NULLIF(p.raw->>'slug', '') AS market_slug,
+      NULLIF(p.raw->>'eventSlug', '') AS event_slug,
+      COALESCE(NULLIF(p.raw->>'outcome', ''), 'UNKNOWN') AS outcome,
+      p.shares::numeric AS shares,
+      p.cost_basis_usdc::numeric AS cost_basis_usdc,
+      p.current_value_usdc::numeric AS current_value_usdc,
+      p.avg_price::numeric AS avg_price,
+      p.last_observed_at
+    FROM poly_trader_current_positions p
+    JOIN active_targets a ON a.trader_wallet_id = p.trader_wallet_id
+    WHERE p.active = true
+      AND p.current_value_usdc > 0
+      AND p.condition_id IN (${conditionList})
+    ORDER BY p.current_value_usdc DESC
   `)) as unknown as TargetPositionRow[];
 
   return rows.flatMap((row) => {
@@ -198,15 +181,13 @@ async function readTargetMarketPositions(params: {
     ) {
       return [];
     }
-
     const shares = toNumber(row.shares);
     const costBasisUsdc = toNumber(row.cost_basis_usdc);
     const avgPrice = nullableNumber(row.avg_price);
-
     return [
       {
-        side: "copy_target" as const,
-        source: "trader_current_positions" as const,
+        side: "copy_target",
+        source: "trader_current_positions",
         label: row.label ?? "Copy target",
         walletAddress: row.wallet_address.toLowerCase(),
         conditionId: row.condition_id,
@@ -221,24 +202,21 @@ async function readTargetMarketPositions(params: {
         currentValueUsdc: toNumber(row.current_value_usdc),
         vwap: positionVwap(costBasisUsdc, shares, avgPrice),
         avgPrice,
-        hedgeRole: row.hedge_role ?? "single",
+        lifecycle: "active" as const,
         lastObservedAt: isoOrNull(row.last_observed_at),
       },
     ];
   });
 }
 
-function groupMarketPositions(
-  positions: readonly WalletExecutionMarketParticipantPosition[]
+function groupParticipants(
+  legs: readonly RawLeg[]
 ): WalletExecutionMarketGroup[] {
-  const linesByCondition = new Map<
-    string,
-    WalletExecutionMarketParticipantPosition[]
-  >();
-  for (const position of positions) {
-    const existing = linesByCondition.get(position.conditionId) ?? [];
-    existing.push(position);
-    linesByCondition.set(position.conditionId, existing);
+  const byCondition = new Map<string, RawLeg[]>();
+  for (const leg of legs) {
+    const list = byCondition.get(leg.conditionId) ?? [];
+    list.push(leg);
+    byCondition.set(leg.conditionId, list);
   }
 
   const groupBuckets = new Map<
@@ -250,35 +228,42 @@ function groupMarketPositions(
     }
   >();
 
-  for (const [conditionId, linePositions] of linesByCondition.entries()) {
-    const anchor = pickAnchorPosition(linePositions);
+  for (const [conditionId, conditionLegs] of byCondition.entries()) {
+    const participants = pivotParticipants(conditionLegs);
+    const anchor = pickAnchor(conditionLegs);
+    if (anchor === null) continue;
     const eventSlug =
-      linePositions.find((position) => position.eventSlug !== null)
-        ?.eventSlug ?? null;
+      conditionLegs.find((leg) => leg.eventSlug !== null)?.eventSlug ?? null;
     const eventTitle =
-      linePositions.find((position) => position.eventTitle !== null)
-        ?.eventTitle ?? null;
+      conditionLegs.find((leg) => leg.eventTitle !== null)?.eventTitle ?? null;
     const groupKey = eventSlug
       ? `event:${eventSlug}`
       : `condition:${conditionId}`;
+
+    const ourValueUsdc = roundMoney(
+      sumValueBySide(conditionLegs, "our_wallet")
+    );
+    const targetValueUsdc = roundMoney(
+      sumValueBySide(conditionLegs, "copy_target")
+    );
+
     const line = {
       conditionId,
       marketTitle: anchor.marketTitle,
       marketSlug: anchor.marketSlug,
       resolvesAt: null,
-      ourValueUsdc: roundMoney(sumSide(linePositions, "our_wallet")),
-      targetValueUsdc: roundMoney(sumSide(linePositions, "copy_target")),
+      ourValueUsdc,
+      targetValueUsdc,
       ourVwap: weightedVwap(
-        linePositions.filter((position) => position.side === "our_wallet")
+        conditionLegs.filter((leg) => leg.side === "our_wallet")
       ),
       targetVwap: weightedVwap(
-        linePositions.filter((position) => position.side === "copy_target")
+        conditionLegs.filter((leg) => leg.side === "copy_target")
       ),
-      hedgeCount: linePositions.filter(
-        (position) => position.hedgeRole === "hedge"
-      ).length,
-      positions: [...linePositions].sort(compareParticipantPosition),
+      hedgeCount: participants.filter((p) => p.hedge !== null).length,
+      participants,
     };
+
     const bucket = groupBuckets.get(groupKey) ?? {
       eventTitle,
       eventSlug,
@@ -309,14 +294,9 @@ function groupMarketPositions(
           lines.reduce(
             (sum, line) =>
               sum +
-              line.positions
-                .filter((position) => position.side === "our_wallet")
-                .reduce(
-                  (lineSum, position) =>
-                    lineSum +
-                    (position.currentValueUsdc - position.costBasisUsdc),
-                  0
-                ),
+              line.participants
+                .filter((p) => p.side === "our_wallet")
+                .reduce((rowSum, p) => rowSum + p.net.pnlUsdc, 0),
             0
           )
         ),
@@ -327,101 +307,114 @@ function groupMarketPositions(
     .sort((left, right) => right.ourValueUsdc - left.ourValueUsdc);
 }
 
-type HedgeInput = {
-  conditionId: string;
-  tokenId: string;
-  costBasisUsdc: number;
-};
+// Per-condition: pivot one row per (wallet) with primary + optional hedge legs.
+// Hedge classification: when a wallet holds two legs of one condition, the
+// smaller cost-basis leg is the hedge; the other is primary. Singletons go to
+// primary with hedge=null.
+function pivotParticipants(
+  legs: readonly RawLeg[]
+): WalletExecutionMarketParticipantRow[] {
+  const byWallet = new Map<string, RawLeg[]>();
+  for (const leg of legs) {
+    const key = leg.walletAddress;
+    const list = byWallet.get(key) ?? [];
+    list.push(leg);
+    byWallet.set(key, list);
+  }
 
-function hedgeRolesByCondition(
-  positions: readonly HedgeInput[]
-): Map<string, HedgeRole> {
-  const grouped = new Map<string, HedgeInput[]>();
-  for (const position of positions) {
-    const existing = grouped.get(position.conditionId) ?? [];
-    grouped.set(position.conditionId, [...existing, position]);
+  const rows: WalletExecutionMarketParticipantRow[] = [];
+  for (const [walletAddress, walletLegs] of byWallet.entries()) {
+    const primaryLeg = pickPrimary(walletLegs);
+    if (primaryLeg === null) continue;
+    const hedgeLeg =
+      walletLegs.length === 2 ? pickHedge(walletLegs, primaryLeg) : null;
+    const anchor = primaryLeg;
+
+    const primary = toContractLeg(primaryLeg);
+    const hedge = hedgeLeg ? toContractLeg(hedgeLeg) : null;
+
+    const lastObservedAt =
+      [primaryLeg.lastObservedAt, hedgeLeg?.lastObservedAt ?? null]
+        .filter((value): value is string => value !== null)
+        .sort()
+        .pop() ?? null;
+
+    rows.push({
+      side: anchor.side,
+      source: anchor.source,
+      label: anchor.label,
+      walletAddress,
+      conditionId: anchor.conditionId,
+      primary,
+      hedge,
+      net: {
+        currentValueUsdc: roundMoney(
+          (primary?.currentValueUsdc ?? 0) + (hedge?.currentValueUsdc ?? 0)
+        ),
+        costBasisUsdc: roundMoney(
+          (primary?.costBasisUsdc ?? 0) + (hedge?.costBasisUsdc ?? 0)
+        ),
+        pnlUsdc: roundMoney((primary?.pnlUsdc ?? 0) + (hedge?.pnlUsdc ?? 0)),
+      },
+      lastObservedAt,
+    });
   }
-  const roles = new Map<string, HedgeRole>();
-  for (const [conditionId, conditionPositions] of grouped.entries()) {
-    if (conditionPositions.length !== 2) {
-      for (const position of conditionPositions) {
-        roles.set(`${conditionId}:${position.tokenId}`, "single");
-      }
-      continue;
-    }
-    const sorted = [...conditionPositions].sort((left, right) =>
-      left.costBasisUsdc === right.costBasisUsdc
-        ? left.tokenId.localeCompare(right.tokenId)
-        : left.costBasisUsdc - right.costBasisUsdc
-    );
-    const [hedge, primary] = sorted;
-    if (!hedge || !primary) continue;
-    roles.set(`${conditionId}:${hedge.tokenId}`, "hedge");
-    roles.set(`${conditionId}:${primary.tokenId}`, "primary");
-  }
-  return roles;
+
+  return rows.sort(compareParticipantRow);
 }
 
-function pickAnchorPosition(
-  positions: readonly WalletExecutionMarketParticipantPosition[]
-): WalletExecutionMarketParticipantPosition {
+function toContractLeg(leg: RawLeg): WalletExecutionMarketLeg {
+  return {
+    tokenId: leg.tokenId,
+    outcome: leg.outcome,
+    shares: leg.shares,
+    currentValueUsdc: roundMoney(leg.currentValueUsdc),
+    costBasisUsdc: roundMoney(leg.costBasisUsdc),
+    vwap: leg.vwap,
+    pnlUsdc: roundMoney(leg.currentValueUsdc - leg.costBasisUsdc),
+    lifecycle: leg.lifecycle,
+  };
+}
+
+function pickPrimary(legs: readonly RawLeg[]): RawLeg | null {
+  // Larger cost-basis leg is primary; deterministic tiebreak by tokenId.
   return (
-    positions.find((position) => position.side === "our_wallet") ??
-    positions[0] ??
-    fallbackPosition
+    [...legs].sort((left, right) =>
+      left.costBasisUsdc === right.costBasisUsdc
+        ? right.tokenId.localeCompare(left.tokenId)
+        : right.costBasisUsdc - left.costBasisUsdc
+    )[0] ?? null
   );
 }
 
-const fallbackPosition: WalletExecutionMarketParticipantPosition = {
-  side: "our_wallet",
-  source: "ledger",
-  label: "Our wallet",
-  walletAddress: "0x0000000000000000000000000000000000000000",
-  conditionId: "unknown",
-  tokenId: "unknown",
-  marketTitle: "Polymarket",
-  eventTitle: null,
-  marketSlug: null,
-  eventSlug: null,
-  outcome: "UNKNOWN",
-  shares: 0,
-  costBasisUsdc: 0,
-  currentValueUsdc: 0,
-  vwap: null,
-  avgPrice: null,
-  hedgeRole: "single",
-  lastObservedAt: null,
-};
+function pickHedge(legs: readonly RawLeg[], primary: RawLeg): RawLeg | null {
+  const others = legs.filter((leg) => leg.tokenId !== primary.tokenId);
+  return others[0] ?? null;
+}
 
-function costBasisFromExecutionPosition(
-  position: WalletExecutionPosition
+function pickAnchor(legs: readonly RawLeg[]): RawLeg | null {
+  return legs.find((leg) => leg.side === "our_wallet") ?? legs[0] ?? null;
+}
+
+function sumValueBySide(
+  legs: readonly RawLeg[],
+  side: ParticipantSide
 ): number {
-  return roundMoney(Math.max(0, position.currentValue - position.pnlUsd));
+  return legs
+    .filter((leg) => leg.side === side)
+    .reduce((sum, leg) => sum + leg.currentValueUsdc, 0);
 }
 
-function weightedVwap(
-  positions: readonly WalletExecutionMarketParticipantPosition[]
-): number | null {
-  const withVwap = positions.filter(
-    (position) => position.vwap !== null && position.shares > 0
-  );
-  const shares = withVwap.reduce((sum, position) => sum + position.shares, 0);
-  if (shares <= 0) return null;
-  return roundPrice(
-    withVwap.reduce(
-      (sum, position) => sum + (position.vwap ?? 0) * position.shares,
-      0
-    ) / shares
-  );
-}
-
-function sumSide(
-  positions: readonly WalletExecutionMarketParticipantPosition[],
-  side: WalletExecutionMarketParticipantPosition["side"]
+function compareParticipantRow(
+  left: WalletExecutionMarketParticipantRow,
+  right: WalletExecutionMarketParticipantRow
 ): number {
-  return positions
-    .filter((position) => position.side === side)
-    .reduce((sum, position) => sum + position.currentValueUsdc, 0);
+  if (left.side !== right.side) return left.side === "our_wallet" ? -1 : 1;
+  return (
+    right.net.currentValueUsdc - left.net.currentValueUsdc ||
+    left.label.localeCompare(right.label) ||
+    left.walletAddress.localeCompare(right.walletAddress)
+  );
 }
 
 function compareLine(
@@ -435,15 +428,19 @@ function compareLine(
   );
 }
 
-function compareParticipantPosition(
-  left: WalletExecutionMarketParticipantPosition,
-  right: WalletExecutionMarketParticipantPosition
+function costBasisFromExecutionPosition(
+  position: WalletExecutionPosition
 ): number {
-  if (left.side !== right.side) return left.side === "our_wallet" ? -1 : 1;
-  return (
-    right.currentValueUsdc - left.currentValueUsdc ||
-    left.label.localeCompare(right.label) ||
-    left.outcome.localeCompare(right.outcome)
+  return roundMoney(Math.max(0, position.currentValue - position.pnlUsd));
+}
+
+function weightedVwap(legs: readonly RawLeg[]): number | null {
+  const withVwap = legs.filter((leg) => leg.vwap !== null && leg.shares > 0);
+  const shares = withVwap.reduce((sum, leg) => sum + leg.shares, 0);
+  if (shares <= 0) return null;
+  return roundPrice(
+    withVwap.reduce((sum, leg) => sum + (leg.vwap ?? 0) * leg.shares, 0) /
+      shares
   );
 }
 
