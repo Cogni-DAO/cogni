@@ -140,6 +140,8 @@ export function DistributionsBlock({
 }
 
 export function DistributionComparisonBlock({
+  activeView: controlledActiveView,
+  onActiveViewChange,
   series,
   targetOverlap,
   targetOverlapLoading,
@@ -152,6 +154,8 @@ export function DistributionComparisonBlock({
   traderInterval,
   onTraderIntervalChange,
 }: {
+  activeView?: ResearchComparisonViewKey | undefined;
+  onActiveViewChange?: ((view: ResearchComparisonViewKey) => void) | undefined;
   series: readonly DistributionComparisonSeries[];
   targetOverlap?: PolyResearchTargetOverlapResponse | undefined;
   targetOverlapLoading?: boolean | undefined;
@@ -166,8 +170,13 @@ export function DistributionComparisonBlock({
 }): ReactElement {
   const [viewMode, setViewMode] =
     useState<WalletDistributionsViewMode>("count");
-  const [activeView, setActiveView] =
+  const [internalActiveView, setInternalActiveView] =
     useState<ResearchComparisonViewKey>("targetOverlap");
+  const activeView = controlledActiveView ?? internalActiveView;
+  const setActiveView = (view: ResearchComparisonViewKey) => {
+    setInternalActiveView(view);
+    onActiveViewChange?.(view);
+  };
   const readySeries = series.filter(
     (
       s
@@ -175,7 +184,6 @@ export function DistributionComparisonBlock({
       data: WalletAnalysisDistributions;
     } => Boolean(s.data)
   );
-  const isLoading = readySeries.length === 0 && series.some((s) => s.isLoading);
   const isError = readySeries.length === 0 && series.some((s) => s.isError);
   const activeTraderView = TRADER_COMPARISON_VIEWS_BY_KEY[activeView];
   const activeDistributionView =
@@ -183,29 +191,6 @@ export function DistributionComparisonBlock({
       activeView as DistributionComparisonViewKey
     ];
   const isTargetOverlapView = activeView === "targetOverlap";
-
-  if (isLoading && traderComparisonLoading && !traderComparison) {
-    return (
-      <Section title="Wallet research">
-        <div className="h-80 animate-pulse rounded bg-muted" aria-hidden />
-      </Section>
-    );
-  }
-
-  if (
-    isError &&
-    readySeries.length === 0 &&
-    traderComparisonError &&
-    !traderComparison
-  ) {
-    return (
-      <Section title="Wallet research">
-        <div className="text-muted-foreground text-sm">
-          Could not load research charts — retrying on next refresh.
-        </div>
-      </Section>
-    );
-  }
 
   return (
     <Section title="">
@@ -494,10 +479,13 @@ function totalUsdc(data: WalletAnalysisDistributions): number {
   );
 }
 
-type TraderComparisonViewKey = "traderPnl" | "traderFills" | "traderFlow";
-type TargetOverlapViewKey = "targetOverlap";
+export type TraderComparisonViewKey =
+  | "traderPnl"
+  | "traderFills"
+  | "traderFlow";
+export type TargetOverlapViewKey = "targetOverlap";
 
-type DistributionComparisonViewKey =
+export type DistributionComparisonViewKey =
   | "tradeSize"
   | "entryPrice"
   | "timeInPosition"
@@ -505,7 +493,7 @@ type DistributionComparisonViewKey =
   | "hourOfDay"
   | "betsPerMarket";
 
-type ResearchComparisonViewKey =
+export type ResearchComparisonViewKey =
   | TargetOverlapViewKey
   | TraderComparisonViewKey
   | DistributionComparisonViewKey;

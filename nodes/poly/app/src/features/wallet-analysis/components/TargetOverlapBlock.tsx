@@ -11,6 +11,8 @@
  *     RN1 only → shared → swisstony only.
  *   - SOLO_BUCKETS_ARE_OWNER_ONLY: solo rows render the active owner only;
  *     shared renders RN1 and swisstony as stacked account rows.
+ *   - ONLY_PNL_IS_DIVERGING: PnL is zero-centered; all positive-only metrics
+ *     start at the left edge so width directly means larger.
  *   - METRIC_TABS_SHARE_AXES: active USDC, fill volume, PnL, markets, and
  *     positions reuse the same bucket structure so the user can compare dimensions.
  * Side-effects: none
@@ -56,16 +58,14 @@ const ACCOUNT_META = {
   rn1: {
     label: "RN1",
     barClassName: "bg-destructive/70",
-    align: "left",
   },
   swisstony: {
     label: "swisstony",
     barClassName: "bg-success/70",
-    align: "right",
   },
 } as const satisfies Record<
   AccountKey,
-  { label: string; barClassName: string; align: "left" | "right" }
+  { label: string; barClassName: string }
 >;
 
 export function TargetOverlapBlock({
@@ -181,7 +181,6 @@ function SoloTargetOverlapRow({
 }): ReactElement {
   const meta = ACCOUNT_META[account];
   const value = sideMetricValue(bucket[account], metric);
-  const pct = max > 0 ? Math.min(100, (Math.abs(value) / max) * 100) : 0;
   const valueClassName = metricValueClassName(metric, value);
 
   return (
@@ -195,34 +194,18 @@ function SoloTargetOverlapRow({
 
       <div className="flex flex-col gap-2 md:col-span-3">
         <div className="flex items-center justify-between gap-3 text-xs">
-          <span className="text-muted-foreground">
-            {meta.align === "left" ? meta.label : ""}
-          </span>
+          <span className="text-muted-foreground">{meta.label}</span>
           <span className={cn("font-mono", valueClassName)}>
             {metricDef.formatter(value)}
           </span>
-          <span className="text-muted-foreground">
-            {meta.align === "right" ? meta.label : ""}
-          </span>
         </div>
-        <div className="flex h-8 w-full overflow-hidden rounded border bg-muted/30">
-          <div className="flex flex-1 justify-end border-r">
-            {account === "rn1" ? (
-              <div
-                className={cn("h-full transition-all", meta.barClassName)}
-                style={{ width: `${pct}%` }}
-              />
-            ) : null}
-          </div>
-          <div className="flex-1">
-            {account === "swisstony" ? (
-              <div
-                className={cn("h-full transition-all", meta.barClassName)}
-                style={{ width: `${pct}%` }}
-              />
-            ) : null}
-          </div>
-        </div>
+        <TargetMetricBar
+          account={account}
+          className="h-8"
+          max={max}
+          metric={metric}
+          value={value}
+        />
       </div>
 
       <div className="min-w-0 text-muted-foreground text-xs md:col-span-1 md:text-right">
@@ -297,20 +280,83 @@ function SharedAccountBar({
   max: number;
 }): ReactElement {
   const meta = ACCOUNT_META[account];
-  const pct = max > 0 ? Math.min(100, (Math.abs(value) / max) * 100) : 0;
 
   return (
-    <div className="grid grid-cols-[5.5rem_minmax(0,1fr)_auto] items-center gap-3 text-xs">
-      <span className="truncate text-muted-foreground">{meta.label}</span>
-      <div className="h-4 overflow-hidden rounded border bg-muted/30">
-        <div
-          className={cn("h-full transition-all", meta.barClassName)}
-          style={{ width: `${pct}%` }}
-        />
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="truncate text-muted-foreground">{meta.label}</span>
+        <span className={cn("font-mono", metricValueClassName(metric, value))}>
+          {metricDef.formatter(value)}
+        </span>
       </div>
-      <span className={cn("font-mono", metricValueClassName(metric, value))}>
-        {metricDef.formatter(value)}
-      </span>
+      <TargetMetricBar
+        account={account}
+        className="h-4"
+        max={max}
+        metric={metric}
+        value={value}
+      />
+    </div>
+  );
+}
+
+function TargetMetricBar({
+  account,
+  value,
+  metric,
+  max,
+  className,
+}: {
+  account: AccountKey;
+  value: number;
+  metric: MetricKey;
+  max: number;
+  className: string;
+}): ReactElement {
+  if (metric === "pnl") {
+    const pct = max > 0 ? Math.min(100, (Math.abs(value) / max) * 100) : 0;
+    return (
+      <div
+        className={cn(
+          "flex w-full overflow-hidden rounded border bg-muted/30",
+          className
+        )}
+      >
+        <div className="flex flex-1 justify-end border-r">
+          {value < 0 ? (
+            <div
+              className="h-full bg-destructive/70 transition-all"
+              style={{ width: `${pct}%` }}
+            />
+          ) : null}
+        </div>
+        <div className="flex-1">
+          {value > 0 ? (
+            <div
+              className="h-full bg-success/70 transition-all"
+              style={{ width: `${pct}%` }}
+            />
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  const pct = max > 0 ? Math.min(100, (Math.max(0, value) / max) * 100) : 0;
+  return (
+    <div
+      className={cn(
+        "w-full overflow-hidden rounded border bg-muted/30",
+        className
+      )}
+    >
+      <div
+        className={cn(
+          "h-full transition-all",
+          ACCOUNT_META[account].barClassName
+        )}
+        style={{ width: `${pct}%` }}
+      />
     </div>
   );
 }
