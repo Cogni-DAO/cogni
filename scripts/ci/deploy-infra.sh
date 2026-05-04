@@ -847,6 +847,10 @@ INFRA_SERVICES="postgres litellm redis alloy temporal-postgres temporal temporal
 if $RUNTIME_COMPOSE config --services 2>/dev/null | grep -q '^doltgres$'; then
   INFRA_SERVICES="$INFRA_SERVICES doltgres"
 fi
+# alloy-k8s-events is optional — only include if defined in this compose file.
+if $RUNTIME_COMPOSE config --services 2>/dev/null | grep -q '^alloy-k8s-events$'; then
+  INFRA_SERVICES="$INFRA_SERVICES alloy-k8s-events"
+fi
 $RUNTIME_COMPOSE up -d --remove-orphans $INFRA_SERVICES
 
 # Sandbox-openclaw disabled — removed from k8s catalog and compose deploy path.

@@ -446,6 +446,10 @@ services:
     image: grafana/alloy:v1.9.2
     restart: unless-stopped
     network_mode: host
+    # k3s writes /etc/rancher/k3s/k3s.yaml with 0600 root-owned perms; the
+    # default alloy user (uid 473) cannot read it. Run as root so the
+    # read-only kubeconfig bind-mount is usable.
+    user: "0:0"
     volumes:
       - ./configs/alloy-config.k8s-events.alloy:/etc/alloy/config.alloy:ro
       - alloy_k8s_events_data:/var/lib/alloy
