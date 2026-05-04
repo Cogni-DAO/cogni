@@ -4,7 +4,8 @@
 /**
  * Module: `@app/api/v1/poly/wallet/refresh`
  * Purpose: HTTP POST — force a bounded refresh of the caller's Polymarket
- *   wallet data. Updates the DB ledger rows used by dashboard page-loads,
+ *   wallet data. Reconciles the DB current-position model from Polymarket's
+ *   Data API, updates legacy ledger rows used for order lifecycle overlays,
  *   then clears process caches and warms the non-CLOB execution slice.
  * Scope: Session-auth, tenant-scoped. This is an explicit mutation, not a
  *   page-load dependency; bounded CLOB/Data-API reads are allowed here to
@@ -16,10 +17,12 @@
 
 import { toUserId } from "@cogni/ids";
 import { noopMetrics, type OrderStatus } from "@cogni/poly-market-provider";
+import { PolymarketDataApiClient } from "@cogni/poly-market-provider/adapters/polymarket";
 import {
   type PolyWalletRefreshOutput,
   polyWalletRefreshOperation,
 } from "@cogni/poly-node-contracts";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { createPolyTradeExecutorFactory } from "@/bootstrap/capabilities/poly-trade-executor";
@@ -30,6 +33,7 @@ import {
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
 import type { LedgerRow, LedgerStatus } from "@/features/trading";
+import { refreshCurrentPositionsForWallet } from "@/features/wallet-analysis/server/trader-observation-service";
 import {
   getExecutionSlice,
   invalidateWalletAnalysisCaches,
@@ -139,6 +143,8 @@ export const POST = wrapRouteHandlerWithLogging(
     let executionCapturedAt: string | null = null;
     let ledgerRowsRead = 0;
     let ledgerRowsUpdated = 0;
+    let currentPositionsRows = 0;
+    let currentPositionsComplete = false;
 
     try {
       const env = serverEnv();
@@ -161,8 +167,14 @@ export const POST = wrapRouteHandlerWithLogging(
 
       const syncedIds = new Set<string>();
       const orderRefreshFailures: string[] = [];
-      const positionsPromise = executor.listPositions().then(
-        (positions) => ({ ok: true as const, positions }),
+      const currentPositionsPromise = refreshCurrentPositionsForWallet({
+        db: container.serviceDb as unknown as NodePgDatabase<
+          Record<string, unknown>
+        >,
+        client: new PolymarketDataApiClient(),
+        walletAddress: address,
+      }).then(
+        (result) => ({ ok: true as const, result }),
         (err: unknown) => ({ ok: false as const, err })
       );
       const orderRows = rows.filter(isRefreshableOrderRow);
@@ -201,18 +213,27 @@ export const POST = wrapRouteHandlerWithLogging(
         });
       }
 
-      const positionsResult = await positionsPromise;
-      if (!positionsResult.ok) {
+      const currentPositionsResult = await currentPositionsPromise;
+      if (!currentPositionsResult.ok) {
         warnings.push({
           code: "positions_reconciliation_unavailable",
           message:
-            positionsResult.err instanceof Error
-              ? positionsResult.err.message
-              : String(positionsResult.err),
+            currentPositionsResult.err instanceof Error
+              ? currentPositionsResult.err.message
+              : String(currentPositionsResult.err),
         });
       } else {
+        currentPositionsRows = currentPositionsResult.result.positionRows;
+        currentPositionsComplete = currentPositionsResult.result.complete;
+        if (!currentPositionsResult.result.complete) {
+          warnings.push({
+            code: "positions_reconciliation_partial",
+            message:
+              "Current positions were fetched up to the configured page cap; missing DB rows were not deactivated.",
+          });
+        }
         const currentValueByAsset = new Map(
-          positionsResult.positions
+          currentPositionsResult.result.positions
             .filter((position) => position.size > 0)
             .map((position) => [
               position.asset,
@@ -238,6 +259,7 @@ export const POST = wrapRouteHandlerWithLogging(
               });
               return 1;
             }
+            if (!currentPositionsResult.result.complete) return 0;
             if (closedAssets.has(tokenId)) return 0;
             closedAssets.add(tokenId);
             return container.orderLedger.markPositionClosedByAsset({
@@ -281,9 +303,13 @@ export const POST = wrapRouteHandlerWithLogging(
         billing_account_id: account.id,
         funder_address: address,
         execution_captured_at: executionCapturedAt,
+        current_positions_rows: currentPositionsRows,
+        current_positions_complete: currentPositionsComplete,
         ledger_rows_read: ledgerRowsRead,
         ledger_rows_updated: ledgerRowsUpdated,
         warning_count: warnings.length,
+        event: "poly.wallet.refresh",
+        phase: "complete",
       },
       "poly.wallet.refresh"
     );

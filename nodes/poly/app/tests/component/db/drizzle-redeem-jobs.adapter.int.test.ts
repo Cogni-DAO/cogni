@@ -216,6 +216,69 @@ describe("DrizzleRedeemJobsAdapter (Component) — Blocker #2 regression", () =>
     expect(claimed?.status).toBe("claimed");
   });
 
+  it("revives a confirmed redeemed sibling row when current winner evidence arrives", async () => {
+    const initial = await adapter.enqueue({
+      funderAddress: FUNDER,
+      conditionId: COND,
+      positionId: "loser-position",
+      outcomeIndex: 1,
+      flavor: "binary",
+      indexSet: [],
+      expectedShares: "0",
+      expectedPayoutUsdc: "0",
+      lifecycleState: "redeemed",
+      status: "skipped",
+    });
+    await db
+      .update(polyRedeemJobs)
+      .set({
+        status: "confirmed",
+        lifecycleState: "redeemed",
+        txHashes: [
+          "0x1111111111111111111111111111111111111111111111111111111111111111",
+        ],
+        attemptCount: 1,
+        confirmedAt: new Date(),
+      })
+      .where(eq(polyRedeemJobs.id, initial.jobId));
+
+    const later = await adapter.enqueue({
+      funderAddress: FUNDER,
+      conditionId: COND,
+      positionId: POSITION_ID,
+      outcomeIndex: 0,
+      flavor: "binary",
+      indexSet: ["1"],
+      expectedShares: "5000000",
+      expectedPayoutUsdc: "5000000",
+      lifecycleState: "winner",
+    });
+
+    expect(later.alreadyExisted).toBe(true);
+    expect(later.jobId).toBe(initial.jobId);
+
+    const rows = await db
+      .select()
+      .from(polyRedeemJobs)
+      .where(eq(polyRedeemJobs.id, initial.jobId));
+    expect(rows[0]).toMatchObject({
+      positionId: POSITION_ID,
+      outcomeIndex: 0,
+      status: "pending",
+      lifecycleState: "winner",
+      expectedShares: "5000000",
+      expectedPayoutUsdc: "5000000",
+      txHashes: [],
+      attemptCount: 0,
+      confirmedAt: null,
+    });
+
+    const claimed = await adapter.claimNextPending(FUNDER);
+    expect(claimed?.id).toBe(initial.jobId);
+    expect(claimed?.positionId).toBe(POSITION_ID);
+    expect(claimed?.status).toBe("claimed");
+  });
+
   it("claimNextPending is funder-scoped — funder A never claims funder B's row (task.0412 multi-tenant fan-out)", async () => {
     const FUNDER_B = "0xbbbb000000000000000000000000000000000002" as const;
     try {

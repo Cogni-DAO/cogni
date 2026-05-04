@@ -30,8 +30,8 @@ import {
   getPolyTraderWalletAdapter,
   WalletAdapterUnconfiguredError,
 } from "@/bootstrap/poly-trader-wallet";
+import { readCurrentWalletPositionModel } from "@/features/wallet-analysis/server/current-position-read-model";
 import { getTradingWalletPnlHistory } from "@/features/wallet-analysis/server/trading-wallet-overview-service";
-import { getBalanceSlice } from "@/features/wallet-analysis/server/wallet-analysis-service";
 import { EVENT_NAMES, logEvent } from "@/shared/observability";
 import {
   DASHBOARD_LEDGER_POSITION_LIMIT,
@@ -158,6 +158,12 @@ export const GET = wrapRouteHandlerWithLogging(
 
     const capturedAtDate = new Date(capturedAt);
     let positionSummary = summarizeLedgerPositions([], capturedAtDate);
+    let currentPositionSummary: {
+      positionsMtm: number;
+      syncedAt: string | null;
+      syncAgeMs: number | null;
+      stale: boolean;
+    } | null = null;
     try {
       const rows = await container.orderLedger.listTenantPositions({
         billing_account_id: account.id,
@@ -172,27 +178,30 @@ export const GET = wrapRouteHandlerWithLogging(
       });
     }
 
-    let positionsMtm: number | null = roundToCents(
-      positionSummary.positionsMtm
-    );
-    if (freshness === "live") {
-      try {
-        const balanceSlice = await getBalanceSlice(balances.address);
-        if (balanceSlice.kind === "ok") {
-          positionsMtm = roundToCents(balanceSlice.value.positions);
-        } else {
-          warnings.push({
-            code: "positions_mtm_unavailable",
-            message: balanceSlice.warning.message,
-          });
-        }
-      } catch (err) {
-        warnings.push({
-          code: "positions_mtm_unavailable",
-          message: err instanceof Error ? err.message : String(err),
-        });
+    try {
+      const currentPositions = await readCurrentWalletPositionModel({
+        db: container.serviceDb,
+        walletAddress: balances.address,
+        capturedAt: capturedAtDate,
+      });
+      if (
+        !currentPositions.warnings.some(
+          (warning) => warning.code === "current_positions_wallet_missing"
+        )
+      ) {
+        currentPositionSummary = currentPositions.summary;
       }
+      warnings.push(...currentPositions.warnings);
+    } catch (err) {
+      warnings.push({
+        code: "current_positions_read_model_unavailable",
+        message: err instanceof Error ? err.message : String(err),
+      });
     }
+    const positionsMtm =
+      currentPositionSummary !== null
+        ? roundToCents(currentPositionSummary.positionsMtm)
+        : null;
 
     // `balances.usdcE` and `balances.pusd` are the wallet's two on-chain cash
     // balances (USDC.e bridged + Polymarket V2 pUSD). Both are spendable from
@@ -234,16 +243,21 @@ export const GET = wrapRouteHandlerWithLogging(
       )
         ? "positions_read_model_unavailable"
         : warnings.some(
-              (warning) => warning.code === "positions_mtm_unavailable"
+              (warning) =>
+                warning.code === "current_positions_read_model_unavailable"
             )
-          ? "positions_mtm_unavailable"
+          ? "current_positions_read_model_unavailable"
           : warnings.some(
-                (warning) => warning.code === "pnl_history_unavailable"
+                (warning) => warning.code === "current_positions_stale"
               )
-            ? "pnl_history_unavailable"
-            : warnings.some((warning) => warning.code === "balances_partial")
-              ? "balances_partial"
-              : "ok",
+            ? "current_positions_stale"
+            : warnings.some(
+                  (warning) => warning.code === "pnl_history_unavailable"
+                )
+              ? "pnl_history_unavailable"
+              : warnings.some((warning) => warning.code === "balances_partial")
+                ? "balances_partial"
+                : "ok",
       interval,
       freshness,
       connected: true,
@@ -268,9 +282,11 @@ export const GET = wrapRouteHandlerWithLogging(
         usdc_positions_mtm: positionsMtm,
         usdc_total: total,
         open_orders: positionSummary.openOrders,
-        positions_synced_at: positionSummary.syncedAt,
-        positions_sync_age_ms: positionSummary.syncAgeMs,
-        positions_stale: positionSummary.stale,
+        positions_synced_at:
+          currentPositionSummary?.syncedAt ?? positionSummary.syncedAt,
+        positions_sync_age_ms:
+          currentPositionSummary?.syncAgeMs ?? positionSummary.syncAgeMs,
+        positions_stale: currentPositionSummary?.stale ?? positionSummary.stale,
         pnlHistory,
         warnings,
       })

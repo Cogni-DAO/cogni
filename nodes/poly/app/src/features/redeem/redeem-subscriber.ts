@@ -186,7 +186,11 @@ export class RedeemSubscriber {
       const enqueueInput = decisionToEnqueueInput(this.deps.funderAddress, c);
       if (enqueueInput === null) continue;
       const result = await this.deps.redeemJobs.enqueue(enqueueInput);
-      if (!result.alreadyExisted || enqueueInput.status === "skipped") {
+      if (
+        !result.alreadyExisted ||
+        enqueueInput.status === "skipped" ||
+        enqueueInput.lifecycleState === "winner"
+      ) {
         await mirrorRedeemLifecycleToLedger(
           {
             orderLedger: this.deps.orderLedger,

@@ -65,6 +65,9 @@ const mockMarkSynced = vi.fn();
 const mockGetBalanceSlice = vi.fn();
 const mockGetExecutionSlice = vi.fn();
 const mockInvalidateWalletAnalysisCaches = vi.fn();
+const mockReadCurrentWalletPositionModel = vi.fn();
+const mockRefreshCurrentPositionsForWallet = vi.fn();
+const mockServiceDb = {};
 
 vi.mock("@/bootstrap/http", () => ({
   wrapRouteHandlerWithLogging:
@@ -101,6 +104,7 @@ vi.mock("@/bootstrap/container", () => ({
       markPositionClosedByAsset: mockMarkPositionClosedByAsset,
       markSynced: mockMarkSynced,
     },
+    serviceDb: mockServiceDb,
   })),
 }));
 
@@ -126,6 +130,17 @@ vi.mock("@/features/wallet-analysis/server/wallet-analysis-service", () => ({
   invalidateWalletAnalysisCaches: mockInvalidateWalletAnalysisCaches,
 }));
 
+vi.mock(
+  "@/features/wallet-analysis/server/current-position-read-model",
+  () => ({
+    readCurrentWalletPositionModel: mockReadCurrentWalletPositionModel,
+  })
+);
+
+vi.mock("@/features/wallet-analysis/server/trader-observation-service", () => ({
+  refreshCurrentPositionsForWallet: mockRefreshCurrentPositionsForWallet,
+}));
+
 vi.mock("@/shared/env/server-env", () => ({
   serverEnv: vi.fn(() => ({
     POLY_CLOB_HOST: "https://clob.polymarket.com",
@@ -141,15 +156,71 @@ let syncedAt: Date;
 let row: LedgerRow;
 
 function mockCurrentPositionsMtm(positions: number): void {
-  mockGetBalanceSlice.mockResolvedValue({
-    kind: "ok",
-    value: {
-      positions,
-      total: positions,
-      isOperator: false,
-      computedAt: new Date().toISOString(),
+  mockReadCurrentWalletPositionModel.mockResolvedValue({
+    positions: [],
+    summary: {
+      positionsMtm: positions,
+      syncedAt: syncedAt.toISOString(),
+      syncAgeMs: 0,
+      stale: false,
+      activeRows: positions > 0 ? 1 : 0,
     },
+    warnings: [],
   });
+}
+
+function mockCurrentPositionModel(
+  positions = [makeCurrentExecutionPosition()]
+): void {
+  mockReadCurrentWalletPositionModel.mockResolvedValue({
+    positions,
+    summary: {
+      positionsMtm: positions.reduce(
+        (sum, position) => sum + position.currentValue,
+        0
+      ),
+      syncedAt: syncedAt.toISOString(),
+      syncAgeMs: 0,
+      stale: false,
+      activeRows: positions.length,
+    },
+    warnings: [],
+  });
+}
+
+function makeCurrentExecutionPosition(overrides: Record<string, unknown> = {}) {
+  return {
+    positionId:
+      "0x1111111111111111111111111111111111111111111111111111111111111111:token-1",
+    conditionId:
+      "0x1111111111111111111111111111111111111111111111111111111111111111",
+    asset: "token-1",
+    marketTitle: "Will CLOB stay up?",
+    eventTitle: "CLOB Health",
+    marketSlug: "will-clob-stay-up",
+    eventSlug: "clob-health",
+    marketUrl: "https://polymarket.com/event/clob-health/will-clob-stay-up",
+    outcome: "YES",
+    status: "open",
+    lifecycleState: null,
+    openedAt: new Date(Date.now() - 60_000).toISOString(),
+    closedAt: null,
+    resolvesAt: "2026-05-03T00:00:00.000Z",
+    gameStartTime: "2026-05-02T12:00:00.000Z",
+    heldMinutes: 1,
+    entryPrice: 0.5,
+    currentPrice: 0.5,
+    size: 20,
+    currentValue: 10,
+    pnlUsd: 0,
+    pnlPct: 0,
+    syncedAt: syncedAt.toISOString(),
+    syncAgeMs: 0,
+    syncStale: false,
+    timeline: [],
+    events: [],
+    ...overrides,
+  };
 }
 
 describe("poly wallet dashboard DB read routes", () => {
@@ -196,12 +267,17 @@ describe("poly wallet dashboard DB read routes", () => {
         currentValue: 10,
       },
     ]);
+    mockRefreshCurrentPositionsForWallet.mockResolvedValue({
+      positions: [{ asset: "token-1", size: 20, currentValue: 10 }],
+      positionRows: 1,
+      complete: true,
+    });
+    syncedAt = new Date();
     mockUpdateStatus.mockResolvedValue(undefined);
     mockMarkPositionClosedByAsset.mockResolvedValue(1);
     mockMarkSynced.mockResolvedValue(undefined);
-    mockCurrentPositionsMtm(10);
+    mockCurrentPositionModel();
     mockGetExecutionSlice.mockRejectedValue(new Error("data api unavailable"));
-    syncedAt = new Date();
     row = {
       target_id: "target-1",
       fill_id: "data-api:fill-1",
@@ -295,6 +371,42 @@ describe("poly wallet dashboard DB read routes", () => {
     });
   });
 
+  it("overview does not fall back to ledger MTM when current-position inventory is unavailable", async () => {
+    mockReadCurrentWalletPositionModel.mockRejectedValueOnce(
+      new Error("current inventory unavailable")
+    );
+    mockListTenantPositions.mockResolvedValue([
+      {
+        ...row,
+        attributes: {
+          ...row.attributes,
+          size_usdc: 200,
+          filled_size_usdc: 100,
+        },
+      },
+    ]);
+    const { GET } = await import("@/app/api/v1/poly/wallet/overview/route");
+
+    const response = await GET(
+      new Request("http://localhost/api/v1/poly/wallet/overview?interval=1W")
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json).toMatchObject({
+      usdc_available: 0,
+      usdc_locked: 100,
+      usdc_positions_mtm: null,
+      usdc_total: null,
+      open_orders: 1,
+    });
+    expect(json.warnings).toContainEqual(
+      expect.objectContaining({
+        code: "current_positions_read_model_unavailable",
+      })
+    );
+  });
+
   it("overview read-model freshness skips live Polymarket valuation and P/L history", async () => {
     mockListTenantPositions.mockResolvedValue([
       {
@@ -319,8 +431,8 @@ describe("poly wallet dashboard DB read routes", () => {
       freshness: "read_model",
       usdc_available: 0,
       usdc_locked: 100,
-      usdc_positions_mtm: 100,
-      usdc_total: 130,
+      usdc_positions_mtm: 10,
+      usdc_total: 40,
       pnlHistory: [],
       warnings: [],
     });
@@ -341,7 +453,8 @@ describe("poly wallet dashboard DB read routes", () => {
     expect(response.status).toBe(200);
     expect(json.live_positions).toHaveLength(1);
     expect(json.live_positions[0]).toMatchObject({
-      positionId: "0xorder",
+      positionId:
+        "0x1111111111111111111111111111111111111111111111111111111111111111:token-1",
       conditionId:
         "0x1111111111111111111111111111111111111111111111111111111111111111",
       asset: "token-1",
@@ -369,6 +482,53 @@ describe("poly wallet dashboard DB read routes", () => {
       statuses: ["pending", "open", "filled", "partial", "canceled", "error"],
       limit: 2_000,
     });
+  });
+
+  it("execution moves zero-value current positions into history", async () => {
+    mockCurrentPositionModel([
+      makeCurrentExecutionPosition({
+        asset: "token-live",
+        positionId:
+          "0x1111111111111111111111111111111111111111111111111111111111111111:token-live",
+        currentValue: 5,
+      }),
+      makeCurrentExecutionPosition({
+        asset: "token-loser",
+        positionId:
+          "0x2222222222222222222222222222222222222222222222222222222222222222:token-loser",
+        conditionId:
+          "0x2222222222222222222222222222222222222222222222222222222222222222",
+        marketTitle: "Resolved loser",
+        status: "closed",
+        lifecycleState: "loser",
+        currentPrice: 0,
+        currentValue: 0,
+        pnlUsd: 0,
+        pnlPct: 0,
+        closedAt: NOW.toISOString(),
+      }),
+    ]);
+    const { GET } = await import("@/app/api/v1/poly/wallet/execution/route");
+
+    const response = await GET(
+      new Request("http://localhost/api/v1/poly/wallet/execution")
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.live_positions).toHaveLength(1);
+    expect(json.live_positions[0]).toMatchObject({ asset: "token-live" });
+    expect(
+      json.live_positions.map((p: { asset: string }) => p.asset)
+    ).not.toContain("token-loser");
+    expect(json.closed_positions).toContainEqual(
+      expect.objectContaining({
+        asset: "token-loser",
+        status: "closed",
+        lifecycleState: "loser",
+        currentValue: 0,
+      })
+    );
   });
 
   it("execution read-model freshness skips live Polymarket positions", async () => {
@@ -430,7 +590,35 @@ describe("poly wallet dashboard DB read routes", () => {
     expect(mockGetExecutionSlice).not.toHaveBeenCalled();
   });
 
+  it("execution does not fall back to ledger open rows when current-position inventory is unavailable", async () => {
+    mockReadCurrentWalletPositionModel.mockRejectedValueOnce(
+      new Error("current inventory unavailable")
+    );
+    const { GET } = await import("@/app/api/v1/poly/wallet/execution/route");
+
+    const response = await GET(
+      new Request("http://localhost/api/v1/poly/wallet/execution")
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.live_positions).toEqual([]);
+    expect(json.closed_positions).toEqual([]);
+    expect(json.warnings).toContainEqual(
+      expect.objectContaining({
+        code: "current_positions_read_model_unavailable",
+      })
+    );
+  });
+
   it("execution derives position P/L from refreshed DB current value", async () => {
+    mockCurrentPositionModel([
+      makeCurrentExecutionPosition({
+        currentValue: 1.9,
+        pnlUsd: 0.9,
+        pnlPct: 90,
+      }),
+    ]);
     mockListTenantPositions.mockResolvedValue([
       {
         ...row,
@@ -533,7 +721,8 @@ describe("poly wallet dashboard DB read routes", () => {
     expect(json.live_positions).toHaveLength(1);
     expect(json.live_positions[0]).toMatchObject({
       asset: "token-1",
-      positionId: "0xorder",
+      positionId:
+        "0x1111111111111111111111111111111111111111111111111111111111111111:token-1",
       marketTitle: "Will CLOB stay up?",
       currentValue: 10,
     });
@@ -544,13 +733,10 @@ describe("poly wallet dashboard DB read routes", () => {
       ...EMPTY_14_DAY_COUNTS.slice(0, -1),
       { day: "2026-05-02", n: 1 },
     ]);
-    expect(mockGetExecutionSlice).toHaveBeenCalledWith(FUNDER, {
-      includePriceHistory: true,
-      assets: ["token-1"],
-    });
+    expect(mockGetExecutionSlice).not.toHaveBeenCalled();
   });
 
-  it("execution overlays live fields onto DB rows without dropping extra DB-backed positions", async () => {
+  it("execution renders all DB current-position rows without dropping ledger-backed history", async () => {
     const olderRow = {
       ...row,
       fill_id: "data-api:fill-older",
@@ -565,44 +751,23 @@ describe("poly wallet dashboard DB read routes", () => {
       },
     };
     mockListTenantPositions.mockResolvedValue([row, olderRow]);
-    mockGetExecutionSlice.mockResolvedValue({
-      address: FUNDER,
-      capturedAt: NOW.toISOString(),
-      dailyTradeCounts: [],
-      live_positions: [
-        {
-          positionId: "condition-live:token-1",
-          conditionId:
-            "0x1111111111111111111111111111111111111111111111111111111111111111",
-          asset: "token-1",
-          marketTitle: "Will CLOB stay up?",
-          marketSlug: "will-clob-stay-up",
-          eventSlug: "clob-health",
-          marketUrl:
-            "https://polymarket.com/event/clob-health/will-clob-stay-up",
-          outcome: "YES",
-          status: "open",
-          lifecycleState: null,
-          openedAt: NOW.toISOString(),
-          closedAt: null,
-          resolvesAt: "2026-05-03T00:00:00.000Z",
-          heldMinutes: 0,
-          entryPrice: 0.5,
-          currentPrice: 0.7,
-          size: 20,
-          currentValue: 14,
-          pnlUsd: 4,
-          pnlPct: 40,
-          timeline: [
-            { ts: "2026-05-02T02:59:00.000Z", price: 0.5, size: 20 },
-            { ts: "2026-05-02T03:00:00.000Z", price: 0.7, size: 20 },
-          ],
-          events: [],
-        },
-      ],
-      closed_positions: [],
-      warnings: [],
-    });
+    mockCurrentPositionModel([
+      makeCurrentExecutionPosition({
+        currentPrice: 0.7,
+        currentValue: 14,
+        pnlUsd: 4,
+        pnlPct: 40,
+      }),
+      makeCurrentExecutionPosition({
+        positionId:
+          "0x1111111111111111111111111111111111111111111111111111111111111111:token-older",
+        asset: "token-older",
+        marketTitle: "Older DB-backed row",
+        currentValue: 2,
+        pnlUsd: 0,
+        pnlPct: 0,
+      }),
+    ]);
     const { GET } = await import("@/app/api/v1/poly/wallet/execution/route");
 
     const response = await GET(
@@ -626,18 +791,12 @@ describe("poly wallet dashboard DB read routes", () => {
       currentValue: 14,
       pnlUsd: 4,
       heldMinutes: 1,
-      timeline: [
-        { ts: "2026-05-02T02:59:00.000Z", price: 0.5, size: 20 },
-        { ts: "2026-05-02T03:00:00.000Z", price: 0.7, size: 20 },
-      ],
+      timeline: [],
     });
-    expect(mockGetExecutionSlice).toHaveBeenCalledWith(FUNDER, {
-      includePriceHistory: true,
-      assets: ["token-1", "token-older"],
-    });
+    expect(mockGetExecutionSlice).not.toHaveBeenCalled();
   });
 
-  it("execution coalesces duplicate ledger rows before live enrichment", async () => {
+  it("execution uses the current-position read model instead of duplicate ledger rows for live exposure", async () => {
     const duplicateRow = {
       ...row,
       fill_id: "data-api:fill-duplicate",
@@ -651,42 +810,13 @@ describe("poly wallet dashboard DB read routes", () => {
       },
     };
     mockListTenantPositions.mockResolvedValue([row, duplicateRow]);
-    mockGetExecutionSlice.mockResolvedValue({
-      address: FUNDER,
-      capturedAt: NOW.toISOString(),
-      dailyTradeCounts: [],
-      live_positions: [
-        {
-          positionId:
-            "0x1111111111111111111111111111111111111111111111111111111111111111:token-1",
-          conditionId:
-            "0x1111111111111111111111111111111111111111111111111111111111111111",
-          asset: "token-1",
-          marketTitle: "Will CLOB stay up?",
-          marketSlug: "will-clob-stay-up",
-          eventSlug: "clob-health",
-          marketUrl:
-            "https://polymarket.com/event/clob-health/will-clob-stay-up",
-          outcome: "YES",
-          status: "open",
-          lifecycleState: null,
-          openedAt: NOW.toISOString(),
-          closedAt: null,
-          resolvesAt: "2026-05-03T00:00:00.000Z",
-          heldMinutes: 0,
-          entryPrice: 0.5,
-          currentPrice: 0.7,
-          size: 42.2571,
-          currentValue: 29.58,
-          pnlUsd: -1.12,
-          pnlPct: -3.66,
-          timeline: [],
-          events: [],
-        },
-      ],
-      closed_positions: [],
-      warnings: [],
-    });
+    mockCurrentPositionModel([
+      makeCurrentExecutionPosition({
+        currentValue: 29.58,
+        pnlUsd: -1.12,
+        pnlPct: -3.66,
+      }),
+    ]);
     const { GET } = await import("@/app/api/v1/poly/wallet/execution/route");
 
     const response = await GET(
@@ -704,10 +834,7 @@ describe("poly wallet dashboard DB read routes", () => {
       pnlUsd: -1.12,
       pnlPct: -3.66,
     });
-    expect(mockGetExecutionSlice).toHaveBeenCalledWith(FUNDER, {
-      includePriceHistory: true,
-      assets: ["token-1"],
-    });
+    expect(mockGetExecutionSlice).not.toHaveBeenCalled();
   });
 
   it("overview does not double-count unfilled resting BUY orders as position MTM", async () => {
@@ -826,7 +953,7 @@ describe("poly wallet dashboard DB read routes", () => {
     });
   });
 
-  it("execution does not resurrect a DB-backed row stamped closed", async () => {
+  it("execution lets current-position snapshot override a stale closed ledger row", async () => {
     mockListTenantPositions.mockResolvedValue([
       {
         ...row,
@@ -848,12 +975,13 @@ describe("poly wallet dashboard DB read routes", () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.live_positions).toEqual([]);
-    expect(json.closed_positions).toHaveLength(1);
-    expect(mockGetExecutionSlice).toHaveBeenCalledWith(FUNDER, {
-      includePriceHistory: true,
-      assets: ["token-1"],
+    expect(json.live_positions).toHaveLength(1);
+    expect(json.live_positions[0]).toMatchObject({
+      asset: "token-1",
+      currentValue: 10,
     });
+    expect(json.closed_positions).toEqual([]);
+    expect(mockGetExecutionSlice).not.toHaveBeenCalled();
   });
 
   it("execution marks typed winner lifecycle rows redeemable", async () => {
@@ -897,6 +1025,7 @@ describe("poly wallet dashboard DB read routes", () => {
         },
       },
     ]);
+    mockCurrentPositionModel([]);
     const { GET } = await import("@/app/api/v1/poly/wallet/execution/route");
 
     const response = await GET(
@@ -914,7 +1043,7 @@ describe("poly wallet dashboard DB read routes", () => {
     });
   });
 
-  it("execution filters Data API live positions that the ledger classified as dust", async () => {
+  it("execution keeps dust ledger rows closed when current snapshot omits them", async () => {
     mockListTenantPositions.mockResolvedValue([
       {
         ...row,
@@ -927,6 +1056,7 @@ describe("poly wallet dashboard DB read routes", () => {
         },
       },
     ]);
+    mockCurrentPositionModel([]);
     mockGetExecutionSlice.mockResolvedValue({
       address: FUNDER,
       capturedAt: NOW.toISOString(),
@@ -1020,6 +1150,14 @@ describe("poly wallet dashboard DB read routes", () => {
           outcome: "NO",
         },
       },
+    ]);
+    mockCurrentPositionModel([
+      makeCurrentExecutionPosition({
+        positionId:
+          "0x1111111111111111111111111111111111111111111111111111111111111111:token-2",
+        asset: "token-2",
+        outcome: "NO",
+      }),
     ]);
     const { GET } = await import("@/app/api/v1/poly/wallet/execution/route");
 
@@ -1192,6 +1330,17 @@ describe("poly wallet dashboard DB read routes", () => {
         },
       },
     ]);
+    mockCurrentPositionModel([
+      makeCurrentExecutionPosition({
+        currentValue: 2,
+      }),
+      makeCurrentExecutionPosition({
+        positionId:
+          "0x1111111111111111111111111111111111111111111111111111111111111111:token-error",
+        asset: "token-error",
+        currentValue: 1,
+      }),
+    ]);
     const { GET } = await import("@/app/api/v1/poly/wallet/execution/route");
 
     const response = await GET(
@@ -1208,7 +1357,11 @@ describe("poly wallet dashboard DB read routes", () => {
   });
 
   it("refresh updates the ledger rows that dashboard page-loads read", async () => {
-    mockListPositions.mockResolvedValue([]);
+    mockRefreshCurrentPositionsForWallet.mockResolvedValue({
+      positions: [],
+      positionRows: 0,
+      complete: true,
+    });
     mockGetExecutionSlice.mockResolvedValue({
       address: FUNDER,
       capturedAt: NOW.toISOString(),
@@ -1236,6 +1389,13 @@ describe("poly wallet dashboard DB read routes", () => {
       limit: 2_000,
     });
     expect(mockGetOrder).toHaveBeenCalledWith("0xorder");
+    expect(mockRefreshCurrentPositionsForWallet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        db: expect.anything(),
+        client: expect.anything(),
+        walletAddress: FUNDER,
+      })
+    );
     expect(mockUpdateStatus).toHaveBeenCalledWith({
       client_order_id: "0xclient",
       status: "partial",
@@ -1254,7 +1414,11 @@ describe("poly wallet dashboard DB read routes", () => {
 
   it("refresh still reconciles positions when one order lookup fails", async () => {
     mockGetOrder.mockRejectedValue(new Error("clob getOrder unavailable"));
-    mockListPositions.mockResolvedValue([]);
+    mockRefreshCurrentPositionsForWallet.mockResolvedValue({
+      positions: [],
+      positionRows: 0,
+      complete: true,
+    });
     const { POST } = await import("@/app/api/v1/poly/wallet/refresh/route");
 
     const response = await POST(
@@ -1271,7 +1435,7 @@ describe("poly wallet dashboard DB read routes", () => {
     expect(json.warnings).not.toContainEqual(
       expect.objectContaining({ code: "ledger_refresh_unavailable" })
     );
-    expect(mockListPositions).toHaveBeenCalled();
+    expect(mockRefreshCurrentPositionsForWallet).toHaveBeenCalled();
     expect(mockMarkPositionClosedByAsset).toHaveBeenCalledWith({
       billing_account_id: ACCOUNT.id,
       token_id: "token-1",
@@ -1281,7 +1445,9 @@ describe("poly wallet dashboard DB read routes", () => {
   });
 
   it("refresh does not close DB positions when positions reconciliation fails", async () => {
-    mockListPositions.mockRejectedValue(new Error("positions unavailable"));
+    mockRefreshCurrentPositionsForWallet.mockRejectedValue(
+      new Error("positions unavailable")
+    );
     const { POST } = await import("@/app/api/v1/poly/wallet/refresh/route");
 
     const response = await POST(
@@ -1301,6 +1467,28 @@ describe("poly wallet dashboard DB read routes", () => {
       filled_size_usdc: 10,
       order_id: "0xorder",
     });
+    expect(mockMarkPositionClosedByAsset).not.toHaveBeenCalled();
+  });
+
+  it("refresh keeps stale DB rows active when the current-position poll is partial", async () => {
+    mockRefreshCurrentPositionsForWallet.mockResolvedValue({
+      positions: [],
+      positionRows: 0,
+      complete: false,
+    });
+    const { POST } = await import("@/app/api/v1/poly/wallet/refresh/route");
+
+    const response = await POST(
+      new Request("http://localhost/api/v1/poly/wallet/refresh", {
+        method: "POST",
+      })
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.warnings).toContainEqual(
+      expect.objectContaining({ code: "positions_reconciliation_partial" })
+    );
     expect(mockMarkPositionClosedByAsset).not.toHaveBeenCalled();
   });
 });

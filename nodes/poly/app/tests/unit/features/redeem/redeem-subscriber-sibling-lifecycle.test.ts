@@ -110,4 +110,32 @@ describe("RedeemSubscriber sibling lifecycle mirroring", () => {
       })
     );
   });
+
+  it("mirrors a winner lifecycle even when enqueue revived an existing job row", async () => {
+    mockResolveRedeemCandidatesForCondition.mockResolvedValue([
+      winnerCandidate(),
+    ]);
+    const enqueue = vi
+      .fn()
+      .mockResolvedValue({ alreadyExisted: true, jobId: "job-winner" });
+    const markPositionLifecycleByAsset = vi.fn(async () => 1);
+    const subscriber = new RedeemSubscriber({
+      redeemJobs: { enqueue } as never,
+      orderLedger: { markPositionLifecycleByAsset },
+      billingAccountId: "billing-account-1",
+      publicClient: {} as never,
+      dataApiClient: {} as never,
+      funderAddress: FUNDER,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    });
+
+    await subscriber.enqueueForCondition(CONDITION_ID);
+
+    expect(markPositionLifecycleByAsset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token_id: "111",
+        lifecycle: "winner",
+      })
+    );
+  });
 });

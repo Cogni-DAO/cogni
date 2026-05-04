@@ -27,6 +27,7 @@ import {
   getCoreRowModel,
   getPaginationRowModel,
   getSortedRowModel,
+  type PaginationState,
   useReactTable,
   type VisibilityState,
 } from "@tanstack/react-table";
@@ -88,6 +89,7 @@ const HISTORY_VISIBILITY: VisibilityState = {
   pnlPct: true,
 };
 const PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 
 export function PositionsTable({
   positions,
@@ -121,9 +123,21 @@ export function PositionsTable({
   // column from the previous variant.
   const [columnVisibility, setColumnVisibility] =
     useState<VisibilityState>(variantVisibility);
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: PAGE_SIZE,
+  });
   useEffect(() => {
     setColumnVisibility(variantVisibility);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   }, [variantVisibility]);
+  useEffect(() => {
+    setPagination((prev) => {
+      const pageCount = Math.max(1, Math.ceil(data.length / prev.pageSize));
+      if (prev.pageIndex < pageCount) return prev;
+      return { ...prev, pageIndex: pageCount - 1 };
+    });
+  }, [data.length]);
 
   const table = useReactTable({
     data,
@@ -131,11 +145,9 @@ export function PositionsTable({
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    initialState: {
-      pagination: { pageIndex: 0, pageSize: PAGE_SIZE },
-    },
-    state: { columnVisibility },
+    state: { columnVisibility, pagination },
     onColumnVisibilityChange: setColumnVisibility,
+    onPaginationChange: setPagination,
   });
 
   return (
@@ -156,8 +168,8 @@ export function PositionsTable({
       <DataGridContainer className="overflow-x-auto">
         <DataGridTable />
       </DataGridContainer>
-      {data.length > PAGE_SIZE ? (
-        <DataGridPagination sizes={[25, 50, 100]} />
+      {data.length >= PAGE_SIZE ? (
+        <DataGridPagination sizes={[...PAGE_SIZE_OPTIONS]} />
       ) : null}
     </DataGrid>
   );
