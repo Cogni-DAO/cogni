@@ -34,6 +34,7 @@ import {
   type TraderMetricMode,
   TraderSizePnlChart,
 } from "./TraderComparisonBlock";
+import { TraderPnlOverlayChart } from "./TraderPnlOverlayChart";
 
 export type DistributionsBlockProps = {
   data?: WalletAnalysisDistributions | undefined;
@@ -188,6 +189,7 @@ export function DistributionComparisonBlock({
   const isError = readySeries.length === 0 && series.some((s) => s.isError);
   const activeTraderView = TRADER_COMPARISON_VIEWS_BY_KEY[activeView];
   const isTraderSizePnlView = activeView === "traderSizePnl";
+  const isTraderPnlView = activeView === "traderPnl";
   const activeDistributionView =
     DISTRIBUTION_COMPARISON_VIEWS_BY_KEY[
       activeView as DistributionComparisonViewKey
@@ -247,7 +249,14 @@ export function DistributionComparisonBlock({
               isError={targetOverlapError}
             />
           ) : null}
-          {activeTraderView ? (
+          {isTraderPnlView ? (
+            <TraderPnlOverlayChart
+              data={traderComparison}
+              isLoading={traderComparisonLoading}
+              isError={traderComparisonError}
+            />
+          ) : null}
+          {activeTraderView && !isTraderPnlView ? (
             <TraderComparisonChart
               data={traderComparison}
               isLoading={traderComparisonLoading}
