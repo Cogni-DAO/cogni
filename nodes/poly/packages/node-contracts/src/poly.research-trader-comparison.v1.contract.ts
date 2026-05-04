@@ -39,6 +39,49 @@ export type PolyResearchTraderComparisonWarning = z.infer<
   typeof PolyResearchTraderComparisonWarningSchema
 >;
 
+export const PolyResearchTraderSizePnlBucketSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  loPercentile: z.number().int().min(0).max(100),
+  hiPercentile: z.number().int().min(0).max(100),
+  minSizeUsdc: z.number().nonnegative(),
+  maxSizeUsdc: z.number().nonnegative(),
+  avgSizeUsdc: z.number().nonnegative(),
+  buyCount: z.number().int().nonnegative(),
+  resolvedCount: z.number().int().nonnegative(),
+  winCount: z.number().int().nonnegative(),
+  lossCount: z.number().int().nonnegative(),
+  flatCount: z.number().int().nonnegative(),
+  pendingCount: z.number().int().nonnegative(),
+  winRate: z.number().min(0).max(1).nullable(),
+  pnlUsdc: z.number(),
+  buyUsdc: z.number().nonnegative(),
+  hedgeBuyCount: z.number().int().nonnegative(),
+  hedgeBuyUsdc: z.number().nonnegative(),
+});
+export type PolyResearchTraderSizePnlBucket = z.infer<
+  typeof PolyResearchTraderSizePnlBucketSchema
+>;
+
+export const PolyResearchTraderSizePnlSchema = z.object({
+  bucketStep: z.literal(5),
+  sampleBuyCount: z.number().int().nonnegative(),
+  resolvedCount: z.number().int().nonnegative(),
+  winCount: z.number().int().nonnegative(),
+  lossCount: z.number().int().nonnegative(),
+  flatCount: z.number().int().nonnegative(),
+  pendingCount: z.number().int().nonnegative(),
+  winRate: z.number().min(0).max(1).nullable(),
+  pnlUsdc: z.number(),
+  buyUsdc: z.number().nonnegative(),
+  hedgeBuyCount: z.number().int().nonnegative(),
+  hedgeBuyUsdc: z.number().nonnegative(),
+  buckets: z.array(PolyResearchTraderSizePnlBucketSchema).length(20),
+});
+export type PolyResearchTraderSizePnl = z.infer<
+  typeof PolyResearchTraderSizePnlSchema
+>;
+
 export const PolyResearchTraderComparisonTraderSchema = z.object({
   address: PolyAddressSchema,
   label: z.string(),
@@ -61,6 +104,7 @@ export const PolyResearchTraderComparisonTraderSchema = z.object({
     sellUsdc: z.number().nonnegative(),
     marketCount: z.number().int().nonnegative(),
   }),
+  tradeSizePnl: PolyResearchTraderSizePnlSchema,
 });
 export type PolyResearchTraderComparisonTrader = z.infer<
   typeof PolyResearchTraderComparisonTraderSchema

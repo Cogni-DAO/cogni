@@ -32,6 +32,7 @@ import {
   TRADER_COMPARISON_INTERVALS,
   TraderComparisonChart,
   type TraderMetricMode,
+  TraderSizePnlChart,
 } from "./TraderComparisonBlock";
 
 export type DistributionsBlockProps = {
@@ -186,6 +187,7 @@ export function DistributionComparisonBlock({
   );
   const isError = readySeries.length === 0 && series.some((s) => s.isError);
   const activeTraderView = TRADER_COMPARISON_VIEWS_BY_KEY[activeView];
+  const isTraderSizePnlView = activeView === "traderSizePnl";
   const activeDistributionView =
     DISTRIBUTION_COMPARISON_VIEWS_BY_KEY[
       activeView as DistributionComparisonViewKey
@@ -221,7 +223,7 @@ export function DistributionComparisonBlock({
                 onChange={onTargetOverlapIntervalChange}
               />
             ) : null}
-            {activeTraderView ? (
+            {activeTraderView || isTraderSizePnlView ? (
               <IntervalToggle
                 interval={traderInterval}
                 intervals={TRADER_COMPARISON_INTERVALS}
@@ -251,6 +253,13 @@ export function DistributionComparisonBlock({
               isLoading={traderComparisonLoading}
               isError={traderComparisonError}
               mode={activeTraderView.mode}
+            />
+          ) : null}
+          {isTraderSizePnlView ? (
+            <TraderSizePnlChart
+              data={traderComparison}
+              isLoading={traderComparisonLoading}
+              isError={traderComparisonError}
             />
           ) : null}
           {activeDistributionView && readySeries.length > 0 ? (
@@ -388,7 +397,7 @@ function ResearchChartViewport({
   children: ReactNode;
 }): ReactElement {
   return (
-    <div className="min-h-80 rounded border bg-background p-3">{children}</div>
+    <div className="min-h-96 rounded border bg-background p-5">{children}</div>
   );
 }
 
@@ -482,7 +491,8 @@ function totalUsdc(data: WalletAnalysisDistributions): number {
 export type TraderComparisonViewKey =
   | "traderPnl"
   | "traderFills"
-  | "traderFlow";
+  | "traderFlow"
+  | "traderSizePnl";
 export type TargetOverlapViewKey = "targetOverlap";
 
 export type DistributionComparisonViewKey =
@@ -569,6 +579,7 @@ const DISTRIBUTION_COMPARISON_VIEWS = [
 const RESEARCH_COMPARISON_VIEWS = [
   { key: "targetOverlap", label: "Target overlap" },
   ...TRADER_COMPARISON_VIEWS,
+  { key: "traderSizePnl", label: "Size P/L" },
   ...DISTRIBUTION_COMPARISON_VIEWS,
 ] satisfies readonly { key: ResearchComparisonViewKey; label: string }[];
 

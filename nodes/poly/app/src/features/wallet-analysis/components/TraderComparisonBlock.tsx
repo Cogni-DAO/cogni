@@ -17,15 +17,17 @@
 import type {
   PolyResearchTraderComparisonResponse,
   PolyResearchTraderComparisonTrader,
+  PolyResearchTraderSizePnlBucket,
   PolyWalletOverviewInterval,
 } from "@cogni/poly-node-contracts";
 import { BarChart3, CircleDollarSign, Hash } from "lucide-react";
-import type { ReactElement, ReactNode } from "react";
+import { type ReactElement, type ReactNode, useMemo, useState } from "react";
 
 import { ToggleGroup, ToggleGroupItem } from "@/components";
 import { cn } from "@/shared/util/cn";
 
 export type TraderMetricMode = "pnl" | "count" | "flow";
+type SizePnlViewMode = "pnl" | "winrate";
 
 export const TRADER_COMPARISON_INTERVALS: readonly PolyWalletOverviewInterval[] =
   ["1D", "1W", "1M", "ALL"] as const;
@@ -136,6 +138,58 @@ export function TraderComparisonChart({
   );
 }
 
+export function TraderSizePnlChart({
+  data,
+  isLoading,
+  isError,
+}: {
+  data?: PolyResearchTraderComparisonResponse | undefined;
+  isLoading?: boolean | undefined;
+  isError?: boolean | undefined;
+}): ReactElement {
+  const traders = useMemo(
+    () => orderSizePnlTraders(data?.traders ?? []),
+    [data?.traders]
+  );
+  const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<SizePnlViewMode>("pnl");
+  const selectedTrader =
+    traders.find((trader) => trader.address === selectedAddress) ?? traders[0];
+
+  if (isLoading && !data) {
+    return <div className="h-80 animate-pulse rounded bg-muted" />;
+  }
+  if (isError && traders.length === 0) {
+    return (
+      <p className="text-muted-foreground text-sm">Size P/L is unavailable.</p>
+    );
+  }
+  if (!selectedTrader) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        No observed buy-size data available.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <SizePnlTraderTabs
+            traders={traders}
+            selectedAddress={selectedTrader.address}
+            onSelect={setSelectedAddress}
+          />
+          <SizePnlModeToggle viewMode={viewMode} onChange={setViewMode} />
+        </div>
+        <SizePnlSummary trader={selectedTrader} />
+      </div>
+      <SizePnlSvg trader={selectedTrader} viewMode={viewMode} />
+    </div>
+  );
+}
+
 function TraderComparisonHeader({
   interval,
   onIntervalChange,
@@ -207,6 +261,271 @@ function TraderComparisonHeader({
           ))}
         </ToggleGroup>
       </div>
+    </div>
+  );
+}
+
+function SizePnlSummary({
+  trader,
+}: {
+  trader: PolyResearchTraderComparisonTrader;
+}): ReactElement {
+  const stats = trader.tradeSizePnl;
+  return (
+    <div className="flex flex-wrap justify-end gap-3 text-muted-foreground text-xs">
+      <span>
+        <span className={cn("font-mono", pnlClassName(stats.pnlUsdc))}>
+          {formatSignedUsd(stats.pnlUsdc)}
+        </span>{" "}
+        P/L
+      </span>
+      <span>
+        <span className="font-mono">
+          {stats.winCount.toLocaleString()}-{stats.lossCount.toLocaleString()}
+        </span>{" "}
+        W/L
+      </span>
+      {stats.flatCount > 0 ? (
+        <span>
+          <span className="font-mono">{stats.flatCount.toLocaleString()}</span>{" "}
+          flat
+        </span>
+      ) : null}
+      <span>
+        <span className="font-mono">{formatPercent(stats.winRate)}</span> WR
+      </span>
+      <span>
+        <span className="font-mono">{formatUsd(stats.hedgeBuyUsdc)}</span> hedge
+      </span>
+    </div>
+  );
+}
+
+function SizePnlTraderTabs({
+  traders,
+  selectedAddress,
+  onSelect,
+}: {
+  traders: readonly PolyResearchTraderComparisonTrader[];
+  selectedAddress: string;
+  onSelect: (address: string) => void;
+}): ReactElement {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {traders.map((trader) => (
+        <button
+          key={trader.address}
+          type="button"
+          onClick={() => onSelect(trader.address)}
+          className={cn(
+            "rounded border px-3 py-1.5 text-xs transition-colors",
+            trader.address === selectedAddress
+              ? "border-primary/50 bg-primary/10 text-foreground"
+              : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
+        >
+          {trader.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SizePnlModeToggle({
+  viewMode,
+  onChange,
+}: {
+  viewMode: SizePnlViewMode;
+  onChange: (mode: SizePnlViewMode) => void;
+}): ReactElement {
+  return (
+    <div className="inline-flex rounded border bg-muted p-0.5 text-xs">
+      {(["pnl", "winrate"] as const).map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          onClick={() => onChange(mode)}
+          className={cn(
+            "rounded px-2 py-1 font-medium uppercase tracking-wider transition-colors",
+            viewMode === mode
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          {mode === "pnl" ? "P/L" : "Win rate"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SizePnlSvg({
+  trader,
+  viewMode,
+}: {
+  trader: PolyResearchTraderComparisonTrader;
+  viewMode: SizePnlViewMode;
+}): ReactElement {
+  const buckets = trader.tradeSizePnl.buckets;
+  const width = 2400;
+  const height = 600;
+  const left = 104;
+  const right = 48;
+  const top = 34;
+  const bottom = 108;
+  const plotW = width - left - right;
+  const plotH = height - top - bottom;
+  const zeroY = top + plotH / 2;
+  const maxPnlMagnitude = Math.max(
+    1,
+    ...buckets.map((bucket) => Math.abs(bucket.pnlUsdc))
+  );
+  const pnlScale = (plotH / 2 - 18) / maxPnlMagnitude;
+  const winRateBottom = height - bottom;
+  const winRateScale = (plotH - 18) / 1;
+  const gap = 8;
+  const barW = plotW / buckets.length - gap;
+  const yAxisLabel = viewMode === "pnl" ? "resolved P/L" : "win rate";
+
+  return (
+    <div className="overflow-hidden rounded border bg-card/40">
+      <svg
+        role="img"
+        aria-label={`${trader.label} ${yAxisLabel} by buy-size percentile bucket`}
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full"
+        style={{ height: "520px" }}
+      >
+        <line
+          x1={left}
+          y1={top}
+          x2={left}
+          y2={height - bottom}
+          stroke="rgba(148, 163, 184, 0.28)"
+        />
+        <line
+          x1={left}
+          y1={viewMode === "pnl" ? zeroY : winRateBottom}
+          x2={width - right}
+          y2={viewMode === "pnl" ? zeroY : winRateBottom}
+          stroke="rgba(148, 163, 184, 0.45)"
+        />
+        {viewMode === "winrate" ? (
+          <line
+            x1={left}
+            y1={top + plotH / 2}
+            x2={width - right}
+            y2={top + plotH / 2}
+            stroke="rgba(148, 163, 184, 0.16)"
+          />
+        ) : null}
+        <line
+          x1={left}
+          y1={top}
+          x2={width - right}
+          y2={top}
+          stroke="rgba(148, 163, 184, 0.16)"
+        />
+        <line
+          x1={left}
+          y1={height - bottom}
+          x2={width - right}
+          y2={height - bottom}
+          stroke="rgba(148, 163, 184, 0.16)"
+        />
+        <text
+          x={18}
+          y={top + plotH / 2}
+          textAnchor="middle"
+          transform={`rotate(-90 18 ${top + plotH / 2})`}
+          className="fill-muted-foreground font-mono text-xs"
+        >
+          {yAxisLabel}
+        </text>
+        <text
+          x={left - 10}
+          y={top + 4}
+          textAnchor="end"
+          className="fill-muted-foreground font-mono text-xs"
+        >
+          {viewMode === "pnl" ? formatCompactUsd(maxPnlMagnitude) : "100%"}
+        </text>
+        <text
+          x={left - 10}
+          y={(viewMode === "pnl" ? zeroY : top + plotH / 2) + 4}
+          textAnchor="end"
+          className="fill-muted-foreground font-mono text-xs"
+        >
+          {viewMode === "pnl" ? "$0" : "50%"}
+        </text>
+        <text
+          x={left - 10}
+          y={height - bottom + 4}
+          textAnchor="end"
+          className="fill-muted-foreground font-mono text-xs"
+        >
+          {viewMode === "pnl" ? `-${formatCompactUsd(maxPnlMagnitude)}` : "0%"}
+        </text>
+        <text
+          x={left + plotW / 2}
+          y={height - 30}
+          textAnchor="middle"
+          className="fill-muted-foreground font-mono text-xs"
+        >
+          buy-size percentile
+        </text>
+
+        {buckets.map((bucket, index) => {
+          const x = left + index * (barW + gap) + gap / 2;
+          const barH =
+            viewMode === "pnl"
+              ? Math.max(2, Math.abs(bucket.pnlUsdc) * pnlScale)
+              : Math.max(2, (bucket.winRate ?? 0) * winRateScale);
+          const y =
+            viewMode === "pnl"
+              ? bucket.pnlUsdc >= 0
+                ? zeroY - barH
+                : zeroY
+              : winRateBottom - barH;
+          const labelX = x + barW / 2;
+          const showLabel = bucket.loPercentile % 25 === 0;
+          return (
+            <g key={bucket.key}>
+              <rect
+                x={x}
+                y={y}
+                width={barW}
+                height={barH}
+                rx="2"
+                className={cn(
+                  sizeBucketFillClass(bucket, viewMode),
+                  bucket.buyCount === 0 && "fill-muted-foreground/20"
+                )}
+              >
+                <title>{bucketTooltip(bucket)}</title>
+              </rect>
+              {showLabel ? (
+                <text
+                  x={labelX}
+                  y={height - 56}
+                  textAnchor="middle"
+                  className="fill-muted-foreground font-mono text-xs"
+                >
+                  p{bucket.loPercentile}
+                </text>
+              ) : null}
+            </g>
+          );
+        })}
+        <text
+          x={width - right}
+          y={height - 56}
+          textAnchor="end"
+          className="fill-muted-foreground font-mono text-xs"
+        >
+          p100
+        </text>
+      </svg>
     </div>
   );
 }
@@ -355,12 +674,73 @@ function detailForMode(
   )} sold`;
 }
 
+function orderSizePnlTraders(
+  traders: readonly PolyResearchTraderComparisonTrader[]
+): readonly PolyResearchTraderComparisonTrader[] {
+  const score = (trader: PolyResearchTraderComparisonTrader) => {
+    const label = trader.label.toLowerCase();
+    if (label === "rn1") return 0;
+    if (label === "swisstony") return 1;
+    if (label === "you") return 2;
+    return 3;
+  };
+  return [...traders].sort((a, b) => score(a) - score(b));
+}
+
+function bucketTooltip(bucket: PolyResearchTraderSizePnlBucket): string {
+  const sizeRange =
+    bucket.buyCount > 0
+      ? `${formatUsd(bucket.minSizeUsdc)}-${formatUsd(bucket.maxSizeUsdc)}`
+      : "--";
+  return [
+    `${bucket.label}: ${formatSignedUsd(bucket.pnlUsdc)}`,
+    `${bucket.winCount.toLocaleString()}W / ${bucket.lossCount.toLocaleString()}L / ${bucket.flatCount.toLocaleString()} flat / ${bucket.pendingCount.toLocaleString()} pending`,
+    `WR ${formatPercent(bucket.winRate)}`,
+    `avg ${formatUsd(bucket.avgSizeUsdc)} (${sizeRange})`,
+    `hedge ${formatUsd(bucket.hedgeBuyUsdc)}`,
+  ].join(" · ");
+}
+
+function sizeBucketFillClass(
+  bucket: PolyResearchTraderSizePnlBucket,
+  viewMode: SizePnlViewMode
+): string {
+  if (viewMode === "pnl") {
+    return bucket.pnlUsdc >= 0 ? "fill-success/80" : "fill-destructive/80";
+  }
+  if (bucket.winRate === null) return "fill-muted-foreground/30";
+  if (bucket.winRate >= 0.55) return "fill-success/80";
+  if (bucket.winRate <= 0.45) return "fill-destructive/80";
+  return "fill-amber-400/80";
+}
+
+function pnlClassName(value: number): string {
+  if (value > 0) return "text-success";
+  if (value < 0) return "text-destructive";
+  return "text-muted-foreground";
+}
+
+function formatSignedUsd(value: number): string {
+  return `${value >= 0 ? "+" : "-"}${formatUsd(Math.abs(value))}`;
+}
+
 function formatUsd(value: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: Math.abs(value) >= 1_000 ? 0 : 2,
   }).format(value);
+}
+
+function formatCompactUsd(value: number): string {
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}m`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}k`;
+  return `$${value.toFixed(0)}`;
+}
+
+function formatPercent(value: number | null): string {
+  if (value === null) return "--";
+  return `${(value * 100).toFixed(0)}%`;
 }
 
 function shortAddress(address: string): string {

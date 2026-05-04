@@ -35,6 +35,19 @@ function fakeDb(rows: unknown[]): TestDb & {
   } as unknown as TestDb & { execute: ReturnType<typeof vi.fn> };
 }
 
+function fakeDbSequence(...results: unknown[][]): TestDb & {
+  execute: ReturnType<typeof vi.fn>;
+} {
+  const execute = vi.fn();
+  for (const result of results) {
+    execute.mockResolvedValueOnce(result);
+  }
+  execute.mockResolvedValue([]);
+  return { execute } as unknown as TestDb & {
+    execute: ReturnType<typeof vi.fn>;
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -100,7 +113,7 @@ describe("getTraderComparison", () => {
       "1W"
     );
 
-    expect(db.execute).toHaveBeenCalledTimes(1);
+    expect(db.execute).toHaveBeenCalledTimes(2);
     expect(mockedGetPnlSlice).toHaveBeenCalledWith(WALLET, "1W");
     expect(result.traders).toMatchObject([
       {
@@ -120,6 +133,16 @@ describe("getTraderComparison", () => {
           buyUsdc: 90.25,
           sellUsdc: 60.25,
           marketCount: 4,
+        },
+        tradeSizePnl: {
+          bucketStep: 5,
+          sampleBuyCount: 0,
+          resolvedCount: 0,
+          pnlUsdc: 0,
+          buckets: expect.arrayContaining([
+            expect.objectContaining({ label: "p0-p5" }),
+            expect.objectContaining({ label: "p95-p100" }),
+          ]),
         },
       },
     ]);
@@ -160,6 +183,11 @@ describe("getTraderComparison", () => {
         buyUsdc: 0,
         sellUsdc: 0,
         marketCount: 0,
+      },
+      tradeSizePnl: {
+        sampleBuyCount: 0,
+        resolvedCount: 0,
+        pnlUsdc: 0,
       },
     });
   });
@@ -203,4 +231,109 @@ describe("getTraderComparison", () => {
       },
     ]);
   });
+
+  it("buckets resolved BUY P/L by per-trader size percentiles", async () => {
+    const db = fakeDbSequence(
+      [
+        {
+          id: "wallet-1",
+          label: "RN1",
+          kind: "copy_target",
+          first_observed_at: null,
+          last_success_at: null,
+          status: "ok",
+          trade_count: 5,
+          buy_count: 4,
+          sell_count: 1,
+          notional_usdc: 135,
+          buy_usdc: 130,
+          sell_usdc: 5,
+          market_count: 3,
+        },
+      ],
+      [
+        fill("c1", "yes-1", "BUY", 0.2, 100, "2026-05-01T00:00:00.000Z"),
+        fill("c1", "yes-1", "SELL", 0.1, 50, "2026-05-02T00:00:00.000Z"),
+        fill("c2", "no-2", "BUY", 0.5, 20, "2026-05-01T00:01:00.000Z"),
+        fill("c3", "yes-3", "BUY", 0.1, 1000, "2026-05-01T00:02:00.000Z"),
+      ]
+    );
+    mockedGetPnlSlice.mockResolvedValue({
+      kind: "ok",
+      value: {
+        interval: "ALL",
+        computedAt: "2026-05-01T00:00:00.000Z",
+        history: [
+          { ts: "2026-04-24T00:00:00.000Z", pnl: 0 },
+          { ts: "2026-05-01T00:00:00.000Z", pnl: 100 },
+        ],
+      },
+    });
+
+    const result = await getTraderComparison(
+      db,
+      [{ address: WALLET, label: "RN1" }],
+      "ALL",
+      {
+        readResolution: async (conditionId) => ({
+          closed: true,
+          tokens: [
+            {
+              token_id:
+                conditionId === "c2" ? "no-2" : `yes-${conditionId.slice(1)}`,
+              winner: conditionId === "c3",
+            },
+            { token_id: `other-${conditionId}`, winner: conditionId !== "c3" },
+          ],
+        }),
+      }
+    );
+
+    const stats = result.traders[0]?.tradeSizePnl;
+    expect(stats).toMatchObject({
+      sampleBuyCount: 3,
+      resolvedCount: 3,
+      winCount: 1,
+      lossCount: 2,
+      pendingCount: 0,
+      buyUsdc: 130,
+    });
+    expect(stats?.winRate).toBeCloseTo(1 / 3);
+    expect(stats?.pnlUsdc).toBeCloseTo(875);
+    expect(
+      stats?.buckets.find((bucket) => bucket.label === "p0-p5")
+    ).toMatchObject({
+      buyCount: 1,
+      pnlUsdc: -10,
+      minSizeUsdc: 10,
+      maxSizeUsdc: 10,
+    });
+    expect(
+      stats?.buckets.find((bucket) => bucket.label === "p65-p70")
+    ).toMatchObject({
+      buyCount: 1,
+      pnlUsdc: 900,
+      minSizeUsdc: 100,
+      maxSizeUsdc: 100,
+    });
+  });
 });
+
+function fill(
+  conditionId: string,
+  tokenId: string,
+  side: "BUY" | "SELL",
+  price: number,
+  shares: number,
+  observedAt: string
+) {
+  return {
+    condition_id: conditionId,
+    token_id: tokenId,
+    side,
+    price,
+    shares,
+    size_usdc: price * shares,
+    observed_at: observedAt,
+  };
+}

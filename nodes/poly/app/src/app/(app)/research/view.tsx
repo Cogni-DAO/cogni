@@ -571,7 +571,10 @@ function ResearchBenchmarkBoard({
 
 function isTraderComparisonView(view: ResearchComparisonViewKey): boolean {
   return (
-    view === "traderPnl" || view === "traderFills" || view === "traderFlow"
+    view === "traderPnl" ||
+    view === "traderFills" ||
+    view === "traderFlow" ||
+    view === "traderSizePnl"
   );
 }
 
