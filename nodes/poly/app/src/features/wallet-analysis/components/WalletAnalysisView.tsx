@@ -331,7 +331,7 @@ function CopyTargetBenchmarkBlock({
         </p>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <MetricTile
           label="Target notional"
           value={formatUsd(benchmark.summary.targetSizeUsdc)}
@@ -346,6 +346,11 @@ function CopyTargetBenchmarkBlock({
           label="Capture"
           value={capture}
           detail={`${benchmark.activeGaps.length.toLocaleString()} active gaps`}
+        />
+        <MetricTile
+          label="Hedges"
+          value={`${benchmark.hedgePolicy.actionableHedges.toLocaleString()}/${benchmark.hedgePolicy.hedgedConditions.toLocaleString()}`}
+          detail={`>=${formatPct(benchmark.hedgePolicy.minTargetHedgeRatio)} and >=${formatUsd(benchmark.hedgePolicy.minTargetHedgeUsdc)}`}
         />
         <MetricTile
           label="Observed span"

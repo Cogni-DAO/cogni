@@ -46,12 +46,21 @@ type ActiveGapRow = {
   target_current_value_usdc: string | number | null;
 };
 
+type HedgePolicyRow = {
+  hedged_conditions: string | number | null;
+  actionable_hedges: string | number | null;
+  lowest_actionable_ratio: string | number | null;
+};
+
 type SummaryRow = {
   target_open_value_usdc: string | number | null;
   cogni_open_value_usdc: string | number | null;
   target_trades: string | number | null;
   cogni_trades: string | number | null;
 };
+
+const AS_BUILT_MIN_TARGET_HEDGE_RATIO = 0.02;
+const AS_BUILT_MIN_TARGET_HEDGE_USDC = 5;
 
 export async function getBenchmarkSlice(
   db: Db,
@@ -119,20 +128,25 @@ async function readBenchmark(
     });
   }
 
-  const [summaryRows, marketRows, gapRows] = await Promise.all([
-    readSummary(db, wallet.id, comparisonWallet?.id ?? null, windowStartIso),
-    wallet.kind === "copy_target"
-      ? readMarketRows(
-          db,
-          wallet.id,
-          comparisonWallet?.id ?? null,
-          windowStartIso
-        )
-      : Promise.resolve([]),
-    wallet.kind === "copy_target"
-      ? readActiveGaps(db, wallet.id, comparisonWallet?.id ?? null)
-      : [],
-  ]);
+  const [summaryRows, marketRows, gapRows, hedgePolicyRows] = await Promise.all(
+    [
+      readSummary(db, wallet.id, comparisonWallet?.id ?? null, windowStartIso),
+      wallet.kind === "copy_target"
+        ? readMarketRows(
+            db,
+            wallet.id,
+            comparisonWallet?.id ?? null,
+            windowStartIso
+          )
+        : Promise.resolve([]),
+      wallet.kind === "copy_target"
+        ? readActiveGaps(db, wallet.id, comparisonWallet?.id ?? null)
+        : [],
+      wallet.kind === "copy_target"
+        ? readHedgePolicyRows(db, wallet.id)
+        : Promise.resolve([]),
+    ]
+  );
 
   const summary = summaryRows[0] ?? {
     target_open_value_usdc: 0,
@@ -174,6 +188,7 @@ async function readBenchmark(
       targetOpenValueUsdc: toNumber(summary.target_open_value_usdc),
       cogniOpenValueUsdc: toNumber(summary.cogni_open_value_usdc),
     },
+    hedgePolicy: hedgePolicyFromRows(hedgePolicyRows),
     markets: marketRows.slice(0, 50).map((row) => {
       const targetSize = toNumber(row.target_size_usdc);
       const cogniSize = toNumber(row.cogni_size_usdc);
@@ -241,9 +256,23 @@ function emptyBenchmark(params: {
       targetOpenValueUsdc: 0,
       cogniOpenValueUsdc: 0,
     },
+    hedgePolicy: hedgePolicyFromRows([]),
     markets: [],
     activeGaps: [],
     computedAt: params.computedAt,
+  };
+}
+
+function hedgePolicyFromRows(
+  rows: HedgePolicyRow[]
+): WalletAnalysisBenchmark["hedgePolicy"] {
+  const row = rows[0];
+  return {
+    minTargetHedgeRatio: AS_BUILT_MIN_TARGET_HEDGE_RATIO,
+    minTargetHedgeUsdc: AS_BUILT_MIN_TARGET_HEDGE_USDC,
+    hedgedConditions: Number(toNumber(row?.hedged_conditions).toFixed(0)),
+    actionableHedges: Number(toNumber(row?.actionable_hedges).toFixed(0)),
+    lowestActionableRatio: nullableNumber(row?.lowest_actionable_ratio),
   };
 }
 
@@ -356,6 +385,45 @@ async function readActiveGaps(
     ORDER BY target.current_value_usdc DESC
     LIMIT 50
   `)) as unknown as ActiveGapRow[];
+}
+
+async function readHedgePolicyRows(
+  db: Db,
+  targetWalletId: string
+): Promise<HedgePolicyRow[]> {
+  return (await db.execute(sql`
+    WITH active_target AS (
+      SELECT
+        condition_id,
+        token_id,
+        cost_basis_usdc::numeric AS cost_basis_usdc
+      FROM poly_trader_current_positions
+      WHERE trader_wallet_id = ${targetWalletId}
+        AND active = true
+        AND cost_basis_usdc > 0
+    ),
+    binary_conditions AS (
+      SELECT
+        condition_id,
+        COUNT(*) AS legs,
+        MAX(cost_basis_usdc) AS primary_cost_usdc,
+        MIN(cost_basis_usdc) AS hedge_cost_usdc
+      FROM active_target
+      GROUP BY condition_id
+      HAVING COUNT(*) = 2
+    )
+    SELECT
+      COUNT(*) AS hedged_conditions,
+      COUNT(*) FILTER (
+        WHERE hedge_cost_usdc >= ${AS_BUILT_MIN_TARGET_HEDGE_USDC}
+          AND hedge_cost_usdc / NULLIF(primary_cost_usdc, 0) >= ${AS_BUILT_MIN_TARGET_HEDGE_RATIO}
+      ) AS actionable_hedges,
+      MIN(hedge_cost_usdc / NULLIF(primary_cost_usdc, 0)) FILTER (
+        WHERE hedge_cost_usdc >= ${AS_BUILT_MIN_TARGET_HEDGE_USDC}
+          AND hedge_cost_usdc / NULLIF(primary_cost_usdc, 0) >= ${AS_BUILT_MIN_TARGET_HEDGE_RATIO}
+      ) AS lowest_actionable_ratio
+    FROM binary_conditions
+  `)) as unknown as HedgePolicyRow[];
 }
 
 function windowStartFor(interval: PolyWalletOverviewInterval): Date {

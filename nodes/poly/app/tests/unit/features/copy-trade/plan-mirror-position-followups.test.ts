@@ -267,6 +267,41 @@ describe("planMirrorFromFill() — position-aware followups", () => {
     });
   });
 
+  it("skips an otherwise useful hedge below the configured target hedge ratio", () => {
+    const fill = makeFill(HEDGE_TOKEN, 1, 0.2);
+    const d = planMirrorFromFill({
+      fill,
+      config: CONFIG,
+      state: state({
+        target_position: {
+          condition_id: CONDITION_ID,
+          tokens: [
+            {
+              token_id: PRIMARY_TOKEN,
+              size_shares: 5_000,
+              cost_usdc: 2_500,
+              current_value_usdc: 2_500,
+            },
+            {
+              token_id: HEDGE_TOKEN,
+              size_shares: 100,
+              cost_usdc: 25,
+              current_value_usdc: 25,
+            },
+          ],
+        },
+      }),
+      client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
+      min_shares: 1,
+      min_usdc_notional: 1,
+    });
+    expect(d).toEqual({
+      kind: "skip",
+      reason: "target_position_below_threshold",
+      position_branch: "hedge",
+    });
+  });
+
   it("does not guess hedge semantics when the opposite token is unknown", () => {
     const fill = makeFill(HEDGE_TOKEN, 1, 0.2);
     const d = planMirrorFromFill({
