@@ -192,9 +192,9 @@ export type WalletBenchmark = {
   hedgePolicy: {
     minTargetHedgeRatio: number;
     minTargetHedgeUsdc: number;
-    hedgedConditions: number;
-    actionableHedges: number;
-    lowestActionableRatio: number | null;
+    targetHedgedConditions: number;
+    targetHedgesPassingGate: number;
+    lowestPassingHedgeRatio: number | null;
   };
   markets: readonly WalletBenchmarkMarket[];
   activeGaps: readonly WalletBenchmarkGap[];

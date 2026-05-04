@@ -47,9 +47,9 @@ type ActiveGapRow = {
 };
 
 type HedgePolicyRow = {
-  hedged_conditions: string | number | null;
-  actionable_hedges: string | number | null;
-  lowest_actionable_ratio: string | number | null;
+  target_hedged_conditions: string | number | null;
+  target_hedges_passing_gate: string | number | null;
+  lowest_passing_hedge_ratio: string | number | null;
 };
 
 type SummaryRow = {
@@ -270,9 +270,13 @@ function hedgePolicyFromRows(
   return {
     minTargetHedgeRatio: AS_BUILT_MIN_TARGET_HEDGE_RATIO,
     minTargetHedgeUsdc: AS_BUILT_MIN_TARGET_HEDGE_USDC,
-    hedgedConditions: Number(toNumber(row?.hedged_conditions).toFixed(0)),
-    actionableHedges: Number(toNumber(row?.actionable_hedges).toFixed(0)),
-    lowestActionableRatio: nullableNumber(row?.lowest_actionable_ratio),
+    targetHedgedConditions: Number(
+      toNumber(row?.target_hedged_conditions).toFixed(0)
+    ),
+    targetHedgesPassingGate: Number(
+      toNumber(row?.target_hedges_passing_gate).toFixed(0)
+    ),
+    lowestPassingHedgeRatio: nullableNumber(row?.lowest_passing_hedge_ratio),
   };
 }
 
@@ -413,15 +417,15 @@ async function readHedgePolicyRows(
       HAVING COUNT(*) = 2
     )
     SELECT
-      COUNT(*) AS hedged_conditions,
+      COUNT(*) AS target_hedged_conditions,
       COUNT(*) FILTER (
         WHERE hedge_cost_usdc >= ${AS_BUILT_MIN_TARGET_HEDGE_USDC}
           AND hedge_cost_usdc / NULLIF(primary_cost_usdc, 0) >= ${AS_BUILT_MIN_TARGET_HEDGE_RATIO}
-      ) AS actionable_hedges,
+      ) AS target_hedges_passing_gate,
       MIN(hedge_cost_usdc / NULLIF(primary_cost_usdc, 0)) FILTER (
         WHERE hedge_cost_usdc >= ${AS_BUILT_MIN_TARGET_HEDGE_USDC}
           AND hedge_cost_usdc / NULLIF(primary_cost_usdc, 0) >= ${AS_BUILT_MIN_TARGET_HEDGE_RATIO}
-      ) AS lowest_actionable_ratio
+      ) AS lowest_passing_hedge_ratio
     FROM binary_conditions
   `)) as unknown as HedgePolicyRow[];
 }

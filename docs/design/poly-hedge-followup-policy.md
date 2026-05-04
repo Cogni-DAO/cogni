@@ -71,16 +71,19 @@ That matches the current `DEFAULT_POSITION_FOLLOWUP_POLICY` in
 ## Prototype Surface
 
 PR #1215 adds live-forward observed trader facts for RN1, swisstony, and active
-Cogni wallets. This design builds on that by exposing hedge readiness on the
-research benchmark panel:
+Cogni wallets. This design builds on that by adding hedge-readiness fields to
+the wallet-analysis benchmark response:
 
-- `hedgedConditions`: active target conditions with exactly two open token legs;
-- `actionableHedges`: those whose smaller leg clears `$5` and `2%`;
-- `lowestActionableRatio`: the smallest ratio currently passing the gate.
+- `targetHedgedConditions`: active target conditions with exactly two open token
+  legs;
+- `targetHedgesPassingGate`: those whose smaller leg clears `$5` and `2%`;
+- `lowestPassingHedgeRatio`: the smallest target hedge ratio currently passing
+  the gate.
 
-This is intentionally read-only. It tells the operator whether the policy would
-be active on the saved target-position read model before changing any CLOB
-execution behavior.
+This is intentionally read-only and not currently rendered in the research UI.
+It lets the API/read-model expose whether the policy would be active on the
+saved target-position state before changing any CLOB execution behavior or
+shipping user-facing hedge controls.
 
 ## Bet Sizing And Target Config
 
@@ -106,14 +109,16 @@ For hedging to be useful, active, and validateable on candidate-a:
 exercise: On candidate-a, sign in with a funded and trading-ready Polymarket
 wallet. Track RN1 and swisstony with `mirror_filter_percentile=75` and
 `mirror_max_usdc_per_trade>=5`. Wait for `poly.trader.observe` to save position
-snapshots, then open `/research/w/0x2005d16a84ceefa912d4e380cd32e7ff827875ea`
-and `/research/w/0x204f72f35326db932158cba6adff0b9a1da95e14`; confirm the
-Copy Benchmark panel shows a nonzero `Hedges` tile when either target has
-active two-leg conditions.
+snapshots, then request the wallet-analysis benchmark slice for
+`/api/v1/poly/wallets/0x2005d16a84ceefa912d4e380cd32e7ff827875ea?include=benchmark`
+and
+`/api/v1/poly/wallets/0x204f72f35326db932158cba6adff0b9a1da95e14?include=benchmark`;
+confirm `benchmark.hedgePolicy` reports the configured thresholds and nonzero
+target hedge counts when either target has active two-leg conditions.
 
 observability: Query Loki at the deployed SHA for
 `event="poly.trader.observe"` wallet_ok events for RN1/swisstony and
 `event="poly.mirror.decision"` with `position_branch="hedge"` or
 `reason="target_position_below_threshold"`. A validated hedge prototype has the
-research panel showing actionable hedge counts and Loki showing either a placed
+benchmark API showing actionable hedge counts and Loki showing either a placed
 hedge or an explicit threshold skip for a same-condition opposite-token fill.
