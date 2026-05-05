@@ -14,6 +14,8 @@ tags: [poly, backfill, data-corpus, gamma, research]
 
 # Polymarket target-wallet backfill spike — 2026-05-05
 
+> **Update 2026-05-05 (post-flight):** the Gamma-via-`/markets?condition_ids=` path explored below is **superseded by PR #1265** ("persist Gamma market metadata to canonical table"), which adds a `poly_market_metadata` table + a Data API method for the same data. Both `gamma-fetch.ts` and `outcomes-load.ts` were deleted from this PR. The `walk.ts` / `load.ts` / `pnl-backfill.ts` scripts remain — they're independent of resolution metadata. Once PR #1265 lands, the resolution backfill drops onto its writer; we don't need a separate Gamma fetcher in this PR.
+
 ## Question
 
 CP1–CP7 (task.5012 and friends) is moving every wallet-analysis reader off live Polymarket HTTP onto DB-backed tables (`poly_trader_user_pnl_points`, `poly_trader_fills`, `poly_market_outcomes`, `poly_trader_current_positions`, the upcoming `polyMarketPriceHistory`). The live tick (`runTraderObservationTick`, 30 s cadence) only writes new fills; it leaves the past empty. To make the new dashboard reads useful from day one — and to give the trader-comparison / pre-position trace research surfaces real data — we need to seed those tables with everything the two curated targets (RN1, swisstony) have ever done, plus the Gamma resolution metadata for the markets they touched.
@@ -37,7 +39,7 @@ The question this spike answers:
   | swisstony | 15.7 K | 17.5 K | 19.7 K | 7.0 K | 0 (no wallet) |
   Time-weighted estimate: **≈3 M trades per wallet over its lifetime, 6 M total**.
 - **Sequential walk @ 1.1 s/page:** ~**110 min per wallet**, ~110 min wall-clock for both in parallel. With 12 monthly windows fanned out per wallet (24 walkers, still well under observed concurrency limits), **~10–15 min wall-clock total**.
-- **Gamma resolution batch is broken.** `GET /markets?condition_ids=A&condition_ids=B…` accepts the array form but silently caps the result page at ~24 even with `limit=500`. Use one `condition_ids=` per request and parallelize at 10. Unique markets: ~1–2 % of trades = **45 K–60 K markets per wallet → 30–60 min Gamma sequential, ~3–6 min @ 10 parallel**, deduped across both wallets.
+- **Gamma resolution path superseded by PR #1265** (see top-of-doc note). Empirical findings below kept for the record: array batch silently caps at ~24 even with `limit=500`; single-id fan-out=10 gets 429-rate-limited hard (14,460 of 14,462 markets failed in the live run). PR #1265 routes around all of this with a Data API method + persisted `poly_market_metadata` table.
 - **v0 should be a local CLI** (`scripts/experiments/poly-backfill/`) writing NDJSON to disk first, then a thin loader that calls the existing `appendFills()` + a new `appendMarketOutcomes()` writer once CP2 (#1245) and CP3 (`task.5018`) land. **Do not deploy as a job.** This is a one-shot growing-corpus operation, not an ongoing service.
 - **Pre-position analytics (first-entry, layering, hedging) need no new tables.** They are SQL projections over `poly_trader_fills` grouped by `(trader_wallet_id, condition_id)` ordered by `timestamp` — same state machine `plan-mirror.ts` already runs live. `## Pre-position analytics` below sketches the queries.
 
