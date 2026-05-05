@@ -31,15 +31,6 @@ export const tsupConfig = defineConfig([
     sourcemap: true,
     platform: "node",
   },
-  {
-    entry: ["src/adapters/notion/index.ts"],
-    outDir: "dist/adapters/notion",
-    format: ["esm"],
-    dts: false,
-    clean: false,
-    sourcemap: true,
-    platform: "node",
-  },
 ]);
 
 export default tsupConfig;
