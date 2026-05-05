@@ -54,7 +54,9 @@ interface ControllableSource extends WalletActivitySource {
   listenerCount(): number;
 }
 
-function makeControllableSource(opts?: { fillsPerCall?: () => Fill[] }): ControllableSource {
+function makeControllableSource(opts?: {
+  fillsPerCall?: () => Fill[];
+}): ControllableSource {
   const wakeListeners = new Set<() => void>();
   const pendingResolvers: Array<() => void> = [];
   let calls = 0;

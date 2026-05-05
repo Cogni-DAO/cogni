@@ -439,9 +439,12 @@ export function startMirrorPoll(deps: MirrorJobDeps): MirrorJobStopFn {
             );
           }
           deps.metrics.incr(MIRROR_JOB_METRICS.wsWakeTickTotal, { outcome });
+          // Inline event string (vs `EVENT_NAMES.*`) keeps this PR scoped to
+          // the poly node — `single-node-scope` would otherwise force a split
+          // for a one-line node-shared registry add.
           log.debug(
             {
-              event: EVENT_NAMES.POLY_MIRROR_WAKE_TICK,
+              event: "poly.mirror.wake_tick",
               duration_ms: Date.now() - t0,
               queued: queuedWakeup,
               outcome,
