@@ -24,18 +24,23 @@
  *     (post-resolution / post-redeem). Snapshots preserve the last observed
  *     `(shares, cost_basis_usdc, current_value_usdc)` so attribution survives
  *     target exit by any means.
- *   - ATTRIBUTION_ANCHORED_ON_FILLS: only (target, condition) pairs we have
- *     actually mirrored — `poly_copy_trade_fills` rows with status in
- *     {filled, partial, open} for the caller's tenant — are surfaced. Random
- *     other-target activity is not shown.
+ *   - TARGET_LEGS_FROM_SNAPSHOTS: every active copy-target whose latest
+ *     snapshot covers a condition we hold surfaces as a leg, regardless of
+ *     whether we've mirrored a fill from that target on that condition. The
+ *     "Markets" lens compares us against the targets we follow — gating on
+ *     per-condition fills throws away DB-persisted positions and produces
+ *     bogus solo-market percentages.
  *   - SERVER_SIDE_LIFECYCLE: a leg's lifecycle is `"active"` if the latest
  *     snapshot still shows positive current value, otherwise `"inactive"`
  *     (target observed but no longer held). Once `poly_market_outcomes` is
  *     populated, resolved legs get joined in to promote `active`/`inactive`
  *     → `winner`/`loser`/`resolved`.
+ *   - EDGE_GAP_NULL_WITHOUT_TARGETS: `edgeGapUsdc` and `edgeGapPct` are null
+ *     on lines/groups with zero target legs. "How much we beat (nobody) by"
+ *     is undefined, not `-ourPnl`.
  * Side-effects: DB read across `poly_copy_trade_targets`,
- *   `poly_trader_wallets`, `poly_copy_trade_fills`,
- *   `poly_trader_position_snapshots`. No upstream Polymarket calls.
+ *   `poly_trader_wallets`, `poly_trader_position_snapshots`. No upstream
+ *   Polymarket calls.
  * Links: docs/design/poly-dashboard-market-aggregation.md,
  *        docs/design/poly-hedge-followup-policy.md,
  *        .context/market-aggregation-research-handoff.md
@@ -174,7 +179,6 @@ async function readTargetLegs(params: {
     WITH active_targets AS (
       SELECT
         lower(t.target_wallet) AS wallet_address,
-        t.id AS copy_target_id,
         w.id AS trader_wallet_id,
         COALESCE(NULLIF(w.label, ''), 'Copy target') AS label
       FROM poly_copy_trade_targets t
@@ -182,19 +186,6 @@ async function readTargetLegs(params: {
       WHERE t.billing_account_id = ${params.billingAccountId}
         AND t.disabled_at IS NULL
         AND w.disabled_at IS NULL
-    ),
-    filled_target_conditions AS (
-      SELECT DISTINCT
-        a.copy_target_id,
-        a.trader_wallet_id,
-        a.wallet_address,
-        a.label,
-        f.market_id AS condition_id
-      FROM active_targets a
-      JOIN poly_copy_trade_fills f ON f.target_id = a.copy_target_id
-      WHERE f.billing_account_id = ${params.billingAccountId}
-        AND f.market_id IN (${conditionList})
-        AND f.status IN ('filled', 'partial', 'open')
     ),
     latest_snapshots AS (
       SELECT DISTINCT ON (s.trader_wallet_id, s.condition_id, s.token_id)
@@ -208,16 +199,13 @@ async function readTargetLegs(params: {
         s.captured_at AS last_observed_at,
         s.raw
       FROM poly_trader_position_snapshots s
-      WHERE EXISTS (
-        SELECT 1 FROM filled_target_conditions ftc
-        WHERE ftc.trader_wallet_id = s.trader_wallet_id
-          AND ftc.condition_id = s.condition_id
-      )
+      WHERE s.condition_id IN (${conditionList})
+        AND s.trader_wallet_id IN (SELECT trader_wallet_id FROM active_targets)
       ORDER BY s.trader_wallet_id, s.condition_id, s.token_id, s.captured_at DESC
     )
     SELECT
-      ftc.wallet_address,
-      ftc.label,
+      a.wallet_address,
+      a.label,
       ls.condition_id,
       ls.token_id,
       -- Canonical Gamma metadata via poly_market_metadata; fall back to
@@ -249,10 +237,8 @@ async function readTargetLegs(params: {
       ls.last_observed_at,
       CASE WHEN ls.current_value_usdc > 0 THEN 'active' ELSE 'inactive' END
         AS lifecycle
-    FROM filled_target_conditions ftc
-    JOIN latest_snapshots ls
-      ON ls.trader_wallet_id = ftc.trader_wallet_id
-      AND ls.condition_id = ftc.condition_id
+    FROM latest_snapshots ls
+    JOIN active_targets a ON a.trader_wallet_id = ls.trader_wallet_id
     LEFT JOIN poly_market_metadata pmm
       ON pmm.condition_id = ls.condition_id
     ORDER BY ls.current_value_usdc DESC NULLS LAST
@@ -308,7 +294,11 @@ function groupParticipants(
   }
 
   type Line = WalletExecutionMarketGroup["lines"][number];
-  type LineWithMeta = { line: Line; ourCostBasisUsdc: number };
+  type LineWithMeta = {
+    line: Line;
+    ourCostBasisUsdc: number;
+    hasTargetLeg: boolean;
+  };
 
   const groupBuckets = new Map<
     string,
@@ -340,8 +330,13 @@ function groupParticipants(
     const ourPnlUsdc = sumPnl(ourLegs);
     const targetPnlUsdc = sumPnl(targetLegsForLine);
     const ourCostBasisUsdc = sumCostBasis(ourLegs);
-    const edgeGapUsdc = roundMoney(targetPnlUsdc - ourPnlUsdc);
-    const edgeGapPct = pctOrNull(edgeGapUsdc, ourCostBasisUsdc);
+    const hasTargetLeg = targetLegsForLine.length > 0;
+    // EDGE_GAP_NULL_WITHOUT_TARGETS: comparing our P/L to nobody is undefined.
+    const edgeGapUsdc = hasTargetLeg
+      ? roundMoney(targetPnlUsdc - ourPnlUsdc)
+      : null;
+    const edgeGapPct =
+      edgeGapUsdc === null ? null : pctOrNull(edgeGapUsdc, ourCostBasisUsdc);
     const lineStatus: WalletExecutionMarketLineStatus = ourLegs.some(
       (leg) => leg.ourPositionStatus === "live"
     )
@@ -372,7 +367,7 @@ function groupParticipants(
     if (bucket.eventTitle === null && eventTitle !== null) {
       bucket.eventTitle = eventTitle;
     }
-    bucket.lines.push({ line, ourCostBasisUsdc });
+    bucket.lines.push({ line, ourCostBasisUsdc, hasTargetLeg });
     groupBuckets.set(groupKey, bucket);
   }
 
@@ -381,13 +376,20 @@ function groupParticipants(
       const sorted = [...bucket.lines].sort((left, right) =>
         compareLine(left.line, right.line)
       );
-      const groupOurCostBasis = sorted.reduce(
-        (sum, entry) => sum + entry.ourCostBasisUsdc,
-        0
-      );
-      const groupEdgeGapUsdc = roundMoney(
-        sorted.reduce((sum, entry) => sum + entry.line.edgeGapUsdc, 0)
-      );
+      const groupHasTarget = sorted.some((entry) => entry.hasTargetLeg);
+      // Sum cost basis only for lines that contribute to the gap, so the
+      // percentage denominator matches the numerator.
+      const groupOurCostBasis = sorted
+        .filter((entry) => entry.hasTargetLeg)
+        .reduce((sum, entry) => sum + entry.ourCostBasisUsdc, 0);
+      const groupEdgeGapUsdc = groupHasTarget
+        ? roundMoney(
+            sorted.reduce(
+              (sum, entry) => sum + (entry.line.edgeGapUsdc ?? 0),
+              0
+            )
+          )
+        : null;
       const groupStatus: WalletExecutionMarketLineStatus = sorted.some(
         (entry) => entry.line.status === "live"
       )
@@ -417,7 +419,10 @@ function groupParticipants(
           )
         ),
         edgeGapUsdc: groupEdgeGapUsdc,
-        edgeGapPct: pctOrNull(groupEdgeGapUsdc, groupOurCostBasis),
+        edgeGapPct:
+          groupEdgeGapUsdc === null
+            ? null
+            : pctOrNull(groupEdgeGapUsdc, groupOurCostBasis),
         hedgeCount: lines.reduce((sum, line) => sum + line.hedgeCount, 0),
         lines,
       };

@@ -85,9 +85,11 @@ function pnlClass(value: number): string {
 /**
  * `edgeGapUsdc = targetPnl - ourPnl`. Positive = targets ahead of us
  * (alpha leaking) → render as `destructive`. Negative = we are ahead → success.
+ * Null = no target legs to compare against → muted (rendered as `—`).
  * Same orientation for the percentage cell.
  */
-function edgeGapClass(value: number): string {
+function edgeGapClass(value: number | null): string {
+  if (value === null) return "text-muted-foreground";
   if (value > 0) return "text-destructive";
   if (value < 0) return "text-success";
   return "text-muted-foreground";
@@ -334,13 +336,17 @@ export function makeColumns(): AnyCol[] {
       cell: ({ row }) => {
         const pct = row.original.edgeGapPct;
         const usdc = row.original.edgeGapUsdc;
+        const tooltip =
+          usdc === null
+            ? "No copy-target legs in this market"
+            : `Target P/L − our P/L = ${formatSignedUsd(usdc)}`;
         return (
           <div
             className={cn(
               "text-right text-sm tabular-nums",
               edgeGapClass(usdc)
             )}
-            title={`Target P/L − our P/L = ${formatSignedUsd(usdc)}`}
+            title={tooltip}
           >
             {formatEdgeGapPct(pct)}
           </div>

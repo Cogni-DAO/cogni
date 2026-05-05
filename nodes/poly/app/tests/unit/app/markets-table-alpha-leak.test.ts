@@ -68,4 +68,11 @@ describe("isAlphaLeak", () => {
     // pnlUsd = -10, edgeGap = -40 → targetPnl = -50.
     expect(isAlphaLeak(group({ pnlUsd: -10, edgeGapUsdc: -40 }))).toBe(false);
   });
+
+  it("returns false when edgeGapUsdc is null (no target legs)", () => {
+    // Solo market: we hold the position but no copy-target snapshot exists.
+    // "Edge gap vs. nobody" is undefined, not a leak.
+    expect(isAlphaLeak(group({ pnlUsd: -50, edgeGapUsdc: null }))).toBe(false);
+    expect(isAlphaLeak(group({ pnlUsd: 50, edgeGapUsdc: null }))).toBe(false);
+  });
 });
