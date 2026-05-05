@@ -21,6 +21,8 @@ Code style principles for Cogni-Template. Enforcement in config files (`eslint.c
 - **Hexagonal Architecture**: Dependencies point inward. See [Architecture](architecture.md).
 - **Type Safety First**: Strict TypeScript, no `any`, explicit return types.
 - **Code as Documentation**: File headers explain contracts.
+- **Code speaks for itself**: No inline comments narrating _what_ code does — names and types are the docs. Put non-obvious _why_ (constraints, invariants, workarounds) in the TSDoc module header; route spec / work-item / design-doc references through its `Links:` field. Cross-file orientation lives in `AGENTS.md` Pointers, not sprawled across source.
+- **Deterministic reproducibility**: Everything the system runs on lives in git — infra as code (GitOps via Argo + OpenTofu), memory as code (Dolt ops). Ad-hoc `ssh`, `kubectl`, one-off env vars, and console clicks are fine for a 5-minute experiment; anything that needs to stay gets captured as a script, terraform change, or GitOps commit before the session ends. If it isn't in git, it didn't happen.
 
 ## File Headers
 

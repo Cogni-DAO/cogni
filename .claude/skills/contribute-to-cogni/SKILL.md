@@ -76,7 +76,7 @@ At each phase: search the resource roots below for the relevant guides, specs, a
 ## Phase 2 — Flight Request
 
 7. Wait until all required CI checks are green on your PR head SHA.
-8. Request flight: `POST /api/v1/vcs/flight { "prNumber": N }` → 202 or 422 (CI not green). If a human dispatches the workflow directly, still validate only the exact PR head SHA that `/version.buildSha` serves.
+8. Request flight: `POST /api/v1/vcs/flight { "prNumber": N }` → 202 or 422 (CI not green). **The operator endpoint is the only sanctioned flight path** — it dispatches as the GitHub App so every flight is auditable to the operator, not a human PAT. Do not run `gh workflow run candidate-flight.yml` yourself; that produces a `triggering_actor` of whichever human's PAT you're using, breaks the agent-attribution chain, and leaves the operator with no record of your flight intent.
 
 ## Phase 3 — Self-Validate
 
