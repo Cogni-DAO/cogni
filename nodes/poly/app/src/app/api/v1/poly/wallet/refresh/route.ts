@@ -392,7 +392,7 @@ export const POST = wrapRouteHandlerWithLogging(
     }
 
     try {
-      const execution = await getExecutionSlice(address, {
+      const execution = await getExecutionSlice(container.serviceDb, address, {
         includePriceHistory: false,
         includeTrades: false,
       });
