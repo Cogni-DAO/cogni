@@ -25,6 +25,7 @@ import {
   __setClientsForTests,
   getDistributionsSlice,
   getExecutionSlice,
+  getSnapshotSlice,
 } from "@/features/wallet-analysis/server/wallet-analysis-service";
 
 function makeTrade(
@@ -323,30 +324,36 @@ describe("getDistributionsSlice — historical observed fills", () => {
         },
       },
     ];
+    // task.5012 CP4: getDistributionsSlice now reads resolutions from
+    // poly_market_outcomes via a second drizzle SELECT (no CLOB call). Build a
+    // fresh chain per `select()` call so `state.joined` is per-query.
+    const outcomeRows = [
+      { conditionId: "cid-a", tokenId: "asset-win", outcome: "winner" },
+      { conditionId: "cid-a", tokenId: "asset-loss", outcome: "loser" },
+    ];
     const fakeDb = {
-      select: () => fakeDb,
-      from: () => fakeDb,
-      innerJoin: () => fakeDb,
-      where: () => fakeDb,
-      orderBy: async () => rows,
+      select: () => {
+        const state = { joined: false };
+        const chain: Record<string, unknown> = {};
+        chain.from = () => chain;
+        chain.innerJoin = () => {
+          state.joined = true;
+          return chain;
+        };
+        chain.where = () =>
+          state.joined
+            ? chain
+            : (outcomeRows as unknown as Record<string, unknown>);
+        chain.orderBy = async () => rows;
+        return chain;
+      },
     };
-    __setClientsForTests({
-      clobPublic: {
-        async getMarketResolution() {
-          return {
-            closed: true,
-            tokens: [
-              { token_id: "asset-win", winner: true },
-              { token_id: "asset-loss", winner: false },
-            ],
-          };
-        },
-      } as unknown as PolymarketClobPublicClient,
-    });
 
-    const result = await getDistributionsSlice(addr, "historical", {
-      db: fakeDb as never,
-    });
+    const result = await getDistributionsSlice(
+      fakeDb as never,
+      addr,
+      "historical"
+    );
 
     expect(result.kind).toBe("ok");
     if (result.kind !== "ok") return;
@@ -363,5 +370,95 @@ describe("getDistributionsSlice — historical observed fills", () => {
         0
       )
     ).toBe(2);
+  });
+});
+
+describe("getSnapshotSlice — DB-backed (task.5012 CP4)", () => {
+  afterEach(() => {
+    __setClientsForTests({});
+    clearTtlCache();
+  });
+
+  it("computes snapshot metrics from poly_trader_fills + poly_market_outcomes", async () => {
+    const addr = "0xabcdef1234567890abcdef1234567890abcdef12";
+    // 1 BUY + 1 SELL on cid-a/asset-win (resolved winner → win),
+    // 1 BUY on cid-b/asset-pending (no outcome row → still open).
+    const fillRows = [
+      {
+        conditionId: "cid-a",
+        tokenId: "asset-win",
+        side: "BUY",
+        price: "0.40000000",
+        shares: "10.00000000",
+        observedAt: new Date("2026-05-01T12:00:00.000Z"),
+        raw: { outcome: "YES", attributes: { title: "Market A" } },
+      },
+      {
+        conditionId: "cid-a",
+        tokenId: "asset-win",
+        side: "SELL",
+        price: "0.80000000",
+        shares: "10.00000000",
+        observedAt: new Date("2026-05-02T12:00:00.000Z"),
+        raw: { outcome: "YES", attributes: { title: "Market A" } },
+      },
+      {
+        conditionId: "cid-b",
+        tokenId: "asset-pending",
+        side: "BUY",
+        price: "0.30000000",
+        shares: "20.00000000",
+        observedAt: new Date("2026-05-03T12:00:00.000Z"),
+        raw: { outcome: "YES", attributes: { title: "Market B" } },
+      },
+    ];
+    const outcomeRows = [
+      { conditionId: "cid-a", tokenId: "asset-win", outcome: "winner" },
+      { conditionId: "cid-a", tokenId: "asset-loss", outcome: "loser" },
+    ];
+    const fakeDb = {
+      select: () => {
+        const state = { joined: false };
+        const chain: Record<string, unknown> = {};
+        chain.from = () => chain;
+        chain.innerJoin = () => {
+          state.joined = true;
+          return chain;
+        };
+        chain.where = () =>
+          state.joined
+            ? chain
+            : (outcomeRows as unknown as Record<string, unknown>);
+        chain.orderBy = async () => fillRows;
+        return chain;
+      },
+    };
+
+    const result = await getSnapshotSlice(fakeDb as never, addr);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    // 1 resolved token (asset-win is closed+winner), 1 open token (asset-pending,
+    // no outcome row).
+    expect(result.value.resolvedPositions).toBe(1);
+    expect(result.value.openPositions).toBe(1);
+    expect(result.value.uniqueMarkets).toBe(2);
+    // resolvedPositions=1 < default minResolvedForMetrics (5) → trueWinRatePct null.
+    expect(result.value.trueWinRatePct).toBeNull();
+  });
+
+  it("returns warning on DB read failure", async () => {
+    const failingDb = {
+      select: () => {
+        throw new Error("db down");
+      },
+    };
+    const result = await getSnapshotSlice(
+      failingDb as never,
+      "0xabcdef1234567890abcdef1234567890abcdef12"
+    );
+    expect(result.kind).toBe("warn");
+    if (result.kind !== "warn") return;
+    expect(result.warning.slice).toBe("snapshot");
   });
 });
