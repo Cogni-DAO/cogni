@@ -14,6 +14,7 @@ One-shot operator scripts that mutate remote git state outside the regular CI/CD
 ## Pointers
 
 - [`bootstrap-per-node-deploy-branches.sh`](bootstrap-per-node-deploy-branches.sh): create + fast-forward `deploy/<env>-<node>` branches from each whole-slot `deploy/<env>` tip (task.0372 / `BOOTSTRAP_FAST_FORWARDS_BEFORE_MERGE`).
+- [`cleanup-candidate-a-shadow-namespaces.sh`](cleanup-candidate-a-shadow-namespaces.sh): one-shot recovery for bug.5009 — deletes shadow preview/production ApplicationSets + namespaces from candidate-a's k3s. Run via SSH on the candidate-a VM.
 
 ## Boundaries
 

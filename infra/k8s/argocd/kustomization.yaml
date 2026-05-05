@@ -8,6 +8,18 @@
 #   kubectl create namespace argocd
 #   kubectl kustomize infra/k8s/argocd/ | kubectl apply -n argocd -f -
 #
+# bug.5009: per-env *-applicationset.yaml files are intentionally NOT listed
+# in `resources:`. Each cluster (candidate-a / preview / production) must
+# reconcile only ITS OWN ApplicationSet. Per-env application happens via
+# scripts/setup/provision-test-vm.sh, .github/workflows/candidate-flight.yml,
+# and .github/workflows/promote-and-deploy.yml — those `kubectl apply` the
+# single matching `<env>-applicationset.yaml`. Bundling all three here let a
+# manual `kubectl kustomize | kubectl apply` (e.g. the bug.0312 recovery
+# handoff) shadow-install preview + production ApplicationSets onto
+# candidate-a, which then synced cogni-preview/cogni-production namespaces
+# in-cluster. Keep the per-env files in this directory; do not re-add them
+# to `resources:`.
+#
 # Pin to a specific release for reproducibility:
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -20,11 +32,6 @@ resources:
   - https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.4/manifests/install.yaml
   # ksops CMP plugin ConfigMap
   - ksops-cmp.yaml
-  # ApplicationSets — one per environment.
-  # canary was retired in bug.0312; candidate-a replaces it as the pre-merge slot.
-  - candidate-a-applicationset.yaml
-  - preview-applicationset.yaml
-  - production-applicationset.yaml
 
 patches:
   # Add ksops sidecar to repo-server for SOPS/age secret decryption
