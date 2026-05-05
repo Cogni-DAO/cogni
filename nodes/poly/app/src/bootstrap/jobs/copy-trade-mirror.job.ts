@@ -21,7 +21,6 @@
  * @internal
  */
 
-import { EVENT_NAMES } from "@cogni/node-shared";
 import type {
   LoggerPort,
   MetricsPort,
@@ -42,12 +41,17 @@ import type {
 } from "@/features/copy-trade/types";
 import type { OrderLedger } from "@/features/trading";
 import type { WalletActivitySource } from "@/features/wallet-watch";
+import { EVENT_NAMES } from "@/shared/observability/events";
 
 export const MIRROR_JOB_METRICS = {
   /** `poly_mirror_poll_ticks_total` — one per successful tick. Alertable on rate from >1 pod (SINGLE_WRITER canary). */
   pollTicksTotal: "poly_mirror_poll_ticks_total",
   /** `poly_mirror_poll_tick_errors_total` — tick wrapper catches an escape. */
   pollTickErrorsTotal: "poly_mirror_poll_tick_errors_total",
+  /** `poly_mirror_ws_wake_ticks_total` — wake-driven tick fired (push-on-wake path). Push runs in addition to the safety-net `setInterval`. Use `rate(...)` to confirm push is producing signal in prod. */
+  wsWakeTicksTotal: "poly_mirror_ws_wake_ticks_total",
+  /** `poly_mirror_ws_wake_tick_errors_total` — wake IIFE wrapper caught an escape (paranoia counter; `tick()` already swallows). */
+  wsWakeTickErrorsTotal: "poly_mirror_ws_wake_tick_errors_total",
 } as const;
 
 /** How far back to initialize the first-tick cursor (seconds). */
@@ -400,11 +404,67 @@ export function startMirrorPoll(deps: MirrorJobDeps): MirrorJobStopFn {
   // `void` keeps the promise from leaking back into the event loop error flow.
   void tick();
 
+  // Push-on-wake: when the source supports `subscribeWake`, a watched-asset WS
+  // frame fires the registered callback synchronously. We collapse fan-in with
+  // a single-flight runner — at most one wake-tick in flight, plus at most one
+  // queued follow-up — so a burst of frames coalesces into ≤2 ticks. The 30s
+  // `setInterval` below is the safety-net for new-market discovery and zombie
+  // WS recovery; it stays untouched. Push path is purely additive.
+  let inFlightWakeTick: Promise<void> | null = null;
+  let queuedWakeup = false;
+  let unsubscribeWake: (() => void) | null = null;
+
+  if (deps.source.subscribeWake) {
+    unsubscribeWake = deps.source.subscribeWake(() => {
+      if (inFlightWakeTick) {
+        queuedWakeup = true;
+        return;
+      }
+      inFlightWakeTick = (async () => {
+        do {
+          queuedWakeup = false;
+          const t0 = Date.now();
+          let threw = false;
+          try {
+            await tick();
+          } catch (err: unknown) {
+            // `tick()` already swallows everything; this is paranoia for a
+            // future refactor that lets something escape.
+            threw = true;
+            deps.metrics.incr(MIRROR_JOB_METRICS.wsWakeTickErrorsTotal, {});
+            log.error(
+              {
+                event: EVENT_NAMES.POLY_MIRROR_POLL_TICK_ERROR,
+                errorCode: "wake_tick_threw",
+                err: err instanceof Error ? err.message : String(err),
+              },
+              "push-on-wake tick threw (continuing)"
+            );
+          }
+          if (!threw) {
+            deps.metrics.incr(MIRROR_JOB_METRICS.wsWakeTicksTotal, {});
+          }
+          log.debug(
+            {
+              event: EVENT_NAMES.POLY_MIRROR_WAKE_TICK,
+              duration_ms: Date.now() - t0,
+              queued: queuedWakeup,
+              threw,
+            },
+            "wake tick complete"
+          );
+        } while (queuedWakeup);
+        inFlightWakeTick = null;
+      })();
+    });
+  }
+
   const handle = setInterval(() => {
     void tick();
   }, MIRROR_POLL_MS);
 
   return function stop() {
+    unsubscribeWake?.();
     clearInterval(handle);
     log.info(
       { event: EVENT_NAMES.POLY_MIRROR_POLL_STOPPED },

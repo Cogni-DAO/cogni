@@ -3,29 +3,33 @@
 
 /**
  * Module: `@features/wallet-analysis/server/wallet-analysis-service`
- * Purpose: Service layer feeding `/api/v1/poly/wallets/[addr]` (snapshot, trades, balance, pnl slices) and `/api/v1/poly/wallet/execution` (live/closed position split). The `pnl` and `trades` slices are pure DB reads (PAGE_LOAD_DB_ONLY — task.5012 CP1+CP2). Other slices still fetch via `PolymarketDataApiClient` + the public CLOB client, bounded by a process-wide `p-limit(4)` and per-(slice, addr) coalesced under a 30 s TTL; CP3+ will move them to DB read-models.
+ * Purpose: Service layer feeding `/api/v1/poly/wallets/[addr]` (snapshot, trades, balance, pnl slices) and `/api/v1/poly/wallet/execution` (live/closed position split). The `pnl`, `trades`, `balance`, and `execution` (positions+trades) slices are DB-only reads (PAGE_LOAD_DB_ONLY — task.5012 CP1/CP2/CP5). Snapshot and distributions(live) still hit Data API + CLOB; CP4 moves those to DB. CLOB `getPriceHistory` per open position remains live (`PAGE_LOAD_DB_ONLY_EXCEPT_PRICE_HISTORY`, closed by CP7).
  * Scope: Compute + I/O only. Does not authenticate, does not parse HTTP. Returns Zod-validated slice values per the wallet-analysis v1 and execution v1 contracts.
  * Invariants:
  *   - REUSE_PACKAGE_CLIENTS: all upstream HTTP goes through `@cogni/poly-market-provider` clients — no fetch in this file.
  *   - DETERMINISTIC_METRICS: snapshot math is identical to `computeWalletMetrics` (spike.0323 v3) for the trade-derived fields it surfaces (winrate, duration, activity counts). PnL-class outputs (`realizedPnlUsdc` etc.) of `computeWalletMetrics` are deliberately not surfaced; PnL is sourced from the `pnl` slice (task.0389).
  *   - PNL_NOT_IN_SNAPSHOT: `getSnapshotSlice` does not return any PnL field. Headline PnL on the wallet research surface is derived from `getPnlSlice` (DB-backed `poly_trader_user_pnl_points`, written by the trader-observation tick) — single source, reconciles with the chart by construction.
- *   - PAGE_LOAD_DB_ONLY (task.5012): `getPnlSlice` performs no outbound HTTP. The trader-observation job is the only writer to the user-pnl read model.
+ *   - PAGE_LOAD_DB_ONLY (task.5012): every slice except `getExecutionSlice`'s CLOB price-history call is DB-only. `getPnlSlice` reads `poly_trader_user_pnl_points`; `getTradesSlice` + `getSnapshotSlice` + `getDistributionsSlice` read `poly_trader_fills` + `poly_market_outcomes`; `getBalanceSlice` + `getExecutionSlice` read `poly_trader_current_positions` + `poly_trader_fills`. Conditions absent from `poly_market_outcomes` are treated as unresolved (open positions).
+ *   - PAGE_LOAD_DB_ONLY_EXCEPT_PRICE_HISTORY (task.5012 CP5): `getExecutionSlice` still calls CLOB `getPriceHistory` per open position — bounded v0 carve-out, removed by CP7's `poly_market_price_history` mirror.
  *   - PARTIAL_FAILURE_NEVER_THROWS: each slice returns a `{ value | warning }` result; the route surfaces warnings without 5xx-ing.
  *   - CLOB_HISTORY_OPEN_ONLY: `getPriceHistory` is fetched only for open/redeemable positions; closed positions use trade-derived timelines only.
- *   - PAGE_LOAD_DB_ONLY (task.5018): `getExecutionSlice` reads price-history from `poly_market_price_history` (DB-backed). The price-history bootstrap job is the only writer. Closes the `PAGE_LOAD_DB_ONLY_EXCEPT_PRICE_HISTORY` carve-out from CP5.
- * Side-effects: IO (Polymarket Data API + DB reads for user-pnl + price-history).
+ *   - PAGE_LOAD_DB_ONLY (task.5018 CP7): `getExecutionSlice` reads price-history from `poly_market_price_history` (DB-backed). The price-history bootstrap job is the only writer. Closes the `PAGE_LOAD_DB_ONLY_EXCEPT_PRICE_HISTORY` carve-out from CP5 — every wallet-analysis page-load surface is now DB-only.
+ * Side-effects: IO (DB reads only post-CP7; trader-observation + market-outcome + price-history ticks are the only writers).
  * Notes: Cache is process-scoped — see `instrumentation.ts` single-replica boot assert.
- * Links: docs/design/wallet-analysis-components.md, nodes/poly/packages/market-provider/src/analysis/wallet-metrics.ts, nodes/poly/packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts, nodes/poly/packages/node-contracts/src/poly.wallet.execution.v1.contract.ts
+ * Links: docs/design/wallet-analysis-components.md, nodes/poly/packages/market-provider/src/analysis/wallet-metrics.ts, nodes/poly/packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts, nodes/poly/packages/node-contracts/src/poly.wallet.execution.v1.contract.ts, work/items/task.5012, work/items/task.5015
  * @public
  */
 
 import {
+  polyMarketOutcomes,
+  polyTraderCurrentPositions,
   polyTraderFills,
   polyTraderWallets,
 } from "@cogni/poly-db-schema/trader-activity";
-import {
+import type {
   PolymarketClobPublicClient,
-  PolymarketDataApiClient,
+  PolymarketUserPosition,
+  PolymarketUserTrade,
 } from "@cogni/poly-market-provider/adapters/polymarket";
 import {
   computeWalletMetrics,
@@ -47,10 +51,9 @@ import type {
   WalletExecutionPosition,
   WalletExecutionWarning,
 } from "@cogni/poly-node-contracts";
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import pLimit from "p-limit";
 import { clearTtlCacheByPrefix, coalesce } from "./coalesce";
 import {
   pickStoredPriceHistoryFidelity,
@@ -61,13 +64,8 @@ import { getTradingWalletPnlHistory } from "./trading-wallet-overview-service";
 /** Cache TTL for every slice. Matches design doc 30 s. */
 const SLICE_TTL_MS = 30_000;
 
-/** Per-process upstream concurrency cap — design invariant `p-limit(4)`. */
-const upstreamLimit = pLimit(4);
-
 /** Trades fetched per analysis request (`computeWalletMetrics` accepts up to ~500 per the Data API cap). */
 const TRADE_FETCH_LIMIT = 500;
-const EXECUTION_TRADE_FETCH_LIMIT = 10_000;
-const EXECUTION_POSITION_FETCH_LIMIT = 500;
 /** Max open/redeemable rows returned in live_positions. */
 const EXECUTION_OPEN_LIMIT = 18;
 /** Max closed rows returned in closed_positions. */
@@ -88,27 +86,19 @@ type HistoricalFillRow = {
 };
 
 /**
- * Module-singleton clients — created lazily so test code can `vi.mock` either of them
- * before first use. Public-only access; no auth/credentials involved.
+ * Module-singleton CLOB public client — retained as a no-op test surface
+ * after CP7 swapped the price-history call to a DB read. The CLOB client
+ * is no longer invoked at runtime; the singleton persists so existing tests
+ * that construct + inject a fake (`__setClientsForTests({ clobPublic })`)
+ * continue to compile without rework. Drop both this var and the setter
+ * once those tests are migrated.
  */
-let dataApiClient: PolymarketDataApiClient | undefined;
 let clobPublicClient: PolymarketClobPublicClient | undefined;
 
-function getDataApiClient(): PolymarketDataApiClient {
-  if (!dataApiClient) dataApiClient = new PolymarketDataApiClient();
-  return dataApiClient;
-}
-function getClobPublicClient(): PolymarketClobPublicClient {
-  if (!clobPublicClient) clobPublicClient = new PolymarketClobPublicClient();
-  return clobPublicClient;
-}
-
-/** Test-only: replace the module-singleton clients with stubs. */
+/** Test-only: kept as a structural shim post-CP7. See note above. */
 export function __setClientsForTests(opts: {
-  dataApi?: PolymarketDataApiClient;
   clobPublic?: PolymarketClobPublicClient;
 }): void {
-  dataApiClient = opts.dataApi ?? dataApiClient;
   clobPublicClient = opts.clobPublic ?? clobPublicClient;
 }
 
@@ -124,6 +114,9 @@ export function invalidateWalletAnalysisCaches(addr: string): void {
   const addressVariants = new Set([addr, addr.toLowerCase()]);
   for (const address of addressVariants) {
     clearTtlCacheByPrefix(`positions:${address}`);
+    clearTtlCacheByPrefix(`db-positions:${address}`);
+    clearTtlCacheByPrefix(`db-balance:${address}`);
+    clearTtlCacheByPrefix(`db-execution-trades:${address}`);
     clearTtlCacheByPrefix(`trades:${address}`);
     clearTtlCacheByPrefix(`execution-trades:${address}`);
     clearTtlCacheByPrefix(`pnl:${address}:`);
@@ -208,38 +201,20 @@ function extractTitle(raw: Record<string, unknown> | null): string {
   return typeof title === "string" ? title : "";
 }
 
-/** Compute the snapshot (deterministic metrics) slice. Coalesced + p-limited. */
+/**
+ * Compute the snapshot (deterministic metrics) slice. PAGE_LOAD_DB_ONLY (task.5012 CP4):
+ * trades come from `poly_trader_fills`, resolutions come from `poly_market_outcomes`.
+ * Conditions missing from the outcomes table are treated as unresolved by
+ * `computeWalletMetrics` (they remain in `openPositions`).
+ */
 export async function getSnapshotSlice(
+  db: Db,
   addr: string
 ): Promise<SliceResult<WalletAnalysisSnapshot>> {
   try {
-    const trades = await coalesce(
-      `trades:${addr}`,
-      () =>
-        upstreamLimit(() =>
-          getDataApiClient().listUserActivity(addr, {
-            limit: TRADE_FETCH_LIMIT,
-          })
-        ),
-      SLICE_TTL_MS
-    );
-
+    const trades = await readDbFillsAsOrderFlowTrades(db, addr);
     const cids = [...new Set(trades.map((t) => t.conditionId))];
-    const resolutions = new Map<string, MarketResolutionInput>();
-    await Promise.all(
-      cids.map((cid) =>
-        coalesce(
-          `resolution:${cid}`,
-          () =>
-            upstreamLimit(() => getClobPublicClient().getMarketResolution(cid)),
-          // Resolutions are immutable once `closed=true`, but we keep a short
-          // TTL so we re-poll markets that aren't closed yet.
-          SLICE_TTL_MS
-        ).then((r) => {
-          if (r) resolutions.set(cid, r);
-        })
-      )
-    );
+    const resolutions = await readResolutionsForConditions(db, cids);
 
     const m = computeWalletMetrics(trades, resolutions);
     return {
@@ -275,57 +250,20 @@ export async function getSnapshotSlice(
 /**
  * Distributions slice — order-flow histograms (DCA depth, trade size, entry
  * price, DCA window, hour-of-day, event clustering) with won/lost/pending
- * outcome split. Reuses the `trades:${addr}` + `resolution:${cid}` cache
- * entries populated by `getSnapshotSlice` so a request that includes both
- * slices triggers exactly one upstream fan-out per (wallet, market).
- *
- * `historical` reads every saved observation for rostered research wallets;
- * `live` keeps the arbitrary-address on-demand path.
+ * outcome split. PAGE_LOAD_DB_ONLY (task.5012 CP4): trades from
+ * `poly_trader_fills`, resolutions from `poly_market_outcomes`. The legacy
+ * `live` mode is collapsed into `historical` — both modes now read DB only;
+ * `mode` is preserved on the response for contract continuity.
  */
 export async function getDistributionsSlice(
+  db: Db,
   addr: string,
-  mode: "live" | "historical",
-  opts: { db?: Db | undefined } = {}
+  mode: "live" | "historical"
 ): Promise<SliceResult<WalletAnalysisDistributions>> {
-  if (mode === "historical") {
-    if (!opts.db) {
-      return {
-        kind: "warn",
-        warning: {
-          slice: "distributions",
-          code: "distributions_unavailable",
-          message: "historical mode requires a service database handle",
-        },
-      };
-    }
-    return getHistoricalDistributionsSlice(addr, opts.db);
-  }
   try {
-    const trades = await coalesce(
-      `trades:${addr}`,
-      () =>
-        upstreamLimit(() =>
-          getDataApiClient().listUserActivity(addr, {
-            limit: TRADE_FETCH_LIMIT,
-          })
-        ),
-      SLICE_TTL_MS
-    );
-
+    const trades = await readDbFillsAsOrderFlowTrades(db, addr);
     const cids = [...new Set(trades.map((t) => t.conditionId))];
-    const resolutions = new Map<string, MarketResolutionInput>();
-    await Promise.all(
-      cids.map((cid) =>
-        coalesce(
-          `resolution:${cid}`,
-          () =>
-            upstreamLimit(() => getClobPublicClient().getMarketResolution(cid)),
-          SLICE_TTL_MS
-        ).then((r) => {
-          if (r) resolutions.set(cid, r);
-        })
-      )
-    );
+    const resolutions = await readResolutionsForConditions(db, cids);
 
     const summary = summariseOrderFlow(trades, resolutions);
     return {
@@ -353,75 +291,216 @@ export async function getDistributionsSlice(
   }
 }
 
-async function getHistoricalDistributionsSlice(
-  addr: string,
-  db: Db
-): Promise<SliceResult<WalletAnalysisDistributions>> {
-  try {
-    const trades = await coalesce(
-      `historical-trader-fills:${addr}`,
-      async () => {
-        const rows = (await db
-          .select({
-            conditionId: polyTraderFills.conditionId,
-            tokenId: polyTraderFills.tokenId,
-            side: polyTraderFills.side,
-            price: polyTraderFills.price,
-            shares: polyTraderFills.shares,
-            observedAt: polyTraderFills.observedAt,
-            raw: polyTraderFills.raw,
-          })
-          .from(polyTraderFills)
-          .innerJoin(
-            polyTraderWallets,
-            eq(polyTraderWallets.id, polyTraderFills.traderWalletId)
-          )
-          .where(eq(polyTraderWallets.walletAddress, addr.toLowerCase()))
-          .orderBy(asc(polyTraderFills.observedAt))) as HistoricalFillRow[];
-        return rows.map(historicalFillToOrderFlowTrade);
-      },
-      SLICE_TTL_MS
-    );
-
-    const cids = [...new Set(trades.map((t) => t.conditionId))];
-    const resolutions = new Map<string, MarketResolutionInput>();
-    await Promise.all(
-      cids.map((cid) =>
-        coalesce(
-          `resolution:${cid}`,
-          () =>
-            upstreamLimit(() => getClobPublicClient().getMarketResolution(cid)),
-          SLICE_TTL_MS
-        ).then((r) => {
-          if (r) resolutions.set(cid, r);
+/**
+ * Read every observed fill for a wallet from `poly_trader_fills` and project
+ * into the structural `OrderFlowTrade` shape (which extends `WalletTradeInput`,
+ * so the same rows feed `computeWalletMetrics`). Returns `[]` when the wallet
+ * has no rows (cold-start before observation tick).
+ */
+async function readDbFillsAsOrderFlowTrades(
+  db: Db,
+  addr: string
+): Promise<OrderFlowTrade[]> {
+  return coalesce(
+    `historical-trader-fills:${addr}`,
+    async () => {
+      const rows = (await db
+        .select({
+          conditionId: polyTraderFills.conditionId,
+          tokenId: polyTraderFills.tokenId,
+          side: polyTraderFills.side,
+          price: polyTraderFills.price,
+          shares: polyTraderFills.shares,
+          observedAt: polyTraderFills.observedAt,
+          raw: polyTraderFills.raw,
         })
-      )
-    );
+        .from(polyTraderFills)
+        .innerJoin(
+          polyTraderWallets,
+          eq(polyTraderWallets.id, polyTraderFills.traderWalletId)
+        )
+        .where(eq(polyTraderWallets.walletAddress, addr.toLowerCase()))
+        .orderBy(asc(polyTraderFills.observedAt))) as HistoricalFillRow[];
+      return rows.map(historicalFillToOrderFlowTrade);
+    },
+    SLICE_TTL_MS
+  );
+}
 
-    const summary = summariseOrderFlow(trades, resolutions);
-    return {
-      kind: "ok",
-      value: {
-        mode: "historical",
-        range: summary.range,
-        dcaDepth: { buckets: [...summary.dcaDepth.buckets] },
-        tradeSize: { buckets: [...summary.tradeSize.buckets] },
-        entryPrice: { buckets: [...summary.entryPrice.buckets] },
-        dcaWindow: { buckets: [...summary.dcaWindow.buckets] },
-        hourOfDay: { buckets: [...summary.hourOfDay.buckets] },
-        eventClustering: { buckets: [...summary.eventClustering.buckets] },
-        topEvents: [...summary.topEvents],
-        pendingShare: summary.pendingShare,
-        quantiles: summary.quantiles,
-        computedAt: new Date().toISOString(),
-      },
-    };
-  } catch (err) {
-    return {
-      kind: "warn",
-      warning: warning("distributions", err),
-    };
+/**
+ * Read `poly_market_outcomes` rows for the given conditionIds and group into
+ * the `MarketResolutionInput` shape `computeWalletMetrics` / `summariseOrderFlow`
+ * expect. A condition is `closed=true` only when ALL its observed token rows
+ * carry a non-`unknown` outcome. Conditions absent from the table do not appear
+ * in the returned map — downstream math then treats them as open/unresolved.
+ */
+async function readResolutionsForConditions(
+  db: Db,
+  conditionIds: ReadonlyArray<string>
+): Promise<Map<string, MarketResolutionInput>> {
+  const out = new Map<string, MarketResolutionInput>();
+  if (conditionIds.length === 0) return out;
+
+  const rows = (await db
+    .select({
+      conditionId: polyMarketOutcomes.conditionId,
+      tokenId: polyMarketOutcomes.tokenId,
+      outcome: polyMarketOutcomes.outcome,
+    })
+    .from(polyMarketOutcomes)
+    .where(
+      inArray(polyMarketOutcomes.conditionId, [...conditionIds])
+    )) as Array<{
+    conditionId: string;
+    tokenId: string;
+    outcome: string;
+  }>;
+
+  const grouped = new Map<
+    string,
+    Array<{ token_id: string; winner: boolean; resolved: boolean }>
+  >();
+  for (const row of rows) {
+    const list = grouped.get(row.conditionId) ?? [];
+    list.push({
+      token_id: row.tokenId,
+      winner: row.outcome === "winner",
+      resolved: row.outcome !== "unknown",
+    });
+    grouped.set(row.conditionId, list);
   }
+
+  for (const [cid, tokens] of grouped) {
+    const closed = tokens.length > 0 && tokens.every((t) => t.resolved);
+    out.set(cid, {
+      closed,
+      tokens: tokens.map((t) => ({ token_id: t.token_id, winner: t.winner })),
+    });
+  }
+  return out;
+}
+
+type DbFillRow = HistoricalFillRow;
+
+async function readFillsFromDb(db: Db, addr: string): Promise<DbFillRow[]> {
+  const rows = await db
+    .select({
+      conditionId: polyTraderFills.conditionId,
+      tokenId: polyTraderFills.tokenId,
+      side: polyTraderFills.side,
+      price: polyTraderFills.price,
+      shares: polyTraderFills.shares,
+      observedAt: polyTraderFills.observedAt,
+      raw: polyTraderFills.raw,
+    })
+    .from(polyTraderFills)
+    .innerJoin(
+      polyTraderWallets,
+      eq(polyTraderWallets.id, polyTraderFills.traderWalletId)
+    )
+    .where(eq(polyTraderWallets.walletAddress, addr.toLowerCase()))
+    .orderBy(asc(polyTraderFills.observedAt));
+  return rows as DbFillRow[];
+}
+
+/**
+ * Project a `poly_trader_current_positions` row into the
+ * `PolymarketUserPosition` shape `mapExecutionPositions` expects. The fields
+ * not stored on the DB row (eventId, oppositeAsset, …) are filled with the
+ * permissive defaults from `PolymarketUserPositionSchema` so downstream
+ * mapping is lossless for the dashboard slice.
+ */
+function dbPositionToUserPosition(
+  row: DbCurrentPositionRow
+): PolymarketUserPosition {
+  const raw = isRecord(row.raw) ? row.raw : {};
+  const shares = toFiniteNumber(row.shares);
+  const costBasis = toFiniteNumber(row.costBasisUsdc);
+  const currentValue = toFiniteNumber(row.currentValueUsdc);
+  const avgPrice = toFiniteNumber(row.avgPrice);
+  const rawCurPrice = readOptionalNumber(raw, "curPrice");
+  const curPrice = rawCurPrice ?? (shares > 0 ? currentValue / shares : 0);
+  const cashPnl = currentValue - costBasis;
+  const percentPnl = costBasis > 0 ? (cashPnl / costBasis) * 100 : 0;
+  const redeemable = readOptionalBoolean(raw, "redeemable") ?? false;
+  const attributes = isRecord(raw.attributes) ? raw.attributes : {};
+  return {
+    proxyWallet: readOptionalString(raw, "proxyWallet") ?? "",
+    asset: row.tokenId,
+    conditionId: row.conditionId,
+    size: shares,
+    avgPrice,
+    initialValue: costBasis,
+    currentValue,
+    cashPnl,
+    percentPnl,
+    totalBought: readOptionalNumber(raw, "totalBought") ?? 0,
+    realizedPnl: readOptionalNumber(raw, "realizedPnl") ?? 0,
+    percentRealizedPnl: readOptionalNumber(raw, "percentRealizedPnl") ?? 0,
+    curPrice,
+    redeemable,
+    mergeable: readOptionalBoolean(raw, "mergeable") ?? false,
+    title:
+      readOptionalString(raw, "title") ??
+      readOptionalString(attributes, "title") ??
+      "",
+    slug:
+      readOptionalString(raw, "slug") ??
+      readOptionalString(attributes, "slug") ??
+      "",
+    icon: readOptionalString(raw, "icon") ?? "",
+    eventId: readOptionalString(raw, "eventId") ?? "",
+    eventSlug:
+      readOptionalString(raw, "eventSlug") ??
+      readOptionalString(attributes, "event_slug") ??
+      "",
+    outcome: readOptionalString(raw, "outcome") ?? "",
+    outcomeIndex: readOptionalNumber(raw, "outcomeIndex") ?? 0,
+    oppositeOutcome: readOptionalString(raw, "oppositeOutcome") ?? "",
+    oppositeAsset: readOptionalString(raw, "oppositeAsset") ?? "",
+    endDate: readOptionalString(raw, "endDate") ?? "",
+    negativeRisk: readOptionalBoolean(raw, "negativeRisk") ?? false,
+  };
+}
+
+/**
+ * Project a `poly_trader_fills` row into the `PolymarketUserTrade` shape
+ * `mapExecutionPositions` expects. Mirrors the historical-distributions
+ * projection (`historicalFillToOrderFlowTrade`) but emits the trade-shape
+ * fields the position-timeline mapper needs.
+ */
+function dbFillToUserTrade(row: DbFillRow): PolymarketUserTrade {
+  const raw = isRecord(row.raw) ? row.raw : {};
+  const attributes = isRecord(raw.attributes) ? raw.attributes : {};
+  const side = row.side === "SELL" ? "SELL" : "BUY";
+  return {
+    proxyWallet: readOptionalString(raw, "proxyWallet") ?? "",
+    side,
+    asset: row.tokenId,
+    conditionId: row.conditionId,
+    size: toFiniteNumber(row.shares),
+    price: toFiniteNumber(row.price),
+    timestamp: Math.floor(row.observedAt.getTime() / 1000),
+    title:
+      readOptionalString(raw, "title") ??
+      readOptionalString(attributes, "title") ??
+      "",
+    slug:
+      readOptionalString(raw, "slug") ??
+      readOptionalString(attributes, "slug") ??
+      "",
+    eventSlug:
+      readOptionalString(raw, "eventSlug") ??
+      readOptionalString(attributes, "event_slug") ??
+      "",
+    icon: readOptionalString(raw, "icon") ?? "",
+    outcome: readOptionalString(raw, "outcome") ?? "",
+    outcomeIndex: readOptionalNumber(raw, "outcomeIndex") ?? 0,
+    transactionHash:
+      readOptionalString(raw, "transactionHash") ??
+      readOptionalString(raw, "txHash") ??
+      "",
+  };
 }
 
 function historicalFillToOrderFlowTrade(
@@ -446,7 +525,9 @@ function historicalFillToOrderFlowTrade(
 }
 
 /**
- * Balance slice — positions for any wallet.
+ * Balance slice — positions for any wallet, sourced from the DB-backed
+ * `poly_trader_current_positions` mirror written by the trader-observation
+ * tick (task.5005). PAGE_LOAD_DB_ONLY (task.5012 CP5) — no outbound HTTP.
  *
  * Post-Stage-4 (OPERATOR_BRANCH_DORMANT): the single-operator "available +
  * locked" breakdown that used to run for `addr === POLY_PROTO_WALLET_ADDRESS`
@@ -456,21 +537,17 @@ function historicalFillToOrderFlowTrade(
  * this helper.
  */
 export async function getBalanceSlice(
+  db: Db,
   addr: string
 ): Promise<SliceResult<WalletAnalysisBalance>> {
   try {
-    const positions = await coalesce(
-      `positions:${addr}`,
-      () =>
-        upstreamLimit(() =>
-          getDataApiClient().listUserPositions(addr, {
-            limit: EXECUTION_POSITION_FETCH_LIMIT,
-          })
-        ),
+    const rows = await coalesce(
+      `db-balance:${addr}`,
+      () => readCurrentPositionsFromDb(db, addr),
       SLICE_TTL_MS
     );
-    const positionsValue = positions.reduce(
-      (s, p) => s + (p.currentValue ?? 0),
+    const positionsValue = rows.reduce(
+      (sum, row) => sum + toFiniteNumber(row.currentValueUsdc),
       0
     );
 
@@ -489,6 +566,48 @@ export async function getBalanceSlice(
       warning: warning("balance", err),
     };
   }
+}
+
+type DbCurrentPositionRow = {
+  conditionId: string;
+  tokenId: string;
+  shares: string | number;
+  costBasisUsdc: string | number;
+  currentValueUsdc: string | number;
+  avgPrice: string | number;
+  lastObservedAt: Date;
+  firstObservedAt: Date;
+  raw: Record<string, unknown> | null;
+};
+
+async function readCurrentPositionsFromDb(
+  db: Db,
+  addr: string
+): Promise<DbCurrentPositionRow[]> {
+  const rows = await db
+    .select({
+      conditionId: polyTraderCurrentPositions.conditionId,
+      tokenId: polyTraderCurrentPositions.tokenId,
+      shares: polyTraderCurrentPositions.shares,
+      costBasisUsdc: polyTraderCurrentPositions.costBasisUsdc,
+      currentValueUsdc: polyTraderCurrentPositions.currentValueUsdc,
+      avgPrice: polyTraderCurrentPositions.avgPrice,
+      lastObservedAt: polyTraderCurrentPositions.lastObservedAt,
+      firstObservedAt: polyTraderCurrentPositions.firstObservedAt,
+      raw: polyTraderCurrentPositions.raw,
+    })
+    .from(polyTraderCurrentPositions)
+    .innerJoin(
+      polyTraderWallets,
+      eq(polyTraderWallets.id, polyTraderCurrentPositions.traderWalletId)
+    )
+    .where(
+      and(
+        eq(polyTraderWallets.walletAddress, addr.toLowerCase()),
+        eq(polyTraderCurrentPositions.active, true)
+      )
+    );
+  return rows as DbCurrentPositionRow[];
 }
 
 /**
@@ -526,23 +645,15 @@ export async function getPnlSlice(
 }
 
 export async function getExecutionSlice(
+  db: Db,
   addr: string,
   opts: {
     /** Skip price-history overlay for refresh paths that only need trade cadence. */
     includePriceHistory?: boolean;
-    /** Skip the expensive `/trades` read when the caller only needs current holdings. */
+    /** Skip the expensive trade read when the caller only needs current holdings. */
     includeTrades?: boolean;
     /** Optional asset allowlist for DB-row enrichment callers. */
     assets?: readonly string[];
-    /**
-     * Service-role DB used to read `poly_market_price_history` for the
-     * per-position timeline overlay. Required when `includePriceHistory !== false`;
-     * page-load callers pass `container.serviceDb` (task.5018, CP7).
-     * Refresh-style callers that already pass `includePriceHistory: false` need not pass `db`.
-     */
-    db?:
-      | NodePgDatabase<Record<string, unknown>>
-      | PostgresJsDatabase<Record<string, unknown>>;
   } = {}
 ): Promise<PolyWalletExecutionOutput> {
   const capturedAt = new Date().toISOString();
@@ -551,32 +662,23 @@ export async function getExecutionSlice(
 
   const [positionsResult, tradesResult] = await Promise.allSettled([
     coalesce(
-      `positions:${addr}`,
-      () =>
-        upstreamLimit(() =>
-          getDataApiClient().listUserPositions(addr, {
-            limit: EXECUTION_POSITION_FETCH_LIMIT,
-          })
-        ),
+      `db-positions:${addr}`,
+      () => readCurrentPositionsFromDb(db, addr),
       SLICE_TTL_MS
     ),
     includeTrades
       ? coalesce(
-          `execution-trades:${addr}`,
-          () =>
-            upstreamLimit(() =>
-              getDataApiClient().listUserTrades(addr, {
-                limit: EXECUTION_TRADE_FETCH_LIMIT,
-              })
-            ),
+          `db-execution-trades:${addr}`,
+          () => readFillsFromDb(db, addr),
           SLICE_TTL_MS
         )
-      : Promise.resolve([]),
+      : Promise.resolve([] as DbFillRow[]),
   ]);
 
-  const positions =
+  const positionRows =
     positionsResult.status === "fulfilled" ? positionsResult.value : [];
-  const trades = tradesResult.status === "fulfilled" ? tradesResult.value : [];
+  const fillRows =
+    tradesResult.status === "fulfilled" ? tradesResult.value : [];
 
   if (positionsResult.status === "rejected") {
     warnings.push({
@@ -596,6 +698,9 @@ export async function getExecutionSlice(
           : String(tradesResult.reason),
     });
   }
+
+  const positions = positionRows.map(dbPositionToUserPosition);
+  const trades = fillRows.map(dbFillToUserTrade);
 
   const dailyTradeCountsResult = buildDailyCounts(
     trades,
@@ -628,13 +733,12 @@ export async function getExecutionSlice(
       : closedCandidates;
 
   let liveForResponse = livePreview;
-  if ((opts.includePriceHistory ?? true) && opts.db !== undefined) {
-    // Read per-asset price history from `poly_market_price_history` (task.5018).
+  if (opts.includePriceHistory ?? true) {
+    // Read per-asset price history from `poly_market_price_history` (task.5018 CP7).
     // The price-history bootstrap job is the only writer; this read is page-load
     // safe (PAGE_LOAD_DB_ONLY). Cold-start gap on a freshly-opened position
     // returns an empty series — `mapExecutionPositions` renders flat/empty
     // until the next 5-min tick ingests.
-    const db = opts.db;
     const priceHistoryByAsset = new Map<
       string,
       Awaited<ReturnType<PolymarketClobPublicClient["getPriceHistory"]>>
@@ -711,6 +815,24 @@ function readOptionalString(
 ): string | undefined {
   const value = record[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function readOptionalNumber(
+  record: Record<string, unknown>,
+  key: string
+): number | undefined {
+  const value = record[key];
+  if (value === null || value === undefined) return undefined;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function readOptionalBoolean(
+  record: Record<string, unknown>,
+  key: string
+): boolean | undefined {
+  const value = record[key];
+  return typeof value === "boolean" ? value : undefined;
 }
 
 function optionalField<TKey extends string>(

@@ -37,6 +37,11 @@ export const EVENT_NAMES = {
   POLY_WALLET_REFRESH_COMPLETE: "feature.poly_wallet_refresh.complete",
   POLY_WALLET_POSITIONS_CLOSE_COMPLETE:
     "feature.poly_wallet_positions_close.complete",
+
+  // Push-on-wake mirror dispatch (task.5017)
+  POLY_MIRROR_WAKE_TICK: "poly.mirror.wake_tick",
+  POLY_WALLET_WATCH_WS_WAKE_CALLBACK_THREW:
+    "poly.wallet_watch.ws.wake_callback_threw",
 } as const;
 
 export type EventName = (typeof EVENT_NAMES)[keyof typeof EVENT_NAMES];

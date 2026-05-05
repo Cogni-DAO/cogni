@@ -9,7 +9,7 @@
 
 ## Purpose
 
-Work item port interfaces, domain types, and storage adapters for structured work item management. Root entry (`@cogni/work-items`) exports pure types/interfaces. Adapter entries export `MarkdownWorkItemAdapter` for `work/items/*.md` frontmatter and `NotionWorkItemMirror` for a Notion view/edit projection prototype.
+Work item port interfaces, domain types, and the markdown file-backed adapter for structured work item management. Root entry (`@cogni/work-items`) exports pure types/interfaces. Adapter entry (`@cogni/work-items/markdown`) exports `MarkdownWorkItemAdapter` for reading/writing `work/items/*.md` frontmatter.
 
 ## Pointers
 
@@ -51,10 +51,6 @@ Work item port interfaces, domain types, and storage adapters for structured wor
   - `MarkdownWorkItemAdapter` — implements QueryPort + CommandPort against markdown files
   - `StaleRevisionError` — thrown on optimistic concurrency conflict
   - `InvalidTransitionError` — thrown on invalid status transition
-- **Exports (mirror `@cogni/work-items/notion`):**
-  - `NotionWorkItemMirror` — projects Cogni-owned work items to Notion and reads editable deltas
-  - `NotionWorkItemMirrorConfig` — auth, data source, fetch, and property-name config
-  - `NotionWorkItemPage`, `WorkItemNotionPatch` — sync job data shapes
 - **Files considered API:** `src/index.ts` (root barrel), `src/adapters/markdown/index.ts` (adapter barrel)
 
 ## Ports
@@ -64,7 +60,7 @@ Work item port interfaces, domain types, and storage adapters for structured wor
 
 ## Responsibilities
 
-- This directory **does**: Define port interfaces, domain types, transition rules, the markdown adapter, and the Notion mirror helper
+- This directory **does**: Define port interfaces, domain types, transition rules, and the markdown adapter
 - This directory **does not**: Import from `@/` or `src/`, depend on app-layer or service code
 
 ## Usage

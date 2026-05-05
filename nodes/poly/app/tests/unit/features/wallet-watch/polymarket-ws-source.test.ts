@@ -530,4 +530,248 @@ describe("createPolymarketWsActivitySource", () => {
     expect(ws.subscribed.size).toBe(0);
     expect(ws.tradeListeners.size).toBe(0);
   });
+
+  describe("subscribeWake (push-on-wake fanout)", () => {
+    it("fires registered callback synchronously on a watched-asset frame", async () => {
+      const ws = makeFakeWs();
+      const source = createPolymarketWsActivitySource({
+        client: makeStubClient({
+          positions: [makePosition(ASSET_ID)],
+          trades: [],
+        }),
+        ws,
+        wallet: TARGET_WALLET,
+        logger: noopLogger,
+        metrics: createRecordingMetrics(),
+      });
+      await flushMicrotasks();
+
+      let wakes = 0;
+      const unsubscribe = source.subscribeWake?.(() => {
+        wakes += 1;
+      });
+      expect(unsubscribe).toBeDefined();
+
+      ws.fireTrade({
+        event_type: "last_trade_price",
+        asset_id: ASSET_ID,
+        market: "",
+        side: "BUY",
+        price: 0.5,
+        size: 10,
+        timestamp: 1_700_000_500,
+        fee_rate_bps: 0,
+      });
+      expect(wakes).toBe(1);
+      source.stop();
+    });
+
+    it("does NOT fire callback for a non-watched asset", async () => {
+      const ws = makeFakeWs();
+      const source = createPolymarketWsActivitySource({
+        client: makeStubClient({
+          positions: [makePosition(ASSET_ID)],
+          trades: [],
+        }),
+        ws,
+        wallet: TARGET_WALLET,
+        logger: noopLogger,
+        metrics: createRecordingMetrics(),
+      });
+      await flushMicrotasks();
+
+      let wakes = 0;
+      source.subscribeWake?.(() => {
+        wakes += 1;
+      });
+
+      ws.fireTrade({
+        event_type: "last_trade_price",
+        asset_id: "not-our-asset",
+        market: "",
+        side: "BUY",
+        price: 0.5,
+        size: 10,
+        timestamp: 1_700_000_500,
+        fee_rate_bps: 0,
+      });
+      expect(wakes).toBe(0);
+      source.stop();
+    });
+
+    it("returned unsubscribe stops further callbacks", async () => {
+      const ws = makeFakeWs();
+      const source = createPolymarketWsActivitySource({
+        client: makeStubClient({
+          positions: [makePosition(ASSET_ID)],
+          trades: [],
+        }),
+        ws,
+        wallet: TARGET_WALLET,
+        logger: noopLogger,
+        metrics: createRecordingMetrics(),
+      });
+      await flushMicrotasks();
+
+      let wakes = 0;
+      const unsubscribe = source.subscribeWake?.(() => {
+        wakes += 1;
+      });
+
+      ws.fireTrade({
+        event_type: "last_trade_price",
+        asset_id: ASSET_ID,
+        market: "",
+        side: "BUY",
+        price: 0.5,
+        size: 10,
+        timestamp: 1_700_000_500,
+        fee_rate_bps: 0,
+      });
+      expect(wakes).toBe(1);
+
+      unsubscribe?.();
+
+      ws.fireTrade({
+        event_type: "last_trade_price",
+        asset_id: ASSET_ID,
+        market: "",
+        side: "BUY",
+        price: 0.5,
+        size: 10,
+        timestamp: 1_700_000_501,
+        fee_rate_bps: 0,
+      });
+      expect(wakes).toBe(1);
+      source.stop();
+    });
+
+    it("isolates a throwing callback so others still run and onTrade does not throw", async () => {
+      const ws = makeFakeWs();
+      const source = createPolymarketWsActivitySource({
+        client: makeStubClient({
+          positions: [makePosition(ASSET_ID)],
+          trades: [],
+        }),
+        ws,
+        wallet: TARGET_WALLET,
+        logger: noopLogger,
+        metrics: createRecordingMetrics(),
+      });
+      await flushMicrotasks();
+
+      let goodWakes = 0;
+      source.subscribeWake?.(() => {
+        throw new Error("first subscriber blew up");
+      });
+      source.subscribeWake?.(() => {
+        goodWakes += 1;
+      });
+
+      // Must not throw out of fireTrade.
+      expect(() =>
+        ws.fireTrade({
+          event_type: "last_trade_price",
+          asset_id: ASSET_ID,
+          market: "",
+          side: "BUY",
+          price: 0.5,
+          size: 10,
+          timestamp: 1_700_000_500,
+          fee_rate_bps: 0,
+        })
+      ).not.toThrow();
+      expect(goodWakes).toBe(1);
+      source.stop();
+    });
+
+    it("warn-logs `wake_callback_threw` with asset_id when a callback throws", async () => {
+      const ws = makeFakeWs();
+      const warnLogs: Array<Record<string, unknown>> = [];
+      const captureLogger = {
+        child: () => captureLogger,
+        debug: () => {},
+        info: () => {},
+        warn: (obj: Record<string, unknown>) => {
+          if (obj.event === "poly.wallet_watch.ws.wake_callback_threw") {
+            warnLogs.push(obj);
+          }
+        },
+        error: () => {},
+      } as unknown as Parameters<
+        typeof createPolymarketWsActivitySource
+      >[0]["logger"];
+
+      const source = createPolymarketWsActivitySource({
+        client: makeStubClient({
+          positions: [makePosition(ASSET_ID)],
+          trades: [],
+        }),
+        ws,
+        wallet: TARGET_WALLET,
+        logger: captureLogger,
+        metrics: createRecordingMetrics(),
+      });
+      await flushMicrotasks();
+
+      source.subscribeWake?.(() => {
+        throw new Error("kaboom");
+      });
+
+      ws.fireTrade({
+        event_type: "last_trade_price",
+        asset_id: ASSET_ID,
+        market: "",
+        side: "BUY",
+        price: 0.5,
+        size: 10,
+        timestamp: 1_700_000_500,
+        fee_rate_bps: 0,
+      });
+
+      expect(warnLogs).toHaveLength(1);
+      expect(warnLogs[0]).toMatchObject({
+        event: "poly.wallet_watch.ws.wake_callback_threw",
+        asset_id: ASSET_ID,
+        err: "kaboom",
+      });
+      source.stop();
+    });
+
+    it("stop() clears wake listeners (no callback after stop)", async () => {
+      const ws = makeFakeWs();
+      const source = createPolymarketWsActivitySource({
+        client: makeStubClient({
+          positions: [makePosition(ASSET_ID)],
+          trades: [],
+        }),
+        ws,
+        wallet: TARGET_WALLET,
+        logger: noopLogger,
+        metrics: createRecordingMetrics(),
+      });
+      await flushMicrotasks();
+
+      let wakes = 0;
+      source.subscribeWake?.(() => {
+        wakes += 1;
+      });
+
+      source.stop();
+
+      // Trade listener already removed by stop(); even if a stale frame
+      // somehow reached the source, wakeListeners is empty.
+      ws.fireTrade({
+        event_type: "last_trade_price",
+        asset_id: ASSET_ID,
+        market: "",
+        side: "BUY",
+        price: 0.5,
+        size: 10,
+        timestamp: 1_700_000_500,
+        fee_rate_bps: 0,
+      });
+      expect(wakes).toBe(0);
+    });
+  });
 });
