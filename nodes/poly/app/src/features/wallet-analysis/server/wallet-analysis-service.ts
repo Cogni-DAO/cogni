@@ -3,28 +3,32 @@
 
 /**
  * Module: `@features/wallet-analysis/server/wallet-analysis-service`
- * Purpose: Service layer feeding `/api/v1/poly/wallets/[addr]` (snapshot, trades, balance, pnl slices) and `/api/v1/poly/wallet/execution` (live/closed position split). Fetches via `PolymarketDataApiClient`, the public CLOB client, and the saved-observation `poly_trader_user_pnl_points` table. CLOB / Data API calls are bounded by a process-wide `p-limit(4)` and per-(slice, addr) coalesced under a 30 s TTL; the P/L slice is a pure DB read (PAGE_LOAD_DB_ONLY).
+ * Purpose: Service layer feeding `/api/v1/poly/wallets/[addr]` (snapshot, trades, balance, pnl slices) and `/api/v1/poly/wallet/execution` (live/closed position split). Snapshot/trades/distributions(live) still call the public Data API + CLOB; balance, pnl, and execution read the DB-backed `poly_trader_*` mirrors. CLOB / Data API calls are bounded by a process-wide `p-limit(4)` and per-(slice, addr) coalesced under a 30 s TTL.
  * Scope: Compute + I/O only. Does not authenticate, does not parse HTTP. Returns Zod-validated slice values per the wallet-analysis v1 and execution v1 contracts.
  * Invariants:
  *   - REUSE_PACKAGE_CLIENTS: all upstream HTTP goes through `@cogni/poly-market-provider` clients — no fetch in this file.
  *   - DETERMINISTIC_METRICS: snapshot math is identical to `computeWalletMetrics` (spike.0323 v3) for the trade-derived fields it surfaces (winrate, duration, activity counts). PnL-class outputs (`realizedPnlUsdc` etc.) of `computeWalletMetrics` are deliberately not surfaced; PnL is sourced from the `pnl` slice (task.0389).
  *   - PNL_NOT_IN_SNAPSHOT: `getSnapshotSlice` does not return any PnL field. Headline PnL on the wallet research surface is derived from `getPnlSlice` (DB-backed `poly_trader_user_pnl_points`, written by the trader-observation tick) — single source, reconciles with the chart by construction.
- *   - PAGE_LOAD_DB_ONLY (task.5012): `getPnlSlice` performs no outbound HTTP. The trader-observation job is the only writer to the user-pnl read model.
+ *   - PAGE_LOAD_DB_ONLY (task.5012): `getPnlSlice`, `getBalanceSlice`, and `getExecutionSlice` perform no outbound HTTP for positions/trades. The trader-observation job is the only writer to those read models.
+ *   - PAGE_LOAD_DB_ONLY_EXCEPT_PRICE_HISTORY (task.5012 CP5): `getExecutionSlice` still calls CLOB `getPriceHistory` per open position — bounded v0 carve-out, removed in v1 once a price-history mirror exists.
  *   - PARTIAL_FAILURE_NEVER_THROWS: each slice returns a `{ value | warning }` result; the route surfaces warnings without 5xx-ing.
  *   - CLOB_HISTORY_OPEN_ONLY: `getPriceHistory` is fetched only for open/redeemable positions; closed positions use trade-derived timelines only.
- * Side-effects: IO (Polymarket Data API + Polymarket CLOB public + DB read for user-pnl).
+ * Side-effects: IO (Polymarket Data API + Polymarket CLOB public + DB read for trader mirrors).
  * Notes: Cache is process-scoped — see `instrumentation.ts` single-replica boot assert.
- * Links: docs/design/wallet-analysis-components.md, nodes/poly/packages/market-provider/src/analysis/wallet-metrics.ts, nodes/poly/packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts, nodes/poly/packages/node-contracts/src/poly.wallet.execution.v1.contract.ts
+ * Links: docs/design/wallet-analysis-components.md, nodes/poly/packages/market-provider/src/analysis/wallet-metrics.ts, nodes/poly/packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts, nodes/poly/packages/node-contracts/src/poly.wallet.execution.v1.contract.ts, work/items/task.5012, work/items/task.5015
  * @public
  */
 
 import {
+  polyTraderCurrentPositions,
   polyTraderFills,
   polyTraderWallets,
 } from "@cogni/poly-db-schema/trader-activity";
 import {
   PolymarketClobPublicClient,
   PolymarketDataApiClient,
+  type PolymarketUserPosition,
+  type PolymarketUserTrade,
 } from "@cogni/poly-market-provider/adapters/polymarket";
 import {
   computeWalletMetrics,
@@ -46,7 +50,7 @@ import type {
   WalletExecutionPosition,
   WalletExecutionWarning,
 } from "@cogni/poly-node-contracts";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import pLimit from "p-limit";
@@ -61,8 +65,6 @@ const upstreamLimit = pLimit(4);
 
 /** Trades fetched per analysis request (`computeWalletMetrics` accepts up to ~500 per the Data API cap). */
 const TRADE_FETCH_LIMIT = 500;
-const EXECUTION_TRADE_FETCH_LIMIT = 10_000;
-const EXECUTION_POSITION_FETCH_LIMIT = 500;
 /** Max open/redeemable rows returned in live_positions. */
 const EXECUTION_OPEN_LIMIT = 18;
 /** Max closed rows returned in closed_positions. */
@@ -119,6 +121,9 @@ export function invalidateWalletAnalysisCaches(addr: string): void {
   const addressVariants = new Set([addr, addr.toLowerCase()]);
   for (const address of addressVariants) {
     clearTtlCacheByPrefix(`positions:${address}`);
+    clearTtlCacheByPrefix(`db-positions:${address}`);
+    clearTtlCacheByPrefix(`db-balance:${address}`);
+    clearTtlCacheByPrefix(`db-execution-trades:${address}`);
     clearTtlCacheByPrefix(`trades:${address}`);
     clearTtlCacheByPrefix(`execution-trades:${address}`);
     clearTtlCacheByPrefix(`pnl:${address}:`);
@@ -384,6 +389,130 @@ async function getHistoricalDistributionsSlice(
   }
 }
 
+type DbFillRow = HistoricalFillRow;
+
+async function readFillsFromDb(db: Db, addr: string): Promise<DbFillRow[]> {
+  const rows = await db
+    .select({
+      conditionId: polyTraderFills.conditionId,
+      tokenId: polyTraderFills.tokenId,
+      side: polyTraderFills.side,
+      price: polyTraderFills.price,
+      shares: polyTraderFills.shares,
+      observedAt: polyTraderFills.observedAt,
+      raw: polyTraderFills.raw,
+    })
+    .from(polyTraderFills)
+    .innerJoin(
+      polyTraderWallets,
+      eq(polyTraderWallets.id, polyTraderFills.traderWalletId)
+    )
+    .where(eq(polyTraderWallets.walletAddress, addr.toLowerCase()))
+    .orderBy(asc(polyTraderFills.observedAt));
+  return rows as DbFillRow[];
+}
+
+/**
+ * Project a `poly_trader_current_positions` row into the
+ * `PolymarketUserPosition` shape `mapExecutionPositions` expects. The fields
+ * not stored on the DB row (eventId, oppositeAsset, …) are filled with the
+ * permissive defaults from `PolymarketUserPositionSchema` so downstream
+ * mapping is lossless for the dashboard slice.
+ */
+function dbPositionToUserPosition(
+  row: DbCurrentPositionRow
+): PolymarketUserPosition {
+  const raw = isRecord(row.raw) ? row.raw : {};
+  const shares = toFiniteNumber(row.shares);
+  const costBasis = toFiniteNumber(row.costBasisUsdc);
+  const currentValue = toFiniteNumber(row.currentValueUsdc);
+  const avgPrice = toFiniteNumber(row.avgPrice);
+  const rawCurPrice = readOptionalNumber(raw, "curPrice");
+  const curPrice =
+    rawCurPrice ?? (shares > 0 ? currentValue / shares : 0);
+  const cashPnl = currentValue - costBasis;
+  const percentPnl = costBasis > 0 ? (cashPnl / costBasis) * 100 : 0;
+  const redeemable = readOptionalBoolean(raw, "redeemable") ?? false;
+  const attributes = isRecord(raw.attributes) ? raw.attributes : {};
+  return {
+    proxyWallet: readOptionalString(raw, "proxyWallet") ?? "",
+    asset: row.tokenId,
+    conditionId: row.conditionId,
+    size: shares,
+    avgPrice,
+    initialValue: costBasis,
+    currentValue,
+    cashPnl,
+    percentPnl,
+    totalBought: readOptionalNumber(raw, "totalBought") ?? 0,
+    realizedPnl: readOptionalNumber(raw, "realizedPnl") ?? 0,
+    percentRealizedPnl: readOptionalNumber(raw, "percentRealizedPnl") ?? 0,
+    curPrice,
+    redeemable,
+    mergeable: readOptionalBoolean(raw, "mergeable") ?? false,
+    title:
+      readOptionalString(raw, "title") ??
+      readOptionalString(attributes, "title") ??
+      "",
+    slug:
+      readOptionalString(raw, "slug") ??
+      readOptionalString(attributes, "slug") ??
+      "",
+    icon: readOptionalString(raw, "icon") ?? "",
+    eventId: readOptionalString(raw, "eventId") ?? "",
+    eventSlug:
+      readOptionalString(raw, "eventSlug") ??
+      readOptionalString(attributes, "event_slug") ??
+      "",
+    outcome: readOptionalString(raw, "outcome") ?? "",
+    outcomeIndex: readOptionalNumber(raw, "outcomeIndex") ?? 0,
+    oppositeOutcome: readOptionalString(raw, "oppositeOutcome") ?? "",
+    oppositeAsset: readOptionalString(raw, "oppositeAsset") ?? "",
+    endDate: readOptionalString(raw, "endDate") ?? "",
+    negativeRisk: readOptionalBoolean(raw, "negativeRisk") ?? false,
+  };
+}
+
+/**
+ * Project a `poly_trader_fills` row into the `PolymarketUserTrade` shape
+ * `mapExecutionPositions` expects. Mirrors the historical-distributions
+ * projection (`historicalFillToOrderFlowTrade`) but emits the trade-shape
+ * fields the position-timeline mapper needs.
+ */
+function dbFillToUserTrade(row: DbFillRow): PolymarketUserTrade {
+  const raw = isRecord(row.raw) ? row.raw : {};
+  const attributes = isRecord(raw.attributes) ? raw.attributes : {};
+  const side = row.side === "SELL" ? "SELL" : "BUY";
+  return {
+    proxyWallet: readOptionalString(raw, "proxyWallet") ?? "",
+    side,
+    asset: row.tokenId,
+    conditionId: row.conditionId,
+    size: toFiniteNumber(row.shares),
+    price: toFiniteNumber(row.price),
+    timestamp: Math.floor(row.observedAt.getTime() / 1000),
+    title:
+      readOptionalString(raw, "title") ??
+      readOptionalString(attributes, "title") ??
+      "",
+    slug:
+      readOptionalString(raw, "slug") ??
+      readOptionalString(attributes, "slug") ??
+      "",
+    eventSlug:
+      readOptionalString(raw, "eventSlug") ??
+      readOptionalString(attributes, "event_slug") ??
+      "",
+    icon: readOptionalString(raw, "icon") ?? "",
+    outcome: readOptionalString(raw, "outcome") ?? "",
+    outcomeIndex: readOptionalNumber(raw, "outcomeIndex") ?? 0,
+    transactionHash:
+      readOptionalString(raw, "transactionHash") ??
+      readOptionalString(raw, "txHash") ??
+      "",
+  };
+}
+
 function historicalFillToOrderFlowTrade(
   row: HistoricalFillRow
 ): OrderFlowTrade {
@@ -406,7 +535,9 @@ function historicalFillToOrderFlowTrade(
 }
 
 /**
- * Balance slice — positions for any wallet.
+ * Balance slice — positions for any wallet, sourced from the DB-backed
+ * `poly_trader_current_positions` mirror written by the trader-observation
+ * tick (task.5005). PAGE_LOAD_DB_ONLY (task.5012 CP5) — no outbound HTTP.
  *
  * Post-Stage-4 (OPERATOR_BRANCH_DORMANT): the single-operator "available +
  * locked" breakdown that used to run for `addr === POLY_PROTO_WALLET_ADDRESS`
@@ -416,21 +547,17 @@ function historicalFillToOrderFlowTrade(
  * this helper.
  */
 export async function getBalanceSlice(
+  db: Db,
   addr: string
 ): Promise<SliceResult<WalletAnalysisBalance>> {
   try {
-    const positions = await coalesce(
-      `positions:${addr}`,
-      () =>
-        upstreamLimit(() =>
-          getDataApiClient().listUserPositions(addr, {
-            limit: EXECUTION_POSITION_FETCH_LIMIT,
-          })
-        ),
+    const rows = await coalesce(
+      `db-balance:${addr}`,
+      () => readCurrentPositionsFromDb(db, addr),
       SLICE_TTL_MS
     );
-    const positionsValue = positions.reduce(
-      (s, p) => s + (p.currentValue ?? 0),
+    const positionsValue = rows.reduce(
+      (sum, row) => sum + toFiniteNumber(row.currentValueUsdc),
       0
     );
 
@@ -449,6 +576,48 @@ export async function getBalanceSlice(
       warning: warning("balance", err),
     };
   }
+}
+
+type DbCurrentPositionRow = {
+  conditionId: string;
+  tokenId: string;
+  shares: string | number;
+  costBasisUsdc: string | number;
+  currentValueUsdc: string | number;
+  avgPrice: string | number;
+  lastObservedAt: Date;
+  firstObservedAt: Date;
+  raw: Record<string, unknown> | null;
+};
+
+async function readCurrentPositionsFromDb(
+  db: Db,
+  addr: string
+): Promise<DbCurrentPositionRow[]> {
+  const rows = await db
+    .select({
+      conditionId: polyTraderCurrentPositions.conditionId,
+      tokenId: polyTraderCurrentPositions.tokenId,
+      shares: polyTraderCurrentPositions.shares,
+      costBasisUsdc: polyTraderCurrentPositions.costBasisUsdc,
+      currentValueUsdc: polyTraderCurrentPositions.currentValueUsdc,
+      avgPrice: polyTraderCurrentPositions.avgPrice,
+      lastObservedAt: polyTraderCurrentPositions.lastObservedAt,
+      firstObservedAt: polyTraderCurrentPositions.firstObservedAt,
+      raw: polyTraderCurrentPositions.raw,
+    })
+    .from(polyTraderCurrentPositions)
+    .innerJoin(
+      polyTraderWallets,
+      eq(polyTraderWallets.id, polyTraderCurrentPositions.traderWalletId)
+    )
+    .where(
+      and(
+        eq(polyTraderWallets.walletAddress, addr.toLowerCase()),
+        eq(polyTraderCurrentPositions.active, true)
+      )
+    );
+  return rows as DbCurrentPositionRow[];
 }
 
 /**
@@ -486,11 +655,12 @@ export async function getPnlSlice(
 }
 
 export async function getExecutionSlice(
+  db: Db,
   addr: string,
   opts: {
     /** Skip public CLOB price history for refresh paths that only need trade cadence. */
     includePriceHistory?: boolean;
-    /** Skip the expensive `/trades` read when the caller only needs current holdings. */
+    /** Skip the expensive trade read when the caller only needs current holdings. */
     includeTrades?: boolean;
     /** Optional asset allowlist for DB-row enrichment callers. */
     assets?: readonly string[];
@@ -502,32 +672,23 @@ export async function getExecutionSlice(
 
   const [positionsResult, tradesResult] = await Promise.allSettled([
     coalesce(
-      `positions:${addr}`,
-      () =>
-        upstreamLimit(() =>
-          getDataApiClient().listUserPositions(addr, {
-            limit: EXECUTION_POSITION_FETCH_LIMIT,
-          })
-        ),
+      `db-positions:${addr}`,
+      () => readCurrentPositionsFromDb(db, addr),
       SLICE_TTL_MS
     ),
     includeTrades
       ? coalesce(
-          `execution-trades:${addr}`,
-          () =>
-            upstreamLimit(() =>
-              getDataApiClient().listUserTrades(addr, {
-                limit: EXECUTION_TRADE_FETCH_LIMIT,
-              })
-            ),
+          `db-execution-trades:${addr}`,
+          () => readFillsFromDb(db, addr),
           SLICE_TTL_MS
         )
-      : Promise.resolve([]),
+      : Promise.resolve([] as DbFillRow[]),
   ]);
 
-  const positions =
+  const positionRows =
     positionsResult.status === "fulfilled" ? positionsResult.value : [];
-  const trades = tradesResult.status === "fulfilled" ? tradesResult.value : [];
+  const fillRows =
+    tradesResult.status === "fulfilled" ? tradesResult.value : [];
 
   if (positionsResult.status === "rejected") {
     warnings.push({
@@ -547,6 +708,9 @@ export async function getExecutionSlice(
           : String(tradesResult.reason),
     });
   }
+
+  const positions = positionRows.map(dbPositionToUserPosition);
+  const trades = fillRows.map(dbFillToUserTrade);
 
   const dailyTradeCountsResult = buildDailyCounts(
     trades,
@@ -580,7 +744,9 @@ export async function getExecutionSlice(
 
   let liveForResponse = livePreview;
   if (opts.includePriceHistory ?? true) {
-    // Fetch CLOB price history for live positions only.
+    // TODO(v1): move CLOB price-history into a DB read-model writer.
+    // PAGE_LOAD_DB_ONLY_EXCEPT_PRICE_HISTORY exception per task.5012 — bounded by
+    // open-position count (~10s per wallet); positions/trades above are DB reads.
     const priceHistoryByAsset = new Map<
       string,
       Awaited<ReturnType<PolymarketClobPublicClient["getPriceHistory"]>>
@@ -662,6 +828,24 @@ function readOptionalString(
 ): string | undefined {
   const value = record[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function readOptionalNumber(
+  record: Record<string, unknown>,
+  key: string
+): number | undefined {
+  const value = record[key];
+  if (value === null || value === undefined) return undefined;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function readOptionalBoolean(
+  record: Record<string, unknown>,
+  key: string
+): boolean | undefined {
+  const value = record[key];
+  return typeof value === "boolean" ? value : undefined;
 }
 
 function optionalField<TKey extends string>(
