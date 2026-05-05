@@ -94,6 +94,15 @@ export async function runMarketOutcomeTick(
   const fillsFilter = includeBackfill
     ? sql``
     : sql`WHERE observed_at > now() - INTERVAL '30 days'`;
+  // In backfill mode, the drain criterion is "every active condition has been
+  // resolved at least once" — so we filter to never-resolved rows only. This
+  // is reachable: once every active condition has an outcome row, the query
+  // returns 0 candidates and the job flips backfillPending → false. In normal
+  // mode we also refresh active markets older than 5 min so resolution status
+  // stays fresh post-drain.
+  const stalenessFilter = includeBackfill
+    ? sql`m.updated_at IS NULL`
+    : sql`m.updated_at IS NULL OR m.updated_at < now() - INTERVAL '5 minutes'`;
 
   const candidates = (await deps.db.execute(sql`
     WITH active_conditions AS (
@@ -110,9 +119,13 @@ export async function runMarketOutcomeTick(
     LEFT JOIN poly_market_outcomes m
       ON m.condition_id = a.condition_id
      AND m.token_id = a.token_id
-    WHERE m.updated_at IS NULL
-       OR m.updated_at < now() - INTERVAL '5 minutes'
-    ORDER BY a.condition_id, a.token_id
+    WHERE ${stalenessFilter}
+    -- Oldest stale (or never-resolved) rows first so the historical
+    -- backfill drains progressively across ticks. Previously
+    -- ORDER BY condition_id meant the tick re-processed the same
+    -- alphabetically-first 100 every cycle, capping resolution at
+    -- one batch per pod restart regardless of how long the job ran.
+    ORDER BY m.updated_at ASC NULLS FIRST, a.condition_id, a.token_id
     LIMIT ${batchSize}
   `)) as unknown as ConditionTokenRow[];
 

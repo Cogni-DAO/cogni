@@ -13,9 +13,14 @@
  *   - DEFAULT_5_MIN_CADENCE: spike.5001 confirmed `pLimit(4)` at 24 rps is safe;
  *     200–500 active conditions @ 5-min interval = ~100 calls/min, well below
  *     the 7,200/min ceiling.
- *   - BACKFILL_FIRST_TICK_ONCE: the first invocation runs with `includeBackfill`
- *     to populate historical conditions; subsequent ticks use the 30-day filter.
- *     State is process-local (no DB cursor) — restart re-runs the backfill.
+ *   - BACKFILL_UNTIL_DRAINED: ticks run with `includeBackfill = true` until
+ *     a tick returns `conditions === 0`, signalling the historical condition
+ *     set is fully resolved. Only then does the job switch to the 30-day
+ *     filter. Previous behaviour flipped the flag after the first tick
+ *     regardless of progress, which capped the backfill at one batch
+ *     (`batchSize`) per pod-restart and left ~95% of historical conditions
+ *     unresolved indefinitely. State is process-local (no DB cursor) —
+ *     restart re-runs the backfill loop.
  * Side-effects: starts a timer, performs IO through injected deps.
  * Links: work/items/task.5012, work/items/task.5016, work/items/spike.5001
  * @internal
@@ -72,7 +77,7 @@ export function startMarketOutcomeJob(
     running = true;
     const isBackfill = backfillPending;
     try {
-      await runMarketOutcomeTick({
+      const result = await runMarketOutcomeTick({
         db: deps.db,
         clobClient: deps.clobClient,
         logger: deps.logger,
@@ -80,7 +85,12 @@ export function startMarketOutcomeJob(
         ...(deps.batchSize !== undefined ? { batchSize: deps.batchSize } : {}),
         includeBackfill: isBackfill,
       });
-      if (isBackfill) {
+      // Drain the historical condition set across multiple ticks. The tick
+      // body already caps each run at `batchSize`, so a "complete" backfill
+      // is signalled by a tick that finds no stale conditions to process.
+      // Flipping the flag earlier (the previous one-tick-and-done behaviour)
+      // capped historical resolution at one batch per pod-restart.
+      if (isBackfill && result.conditions === 0) {
         backfillPending = false;
         log.info(
           {
