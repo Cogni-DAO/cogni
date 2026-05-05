@@ -3,7 +3,7 @@
 
 /**
  * Module: `@features/wallet-analysis/server/wallet-analysis-service`
- * Purpose: Service layer feeding `/api/v1/poly/wallets/[addr]` (snapshot, trades, balance, pnl slices) and `/api/v1/poly/wallet/execution` (live/closed position split). Fetches via `PolymarketDataApiClient`, the public CLOB client, and the saved-observation `poly_trader_user_pnl_points` table. CLOB / Data API calls are bounded by a process-wide `p-limit(4)` and per-(slice, addr) coalesced under a 30 s TTL; the P/L slice is a pure DB read (PAGE_LOAD_DB_ONLY).
+ * Purpose: Service layer feeding `/api/v1/poly/wallets/[addr]` (snapshot, trades, balance, pnl slices) and `/api/v1/poly/wallet/execution` (live/closed position split). The `pnl` and `trades` slices are pure DB reads (PAGE_LOAD_DB_ONLY — task.5012 CP1+CP2). Other slices still fetch via `PolymarketDataApiClient` + the public CLOB client, bounded by a process-wide `p-limit(4)` and per-(slice, addr) coalesced under a 30 s TTL; CP3+ will move them to DB read-models.
  * Scope: Compute + I/O only. Does not authenticate, does not parse HTTP. Returns Zod-validated slice values per the wallet-analysis v1 and execution v1 contracts.
  * Invariants:
  *   - REUSE_PACKAGE_CLIENTS: all upstream HTTP goes through `@cogni/poly-market-provider` clients — no fetch in this file.
@@ -47,7 +47,7 @@ import type {
   WalletExecutionPosition,
   WalletExecutionWarning,
 } from "@cogni/poly-node-contracts";
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import pLimit from "p-limit";
@@ -126,21 +126,48 @@ export function invalidateWalletAnalysisCaches(addr: string): void {
   }
 }
 
-/** Fetch + return the trades slice. Coalesced + p-limited. */
+/**
+ * DB-backed trades slice — reads `poly_trader_fills` (populated by the
+ * trader-observation tick). PAGE_LOAD_DB_ONLY (task.5012 CP2).
+ *
+ * Market title is recovered from the per-row `raw` jsonb that the writer
+ * preserves at ingest. When `raw.attributes.title` is absent or empty the
+ * recent-trade row falls back to `null` (chart already handles this).
+ */
 export async function getTradesSlice(
+  db: Db,
   addr: string
 ): Promise<SliceResult<WalletAnalysisTrades>> {
   try {
-    const trades = await coalesce(
-      `trades:${addr}`,
-      () =>
-        upstreamLimit(() =>
-          getDataApiClient().listUserActivity(addr, {
-            limit: TRADE_FETCH_LIMIT,
-          })
-        ),
-      SLICE_TTL_MS
-    );
+    const rows = await db
+      .select({
+        observedAt: polyTraderFills.observedAt,
+        side: polyTraderFills.side,
+        conditionId: polyTraderFills.conditionId,
+        tokenId: polyTraderFills.tokenId,
+        shares: polyTraderFills.shares,
+        price: polyTraderFills.price,
+        raw: polyTraderFills.raw,
+      })
+      .from(polyTraderFills)
+      .innerJoin(
+        polyTraderWallets,
+        eq(polyTraderFills.traderWalletId, polyTraderWallets.id)
+      )
+      .where(eq(polyTraderWallets.walletAddress, addr.toLowerCase()))
+      .orderBy(desc(polyTraderFills.observedAt))
+      .limit(TRADE_FETCH_LIMIT);
+
+    const trades = rows.map((row) => ({
+      timestamp: Math.floor(row.observedAt.getTime() / 1_000),
+      side: row.side as "BUY" | "SELL",
+      conditionId: row.conditionId,
+      asset: row.tokenId,
+      size: Number(row.shares),
+      price: Number(row.price),
+      title: extractTitle(row.raw),
+    }));
+
     const dailyCounts = buildDailyCounts(trades, 14);
     const topMarkets = buildTopMarkets(trades, 4);
     const recent = trades.slice(0, 50).map((t) => ({
@@ -167,6 +194,14 @@ export async function getTradesSlice(
       warning: warning("trades", err),
     };
   }
+}
+
+function extractTitle(raw: Record<string, unknown> | null): string {
+  if (!raw) return "";
+  const attrs = (raw as { attributes?: Record<string, unknown> }).attributes;
+  if (!attrs) return "";
+  const title = attrs.title;
+  return typeof title === "string" ? title : "";
 }
 
 /**

@@ -362,6 +362,8 @@ let _autoWrapHandle: AutoWrapJobHandle | null = null;
 let _restingSweepStop: (() => void) | null = null;
 // Live observed-trader job stop fn (task.5005). Public Data API only.
 let _traderObservationStop: (() => void) | null = null;
+// Condition-iterating market outcome writer (task.5016). CLOB public client.
+let _marketOutcomeStop: (() => void) | null = null;
 
 /**
  * Get the singleton container instance.
@@ -413,6 +415,14 @@ export function resetContainer(): void {
       // Best-effort.
     }
     _traderObservationStop = null;
+  }
+  if (_marketOutcomeStop) {
+    try {
+      _marketOutcomeStop();
+    } catch {
+      // Best-effort.
+    }
+    _marketOutcomeStop = null;
   }
   if (_temporalConnection) {
     void _temporalConnection.close();
@@ -1082,6 +1092,43 @@ function createContainer(): Container {
           err: err instanceof Error ? err.message : String(err),
         },
         "trader observation job boot failed — continuing without observed trader read model"
+      );
+    }
+  })();
+
+  // task.5016 — sibling condition-iterating writer. Polls Polymarket CLOB
+  // `/markets/{conditionId}` for resolution outcomes and upserts into
+  // `poly_market_outcomes` so CP4 (snapshot/distributions) and CP6
+  // (trader-comparison resolution swap) can read from the DB.
+  void (async () => {
+    try {
+      const { startMarketOutcomeJob } = await import(
+        "@/bootstrap/jobs/market-outcome.job"
+      );
+      const { PolymarketClobPublicClient } = await import(
+        "@cogni/poly-market-provider/adapters/polymarket"
+      );
+      const { noopMetrics: noopMetricsForOutcomes } = await import(
+        "@cogni/poly-market-provider"
+      );
+      const outcomeLogger =
+        log as unknown as import("@cogni/poly-market-provider").LoggerPort;
+      _marketOutcomeStop = startMarketOutcomeJob({
+        db: serviceDb as unknown as import("drizzle-orm/node-postgres").NodePgDatabase<
+          Record<string, unknown>
+        >,
+        clobClient: new PolymarketClobPublicClient(),
+        logger: outcomeLogger,
+        metrics: noopMetricsForOutcomes,
+      });
+    } catch (err: unknown) {
+      log.error(
+        {
+          event: "poly.market-outcome.boot_failed",
+          phase: "boot_failed",
+          err: err instanceof Error ? err.message : String(err),
+        },
+        "market outcome job boot failed — continuing without condition-iterating writer"
       );
     }
   })();
