@@ -849,19 +849,36 @@ function optionalField<TKey extends string>(
     : ({ [key]: value } as { [K in TKey]: string });
 }
 
+/**
+ * Bucket trades by day and emit one row per day from `min(oldestTrade, today
+ * minus minWindowDays)` through today. `minWindowDays` is a floor — fresh
+ * wallets still show that many bars (mostly zeros) so the chart shape is
+ * stable — but older history is never truncated. Returns an empty array when
+ * `minWindowDays <= 0` and there are no trades.
+ */
 function buildDailyCounts(
   trades: ReadonlyArray<{ timestamp: number }>,
-  windowDays: number
+  minWindowDays: number
 ): WalletExecutionDailyCount[] {
   const SEC_PER_DAY = 86_400;
   const nowSec = Math.floor(Date.now() / 1000);
   const buckets = new Map<string, number>();
+  let oldestTradeSec = Number.POSITIVE_INFINITY;
   for (const t of trades) {
     const day = new Date(t.timestamp * 1_000).toISOString().slice(0, 10);
     buckets.set(day, (buckets.get(day) ?? 0) + 1);
+    if (t.timestamp < oldestTradeSec) oldestTradeSec = t.timestamp;
   }
+  const minWindowStartSec =
+    minWindowDays > 0 ? nowSec - (minWindowDays - 1) * SEC_PER_DAY : nowSec;
+  const startSec = Number.isFinite(oldestTradeSec)
+    ? Math.min(minWindowStartSec, oldestTradeSec)
+    : minWindowStartSec;
+  const totalDays =
+    Math.max(0, Math.floor((nowSec - startSec) / SEC_PER_DAY)) + 1;
+  if (totalDays <= 0) return [];
   const out: Array<{ day: string; n: number }> = [];
-  for (let i = windowDays - 1; i >= 0; i--) {
+  for (let i = totalDays - 1; i >= 0; i--) {
     const day = new Date((nowSec - i * SEC_PER_DAY) * 1_000)
       .toISOString()
       .slice(0, 10);

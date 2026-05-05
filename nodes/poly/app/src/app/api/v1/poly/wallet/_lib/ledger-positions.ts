@@ -203,33 +203,69 @@ function readLedgerCostBasis(row: LedgerRow, executedValue: number): number {
   return executedValue;
 }
 
+/**
+ * Bucket counted ledger trades by UTC day. The window starts at
+ * `min(oldest counted trade, capturedAt - TRADE_COUNT_WINDOW_DAYS)` and runs
+ * to `capturedAt`, so older history is never truncated; fresh wallets still
+ * show the floor (14 days, mostly zeros) for stable chart shape.
+ */
 export function summarizeDailyTradeCounts(
   rows: readonly LedgerRow[],
   capturedAt: Date
 ): Array<{ day: string; n: number }> {
   const counts = new Map<string, number>();
+  let oldestCountedMs = Number.POSITIVE_INFINITY;
   for (const row of rows) {
     if (!shouldCountLedgerTrade(row)) continue;
     const day = row.observed_at.toISOString().slice(0, 10);
     counts.set(day, (counts.get(day) ?? 0) + 1);
+    const tsMs = row.observed_at.getTime();
+    if (tsMs < oldestCountedMs) oldestCountedMs = tsMs;
   }
-  return buildUtcDayWindow(capturedAt, TRADE_COUNT_WINDOW_DAYS).map((day) => ({
+  return buildUtcDayWindow(capturedAt, TRADE_COUNT_WINDOW_DAYS, {
+    earliest: Number.isFinite(oldestCountedMs)
+      ? new Date(oldestCountedMs)
+      : null,
+  }).map((day) => ({
     day,
     n: counts.get(day) ?? 0,
   }));
 }
 
-function buildUtcDayWindow(capturedAt: Date, windowDays: number): string[] {
+function buildUtcDayWindow(
+  capturedAt: Date,
+  minWindowDays: number,
+  opts: { earliest: Date | null } = { earliest: null }
+): string[] {
   const days: string[] = [];
-  const cursor = new Date(
+  const todayUtc = new Date(
     Date.UTC(
       capturedAt.getUTCFullYear(),
       capturedAt.getUTCMonth(),
       capturedAt.getUTCDate()
     )
   );
-  cursor.setUTCDate(cursor.getUTCDate() - (windowDays - 1));
-  for (let i = 0; i < windowDays; i++) {
+  const minStart = new Date(todayUtc);
+  minStart.setUTCDate(minStart.getUTCDate() - (minWindowDays - 1));
+  const earliestUtc = opts.earliest
+    ? new Date(
+        Date.UTC(
+          opts.earliest.getUTCFullYear(),
+          opts.earliest.getUTCMonth(),
+          opts.earliest.getUTCDate()
+        )
+      )
+    : null;
+  const startUtc =
+    earliestUtc && earliestUtc.getTime() < minStart.getTime()
+      ? earliestUtc
+      : minStart;
+  const totalDays =
+    Math.floor(
+      (todayUtc.getTime() - startUtc.getTime()) / (24 * 60 * 60 * 1000)
+    ) + 1;
+  const cursor = new Date(startUtc);
+  for (let i = 0; i < totalDays; i++) {
     days.push(cursor.toISOString().slice(0, 10));
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
