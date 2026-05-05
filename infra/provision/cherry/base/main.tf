@@ -32,6 +32,7 @@ resource "cherryservers_server" "server" {
       cogni_repo_url       = var.cogni_repo_url
       cogni_repo_ref       = var.cogni_repo_ref
       sops_age_private_key = var.sops_age_private_key
+      harden_script        = file("${path.module}/../harden-docker-public-ports.sh")
     }))
     allow_reinstall = true
     

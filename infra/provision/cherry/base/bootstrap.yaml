@@ -69,6 +69,18 @@ write_files:
             username: "${ghcr_deploy_username}"
             password: "${ghcr_deploy_token}"
 
+  # Firewall hardening — closes Docker-published internal ports (postgres,
+  # doltgres, redis, litellm, temporal-grpc) to the public internet via the
+  # DOCKER-USER iptables chain. Single-source script under
+  # infra/provision/cherry/harden-docker-public-ports.sh; injected by
+  # Terraform `templatefile()` so existing-VM SSH runs use the same logic.
+  # Links: bug.5167
+  - path: /usr/local/sbin/cogni-harden-docker-public-ports.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      ${indent(6, harden_script)}
+
   - path: /opt/cogni-bootstrap.sh
     owner: root:root
     permissions: "0755"
@@ -117,6 +129,12 @@ write_files:
       systemctl is-active --quiet docker || { echo "FATAL: docker service not active"; exit 1; }
 
       systemctl restart systemd-journald
+
+      # ── Firewall: close Docker-published internal ports to public internet ──
+      # Must run AFTER docker is up (DOCKER-USER chain is created by dockerd),
+      # BEFORE compose services start publishing those ports. See bug.5167.
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Hardening Docker-published ports..."
+      bash /usr/local/sbin/cogni-harden-docker-public-ports.sh
 
       echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Creating cogni-edge network..."
       docker network create cogni-edge || true

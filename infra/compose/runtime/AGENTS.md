@@ -123,7 +123,7 @@ docker compose --project-name cogni-runtime logs -f app
 
 **Doltgres (knowledge plane):**
 
-- `doltgres`: Postgres-wire-compatible Dolt server, port 127.0.0.1:5435→5432, volume `doltgres_data`
+- `doltgres`: Postgres-wire-compatible Dolt server, host port 5435→5432, volume `doltgres_data`. Public-NIC traffic on 5435 is dropped by `DOCKER-USER` chain (see `infra/provision/cherry/harden-docker-public-ports.sh`); k3s pods on `10.42.0.0/16` reach it via the EndpointSlice node IP.
 - `doltgres-provision` (profile: bootstrap): creates roles + per-node `knowledge_<node>` databases via `doltgres-init/provision.sh`. Schema owned by drizzle-kit (k8s PreSync Job), not this script
 - Doltgres 0.56 RBAC is non-functional — runtime `DOLTGRES_URL_*` in k8s secrets connects as `postgres` superuser. Writer role is provisioned but vestigial until upstream GRANT works
 - See [knowledge data plane spec](../../../docs/spec/knowledge-data-plane.md)
@@ -134,7 +134,7 @@ docker compose --project-name cogni-runtime logs -f app
 - `temporal`: Temporal server with auto-setup (handles schema migrations), pinned to v1.29.1
 - `temporal-ui`: Web UI for debugging schedules (localhost:8233)
 - Namespace auto-created via `DEFAULT_NAMESPACE=cogni-{APP_ENV}`
-- Port forwarding: 127.0.0.1:7233 (gRPC), 127.0.0.1:8233 (UI)
+- Port forwarding: host port 7233 (gRPC) — public-NIC traffic dropped by `DOCKER-USER` (see `infra/provision/cherry/harden-docker-public-ports.sh`); k3s pods reach via node IP. UI on 127.0.0.1:8233.
 
 **Playwright MCP (profile: mcp-playwright, dev-only):**
 

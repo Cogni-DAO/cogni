@@ -452,6 +452,17 @@ fi
 
 echo -e "\033[0;32m[INFO]\033[0m Docker prerequisites verified"
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Firewall: close Docker-published internal ports to public internet
+# (idempotent; safe to re-run on every deploy). See bug.5167.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if [ -f /tmp/harden-docker-public-ports.sh ]; then
+  echo -e "\033[0;32m[INFO]\033[0m Hardening Docker-published ports (DOCKER-USER chain)..."
+  bash /tmp/harden-docker-public-ports.sh
+else
+  echo -e "\033[1;33m[WARN]\033[0m harden-docker-public-ports.sh missing — skipping firewall hardening"
+fi
+
 # Compose shortcuts (explicit project names, no global export)
 EDGE_COMPOSE="docker compose --project-name cogni-edge -f /opt/cogni-template-edge/docker-compose.yml"
 RUNTIME_COMPOSE="docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml"
@@ -1310,6 +1321,7 @@ scp $SSH_OPTS "$ARTIFACT_DIR/deploy-infra-remote.sh" root@"$VM_HOST":/tmp/deploy
 scp $SSH_OPTS \
   "$REPO_ROOT/scripts/ci/seed-pnpm-store.sh" \
   "$REPO_ROOT/scripts/ci/ensure-temporal-namespace.sh" \
+  "$REPO_ROOT/infra/provision/cherry/harden-docker-public-ports.sh" \
   root@"$VM_HOST":/tmp/
 scp $SSH_OPTS \
   "$REPO_ROOT/services/sandbox-openclaw/seed-pnpm-store.sh" \
