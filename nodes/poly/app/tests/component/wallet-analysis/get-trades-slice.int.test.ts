@@ -15,10 +15,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import {
-  polyTraderFills,
-  polyTraderWallets,
-} from "@cogni/poly-db-schema";
+import { polyTraderFills, polyTraderWallets } from "@cogni/poly-db-schema";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
