@@ -172,15 +172,18 @@ export async function runMarketOutcomeTick(
           );
         }
         resolutionsByCondition.set(conditionId, resolution);
-        log.info(
-          {
-            event: "poly.market-outcome.outbound",
-            conditionId,
-            status_code: statusCode,
-            latency_ms: Date.now() - startedAt,
-          },
-          "market outcome upstream call"
-        );
+        if (statusCode !== "error") {
+          log.info(
+            {
+              event: "poly.market-outcome.outbound",
+              phase: "ok",
+              conditionId,
+              status_code: statusCode,
+              latency_ms: Date.now() - startedAt,
+            },
+            "market outcome upstream call"
+          );
+        }
       })
     )
   );
