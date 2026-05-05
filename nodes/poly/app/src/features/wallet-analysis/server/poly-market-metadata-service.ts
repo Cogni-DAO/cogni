@@ -4,17 +4,15 @@
 /**
  * Module: `@features/wallet-analysis/server/poly-market-metadata-service`
  * Purpose: Refresh `poly_market_metadata` rows by projecting already-persisted
- *   JSONB into typed columns. Pulls market_title / market_slug / event_slug /
- *   end_date from `poly_trader_current_positions.raw` (the `/positions`
- *   payload), and event_title from `poly_trader_fills.raw->'attributes'->'event_title'`
- *   (the `/trades` payload — `/positions` doesn't carry eventTitle, see bug.5018).
- *   Owns the only writes to `poly_market_metadata`; readers JOIN on `condition_id`.
+ *   `/positions` JSONB from `poly_trader_current_positions.raw` into typed
+ *   columns. Owns the only writes to `poly_market_metadata`; readers JOIN on
+ *   `condition_id`.
  * Scope: Pure server service. Caller owns DB + logger; this module runs a
  *   single SQL upsert per tick.
  * Invariants:
  *   - SINGLE_SOURCE_OF_TRUTH: one canonical typed row per `condition_id`.
  *   - NO_NEW_HTTP: the projection runs entirely off data we already polled
- *     via `/positions` and `/trades` — zero new Polymarket calls. The Gamma
+ *     via `/positions` — zero new Polymarket calls. The Gamma
  *     `/markets?condition_ids=…` endpoint silently ignores its filter and
  *     was removed; readers fall back via COALESCE to the position raw when
  *     metadata rows haven't materialized yet.
@@ -23,10 +21,7 @@
  *     (DISTINCT ON + ORDER BY last_observed_at DESC). Market-level fields
  *     are stable across traders, so this is deterministic in practice.
  * Side-effects: DB write (`poly_market_metadata`).
- * Links: nodes/poly/packages/db-schema/src/trader-activity.ts (table),
- *   nodes/poly/packages/market-provider/src/adapters/polymarket/polymarket.normalize-fill.ts
- *   (`event_title` is read from `trade.eventTitle` and persisted under
- *   `attributes.event_title` on the normalized fill).
+ * Links: nodes/poly/packages/db-schema/src/trader-activity.ts (table).
  * @internal
  */
 
@@ -62,23 +57,7 @@ export async function refreshMarketMetadata(deps: {
 }): Promise<RefreshMarketMetadataResult> {
   let written = 0;
   try {
-    // bug.5018: /positions JSONB lacks `eventTitle`, so projecting it here
-    // always wrote NULL. `event_title` is carried on the /trades payload
-    // (persisted on `poly_trader_fills.raw.attributes.event_title` via
-    // normalize-fill); pull from there as the authoritative source. Project
-    // one event_title per condition_id from the most recent fill that has
-    // it set — market-level field, stable across fills, deterministic enough.
     const result = await deps.db.execute<{ condition_id: string }>(sql`
-      WITH event_titles_from_fills AS (
-        SELECT DISTINCT ON (condition_id)
-          condition_id,
-          NULLIF(raw->'attributes'->>'event_title', '') AS event_title
-        FROM poly_trader_fills
-        WHERE raw IS NOT NULL
-          AND condition_id <> ''
-          AND NULLIF(raw->'attributes'->>'event_title', '') IS NOT NULL
-        ORDER BY condition_id, observed_at DESC
-      )
       INSERT INTO poly_market_metadata (
         condition_id,
         market_title,
@@ -89,22 +68,20 @@ export async function refreshMarketMetadata(deps: {
         raw,
         fetched_at
       )
-      SELECT DISTINCT ON (cp.condition_id)
-        cp.condition_id,
-        NULLIF(cp.raw->>'title', '')                          AS market_title,
-        NULLIF(cp.raw->>'slug', '')                           AS market_slug,
-        COALESCE(NULLIF(cp.raw->>'eventTitle', ''), etf.event_title) AS event_title,
-        NULLIF(cp.raw->>'eventSlug', '')                      AS event_slug,
-        NULLIF(cp.raw->>'endDate', '')::timestamptz           AS end_date,
-        cp.raw,
-        now()                                                 AS fetched_at
-      FROM poly_trader_current_positions cp
-      LEFT JOIN event_titles_from_fills etf
-        ON etf.condition_id = cp.condition_id
-      WHERE cp.active = true
-        AND cp.raw IS NOT NULL
-        AND cp.condition_id <> ''
-      ORDER BY cp.condition_id, cp.last_observed_at DESC
+      SELECT DISTINCT ON (condition_id)
+        condition_id,
+        NULLIF(raw->>'title', '')                       AS market_title,
+        NULLIF(raw->>'slug', '')                        AS market_slug,
+        NULLIF(raw->>'eventTitle', '')                  AS event_title,
+        NULLIF(raw->>'eventSlug', '')                   AS event_slug,
+        NULLIF(raw->>'endDate', '')::timestamptz        AS end_date,
+        raw,
+        now()                                           AS fetched_at
+      FROM poly_trader_current_positions
+      WHERE active = true
+        AND raw IS NOT NULL
+        AND condition_id <> ''
+      ORDER BY condition_id, last_observed_at DESC
       ON CONFLICT (condition_id) DO UPDATE SET
         market_title = EXCLUDED.market_title,
         market_slug  = EXCLUDED.market_slug,
