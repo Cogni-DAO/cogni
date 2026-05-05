@@ -37,10 +37,15 @@ for i in $(seq 1 30); do
 done
 iptables -L DOCKER-USER -n >/dev/null
 
-while iptables -S DOCKER-USER | grep -q -- "$TAG"; do
-  rule="$(iptables -S DOCKER-USER | grep -- "$TAG" | head -1 | sed 's/^-A /-D /')"
-  # shellcheck disable=SC2086
-  iptables $rule
+# Delete by rule line number, not by re-parsing `iptables -S` output.
+# `iptables -S` quotes comment values (`--comment "foo"`); shell word-splitting
+# of that string passes literal quote chars into `iptables -D`, which then
+# fails to match the stored rule (`Bad rule (does a matching rule exist...)`)
+# and aborts under set -e. (bug.5171)
+while :; do
+  ln=$(iptables -L DOCKER-USER --line-numbers -n 2>/dev/null | awk -v t="$TAG" '$0 ~ t {print $1; exit}')
+  [ -z "$ln" ] && break
+  iptables -D DOCKER-USER "$ln"
 done
 
 iptables -A DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment "$TAG:established" -j ACCEPT
