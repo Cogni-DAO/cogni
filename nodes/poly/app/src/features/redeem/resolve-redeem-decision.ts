@@ -27,6 +27,7 @@ import {
   POLYGON_CONDITIONAL_TOKENS,
   POLYGON_USDC_E,
   type PolymarketDataApiClient,
+  type PolymarketUserPosition,
 } from "@cogni/poly-market-provider/adapters/polymarket";
 import {
   decideRedeem,
@@ -95,14 +96,15 @@ export async function resolveRedeemCandidatesForCondition(deps: {
   conditionId: `0x${string}` | string;
   publicClient: PublicClient;
   dataApiClient: PolymarketDataApiClient;
+  positions?: readonly PolymarketUserPosition[];
 }): Promise<ResolvedRedeemCandidate[]> {
   const conditionId = normalizePolygonConditionId(
     typeof deps.conditionId === "string" ? deps.conditionId : deps.conditionId
   );
 
-  const allPositions = await deps.dataApiClient.listUserPositions(
-    deps.funderAddress
-  );
+  const allPositions =
+    deps.positions ??
+    (await deps.dataApiClient.listUserPositions(deps.funderAddress));
   const matches = allPositions.filter((p) => {
     try {
       return normalizePolygonConditionId(p.conditionId) === conditionId;

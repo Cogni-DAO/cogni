@@ -27,6 +27,7 @@ import {
   POLYGON_CONDITIONAL_TOKENS,
   POLYGON_NEG_RISK_ADAPTER,
   type PolymarketDataApiClient,
+  type PolymarketUserPosition,
   polymarketCtfEventsAbi,
   polymarketNegRiskAdapterAbi,
 } from "@cogni/poly-market-provider/adapters/polymarket";
@@ -159,7 +160,10 @@ export class RedeemSubscriber {
   }
 
   /** Public entrypoint reused by catch-up replay. */
-  async enqueueForCondition(conditionId: `0x${string}`): Promise<void> {
+  async enqueueForCondition(
+    conditionId: `0x${string}`,
+    positions?: readonly PolymarketUserPosition[]
+  ): Promise<void> {
     this.deps.logger.info(
       {
         event: "poly.ctf.subscriber.condition_resolution_observed",
@@ -174,6 +178,7 @@ export class RedeemSubscriber {
         conditionId,
         publicClient: this.deps.publicClient,
         dataApiClient: this.deps.dataApiClient,
+        ...(positions !== undefined ? { positions } : {}),
       })
     );
     for (const c of candidates) {

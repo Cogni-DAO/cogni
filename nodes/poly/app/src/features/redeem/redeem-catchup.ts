@@ -29,6 +29,7 @@ import type { Abi, PublicClient } from "viem";
 import { decodeEventLog, getAbiItem } from "viem";
 
 import type { RedeemJobsPort } from "@/ports";
+import { EVENT_NAMES } from "@/shared/observability/events";
 
 import {
   type LedgerLifecycleMirrorPort,
@@ -73,22 +74,40 @@ const negriskPayoutEvent = getAbiItem({
   name: "PayoutRedemption",
 });
 
+const MAX_CATCHUP_BLOCK_SPAN = 500n;
+
+interface ConditionReplayStats {
+  chunks: number;
+  logs: number;
+  conditionIds: number;
+  positionFetches: number;
+  enqueueAttempts: number;
+  enqueueErrors: number;
+}
+
+interface PayoutReplayStats {
+  chunks: number;
+  logs: number;
+  matchedRedemptions: number;
+}
+
 /**
  * Replay all three subscriptions over `[cursor, head]`, advancing each cursor
  * after a successful pass. Idempotent: enqueue UPSERTs on the unique key,
  * markConfirmed is idempotent on already-confirmed rows.
  */
 export async function runRedeemCatchup(deps: RedeemCatchupDeps): Promise<void> {
+  const startedAt = Date.now();
   const head = await deps.publicClient.getBlockNumber();
 
   // CTF ConditionResolution → enqueue
-  await replayConditionResolutions(deps, head);
+  const conditionStats = await replayConditionResolutions(deps, head);
   // CTF + NegRiskAdapter PayoutRedemption → mark confirmed.
   // Each replay receives the event's full ABI so log decoding goes through
   // viem (no raw-topic indexing — the parameter shape differs between the
   // two contracts: CTF has 3 indexed args incl. parentCollectionId, neg-risk
   // has 2 incl. conditionId).
-  await replayPayoutRedemptions(
+  const ctfPayoutStats = await replayPayoutRedemptions(
     deps,
     head,
     "ctf_payout",
@@ -96,7 +115,7 @@ export async function runRedeemCatchup(deps: RedeemCatchupDeps): Promise<void> {
     ctfPayoutEvent,
     polymarketCtfEventsAbi
   );
-  await replayPayoutRedemptions(
+  const negriskPayoutStats = await replayPayoutRedemptions(
     deps,
     head,
     "negrisk_payout",
@@ -104,50 +123,105 @@ export async function runRedeemCatchup(deps: RedeemCatchupDeps): Promise<void> {
     negriskPayoutEvent,
     polymarketNegRiskAdapterAbi
   );
+  const mem = process.memoryUsage();
+  deps.logger.info(
+    {
+      event: EVENT_NAMES.POLY_REDEEM_CATCHUP_COMPLETE,
+      durationMs: Date.now() - startedAt,
+      head_block: head.toString(),
+      ctf_resolution_chunks: conditionStats.chunks,
+      ctf_resolution_logs: conditionStats.logs,
+      ctf_resolution_condition_ids: conditionStats.conditionIds,
+      ctf_resolution_position_fetches: conditionStats.positionFetches,
+      ctf_resolution_enqueue_attempts: conditionStats.enqueueAttempts,
+      ctf_resolution_enqueue_errors: conditionStats.enqueueErrors,
+      ctf_payout_chunks: ctfPayoutStats.chunks,
+      ctf_payout_logs: ctfPayoutStats.logs,
+      ctf_payout_matches: ctfPayoutStats.matchedRedemptions,
+      negrisk_payout_chunks: negriskPayoutStats.chunks,
+      negrisk_payout_logs: negriskPayoutStats.logs,
+      negrisk_payout_matches: negriskPayoutStats.matchedRedemptions,
+      heap_used_mb: Math.round(mem.heapUsed / 1024 / 1024),
+      rss_mb: Math.round(mem.rss / 1024 / 1024),
+    },
+    "redeem-catchup: replay complete"
+  );
 }
 
 async function replayConditionResolutions(
   deps: RedeemCatchupDeps,
   head: bigint
-): Promise<void> {
+): Promise<ConditionReplayStats> {
+  const stats: ConditionReplayStats = {
+    chunks: 0,
+    logs: 0,
+    conditionIds: 0,
+    positionFetches: 0,
+    enqueueAttempts: 0,
+    enqueueErrors: 0,
+  };
   const fromBlock =
     (await deps.redeemJobs.getLastProcessedBlock("ctf_resolution")) ??
     deps.initialFromBlock;
-  if (fromBlock >= head) return;
-  const logs = await deps.publicClient.getLogs({
-    address: POLYGON_CONDITIONAL_TOKENS,
-    event: ctfResolutionEvent,
-    fromBlock: fromBlock + 1n,
-    toBlock: head,
-  });
-  deps.logger.info(
-    {
-      event: "poly.ctf.subscriber.catchup_started",
-      cursor_id: "ctf_resolution",
-      from: fromBlock.toString(),
-      to: head.toString(),
-      count: logs.length,
-    },
-    "redeem-catchup: replaying condition resolutions"
-  );
-  for (const log of logs) {
-    if (log.removed) continue;
-    const conditionId = log.topics[1] as `0x${string}` | undefined;
-    if (!conditionId) continue;
-    try {
-      await deps.subscriber.enqueueForCondition(conditionId);
-    } catch (err) {
-      deps.logger.error(
-        {
-          event: "poly.ctf.subscriber.catchup_error",
-          condition_id: conditionId,
-          err: String(err),
-        },
-        "redeem-catchup: enqueue failed"
-      );
+  if (fromBlock >= head) return stats;
+  for (
+    let chunkFrom = fromBlock + 1n;
+    chunkFrom <= head;
+    chunkFrom += MAX_CATCHUP_BLOCK_SPAN
+  ) {
+    const chunkTo =
+      chunkFrom + MAX_CATCHUP_BLOCK_SPAN - 1n > head
+        ? head
+        : chunkFrom + MAX_CATCHUP_BLOCK_SPAN - 1n;
+    const logs = await deps.publicClient.getLogs({
+      address: POLYGON_CONDITIONAL_TOKENS,
+      event: ctfResolutionEvent,
+      fromBlock: chunkFrom,
+      toBlock: chunkTo,
+    });
+    stats.chunks += 1;
+    stats.logs += logs.length;
+    deps.logger.info(
+      {
+        event: "poly.ctf.subscriber.catchup_started",
+        cursor_id: "ctf_resolution",
+        from: (chunkFrom - 1n).toString(),
+        to: chunkTo.toString(),
+        count: logs.length,
+      },
+      "redeem-catchup: replaying condition resolutions"
+    );
+    const conditionIds = new Set<`0x${string}`>();
+    for (const log of logs) {
+      if (log.removed) continue;
+      const conditionId = log.topics[1] as `0x${string}` | undefined;
+      if (conditionId) conditionIds.add(conditionId);
     }
+    const positions =
+      conditionIds.size > 0
+        ? await deps.dataApiClient.listUserPositions(deps.funderAddress)
+        : [];
+    if (conditionIds.size > 0) stats.positionFetches += 1;
+    stats.conditionIds += conditionIds.size;
+    for (const conditionId of conditionIds) {
+      try {
+        stats.enqueueAttempts += 1;
+        await deps.subscriber.enqueueForCondition(conditionId, positions);
+      } catch (err) {
+        stats.enqueueErrors += 1;
+        deps.logger.error(
+          {
+            event: "poly.ctf.subscriber.catchup_error",
+            condition_id: conditionId,
+            err: String(err),
+          },
+          "redeem-catchup: enqueue failed"
+        );
+      }
+    }
+    await deps.redeemJobs.setLastProcessedBlock("ctf_resolution", chunkTo);
   }
-  await deps.redeemJobs.setLastProcessedBlock("ctf_resolution", head);
+  return stats;
 }
 
 async function replayPayoutRedemptions(
@@ -158,76 +232,96 @@ async function replayPayoutRedemptions(
   // biome-ignore lint/suspicious/noExplicitAny: viem AbiEvent type is intentionally generic
   event: any,
   decodeAbi: Abi
-): Promise<void> {
+): Promise<PayoutReplayStats> {
+  const stats: PayoutReplayStats = {
+    chunks: 0,
+    logs: 0,
+    matchedRedemptions: 0,
+  };
   const fromBlock =
     (await deps.redeemJobs.getLastProcessedBlock(cursorId)) ??
     deps.initialFromBlock;
-  if (fromBlock >= head) return;
-  const logs = await deps.publicClient.getLogs({
-    address: contractAddress,
-    event,
-    fromBlock: fromBlock + 1n,
-    toBlock: head,
-  });
-  deps.logger.info(
-    {
-      event: "poly.ctf.subscriber.catchup_started",
-      cursor_id: cursorId,
-      from: fromBlock.toString(),
-      to: head.toString(),
-      count: logs.length,
-    },
-    "redeem-catchup: replaying payout redemptions"
-  );
-  for (const log of logs) {
-    if (log.removed) continue;
-    let redeemer: `0x${string}`;
-    let conditionId: `0x${string}`;
-    try {
-      const decoded = decodeEventLog({
-        abi: decodeAbi,
-        eventName: "PayoutRedemption",
-        data: log.data,
-        topics: log.topics,
-      });
-      const args = decoded.args as unknown as {
-        redeemer: `0x${string}`;
-        conditionId: `0x${string}`;
-      };
-      redeemer = args.redeemer;
-      conditionId = args.conditionId;
-    } catch {
-      continue;
-    }
-    if (redeemer.toLowerCase() !== deps.funderAddress.toLowerCase()) continue;
-
-    const job = await deps.redeemJobs.findByKey(
-      deps.funderAddress,
-      conditionId
-    );
-    if (job === null) continue;
-    if (job.status === "confirmed") continue;
-    await deps.redeemJobs.markConfirmed({
-      jobId: job.id,
-      txHash: log.transactionHash as `0x${string}`,
+  if (fromBlock >= head) return stats;
+  for (
+    let chunkFrom = fromBlock + 1n;
+    chunkFrom <= head;
+    chunkFrom += MAX_CATCHUP_BLOCK_SPAN
+  ) {
+    const chunkTo =
+      chunkFrom + MAX_CATCHUP_BLOCK_SPAN - 1n > head
+        ? head
+        : chunkFrom + MAX_CATCHUP_BLOCK_SPAN - 1n;
+    const logs = await deps.publicClient.getLogs({
+      address: contractAddress,
+      event,
+      args: { redeemer: deps.funderAddress },
+      fromBlock: chunkFrom,
+      toBlock: chunkTo,
     });
-    await deps.redeemJobs.setLifecycleState({
-      jobId: job.id,
-      lifecycleState: "redeemed",
-    });
-    await mirrorRedeemLifecycleToLedger(
+    stats.chunks += 1;
+    stats.logs += logs.length;
+    deps.logger.info(
       {
-        orderLedger: deps.orderLedger,
-        billingAccountId: deps.billingAccountId,
-        logger: deps.logger,
+        event: "poly.ctf.subscriber.catchup_started",
+        cursor_id: cursorId,
+        from: (chunkFrom - 1n).toString(),
+        to: chunkTo.toString(),
+        count: logs.length,
       },
-      {
-        conditionId,
-        positionId: job.positionId,
-        lifecycle: "redeemed",
-        source: "redeem_catchup_payout",
-      }
+      "redeem-catchup: replaying payout redemptions"
     );
+    for (const log of logs) {
+      if (log.removed) continue;
+      let redeemer: `0x${string}`;
+      let conditionId: `0x${string}`;
+      try {
+        const decoded = decodeEventLog({
+          abi: decodeAbi,
+          eventName: "PayoutRedemption",
+          data: log.data,
+          topics: log.topics,
+        });
+        const args = decoded.args as unknown as {
+          redeemer: `0x${string}`;
+          conditionId: `0x${string}`;
+        };
+        redeemer = args.redeemer;
+        conditionId = args.conditionId;
+      } catch {
+        continue;
+      }
+      if (redeemer.toLowerCase() !== deps.funderAddress.toLowerCase()) continue;
+      stats.matchedRedemptions += 1;
+
+      const job = await deps.redeemJobs.findByKey(
+        deps.funderAddress,
+        conditionId
+      );
+      if (job === null) continue;
+      if (job.status === "confirmed") continue;
+      await deps.redeemJobs.markConfirmed({
+        jobId: job.id,
+        txHash: log.transactionHash as `0x${string}`,
+      });
+      await deps.redeemJobs.setLifecycleState({
+        jobId: job.id,
+        lifecycleState: "redeemed",
+      });
+      await mirrorRedeemLifecycleToLedger(
+        {
+          orderLedger: deps.orderLedger,
+          billingAccountId: deps.billingAccountId,
+          logger: deps.logger,
+        },
+        {
+          conditionId,
+          positionId: job.positionId,
+          lifecycle: "redeemed",
+          source: "redeem_catchup_payout",
+        }
+      );
+    }
+    await deps.redeemJobs.setLastProcessedBlock(cursorId, chunkTo);
   }
-  await deps.redeemJobs.setLastProcessedBlock(cursorId, head);
+  return stats;
 }

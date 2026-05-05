@@ -58,6 +58,7 @@ import {
 } from "@/features/redeem";
 import type { LedgerLifecycleMirrorPort } from "@/features/redeem/mirror-ledger-lifecycle";
 import type { RedeemJobsPort } from "@/ports";
+import { EVENT_NAMES } from "@/shared/observability/events";
 
 const REDEEM_POLL_INTERVAL_MS = 10 * 60 * 1000;
 const REDEEM_WORKER_DRAIN_INTERVAL_MS = 5_000;
@@ -207,6 +208,7 @@ async function startOneTenantPipeline(
 
   const initialFromBlock =
     deps.initialFromBlock ?? (await publicClient.getBlockNumber());
+  const catchupStartedAt = Date.now();
   try {
     await runRedeemCatchup({
       redeemJobs,
@@ -220,9 +222,14 @@ async function startOneTenantPipeline(
       initialFromBlock,
     });
   } catch (err) {
+    const mem = process.memoryUsage();
     log.warn(
       {
-        event: "poly.ctf.redeem.catchup_failed",
+        event: EVENT_NAMES.POLY_REDEEM_CATCHUP_FAILED,
+        durationMs: Date.now() - catchupStartedAt,
+        reason_code: "redeem_catchup_threw",
+        heap_used_mb: Math.round(mem.heapUsed / 1024 / 1024),
+        rss_mb: Math.round(mem.rss / 1024 / 1024),
         err: err instanceof Error ? err.message : String(err),
       },
       "redeem pipeline: catch-up replay threw; subscriber + worker will still start"
@@ -275,6 +282,7 @@ async function backfillLifecycleStates(
   subscriber: RedeemSubscriber,
   log: Logger
 ): Promise<void> {
+  const startedAt = Date.now();
   const positions = await dataApiClient.listUserPositions(funderAddress);
   const conditionIds = new Set<`0x${string}`>();
   for (const p of positions) {
@@ -293,6 +301,19 @@ async function backfillLifecycleStates(
     "redeem pipeline: classifying current positions"
   );
   for (const conditionId of conditionIds) {
-    await subscriber.enqueueForCondition(conditionId);
+    await subscriber.enqueueForCondition(conditionId, positions);
   }
+  const mem = process.memoryUsage();
+  log.info(
+    {
+      event: EVENT_NAMES.POLY_REDEEM_BACKFILL_COMPLETE,
+      durationMs: Date.now() - startedAt,
+      funder: funderAddress,
+      position_count: positions.length,
+      condition_count: conditionIds.size,
+      heap_used_mb: Math.round(mem.heapUsed / 1024 / 1024),
+      rss_mb: Math.round(mem.rss / 1024 / 1024),
+    },
+    "redeem pipeline: lifecycle-state backfill complete"
+  );
 }
