@@ -38,6 +38,7 @@ import type {
 import { and, asc, eq, lt, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { dedupeByKey } from "./observation-helpers";
 
 type Db =
   | NodePgDatabase<Record<string, unknown>>
@@ -140,15 +141,10 @@ export async function fetchAndPersistTradingWalletPnlHistory(input: {
         : undefined
     );
     if (points.length === 0) continue;
-    // Polymarket's /user-pnl returns the current day/hour twice during the
-    // active bucket (last reading + running aggregate); Postgres ON CONFLICT
-    // DO UPDATE rejects a batch that hits the same conflict target twice
-    // ("command cannot affect row a second time"). Dedupe by `t` last-wins.
-    const dedupedByT = new Map<number, (typeof points)[number]>();
-    for (const point of points) {
-      dedupedByT.set(point.t, point);
-    }
-    const rows = Array.from(dedupedByT.values()).map((point) => ({
+    // bug.5011: upstream returns the current bucket twice during the active
+    // period; PG rejects ON CONFLICT batches that hit the same target twice.
+    const deduped = dedupeByKey(points, (p) => p.t);
+    const rows = deduped.map((point) => ({
       traderWalletId: input.traderWalletId,
       fidelity: plan.fidelity,
       ts: new Date(point.t * 1_000),
