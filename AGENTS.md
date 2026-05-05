@@ -47,7 +47,7 @@ For code contributions, follow this sequence unless a human explicitly narrows t
 ## Workflow Guiding Principles
 
 - **Bias for action.** Think until you know what to build and how you'll prove it — then go. Long plans on paper don't beat a running prototype on candidate-a.
-- **Work items live in the Cogni API, not markdown.** Before creating a new task/bug/spike, `GET https://preview.cognidao.org/api/v1/work/items?node=<node>` (and `?projectId=<proj>`) to check existing — then `POST /api/v1/work/items` to track new work. Get an apiKey via `/contribute-to-cogni`. The `work/items/*.md` corpus is legacy reference until the importer back-fills it; do not add new files there.
+- **Work items live in the Cogni API, not markdown.** Before creating a new task/bug/spike, `GET https://cognidao.org/api/v1/work/items?node=<node>` (and `?projectId=<proj>`) to check existing — then `POST /api/v1/work/items` to track new work. Get an apiKey via `/contribute-to-cogni`. The legacy `work/items/*.md` corpus has been imported to prod Doltgres at original IDs (`bug.0002` stays `bug.0002`); do not recreate it.
 - **Prototype against reality.** Your first goal after planning is a real interaction with a deployed build. Code that only runs locally has not yet earned trust.
 - **Close your own loop.** Drive the feature yourself on candidate-a and confirm the observability signal of your own call in Loki. Don't hand the loop off and call it done.
 - **Goal-driven execution.** Convert every task into a verifiable `## Validation` block. The `exercise:` + `observability:` pair _is_ your success criterion — loop to green.

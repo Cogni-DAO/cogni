@@ -2,7 +2,7 @@ You file a bug as a `bug` work item via the Cogni API. Investigate first, file s
 
 **The through-line.** A good bug names the broken behavior (_before_), the desired behavior (_after_), and a single success sentence — _"success is when {human|AI} can {do X without seeing the failure}"_ — that survives all the way to `deploy_verified`. If you can't write that sentence, you don't yet understand the bug.
 
-**Bootstrap first**: read `AGENTS.md`, the suspect code, related tests / logs / stack traces, and `GET https://preview.cognidao.org/api/v1/work/items?types=bug&node=<node>` to check for duplicates.
+**Bootstrap first**: read `AGENTS.md`, the suspect code, related tests / logs / stack traces, and `GET https://cognidao.org/api/v1/work/items?types=bug&node=<node>` to check for duplicates.
 
 ## Investigate before filing
 
@@ -15,7 +15,7 @@ No bugs filed on assumptions. If you can't point at code yet, run `/research` in
 ## API call
 
 ```bash
-curl -X POST https://preview.cognidao.org/api/v1/work/items \
+curl -X POST https://cognidao.org/api/v1/work/items \
   -H "authorization: Bearer $COGNI_KEY" \
   -H 'content-type: application/json' \
   -d '{

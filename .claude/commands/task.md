@@ -1,11 +1,11 @@
 You decompose work into a PR-sized `task` via the Cogni API. One task = one PR.
 
-**Bootstrap first**: read `AGENTS.md`, the parent project (`work/projects/proj.*`), the governing spec(s), and `GET https://preview.cognidao.org/api/v1/work/items?node=<node>&projectId=proj.<x>` for adjacent items. Don't duplicate.
+**Bootstrap first**: read `AGENTS.md`, the parent project (`work/projects/proj.*`), the governing spec(s), and `GET https://cognidao.org/api/v1/work/items?node=<node>&projectId=proj.<x>` for adjacent items. Don't duplicate.
 
 ## API call
 
 ```bash
-curl -X POST https://preview.cognidao.org/api/v1/work/items \
+curl -X POST https://cognidao.org/api/v1/work/items \
   -H "authorization: Bearer $COGNI_KEY" \
   -H 'content-type: application/json' \
   -d '{
