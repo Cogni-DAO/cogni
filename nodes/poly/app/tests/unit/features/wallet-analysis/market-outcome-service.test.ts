@@ -133,19 +133,16 @@ describe("runMarketOutcomeTick", () => {
     }>;
     expect(inserted).toHaveLength(3);
     expect(
-      inserted.find(
-        (r) => r.conditionId === "cond-A" && r.tokenId === "tok-A1"
-      )?.outcome
+      inserted.find((r) => r.conditionId === "cond-A" && r.tokenId === "tok-A1")
+        ?.outcome
     ).toBe("winner");
     expect(
-      inserted.find(
-        (r) => r.conditionId === "cond-A" && r.tokenId === "tok-A2"
-      )?.outcome
+      inserted.find((r) => r.conditionId === "cond-A" && r.tokenId === "tok-A2")
+        ?.outcome
     ).toBe("loser");
     expect(
-      inserted.find(
-        (r) => r.conditionId === "cond-B" && r.tokenId === "tok-B1"
-      )?.outcome
+      inserted.find((r) => r.conditionId === "cond-B" && r.tokenId === "tok-B1")
+        ?.outcome
     ).toBe("unknown");
 
     // One outbound event per upstream call
@@ -153,9 +150,9 @@ describe("runMarketOutcomeTick", () => {
       (e) => e.payload.event === "poly.market-outcome.outbound"
     );
     expect(outbound).toHaveLength(2);
-    expect(outbound.every((e) => e.payload.component === "trader-market-outcome")).toBe(
-      true
-    );
+    expect(
+      outbound.every((e) => e.payload.component === "trader-market-outcome")
+    ).toBe(true);
 
     // tick_ok with the result counters
     const tickOk = entries.find(

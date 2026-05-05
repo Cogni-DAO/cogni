@@ -141,7 +141,10 @@ export async function runMarketOutcomeTick(
     new Set(candidates.map((row) => row.condition_id))
   );
 
-  const resolutionsByCondition = new Map<string, MarketResolutionInput | null>();
+  const resolutionsByCondition = new Map<
+    string,
+    MarketResolutionInput | null
+  >();
 
   await Promise.all(
     distinctConditions.map((conditionId) =>

@@ -128,14 +128,18 @@ describe("runMarketOutcomeTick (component)", () => {
     await db
       .delete(polyMarketOutcomes)
       .where(inArray(polyMarketOutcomes.conditionId, [...CONDITIONS]));
-    await db.delete(polyTraderWallets).where(eq(polyTraderWallets.walletAddress, WALLET));
+    await db
+      .delete(polyTraderWallets)
+      .where(eq(polyTraderWallets.walletAddress, WALLET));
   });
 
   it("populates poly_market_outcomes for all 5 conditions touched by an active wallet", async () => {
     await seedWalletWithFills(db);
 
     const getMarketResolution = vi.fn(async (conditionId: string) => {
-      const idx = CONDITIONS.indexOf(conditionId as (typeof CONDITIONS)[number]);
+      const idx = CONDITIONS.indexOf(
+        conditionId as (typeof CONDITIONS)[number]
+      );
       if (idx < 0) return null;
       return resolutionFor(conditionId, TOKENS[idx] as string);
     });
@@ -167,7 +171,9 @@ describe("runMarketOutcomeTick (component)", () => {
     await seedWalletWithFills(db);
 
     const getMarketResolution = vi.fn(async (conditionId: string) => {
-      const idx = CONDITIONS.indexOf(conditionId as (typeof CONDITIONS)[number]);
+      const idx = CONDITIONS.indexOf(
+        conditionId as (typeof CONDITIONS)[number]
+      );
       if (idx < 0) return null;
       return resolutionFor(conditionId, TOKENS[idx] as string);
     });
@@ -201,7 +207,9 @@ describe("runMarketOutcomeTick (component)", () => {
     await seedWalletWithFills(db);
 
     const getMarketResolution = vi.fn(async (conditionId: string) => {
-      const idx = CONDITIONS.indexOf(conditionId as (typeof CONDITIONS)[number]);
+      const idx = CONDITIONS.indexOf(
+        conditionId as (typeof CONDITIONS)[number]
+      );
       if (idx < 0) return null;
       return resolutionFor(conditionId, TOKENS[idx] as string);
     });
