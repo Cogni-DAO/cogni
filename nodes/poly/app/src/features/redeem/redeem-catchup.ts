@@ -25,6 +25,7 @@ import {
   polymarketCtfEventsAbi,
   polymarketNegRiskAdapterAbi,
 } from "@cogni/poly-market-provider/adapters/polymarket";
+import pLimit from "p-limit";
 import type { Abi, PublicClient } from "viem";
 import { decodeEventLog, getAbiItem } from "viem";
 
@@ -75,6 +76,10 @@ const negriskPayoutEvent = getAbiItem({
 });
 
 const MAX_CATCHUP_BLOCK_SPAN = 500n;
+// Cap concurrent enqueueForCondition fan-out at boot. Each enqueue does a
+// CTF multicall + collateral inference; an unbounded loop over 50+ conditions
+// blew the V8 heap on poly prod (bug.5012). Matches CLOB rate-limit ceiling.
+const ENQUEUE_CONCURRENCY = 4;
 
 interface ConditionReplayStats {
   chunks: number;
@@ -203,22 +208,27 @@ async function replayConditionResolutions(
         : [];
     if (conditionIds.size > 0) stats.positionFetches += 1;
     stats.conditionIds += conditionIds.size;
-    for (const conditionId of conditionIds) {
-      try {
-        stats.enqueueAttempts += 1;
-        await deps.subscriber.enqueueForCondition(conditionId, positions);
-      } catch (err) {
-        stats.enqueueErrors += 1;
-        deps.logger.error(
-          {
-            event: "poly.ctf.subscriber.catchup_error",
-            condition_id: conditionId,
-            err: String(err),
-          },
-          "redeem-catchup: enqueue failed"
-        );
-      }
-    }
+    const limit = pLimit(ENQUEUE_CONCURRENCY);
+    await Promise.all(
+      Array.from(conditionIds, (conditionId) =>
+        limit(async () => {
+          try {
+            stats.enqueueAttempts += 1;
+            await deps.subscriber.enqueueForCondition(conditionId, positions);
+          } catch (err) {
+            stats.enqueueErrors += 1;
+            deps.logger.error(
+              {
+                event: "poly.ctf.subscriber.catchup_error",
+                condition_id: conditionId,
+                err: String(err),
+              },
+              "redeem-catchup: enqueue failed"
+            );
+          }
+        })
+      )
+    );
     await deps.redeemJobs.setLastProcessedBlock("ctf_resolution", chunkTo);
   }
   return stats;
