@@ -227,18 +227,27 @@ function rowToExecutionPosition(
       positionId: `${row.condition_id}:${row.token_id}`,
       conditionId: row.condition_id,
       asset: row.token_id,
+      // `??` only falls through on null/undefined, so a Gamma row that
+      // landed with `marketTitle = ""` would render as empty instead of
+      // hitting the JSONB fallback. `nonEmpty` collapses both null and ""
+      // to undefined; mirrors the SQL `NULLIF(pmm.col, '')` pattern used
+      // in `market-exposure-service.ts`.
       marketTitle:
-        row.metadata_market_title ??
+        nonEmpty(row.metadata_market_title) ??
         readOptionalString(raw, "title") ??
         "Polymarket",
       eventTitle:
-        row.metadata_event_title ??
+        nonEmpty(row.metadata_event_title) ??
         readOptionalString(raw, "eventTitle") ??
         null,
       marketSlug:
-        row.metadata_market_slug ?? readOptionalString(raw, "slug") ?? null,
+        nonEmpty(row.metadata_market_slug) ??
+        readOptionalString(raw, "slug") ??
+        null,
       eventSlug:
-        row.metadata_event_slug ?? readOptionalString(raw, "eventSlug") ?? null,
+        nonEmpty(row.metadata_event_slug) ??
+        readOptionalString(raw, "eventSlug") ??
+        null,
       marketUrl: marketUrl(raw),
       outcome: readOptionalString(raw, "outcome") ?? "UNKNOWN",
       status,
@@ -374,6 +383,15 @@ function readOptionalString(
 ): string | undefined {
   const value = record[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/**
+ * Collapse null + empty-string to `undefined` so `??` chains can fall
+ * through. Mirrors SQL `NULLIF(value, '')` for the metadata-table reads.
+ */
+function nonEmpty(value: string | null): string | undefined {
+  if (value === null || value.length === 0) return undefined;
+  return value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -104,22 +104,44 @@ export async function refreshMarketMetadata(deps: {
     fetched += markets.length;
     const rows = gammaMarketsToMetadataRows(markets, fetchedAt);
     if (rows.length === 0) continue;
-    await deps.db
-      .insert(polyMarketMetadata)
-      .values(rows)
-      .onConflictDoUpdate({
-        target: polyMarketMetadata.conditionId,
-        set: {
-          marketTitle: sql`excluded.market_title`,
-          marketSlug: sql`excluded.market_slug`,
-          eventTitle: sql`excluded.event_title`,
-          eventSlug: sql`excluded.event_slug`,
-          endDate: sql`excluded.end_date`,
-          raw: sql`excluded.raw`,
-          fetchedAt: sql`excluded.fetched_at`,
+    // Dedupe by conditionId before the bulk upsert. Postgres rejects
+    // `INSERT ... ON CONFLICT` if the VALUES list touches the conflict
+    // target row twice in one statement ("cannot affect row a second
+    // time"). Gamma occasionally returns the same conditionId across
+    // multi-event markets; keeping the last occurrence matches the
+    // upsert semantics if it had been processed serially.
+    const dedupedRows = dedupeRowsByConditionId(rows);
+    try {
+      await deps.db
+        .insert(polyMarketMetadata)
+        .values(dedupedRows)
+        .onConflictDoUpdate({
+          target: polyMarketMetadata.conditionId,
+          set: {
+            marketTitle: sql`excluded.market_title`,
+            marketSlug: sql`excluded.market_slug`,
+            eventTitle: sql`excluded.event_title`,
+            eventSlug: sql`excluded.event_slug`,
+            endDate: sql`excluded.end_date`,
+            raw: sql`excluded.raw`,
+            fetchedAt: sql`excluded.fetched_at`,
+          },
+        });
+      written += dedupedRows.length;
+    } catch (err: unknown) {
+      // PARTIAL_FAILURE_SOFT — a write failure for one batch must not
+      // poison subsequent batches. Increment counter, log, continue.
+      failedBatches += 1;
+      deps.logger.warn(
+        {
+          event: "poly.market_metadata.refresh",
+          phase: "batch_write_error",
+          batch_size: dedupedRows.length,
+          err: err instanceof Error ? err.message : String(err),
         },
-      });
-    written += rows.length;
+        "gamma metadata upsert failed for batch"
+      );
+    }
   }
   deps.logger.info(
     {
@@ -145,6 +167,19 @@ function parseEndDate(value: string | null): Date | null {
   if (value === null) return null;
   const ms = Date.parse(value);
   return Number.isFinite(ms) ? new Date(ms) : null;
+}
+
+/**
+ * Last-write-wins dedup of metadata rows by `conditionId`. See call site for
+ * the Postgres "ON CONFLICT cannot affect row a second time" rationale.
+ * Exported for unit-testing.
+ */
+export function dedupeRowsByConditionId<T extends { conditionId: string }>(
+  rows: readonly T[]
+): T[] {
+  const byCondition = new Map<string, T>();
+  for (const row of rows) byCondition.set(row.conditionId, row);
+  return [...byCondition.values()];
 }
 
 /**

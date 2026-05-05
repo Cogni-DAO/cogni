@@ -19,7 +19,10 @@
 import type { GammaMarket } from "@cogni/poly-market-provider/adapters/polymarket";
 import { describe, expect, it } from "vitest";
 
-import { gammaMarketsToMetadataRows } from "@/features/wallet-analysis/server/poly-market-metadata-service";
+import {
+  dedupeRowsByConditionId,
+  gammaMarketsToMetadataRows,
+} from "@/features/wallet-analysis/server/poly-market-metadata-service";
 
 const FETCHED_AT = new Date("2026-05-05T12:00:00Z");
 
@@ -112,5 +115,32 @@ describe("gammaMarketsToMetadataRows", () => {
 
   it("returns an empty array on empty input", () => {
     expect(gammaMarketsToMetadataRows([], FETCHED_AT)).toEqual([]);
+  });
+});
+
+describe("dedupeRowsByConditionId", () => {
+  it("keeps the last occurrence per conditionId (matches upsert semantics)", () => {
+    const rows = [
+      { conditionId: "0xabc", marketTitle: "first" },
+      { conditionId: "0xabc", marketTitle: "second" },
+      { conditionId: "0xdef", marketTitle: "other" },
+    ];
+    expect(dedupeRowsByConditionId(rows)).toEqual([
+      { conditionId: "0xabc", marketTitle: "second" },
+      { conditionId: "0xdef", marketTitle: "other" },
+    ]);
+  });
+
+  it("is a no-op when all conditionIds are already distinct", () => {
+    const rows = [
+      { conditionId: "0xa" },
+      { conditionId: "0xb" },
+      { conditionId: "0xc" },
+    ];
+    expect(dedupeRowsByConditionId(rows)).toEqual(rows);
+  });
+
+  it("returns an empty array on empty input", () => {
+    expect(dedupeRowsByConditionId([])).toEqual([]);
   });
 });
