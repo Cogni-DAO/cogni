@@ -9,6 +9,7 @@
  *   - PACKAGES_NO_ENV — endpoint and reconnect timings are constructor args.
  *   - WS_LOOSE_PARSE — unknown event_type is logged at debug, never throws.
  *   - HEARTBEAT_10S — the underlying CLOB WS expects client `PING` text frames every 10s; missing pings trigger disconnect.
+ *   - SHARED_ASSET_REFCOUNT — a single Polymarket socket is multiplexed across N per-wallet `WalletActivitySource` instances. The asset-subscription set is refcounted: a remote subscribe is sent only when the count goes 0→1 and a remote unsubscribe is sent only when it returns 1→0. Without this, two wallets holding the same outcome token would have one wallet's `unsubscribeAsset` silently kill the other wallet's subscription.
  * Side-effects: opens a single TCP/TLS WS to `wss://ws-subscriptions-clob.polymarket.com/ws/market`; logger emissions; setInterval/setTimeout for heartbeat + backoff.
  * Links: docs https://docs.polymarket.com/developers/CLOB/websocket/wss-overview ; task.0322
  * @public
@@ -90,7 +91,10 @@ export function createPolymarketWsClient(
     subcomponent: "polymarket-ws-client",
   });
 
-  const assets = new Set<string>();
+  // Refcount map per SHARED_ASSET_REFCOUNT — a single socket is multiplexed
+  // across many per-wallet sources. Two wallets owning the same outcome token
+  // would otherwise see one wallet's unsubscribe silently drop the other.
+  const assetRefCounts = new Map<string, number>();
   const tradeListeners = new Set<(event: WsTradeEvent) => void>();
   const stateListeners = new Set<(state: WsConnectionState) => void>();
 
@@ -118,9 +122,9 @@ export function createPolymarketWsClient(
 
   function sendInitialSubscribeFrame() {
     if (!socket || socket.readyState !== 1 /* OPEN */) return;
-    if (assets.size === 0) return;
+    if (assetRefCounts.size === 0) return;
     const frame = JSON.stringify({
-      assets_ids: [...assets],
+      assets_ids: [...assetRefCounts.keys()],
       type: "market",
     });
     try {
@@ -129,7 +133,7 @@ export function createPolymarketWsClient(
         {
           event: "poly.wallet_watch.ws.subscribe",
           phase: "initial",
-          assets_count: assets.size,
+          assets_count: assetRefCounts.size,
         },
         "ws subscribe sent"
       );
@@ -161,7 +165,7 @@ export function createPolymarketWsClient(
         {
           event: "poly.wallet_watch.ws.subscribe",
           phase: operation,
-          assets_count: assets.size,
+          assets_count: assetRefCounts.size,
           update_assets_count: assetIds.length,
         },
         "ws subscription update sent"
@@ -309,16 +313,24 @@ export function createPolymarketWsClient(
 
   return {
     subscribeAsset(assetId) {
-      if (assets.has(assetId)) return;
-      assets.add(assetId);
-      sendSubscriptionUpdate("subscribe", [assetId]);
+      const next = (assetRefCounts.get(assetId) ?? 0) + 1;
+      assetRefCounts.set(assetId, next);
+      // Only emit a remote subscribe on the 0→1 transition; subsequent
+      // callers ride the existing subscription per SHARED_ASSET_REFCOUNT.
+      if (next === 1) sendSubscriptionUpdate("subscribe", [assetId]);
     },
     unsubscribeAsset(assetId) {
-      if (!assets.delete(assetId)) return;
+      const current = assetRefCounts.get(assetId);
+      if (current === undefined) return;
+      if (current > 1) {
+        assetRefCounts.set(assetId, current - 1);
+        return;
+      }
+      assetRefCounts.delete(assetId);
       sendSubscriptionUpdate("unsubscribe", [assetId]);
     },
     listAssets() {
-      return [...assets];
+      return [...assetRefCounts.keys()];
     },
     onTrade(listener) {
       tradeListeners.add(listener);

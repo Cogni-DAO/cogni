@@ -116,6 +116,51 @@ describe("createPolymarketWsClient", () => {
     await client.close();
   });
 
+  it("refcounts shared asset subscriptions across multiple callers", async () => {
+    // SHARED_ASSET_REFCOUNT — two per-wallet sources owning the same
+    // outcome token must not let one wallet's unsubscribe silently kill
+    // the other wallet's subscription.
+    const client = createPolymarketWsClient({
+      logger: noopLogger,
+      webSocketCtor: FakeWebSocket,
+    });
+    const socket = FakeWebSocket.instances[0];
+    if (!socket) throw new Error("socket was not constructed");
+    socket.open();
+
+    client.subscribeAsset("asset-shared");
+    expect(lastJson(socket)).toEqual({
+      assets_ids: ["asset-shared"],
+      operation: "subscribe",
+    });
+    const sentAfterFirstSub = socket.sent.length;
+
+    // Second caller: no remote frame, asset already subscribed.
+    client.subscribeAsset("asset-shared");
+    expect(socket.sent).toHaveLength(sentAfterFirstSub);
+    expect(client.listAssets()).toEqual(["asset-shared"]);
+
+    // First caller releases — still one holder; no remote unsubscribe.
+    client.unsubscribeAsset("asset-shared");
+    expect(socket.sent).toHaveLength(sentAfterFirstSub);
+    expect(client.listAssets()).toEqual(["asset-shared"]);
+
+    // Last holder releases — now the remote unsubscribe fires.
+    client.unsubscribeAsset("asset-shared");
+    expect(lastJson(socket)).toEqual({
+      assets_ids: ["asset-shared"],
+      operation: "unsubscribe",
+    });
+    expect(client.listAssets()).toEqual([]);
+
+    // Extra unsubscribe with refcount already at zero is a no-op.
+    const sentAfterFinalUnsub = socket.sent.length;
+    client.unsubscribeAsset("asset-shared");
+    expect(socket.sent).toHaveLength(sentAfterFinalUnsub);
+
+    await client.close();
+  });
+
   it("sends PING on the documented 10s heartbeat cadence by default", async () => {
     vi.useFakeTimers();
     const client = createPolymarketWsClient({
