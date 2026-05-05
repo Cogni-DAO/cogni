@@ -107,6 +107,7 @@ export function toWalletExecutionPosition(
   const executedValue = ledgerExecutedUsdc(row);
   const currentValue = status === "closed" ? 0 : ledgerCurrentValue(row);
   const costBasis = readLedgerCostBasis(row, executedValue);
+  // Ledger has no redemption-proceeds column; realized PnL only resolvable via current-positions path.
   const pnlUsd =
     status === "closed" ? 0 : roundToCents(currentValue - costBasis);
   const pnlPct =
