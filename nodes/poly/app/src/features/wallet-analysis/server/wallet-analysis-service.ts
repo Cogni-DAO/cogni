@@ -70,6 +70,12 @@ const SNAPSHOT_DAILY_WINDOW = 14;
 /** Top-markets count returned by `getSnapshotSlice`. */
 const SNAPSHOT_TOP_MARKETS = 4;
 /**
+ * Overfetch buffer for the title-fetch query: we ask for titles on
+ * `SNAPSHOT_TOP_MARKETS + this` candidate cids so that empty/missing titles
+ * don't shrink the displayed list below `SNAPSHOT_TOP_MARKETS`.
+ */
+const SNAPSHOT_TOP_MARKETS_OVERFETCH = 8;
+/**
  * Min resolved positions before win-rate / PnL fields surface as non-null on
  * the snapshot. Mirrors `computeWalletMetrics`'s `minResolvedForMetrics`
  * default so the SQL-aggregated path stays output-equivalent.
@@ -242,10 +248,21 @@ export async function getSnapshotSlice(
       readActivityCountsFromDb(db, lower),
     ]);
     const cids = [...new Set(positions.map((p) => p.conditionId))];
-    const resolutions = await readResolutionsForConditions(db, cids);
+    // Pick the most-recent candidate condition_ids for `topMarkets`; overfetch
+    // a small buffer so the displayed list still reaches `topLimit` even when
+    // a few candidates have empty/missing titles in `raw`.
+    const topCandidates = pickTopMarketCandidates(
+      positions,
+      SNAPSHOT_TOP_MARKETS + SNAPSHOT_TOP_MARKETS_OVERFETCH
+    );
+    const [resolutions, titles] = await Promise.all([
+      readResolutionsForConditions(db, cids),
+      readTopMarketTitlesFromDb(db, lower, topCandidates),
+    ]);
 
     const m = composeSnapshotFromAggregates({
       positions,
+      titles,
       dailyRows,
       activity,
       resolutions,
@@ -341,6 +358,12 @@ export async function getDistributionsSlice(
  * snapshot path scale to wallets with millions of fills: SQL collapses the
  * fill stream to a few thousand position rows before we ever touch JS heap.
  *
+ * Numeric-only by design — the per-position market title is fetched separately
+ * by `readTopMarketTitlesFromDb` for ONLY the top-N candidates. Pulling
+ * `MAX(raw->'attributes'->>'title')` here forced a full TOAST-decompressed
+ * jsonb scan over every fill (~500 MB / 33 s on RN1's 836 K rows) just to
+ * surface 4 strings.
+ *
  * Exported for the parity test that asserts `composeSnapshotFromAggregates`
  * stays output-equivalent to `computeWalletMetrics` for the snapshot fields.
  *
@@ -357,15 +380,12 @@ export type PositionAggregate = {
   firstBuyTs: number;
   /** Latest observed_at on this token (any side). */
   lastTs: number;
-  title: string;
 };
 
 async function readPositionAggregatesFromDb(
   db: Db,
   walletAddrLower: string
 ): Promise<PositionAggregate[]> {
-  // Drizzle-typed wouldn't let us express `MAX(raw->'attributes'->>'title')`
-  // succinctly; raw `sql` is the simplest path and matches CP3's pattern.
   const rows = (await db.execute(sql`
     SELECT
       f.condition_id AS "conditionId",
@@ -375,8 +395,7 @@ async function readPositionAggregatesFromDb(
       COALESCE(SUM(f.shares)    FILTER (WHERE f.side = 'BUY'), 0)::float8  AS "buyShares",
       COALESCE(SUM(f.shares)    FILTER (WHERE f.side = 'SELL'), 0)::float8 AS "sellShares",
       COALESCE(EXTRACT(EPOCH FROM MIN(f.observed_at) FILTER (WHERE f.side = 'BUY')), -1)::float8 AS "firstBuyTs",
-      EXTRACT(EPOCH FROM MAX(f.observed_at))::float8 AS "lastTs",
-      MAX(f.raw->'attributes'->>'title') AS "title"
+      EXTRACT(EPOCH FROM MAX(f.observed_at))::float8 AS "lastTs"
     FROM ${polyTraderFills} f
     INNER JOIN ${polyTraderWallets} w ON w.id = f.trader_wallet_id
     WHERE w.wallet_address = ${walletAddrLower}
@@ -394,8 +413,54 @@ async function readPositionAggregatesFromDb(
     sellShares: Number(r.sellShares ?? 0),
     firstBuyTs: Number(r.firstBuyTs ?? -1),
     lastTs: Number(r.lastTs ?? 0),
-    title: typeof r.title === "string" ? r.title : "",
   }));
+}
+
+/**
+ * Fetch market titles for the top-N candidate condition_ids only. The full
+ * aggregator deliberately drops the per-position title to avoid a full TOAST
+ * jsonb scan; this query then resolves only the few titles the snapshot
+ * actually surfaces.
+ *
+ * Plan: bound `observed_at` to the oldest candidate's `lastTs` minus 1 day
+ * slack so the `(trader_wallet_id, observed_at)` index range-scans a tight
+ * window (typically < 1 % of the wallet's fills). The IN-list further filters
+ * to the candidate cids before the MAX(raw->>'title') aggregate decompresses
+ * jsonb — so jsonb decode runs over O(candidates × fills_per_market) rows,
+ * not O(wallet_fills).
+ */
+async function readTopMarketTitlesFromDb(
+  db: Db,
+  walletAddrLower: string,
+  topCandidates: ReadonlyArray<{ conditionId: string; lastTs: number }>
+): Promise<Map<string, string>> {
+  if (topCandidates.length === 0) return new Map();
+  let minTs = topCandidates[0].lastTs;
+  for (const c of topCandidates) if (c.lastTs < minTs) minTs = c.lastTs;
+  const sinceSec = Math.max(0, Math.floor(minTs - 86_400));
+  const cids = topCandidates.map((c) => c.conditionId);
+  const rows = (await db.execute(sql`
+    SELECT
+      f.condition_id AS "conditionId",
+      MAX(f.raw->'attributes'->>'title') AS "title"
+    FROM ${polyTraderFills} f
+    INNER JOIN ${polyTraderWallets} w ON w.id = f.trader_wallet_id
+    WHERE w.wallet_address = ${walletAddrLower}
+      AND f.observed_at >= to_timestamp(${sinceSec})
+      AND f.condition_id IN (${sql.join(
+        cids.map((c) => sql`${c}`),
+        sql`, `
+      )})
+    GROUP BY f.condition_id
+  `)) as unknown as { rows?: Array<Record<string, unknown>> };
+  const list = Array.isArray(rows) ? rows : (rows.rows ?? []);
+  const out = new Map<string, string>();
+  for (const r of list as Array<Record<string, unknown>>) {
+    const cid = String(r.conditionId ?? "");
+    const title = typeof r.title === "string" ? r.title : "";
+    if (cid && title) out.set(cid, title);
+  }
+  return out;
 }
 
 /**
@@ -450,16 +515,32 @@ async function readActivityCountsFromDb(
 }
 
 /**
- * Compose the snapshot from SQL pre-aggregates. Mirrors the per-position
- * resolution math in `computeWalletMetrics` (lines 147–254 of wallet-metrics.ts)
- * but operates on already-aggregated rows so it's `O(uniqueMarkets)` instead
- * of `O(fills)`. Output is bit-equivalent to `computeWalletMetrics(trades, ...)`
- * for the fields snapshot surfaces; PnL fields are intentionally omitted per
- * `PNL_NOT_IN_SNAPSHOT`.
+ * Most-recent condition_ids dedup'd by conditionId, capped at `limit`. Used
+ * to drive the per-cid title fetch (drops the jsonb scan from the main
+ * aggregate) and to feed the composer's `topMarkets` selection.
+ *
+ * @internal
  */
+export function pickTopMarketCandidates(
+  positions: ReadonlyArray<PositionAggregate>,
+  limit: number
+): Array<{ conditionId: string; lastTs: number }> {
+  const byRecent = [...positions].sort((a, b) => b.lastTs - a.lastTs);
+  const out: Array<{ conditionId: string; lastTs: number }> = [];
+  const seen = new Set<string>();
+  for (const p of byRecent) {
+    if (seen.has(p.conditionId)) continue;
+    seen.add(p.conditionId);
+    out.push({ conditionId: p.conditionId, lastTs: p.lastTs });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 /** @internal — exported for parity testing only. */
 export function composeSnapshotFromAggregates(input: {
   positions: ReadonlyArray<PositionAggregate>;
+  titles: ReadonlyMap<string, string>;
   dailyRows: ReadonlyArray<{ day: string; n: number }>;
   activity: { recent30: number; latestTs: number };
   resolutions: ReadonlyMap<string, MarketResolutionInput>;
@@ -517,14 +598,18 @@ export function composeSnapshotFromAggregates(input: {
       : null;
 
   // topMarkets: most-recently-touched conditionId, dedup'd by conditionId, capped.
+  // Titles come from `input.titles` (resolved by `readTopMarketTitlesFromDb`
+  // for the top candidate cids only) — keeps this composer pure and the hot
+  // aggregate path free of jsonb reads.
   const byRecent = [...input.positions].sort((a, b) => b.lastTs - a.lastTs);
   const topMarkets: string[] = [];
   const seenCond = new Set<string>();
   for (const p of byRecent) {
     if (seenCond.has(p.conditionId)) continue;
-    if (!p.title) continue;
+    const title = input.titles.get(p.conditionId);
+    if (!title) continue;
     seenCond.add(p.conditionId);
-    topMarkets.push(p.title);
+    topMarkets.push(title);
     if (topMarkets.length >= input.topLimit) break;
   }
 

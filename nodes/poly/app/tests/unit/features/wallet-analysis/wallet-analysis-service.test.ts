@@ -455,7 +455,6 @@ describe("getSnapshotSlice — DB-backed (task.5012 CP4)", () => {
           sellShares: 10,
           firstBuyTs: 1761998400, // 2026-05-01T12:00 UTC
           lastTs: 1762084800,
-          title: "Market A",
         },
         // open: no outcome row
         {
@@ -467,7 +466,6 @@ describe("getSnapshotSlice — DB-backed (task.5012 CP4)", () => {
           sellShares: 0,
           firstBuyTs: 1762171200,
           lastTs: 1762171200,
-          title: "Market B",
         },
       ],
       dailyCounts: [{ day: "2026-05-03", n: 1 }],
@@ -475,6 +473,10 @@ describe("getSnapshotSlice — DB-backed (task.5012 CP4)", () => {
       outcomes: [
         { conditionId: "cid-a", tokenId: "asset-win", outcome: "winner" },
         { conditionId: "cid-a", tokenId: "asset-loss", outcome: "loser" },
+      ],
+      titles: [
+        { conditionId: "cid-b", title: "Market B" },
+        { conditionId: "cid-a", title: "Market A" },
       ],
     });
 
@@ -487,6 +489,9 @@ describe("getSnapshotSlice — DB-backed (task.5012 CP4)", () => {
     expect(result.value.uniqueMarkets).toBe(2);
     // resolvedPositions=1 < SNAPSHOT_MIN_RESOLVED (5) → trueWinRatePct null.
     expect(result.value.trueWinRatePct).toBeNull();
+    // topMarkets sourced from the separate title fetch, ordered by recency
+    // (cid-b lastTs > cid-a lastTs → cid-b's title surfaces first).
+    expect(result.value.topMarkets).toEqual(["Market B", "Market A"]);
   });
 
   it("returns warning on DB read failure", async () => {
@@ -519,7 +524,6 @@ describe("getSnapshotSlice — DB-backed (task.5012 CP4)", () => {
       sellShares: 0,
       firstBuyTs: 1761998400 + i,
       lastTs: 1761998400 + i,
-      title: `Market ${i}`,
     }));
     const fakeDb = makeSqlAggregateFakeDb({
       positionAggs,
@@ -564,7 +568,6 @@ describe("snapshot parity — SQL-aggregated path matches computeWalletMetrics",
         sellShares: 0,
         firstBuyTs: -1,
         lastTs: 0,
-        title: t.title ?? "",
       };
       const usd = t.size * t.price;
       if (t.side.toUpperCase() === "BUY") {
@@ -577,10 +580,22 @@ describe("snapshot parity — SQL-aggregated path matches computeWalletMetrics",
         a.sellShares += t.size;
       }
       a.lastTs = Math.max(a.lastTs, t.timestamp);
-      if (t.title && !a.title) a.title = t.title;
       byToken.set(t.asset, a);
     }
     return [...byToken.values()];
+  }
+
+  /** Build a {conditionId → title} map from raw fills (mirrors readTopMarketTitlesFromDb). */
+  function jsTitles(
+    fills: ReadonlyArray<WalletTradeInput>
+  ): Map<string, string> {
+    const byCid = new Map<string, string>();
+    for (const t of fills) {
+      if (!t.title) continue;
+      const existing = byCid.get(t.conditionId);
+      if (!existing || t.title > existing) byCid.set(t.conditionId, t.title);
+    }
+    return byCid;
   }
 
   function jsDailyCounts(
@@ -705,12 +720,14 @@ describe("snapshot parity — SQL-aggregated path matches computeWalletMetrics",
   for (const sc of scenarios) {
     it(`parity: ${sc.name}`, () => {
       const positions = jsAggregate(sc.fills);
+      const titles = jsTitles(sc.fills);
       const dailyRows = jsDailyCounts(sc.fills, 14);
       const activity = jsActivity(sc.fills);
 
       // SQL path
       const sqlOut = composeSnapshotFromAggregates({
         positions,
+        titles,
         dailyRows,
         activity,
         resolutions: sc.resolutions,
@@ -753,9 +770,11 @@ describe("snapshot parity — SQL-aggregated path matches computeWalletMetrics",
  *       1st call: positionAggs   (readPositionAggregatesFromDb)
  *       2nd call: dailyCounts    (readDailyCountsFromDb)
  *       3rd call: activity-row   (readActivityCountsFromDb)
+ *       4th call: titles         (readTopMarketTitlesFromDb)
  *   - db.select().from().where()  →  outcome rows (readResolutionsForConditions)
- * Order assumption matches `Promise.all([positions, dailyRows, activity])`
- * in getSnapshotSlice; if the slice is reordered, adjust this fake.
+ * Order assumption matches the slice's call sequence:
+ *   Promise.all([positions, dailyRows, activity])  →  Promise.all([resolutions, titles])
+ * If the slice is reordered, adjust this fake.
  */
 function makeSqlAggregateFakeDb(opts: {
   positionAggs: ReadonlyArray<{
@@ -767,7 +786,6 @@ function makeSqlAggregateFakeDb(opts: {
     sellShares: number;
     firstBuyTs: number;
     lastTs: number;
-    title: string;
   }>;
   dailyCounts: ReadonlyArray<{ day: string; n: number }>;
   activity: { recent30: number; latestTs: number };
@@ -776,11 +794,13 @@ function makeSqlAggregateFakeDb(opts: {
     tokenId: string;
     outcome: string;
   }>;
+  titles?: ReadonlyArray<{ conditionId: string; title: string }>;
 }) {
   const executeQueue: Array<unknown> = [
     opts.positionAggs,
     opts.dailyCounts,
     [opts.activity],
+    opts.titles ?? [],
   ];
   return {
     execute() {
