@@ -13,7 +13,8 @@
  *   - PAGE_LOAD_DB_ONLY_EXCEPT_PRICE_HISTORY (task.5012 CP5): `getExecutionSlice` still calls CLOB `getPriceHistory` per open position — bounded v0 carve-out, removed by CP7's `poly_market_price_history` mirror.
  *   - PARTIAL_FAILURE_NEVER_THROWS: each slice returns a `{ value | warning }` result; the route surfaces warnings without 5xx-ing.
  *   - CLOB_HISTORY_OPEN_ONLY: `getPriceHistory` is fetched only for open/redeemable positions; closed positions use trade-derived timelines only.
- * Side-effects: IO (Polymarket Data API + Polymarket CLOB public + DB read for trader mirrors).
+ *   - PAGE_LOAD_DB_ONLY (task.5018 CP7): `getExecutionSlice` reads price-history from `poly_market_price_history` (DB-backed). The price-history bootstrap job is the only writer. Closes the `PAGE_LOAD_DB_ONLY_EXCEPT_PRICE_HISTORY` carve-out from CP5 — every wallet-analysis page-load surface is now DB-only.
+ * Side-effects: IO (DB reads only post-CP7; trader-observation + market-outcome + price-history ticks are the only writers).
  * Notes: Cache is process-scoped — see `instrumentation.ts` single-replica boot assert.
  * Links: docs/design/wallet-analysis-components.md, nodes/poly/packages/market-provider/src/analysis/wallet-metrics.ts, nodes/poly/packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts, nodes/poly/packages/node-contracts/src/poly.wallet.execution.v1.contract.ts, work/items/task.5012, work/items/task.5015
  * @public
@@ -25,10 +26,10 @@ import {
   polyTraderFills,
   polyTraderWallets,
 } from "@cogni/poly-db-schema/trader-activity";
-import {
+import type {
   PolymarketClobPublicClient,
-  type PolymarketUserPosition,
-  type PolymarketUserTrade,
+  PolymarketUserPosition,
+  PolymarketUserTrade,
 } from "@cogni/poly-market-provider/adapters/polymarket";
 import {
   computeWalletMetrics,
@@ -53,15 +54,15 @@ import type {
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import pLimit from "p-limit";
 import { clearTtlCacheByPrefix, coalesce } from "./coalesce";
+import {
+  pickStoredPriceHistoryFidelity,
+  readPriceHistoryFromDb,
+} from "./price-history-service";
 import { getTradingWalletPnlHistory } from "./trading-wallet-overview-service";
 
 /** Cache TTL for every slice. Matches design doc 30 s. */
 const SLICE_TTL_MS = 30_000;
-
-/** Per-process upstream concurrency cap — design invariant `p-limit(4)`. */
-const upstreamLimit = pLimit(4);
 
 /** Trades fetched per analysis request (`computeWalletMetrics` accepts up to ~500 per the Data API cap). */
 const TRADE_FETCH_LIMIT = 500;
@@ -85,19 +86,16 @@ type HistoricalFillRow = {
 };
 
 /**
- * Module-singleton CLOB public client — created lazily so test code can swap
- * it via `__setClientsForTests` before first use. Public-only access; no
- * auth/credentials involved. Used only by `getExecutionSlice`'s price-history
- * call (PAGE_LOAD_DB_ONLY_EXCEPT_PRICE_HISTORY carve-out, closed by CP7).
+ * Module-singleton CLOB public client — retained as a no-op test surface
+ * after CP7 swapped the price-history call to a DB read. The CLOB client
+ * is no longer invoked at runtime; the singleton persists so existing tests
+ * that construct + inject a fake (`__setClientsForTests({ clobPublic })`)
+ * continue to compile without rework. Drop both this var and the setter
+ * once those tests are migrated.
  */
 let clobPublicClient: PolymarketClobPublicClient | undefined;
 
-function getClobPublicClient(): PolymarketClobPublicClient {
-  if (!clobPublicClient) clobPublicClient = new PolymarketClobPublicClient();
-  return clobPublicClient;
-}
-
-/** Test-only: replace the module-singleton CLOB client with a stub. */
+/** Test-only: kept as a structural shim post-CP7. See note above. */
 export function __setClientsForTests(opts: {
   clobPublic?: PolymarketClobPublicClient;
 }): void {
@@ -650,7 +648,7 @@ export async function getExecutionSlice(
   db: Db,
   addr: string,
   opts: {
-    /** Skip public CLOB price history for refresh paths that only need trade cadence. */
+    /** Skip price-history overlay for refresh paths that only need trade cadence. */
     includePriceHistory?: boolean;
     /** Skip the expensive trade read when the caller only needs current holdings. */
     includeTrades?: boolean;
@@ -736,9 +734,11 @@ export async function getExecutionSlice(
 
   let liveForResponse = livePreview;
   if (opts.includePriceHistory ?? true) {
-    // TODO(v1): move CLOB price-history into a DB read-model writer.
-    // PAGE_LOAD_DB_ONLY_EXCEPT_PRICE_HISTORY exception per task.5012 — bounded by
-    // open-position count (~10s per wallet); positions/trades above are DB reads.
+    // Read per-asset price history from `poly_market_price_history` (task.5018 CP7).
+    // The price-history bootstrap job is the only writer; this read is page-load
+    // safe (PAGE_LOAD_DB_ONLY). Cold-start gap on a freshly-opened position
+    // returns an empty series — `mapExecutionPositions` renders flat/empty
+    // until the next 5-min tick ingests.
     const priceHistoryByAsset = new Map<
       string,
       Awaited<ReturnType<PolymarketClobPublicClient["getPriceHistory"]>>
@@ -751,19 +751,14 @@ export async function getExecutionSlice(
           Math.floor(new Date(position.openedAt).getTime() / 1000) - 3600
         );
         const endTs = Math.floor(new Date(capturedAt).getTime() / 1000);
-        const fidelity = pickPriceHistoryFidelity(startTs, endTs);
+        const fidelity = pickStoredPriceHistoryFidelity(startTs, endTs);
 
-        const history = await coalesce(
-          `execution-price-history:${position.asset}:${startTs}:${endTs}:${fidelity}`,
-          () =>
-            upstreamLimit(() =>
-              getClobPublicClient().getPriceHistory(position.asset, {
-                startTs,
-                endTs,
-                fidelity,
-              })
-            ),
-          SLICE_TTL_MS
+        const history = await readPriceHistoryFromDb(
+          db,
+          position.asset,
+          startTs,
+          endTs,
+          fidelity
         );
         if (history.length > 0) {
           priceHistoryByAsset.set(position.asset, history);
@@ -771,7 +766,7 @@ export async function getExecutionSlice(
       })
     );
 
-    // Re-map live positions with fetched price history timelines.
+    // Re-map live positions with stored price history timelines.
     const liveAssets = new Set(livePreview.map((p) => p.asset));
     liveForResponse = mapExecutionPositions({
       positions,
@@ -897,15 +892,6 @@ function toExecutionContractPosition(
     timeline: [...position.timeline],
     events: [...position.events],
   };
-}
-
-function pickPriceHistoryFidelity(startTs: number, endTs: number): number {
-  const spanDays = Math.max(1, (endTs - startTs) / 86_400);
-  if (spanDays > 365) return 4320;
-  if (spanDays > 90) return 1440;
-  if (spanDays > 21) return 360;
-  if (spanDays > 3) return 60;
-  return 5;
 }
 
 function buildTopMarkets(

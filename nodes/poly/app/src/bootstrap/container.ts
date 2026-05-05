@@ -364,6 +364,8 @@ let _restingSweepStop: (() => void) | null = null;
 let _traderObservationStop: (() => void) | null = null;
 // Condition-iterating market outcome writer (task.5016). CLOB public client.
 let _marketOutcomeStop: (() => void) | null = null;
+// Per-asset price-history mirror job stop fn (task.5018). Public CLOB only.
+let _priceHistoryStop: (() => void) | null = null;
 
 /**
  * Get the singleton container instance.
@@ -423,6 +425,14 @@ export function resetContainer(): void {
       // Best-effort.
     }
     _marketOutcomeStop = null;
+  }
+  if (_priceHistoryStop) {
+    try {
+      _priceHistoryStop();
+    } catch {
+      // Best-effort.
+    }
+    _priceHistoryStop = null;
   }
   if (_temporalConnection) {
     void _temporalConnection.close();
@@ -1129,6 +1139,44 @@ function createContainer(): Container {
           err: err instanceof Error ? err.message : String(err),
         },
         "market outcome job boot failed — continuing without condition-iterating writer"
+      );
+    }
+  })();
+
+  // task.5018 (CP7) — per-asset price-history mirror. Sibling of the
+  // trader-observation tick. Polls CLOB `/prices-history` for every asset that
+  // appears in `poly_trader_current_positions WHERE active=true` UNION recent
+  // fills, two fidelities per asset, every 5 minutes. Closes the
+  // PAGE_LOAD_DB_ONLY_EXCEPT_PRICE_HISTORY carve-out from CP5.
+  void (async () => {
+    try {
+      const { startPriceHistoryJob } = await import(
+        "@/bootstrap/jobs/price-history.job"
+      );
+      const { PolymarketClobPublicClient } = await import(
+        "@cogni/poly-market-provider/adapters/polymarket"
+      );
+      const { noopMetrics: noopMetricsForPriceHistory } = await import(
+        "@cogni/poly-market-provider"
+      );
+      const priceHistoryLogger =
+        log as unknown as import("@cogni/poly-market-provider").LoggerPort;
+      _priceHistoryStop = startPriceHistoryJob({
+        db: serviceDb as unknown as import("drizzle-orm/node-postgres").NodePgDatabase<
+          Record<string, unknown>
+        >,
+        clobClient: new PolymarketClobPublicClient(),
+        logger: priceHistoryLogger,
+        metrics: noopMetricsForPriceHistory,
+      });
+    } catch (err: unknown) {
+      log.error(
+        {
+          event: "poly.market-price-history.error",
+          phase: "boot_failed",
+          err: err instanceof Error ? err.message : String(err),
+        },
+        "price-history job boot failed — continuing without price-history read model"
       );
     }
   })();

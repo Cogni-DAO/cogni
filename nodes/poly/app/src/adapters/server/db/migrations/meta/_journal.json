@@ -302,6 +302,13 @@
       "when": 1778000600000,
       "tag": "0042_freezing_quentin_quire",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1778000700000,
+      "tag": "0043_poly_market_price_history",
+      "breakpoints": true
     }
   ]
 }

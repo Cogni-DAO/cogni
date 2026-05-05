@@ -37,6 +37,22 @@ export type ClobPriceHistoryParams = {
   readonly interval?: string;
 };
 
+/**
+ * Optional structured-log hook for `getPriceHistory`. When supplied, the client
+ * emits one `poly.market-price-history.outbound` event per fetch — used to
+ * assert PAGE_LOAD_DB_ONLY (task.5018) by tagging the caller component
+ * (e.g. `trader-price-history`).
+ */
+export interface PriceHistoryOutboundLogger {
+  info(payload: {
+    event: "poly.market-price-history.outbound";
+    component: string;
+    asset: string;
+    interval?: string;
+    fidelity?: number;
+  }): void;
+}
+
 export class PolymarketClobPublicClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
@@ -83,7 +99,8 @@ export class PolymarketClobPublicClient {
 
   async getPriceHistory(
     asset: string,
-    params?: ClobPriceHistoryParams
+    params?: ClobPriceHistoryParams,
+    opts?: { logger?: PriceHistoryOutboundLogger; component?: string }
   ): Promise<ClobPriceHistoryPoint[]> {
     const url = new URL("/prices-history", this.baseUrl);
     url.searchParams.set("market", asset);
@@ -97,6 +114,14 @@ export class PolymarketClobPublicClient {
     if (params?.endTs !== undefined) {
       url.searchParams.set("endTs", String(params.endTs));
     }
+
+    opts?.logger?.info({
+      event: "poly.market-price-history.outbound",
+      component: opts.component ?? "unknown",
+      asset,
+      ...(params?.interval !== undefined ? { interval: params.interval } : {}),
+      ...(params?.fidelity !== undefined ? { fidelity: params.fidelity } : {}),
+    });
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
