@@ -1,49 +1,44 @@
 # AGENTS.md — Cogni-Template
 
-> Repo-wide orientation, ≤60 lines (terser = better adherence). Subdir `AGENTS.md` extends; closest file wins ([agents.md spec](https://agents.md/)).
+> Repo-wide orientation. Subdir `AGENTS.md` extends; closest file wins ([agents.md spec](https://agents.md/)). Each `nodes/<node>/AGENTS.md` defines that node's rules — read it once you know your scope.
 
-You are an agent inside a multi-agent system. The **operator** (`https://test.cognidao.org`) is your peer coordinator — not a deploy button. Every code change flows through it: claim a work-item session, drive the [development lifecycle](docs/spec/development-lifecycle.md), close to `deploy_verified: true`. Conductor / Claude Code sessions on a human's machine are **not** exempt — claim a session before you push.
+You are an agent inside a multi-agent system. The **operator** (`https://cognidao.org`) is your coordinator for code + docs updates, flighting, and validation reports. Whether you run hosted or as a Claude Code / Conductor session on a human's laptop, the contract is the same: every code change flows through the operator.
 
 ## Required Loop
 
-1. `GET /.well-known/agent.json`, `POST /api/v1/agent/register` for a Bearer token.
-2. Adopt one work item, **one node** (`single-node-scope` is a CI gate). Cross-node ⇒ separate item.
-3. Claim + heartbeat + link PR via `/api/v1/work/items/$ID/{claims,heartbeat,pr,coordination}`. **`coordination.nextAction` is authoritative** — it overrides your plan.
-4. Implement on a worktree branch. **Do not run `pnpm dev:stack` or `pnpm check*` locally** — this machine is resource-constrained. Push, then **watch `gh pr checks` to green**; if red, iterate file-scoped fixes.
-5. After CI green: `POST /api/v1/vcs/flight { prNumber }`. **Never `gh workflow run candidate-flight.yml` yourself** — it bypasses the operator and breaks session attribution.
-6. Run [`/validate-candidate`](.claude/skills/validate-candidate/SKILL.md) against the deployed build, post the scorecard on the PR.
+1. Adopt one work item, **one node** (`single-node-scope` is a CI gate; cross-node ⇒ separate item). Read `nodes/<node>/AGENTS.md` for that node's rules.
+2. Claim + heartbeat + link PR via `/api/v1/work/items/$ID/{claims,heartbeat,pr,coordination}`. **`coordination.nextAction` is authoritative** — it overrides your plan.
+3. Implement on a worktree branch. Push — **CI is your verification.** Watch `gh pr checks`; iterate file-scoped fixes if red.
+4. After CI green + reviewed implementation: `POST /api/v1/vcs/flight { prNumber }`. The build lands at `https://<node>-test.cognidao.org`.
+5. Run [`/validate-candidate`](.claude/skills/validate-candidate/SKILL.md) against the deployed build. Adherence to its validation flow and scorecard format is strict — that's how the system confirms you followed the contract.
+6. Hit a contract blocker (auth, broken endpoint, invariant you can't satisfy)? File a bug: `POST /api/v1/work/items {type:'bug', node:'operator'}`, link from your active item.
 
-Hit a contract blocker (auth, broken endpoint, invariant you can't satisfy)? File a bug: `POST /api/v1/work/items {type:'bug', node:'operator'}`, link from your active item, continue or stop. Don't paper over.
+> Bearer token expected. New contributors register once via [`/contribute-to-cogni`](.claude/skills/contribute-to-cogni/SKILL.md); existing agents reuse the saved token.
 
 ## Definition of Done
 
-`status: done` = code merged. `deploy_verified: true` = the **real** gate: candidate-a healthy, you exercised the feature on the deployed URL, and you saw your own request in Loki at the deployed SHA. Never conflate.
+`status: done` ⇔ code merged. **Code only merges after both**:
+
+1. Full green: reviewed implementation + CI green on the PR.
+2. `deploy_verified: true` — flighted to candidate-a, `/validate-candidate` scorecard posted, your own request observed in Loki at the deployed SHA.
 
 Two named human stops: `needs_review` post-`/design`, `needs_human_qa` post-flight. Drive yourself between them.
 
 ## Principles
 
-- **Think before coding.** State assumptions, surface ambiguity, push back on over-scope.
-- **Simplicity first.** Minimum code that solves the problem. No speculative abstractions, no error handling for impossible cases.
-- **Surgical changes.** Touch only what the task demands. Mention drive-by issues; don't fix them.
-- **Goal-driven execution.** Convert each task into a verifiable `## Validation` block; ship the smallest prototype to candidate-a; iterate against real behavior.
-- **Find the existing artifact before writing new code.** Search `docs/spec/`, `docs/guides/`, `.claude/skills/`, `.claude/commands/`, the operator API. Duplicating an existing port / adapter / guide / skill poisons the codebase.
+- **Reuse + reproducibility.** Find existing code (this repo or OSS) that meets your need before writing new. When you do code, code for reuse. For deployments, reproducibility is non-negotiable — no ad-hoc actions; solve each problem once and capture it in git.
+- **Search before designing.** `docs/spec/`, `docs/guides/`, `.claude/skills/`, `.claude/commands/`, and the operator API (work items + projects + knowledge) hold prior thinking, designs, and priorities. Refine + simplify + clean what exists rather than add parallel artifacts.
+- **Goal-driven execution.** Up front, with the user, identify the before/after I/O that will be clearly testable by a human or an agent. Before closing the work item, you must be able to prove the starting goal is met.
+- **Clean architecture.** Hexagonal layering. Strongly-typed boundaries (Zod). Systemic observability (Pino → Loki). Idempotent operations. Strict typing — no `any`.
+- **Purge legacy.** Backwards-compat shims are debt unless the user explicitly asks for them.
 
 ## Anti-patterns
 
-- Running `gh workflow run candidate-flight.yml` from your own gh creds.
-- Running `pnpm dev:stack` / `pnpm check*` locally instead of pushing + watching CI.
-- Recreating a legacy `work/items/*.md` item — they're in prod Doltgres at original IDs (`bug.0002` stays `bug.0002`).
-- Re-declaring HTTP types instead of importing from `src/contracts/*.contract.ts` (Zod is the SSoT).
-- Inline comments narrating _what_ code does — names + types are the docs (see [style.md](docs/spec/style.md)).
-- Stopping outside the two named review gates.
-- `checkout`/`stash` on the user's main worktree — use git worktrees.
-- Treating CI red on your PR as "pre-existing on main" — it's your code or your worktree.
-- Hitting a mistake another agent will repeat without editing the guide that should have warned you.
+- Adding backwards-compatibility unless specifically user-instructed. Purge legacy in place.
 
 ## Pointers
 
-- [Development Lifecycle](docs/spec/development-lifecycle.md) · [CI/CD](docs/spec/ci-cd.md) · [Agent-First API Validation](docs/guides/agent-api-validation.md)
-- [`/contribute-to-cogni`](.claude/skills/contribute-to-cogni/SKILL.md) — executable contributor contract
+- [Development Lifecycle](docs/spec/development-lifecycle.md) · [CI/CD](docs/spec/ci-cd.md) · [Agent-First API Validation](docs/guides/agent-api-validation.md) · [`/validate-candidate`](.claude/skills/validate-candidate/SKILL.md)
+- [`/contribute-to-cogni`](.claude/skills/contribute-to-cogni/SKILL.md) — registration + executable contributor contract
 - [Architecture](docs/spec/architecture.md) · [Style](docs/spec/style.md) · [Common Mistakes](docs/guides/common-mistakes.md) · [Work Management](work/README.md)
 - **Stuck?** File a bug against the operator (above), or read [`/contribute-to-cogni`](.claude/skills/contribute-to-cogni/SKILL.md) end-to-end.
