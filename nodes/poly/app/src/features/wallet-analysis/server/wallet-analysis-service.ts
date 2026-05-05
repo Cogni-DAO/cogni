@@ -537,7 +537,16 @@ export function pickTopMarketCandidates(
   return out;
 }
 
-/** @internal — exported for parity testing only. */
+/**
+ * Compose the snapshot from SQL pre-aggregates. Mirrors the per-position
+ * resolution math in `computeWalletMetrics` (lines 147–254 of wallet-metrics.ts)
+ * but operates on already-aggregated rows so it's `O(uniqueMarkets)` instead
+ * of `O(fills)`. Output is bit-equivalent to `computeWalletMetrics(trades, ...)`
+ * for the fields snapshot surfaces; PnL fields are intentionally omitted per
+ * `PNL_NOT_IN_SNAPSHOT`.
+ *
+ * @internal — exported for parity testing only.
+ */
 export function composeSnapshotFromAggregates(input: {
   positions: ReadonlyArray<PositionAggregate>;
   titles: ReadonlyMap<string, string>;
