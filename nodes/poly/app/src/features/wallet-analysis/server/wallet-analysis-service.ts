@@ -32,7 +32,6 @@ import type {
   PolymarketUserTrade,
 } from "@cogni/poly-market-provider/adapters/polymarket";
 import {
-  computeWalletMetrics,
   type MarketResolutionInput,
   mapExecutionPositions,
   type OrderFlowTrade,
@@ -51,7 +50,7 @@ import type {
   WalletExecutionPosition,
   WalletExecutionWarning,
 } from "@cogni/poly-node-contracts";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { clearTtlCacheByPrefix, coalesce } from "./coalesce";
@@ -66,6 +65,26 @@ const SLICE_TTL_MS = 30_000;
 
 /** Trades fetched per analysis request (`computeWalletMetrics` accepts up to ~500 per the Data API cap). */
 const TRADE_FETCH_LIMIT = 500;
+/** Window for `dailyCounts` in `getSnapshotSlice` (calendar days). */
+const SNAPSHOT_DAILY_WINDOW = 14;
+/** Top-markets count returned by `getSnapshotSlice`. */
+const SNAPSHOT_TOP_MARKETS = 4;
+/**
+ * Min resolved positions before win-rate / PnL fields surface as non-null on
+ * the snapshot. Mirrors `computeWalletMetrics`'s `minResolvedForMetrics`
+ * default so the SQL-aggregated path stays output-equivalent.
+ */
+const SNAPSHOT_MIN_RESOLVED = 5;
+/**
+ * Distributions slice still loads raw fills into JS to feed `summariseOrderFlow`
+ * (per-fill histograms + per-group quantiles). Until that helper is rewritten
+ * against SQL `width_bucket` + `PERCENTILE_DISC` (CP9 in
+ * docs/research/poly/backfill-spike-2026-05-05.md), bound the read at
+ * 25K most-recent fills to keep the JS heap below ~50 MB. This is a TEMPORARY
+ * safety cap on a single slice; `getSnapshotSlice` proves the SQL-aggregated
+ * pattern and is unbounded.
+ */
+const DISTRIBUTIONS_FILLS_LIMIT_TODO_CP9 = 25_000;
 /** Max open/redeemable rows returned in live_positions. */
 const EXECUTION_OPEN_LIMIT = 18;
 /** Max closed rows returned in closed_positions. */
@@ -212,11 +231,28 @@ export async function getSnapshotSlice(
   addr: string
 ): Promise<SliceResult<WalletAnalysisSnapshot>> {
   try {
-    const trades = await readDbFillsAsOrderFlowTrades(db, addr);
-    const cids = [...new Set(trades.map((t) => t.conditionId))];
+    const lower = addr.toLowerCase();
+    // Three small SQL aggregations — none of them load raw fills.
+    // (1) Per-(condition_id, token_id) aggregates ≈ unique-market count.
+    // (2) Daily counts for the SNAPSHOT_DAILY_WINDOW (14 rows).
+    // (3) 30-day count + latest timestamp + total fill count (1 row).
+    const [positions, dailyRows, activity] = await Promise.all([
+      readPositionAggregatesFromDb(db, lower),
+      readDailyCountsFromDb(db, lower, SNAPSHOT_DAILY_WINDOW),
+      readActivityCountsFromDb(db, lower),
+    ]);
+    const cids = [...new Set(positions.map((p) => p.conditionId))];
     const resolutions = await readResolutionsForConditions(db, cids);
 
-    const m = computeWalletMetrics(trades, resolutions);
+    const m = composeSnapshotFromAggregates({
+      positions,
+      dailyRows,
+      activity,
+      resolutions,
+      window: SNAPSHOT_DAILY_WINDOW,
+      topLimit: SNAPSHOT_TOP_MARKETS,
+      minResolved: SNAPSHOT_MIN_RESOLVED,
+    });
     return {
       kind: "ok",
       value: {
@@ -261,7 +297,14 @@ export async function getDistributionsSlice(
   mode: "live" | "historical"
 ): Promise<SliceResult<WalletAnalysisDistributions>> {
   try {
-    const trades = await readDbFillsAsOrderFlowTrades(db, addr);
+    const trades = await coalesce(
+      `historical-trader-fills:${addr}`,
+      async () => {
+        const fills = await readWalletFillsTodoCp9(db, addr);
+        return fills.map(historicalFillToOrderFlowTrade);
+      },
+      SLICE_TTL_MS
+    );
     const cids = [...new Set(trades.map((t) => t.conditionId))];
     const resolutions = await readResolutionsForConditions(db, cids);
 
@@ -292,39 +335,230 @@ export async function getDistributionsSlice(
 }
 
 /**
- * Read every observed fill for a wallet from `poly_trader_fills` and project
- * into the structural `OrderFlowTrade` shape (which extends `WalletTradeInput`,
- * so the same rows feed `computeWalletMetrics`). Returns `[]` when the wallet
- * has no rows (cold-start before observation tick).
+ * Per-(condition_id, token_id) pre-aggregate of one wallet's fills. Output row
+ * count is bounded by `COUNT(DISTINCT (condition_id, token_id))` for the
+ * wallet — i.e. unique markets traded, NOT total fills. This is what makes the
+ * snapshot path scale to wallets with millions of fills: SQL collapses the
+ * fill stream to a few thousand position rows before we ever touch JS heap.
+ *
+ * Exported for the parity test that asserts `composeSnapshotFromAggregates`
+ * stays output-equivalent to `computeWalletMetrics` for the snapshot fields.
+ *
+ * @internal
  */
-async function readDbFillsAsOrderFlowTrades(
+export type PositionAggregate = {
+  conditionId: string;
+  tokenId: string;
+  buyUsdc: number;
+  sellUsdc: number;
+  buyShares: number;
+  sellShares: number;
+  /** Earliest observed_at of any BUY fill on this token. -1 when none. */
+  firstBuyTs: number;
+  /** Latest observed_at on this token (any side). */
+  lastTs: number;
+  title: string;
+};
+
+async function readPositionAggregatesFromDb(
   db: Db,
-  addr: string
-): Promise<OrderFlowTrade[]> {
-  return coalesce(
-    `historical-trader-fills:${addr}`,
-    async () => {
-      const rows = (await db
-        .select({
-          conditionId: polyTraderFills.conditionId,
-          tokenId: polyTraderFills.tokenId,
-          side: polyTraderFills.side,
-          price: polyTraderFills.price,
-          shares: polyTraderFills.shares,
-          observedAt: polyTraderFills.observedAt,
-          raw: polyTraderFills.raw,
-        })
-        .from(polyTraderFills)
-        .innerJoin(
-          polyTraderWallets,
-          eq(polyTraderWallets.id, polyTraderFills.traderWalletId)
-        )
-        .where(eq(polyTraderWallets.walletAddress, addr.toLowerCase()))
-        .orderBy(asc(polyTraderFills.observedAt))) as HistoricalFillRow[];
-      return rows.map(historicalFillToOrderFlowTrade);
-    },
-    SLICE_TTL_MS
-  );
+  walletAddrLower: string
+): Promise<PositionAggregate[]> {
+  // Drizzle-typed wouldn't let us express `MAX(raw->'attributes'->>'title')`
+  // succinctly; raw `sql` is the simplest path and matches CP3's pattern.
+  const rows = (await db.execute(sql`
+    SELECT
+      f.condition_id AS "conditionId",
+      f.token_id AS "tokenId",
+      COALESCE(SUM(f.size_usdc) FILTER (WHERE f.side = 'BUY'), 0)::float8  AS "buyUsdc",
+      COALESCE(SUM(f.size_usdc) FILTER (WHERE f.side = 'SELL'), 0)::float8 AS "sellUsdc",
+      COALESCE(SUM(f.shares)    FILTER (WHERE f.side = 'BUY'), 0)::float8  AS "buyShares",
+      COALESCE(SUM(f.shares)    FILTER (WHERE f.side = 'SELL'), 0)::float8 AS "sellShares",
+      COALESCE(EXTRACT(EPOCH FROM MIN(f.observed_at) FILTER (WHERE f.side = 'BUY')), -1)::float8 AS "firstBuyTs",
+      EXTRACT(EPOCH FROM MAX(f.observed_at))::float8 AS "lastTs",
+      MAX(f.raw->'attributes'->>'title') AS "title"
+    FROM ${polyTraderFills} f
+    INNER JOIN ${polyTraderWallets} w ON w.id = f.trader_wallet_id
+    WHERE w.wallet_address = ${walletAddrLower}
+    GROUP BY f.condition_id, f.token_id
+  `)) as unknown as {
+    rows?: Array<Record<string, unknown>>;
+  };
+  const list = Array.isArray(rows) ? rows : (rows.rows ?? []);
+  return (list as Array<Record<string, unknown>>).map((r) => ({
+    conditionId: String(r.conditionId ?? ""),
+    tokenId: String(r.tokenId ?? ""),
+    buyUsdc: Number(r.buyUsdc ?? 0),
+    sellUsdc: Number(r.sellUsdc ?? 0),
+    buyShares: Number(r.buyShares ?? 0),
+    sellShares: Number(r.sellShares ?? 0),
+    firstBuyTs: Number(r.firstBuyTs ?? -1),
+    lastTs: Number(r.lastTs ?? 0),
+    title: typeof r.title === "string" ? r.title : "",
+  }));
+}
+
+/**
+ * Daily fill count for the most recent N calendar days (UTC). Returns at most
+ * N rows; days with zero fills are absent and the composer fills them in.
+ */
+async function readDailyCountsFromDb(
+  db: Db,
+  walletAddrLower: string,
+  windowDays: number
+): Promise<Array<{ day: string; n: number }>> {
+  const rows = (await db.execute(sql`
+    SELECT
+      to_char(date_trunc('day', f.observed_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
+      COUNT(*)::int AS n
+    FROM ${polyTraderFills} f
+    INNER JOIN ${polyTraderWallets} w ON w.id = f.trader_wallet_id
+    WHERE w.wallet_address = ${walletAddrLower}
+      AND f.observed_at >= now() - (${windowDays} || ' days')::interval
+    GROUP BY 1
+    ORDER BY 1
+  `)) as unknown as { rows?: Array<Record<string, unknown>> };
+  const list = Array.isArray(rows) ? rows : (rows.rows ?? []);
+  return (list as Array<Record<string, unknown>>).map((r) => ({
+    day: String(r.day ?? ""),
+    n: Number(r.n ?? 0),
+  }));
+}
+
+/**
+ * Single-row activity summary: rolling 30-day count + latest fill timestamp.
+ * Drives `tradesPerDay30d` and `daysSinceLastTrade` without scanning fills in JS.
+ */
+async function readActivityCountsFromDb(
+  db: Db,
+  walletAddrLower: string
+): Promise<{ recent30: number; latestTs: number }> {
+  const rows = (await db.execute(sql`
+    SELECT
+      COALESCE(COUNT(*) FILTER (WHERE f.observed_at >= now() - INTERVAL '30 days'), 0)::int AS "recent30",
+      COALESCE(EXTRACT(EPOCH FROM MAX(f.observed_at)), 0)::float8 AS "latestTs"
+    FROM ${polyTraderFills} f
+    INNER JOIN ${polyTraderWallets} w ON w.id = f.trader_wallet_id
+    WHERE w.wallet_address = ${walletAddrLower}
+  `)) as unknown as { rows?: Array<Record<string, unknown>> };
+  const list = Array.isArray(rows) ? rows : (rows.rows ?? []);
+  const r = (list[0] as Record<string, unknown> | undefined) ?? {};
+  return {
+    recent30: Number(r.recent30 ?? 0),
+    latestTs: Number(r.latestTs ?? 0),
+  };
+}
+
+/**
+ * Compose the snapshot from SQL pre-aggregates. Mirrors the per-position
+ * resolution math in `computeWalletMetrics` (lines 147–254 of wallet-metrics.ts)
+ * but operates on already-aggregated rows so it's `O(uniqueMarkets)` instead
+ * of `O(fills)`. Output is bit-equivalent to `computeWalletMetrics(trades, ...)`
+ * for the fields snapshot surfaces; PnL fields are intentionally omitted per
+ * `PNL_NOT_IN_SNAPSHOT`.
+ */
+/** @internal — exported for parity testing only. */
+export function composeSnapshotFromAggregates(input: {
+  positions: ReadonlyArray<PositionAggregate>;
+  dailyRows: ReadonlyArray<{ day: string; n: number }>;
+  activity: { recent30: number; latestTs: number };
+  resolutions: ReadonlyMap<string, MarketResolutionInput>;
+  window: number;
+  topLimit: number;
+  minResolved: number;
+}): {
+  resolvedPositions: number;
+  wins: number;
+  losses: number;
+  trueWinRatePct: number | null;
+  medianDurationHours: number | null;
+  openPositions: number;
+  openNetCostUsdc: number;
+  uniqueMarkets: number;
+  tradesPerDay30d: number;
+  daysSinceLastTrade: number;
+  topMarkets: ReadonlyArray<string>;
+  dailyCounts: ReadonlyArray<{ day: string; n: number }>;
+} {
+  type Resolved = { pnl: number; won: boolean; durationSec: number };
+  const resolved: Resolved[] = [];
+  let openCount = 0;
+  let openNetCost = 0;
+
+  for (const p of input.positions) {
+    const m = input.resolutions.get(p.conditionId);
+    const tokenInfo = m?.tokens.find((x) => x.token_id === p.tokenId);
+    if (m?.closed && tokenInfo) {
+      const held = p.buyShares - p.sellShares;
+      const payout = held > 0 && tokenInfo.winner ? held : 0;
+      const pnl = p.sellUsdc + payout - p.buyUsdc;
+      const duration = p.firstBuyTs >= 0 ? p.lastTs - p.firstBuyTs : 0;
+      resolved.push({ pnl, won: pnl > 0.5, durationSec: duration });
+    } else {
+      openNetCost += p.buyUsdc - p.sellUsdc;
+      openCount++;
+    }
+  }
+
+  const wins = resolved.filter((r) => r.won).length;
+  const losses = resolved.filter((r) => r.pnl < -0.5).length;
+  const enough = resolved.length >= input.minResolved;
+  const trueWinRatePct = enough
+    ? +((wins / resolved.length) * 100).toFixed(1)
+    : null;
+
+  const durations = resolved
+    .map((r) => r.durationSec)
+    .filter((x) => x > 0)
+    .sort((a, b) => a - b);
+  const medianDurationHours =
+    enough && durations.length > 0
+      ? +((durations[Math.floor(durations.length / 2)] ?? 0) / 3_600).toFixed(2)
+      : null;
+
+  // topMarkets: most-recently-touched conditionId, dedup'd by conditionId, capped.
+  const byRecent = [...input.positions].sort((a, b) => b.lastTs - a.lastTs);
+  const topMarkets: string[] = [];
+  const seenCond = new Set<string>();
+  for (const p of byRecent) {
+    if (seenCond.has(p.conditionId)) continue;
+    if (!p.title) continue;
+    seenCond.add(p.conditionId);
+    topMarkets.push(p.title);
+    if (topMarkets.length >= input.topLimit) break;
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const SEC_PER_DAY = 86_400;
+  const tradesPerDay30d = +(input.activity.recent30 / 30).toFixed(2);
+  const daysSinceLastTrade = input.activity.latestTs
+    ? +((nowSec - input.activity.latestTs) / SEC_PER_DAY).toFixed(2)
+    : Number.POSITIVE_INFINITY;
+
+  // dailyCounts: pad missing days with zero, oldest → newest, exact `window` length.
+  const byDay = new Map<string, number>();
+  for (const r of input.dailyRows) byDay.set(r.day, r.n);
+  const dailyCounts: Array<{ day: string; n: number }> = [];
+  for (let i = input.window - 1; i >= 0; i--) {
+    const ts = nowSec - i * SEC_PER_DAY;
+    const day = new Date(ts * 1_000).toISOString().slice(0, 10);
+    dailyCounts.push({ day, n: byDay.get(day) ?? 0 });
+  }
+
+  return {
+    resolvedPositions: resolved.length,
+    wins,
+    losses,
+    trueWinRatePct,
+    medianDurationHours,
+    openPositions: openCount,
+    openNetCostUsdc: Math.round(openNetCost),
+    uniqueMarkets: input.positions.length,
+    tradesPerDay30d,
+    daysSinceLastTrade,
+    topMarkets,
+    dailyCounts,
+  };
 }
 
 /**
@@ -382,8 +616,69 @@ async function readResolutionsForConditions(
 
 type DbFillRow = HistoricalFillRow;
 
-async function readFillsFromDb(db: Db, addr: string): Promise<DbFillRow[]> {
-  const rows = await db
+/**
+ * Execution-slice fill read: bounded by the wallet's CURRENT POSITION SET
+ * rather than by row count. Pulls only fills whose `condition_id` is in the
+ * wallet's `poly_trader_current_positions` (≈ EXECUTION_OPEN_LIMIT +
+ * EXECUTION_HISTORY_LIMIT positions, so a few thousand rows max even on whale
+ * wallets like RN1). This is the architecturally-correct shape for execution:
+ * the slice only renders per-position trade timelines for displayed positions,
+ * so fills outside that set are dead weight. Unbounded reads on this path
+ * caused the candidate-a OOM (spike.5024 backfill of 825 K RN1 fills).
+ */
+async function readFillsForActivePositionsFromDb(
+  db: Db,
+  addr: string
+): Promise<DbFillRow[]> {
+  const lower = addr.toLowerCase();
+  const rows = (await db.execute(sql`
+    SELECT
+      f.condition_id  AS "conditionId",
+      f.token_id      AS "tokenId",
+      f.side,
+      f.price,
+      f.shares,
+      f.observed_at   AS "observedAt",
+      f.raw
+    FROM ${polyTraderFills} f
+    INNER JOIN ${polyTraderWallets} w ON w.id = f.trader_wallet_id
+    WHERE w.wallet_address = ${lower}
+      AND f.condition_id IN (
+        SELECT cp.condition_id
+        FROM ${polyTraderCurrentPositions} cp
+        WHERE cp.trader_wallet_id = w.id
+      )
+    ORDER BY f.observed_at ASC
+  `)) as unknown as { rows?: Array<Record<string, unknown>> };
+  const list = Array.isArray(rows) ? rows : (rows.rows ?? []);
+  return (list as Array<Record<string, unknown>>).map((r) => ({
+    conditionId: String(r.conditionId ?? ""),
+    tokenId: String(r.tokenId ?? ""),
+    side: String(r.side ?? "BUY") as "BUY" | "SELL",
+    price: String(r.price ?? "0"),
+    shares: String(r.shares ?? "0"),
+    observedAt:
+      r.observedAt instanceof Date
+        ? r.observedAt
+        : new Date(String(r.observedAt)),
+    raw: (r.raw ?? null) as Record<string, unknown> | null,
+  })) as DbFillRow[];
+}
+
+/**
+ * TEMPORARY — distributions-slice fill read with a 25 K most-recent cap.
+ * Removed when `summariseOrderFlow` is rewritten to consume SQL aggregates
+ * (CP9 in docs/research/poly/backfill-spike-2026-05-05.md). Unlike snapshot's
+ * SQL-aggregated path, distributions still computes histograms in JS, so the
+ * cap is a memory safety net. Documented as `slice_truncated` warnings would
+ * blank the slice on the dashboard, so we silently truncate (matches
+ * `getTradesSlice`'s 500-row cap).
+ */
+async function readWalletFillsTodoCp9(
+  db: Db,
+  addr: string
+): Promise<HistoricalFillRow[]> {
+  const fetched = (await db
     .select({
       conditionId: polyTraderFills.conditionId,
       tokenId: polyTraderFills.tokenId,
@@ -399,8 +694,10 @@ async function readFillsFromDb(db: Db, addr: string): Promise<DbFillRow[]> {
       eq(polyTraderWallets.id, polyTraderFills.traderWalletId)
     )
     .where(eq(polyTraderWallets.walletAddress, addr.toLowerCase()))
-    .orderBy(asc(polyTraderFills.observedAt));
-  return rows as DbFillRow[];
+    .orderBy(desc(polyTraderFills.observedAt))
+    .limit(DISTRIBUTIONS_FILLS_LIMIT_TODO_CP9)) as HistoricalFillRow[];
+  fetched.reverse(); // ASC for the consumer's mental model
+  return fetched;
 }
 
 /**
@@ -669,7 +966,7 @@ export async function getExecutionSlice(
     includeTrades
       ? coalesce(
           `db-execution-trades:${addr}`,
-          () => readFillsFromDb(db, addr),
+          () => readFillsForActivePositionsFromDb(db, addr),
           SLICE_TTL_MS
         )
       : Promise.resolve([] as DbFillRow[]),

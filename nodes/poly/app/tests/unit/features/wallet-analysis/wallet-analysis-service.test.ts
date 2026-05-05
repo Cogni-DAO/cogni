@@ -24,14 +24,21 @@ import {
   polyTraderFills,
 } from "@cogni/poly-db-schema/trader-activity";
 import { PolymarketClobPublicClient } from "@cogni/poly-market-provider/adapters/polymarket";
+import {
+  computeWalletMetrics,
+  type MarketResolutionInput,
+  type WalletTradeInput,
+} from "@cogni/poly-market-provider/analysis";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearTtlCache } from "@/features/wallet-analysis/server/coalesce";
 import {
   __setClientsForTests,
+  composeSnapshotFromAggregates,
   getBalanceSlice,
   getDistributionsSlice,
   getExecutionSlice,
   getSnapshotSlice,
+  type PositionAggregate,
 } from "@/features/wallet-analysis/server/wallet-analysis-service";
 
 type FakeDbRow = {
@@ -65,6 +72,24 @@ type FakeFillRow = {
  */
 function makeFakeDb(opts: { positions: FakeDbRow[]; fills: FakeFillRow[] }) {
   return {
+    /**
+     * Execution slice now reads fills via raw `sql` template through `db.execute(...)`
+     * (readFillsForActivePositionsFromDb). Match the field shape the helper expects
+     * — already-aliased keys per the SELECT — and project from `opts.fills`.
+     */
+    execute() {
+      return Promise.resolve(
+        opts.fills.map((f) => ({
+          conditionId: f.conditionId,
+          tokenId: f.tokenId,
+          side: f.side,
+          price: f.price,
+          shares: f.shares,
+          observedAt: f.observedAt,
+          raw: f.raw,
+        }))
+      );
+    },
     select() {
       let rows: unknown[] = [];
       const builder = {
@@ -79,12 +104,21 @@ function makeFakeDb(opts: { positions: FakeDbRow[]; fills: FakeFillRow[] }) {
           return builder;
         },
         where() {
+          // Chain shapes used by the slice queries:
+          //   .where(...) (positions)                                                         → resolves rows
+          //   .where(...).orderBy(...) (legacy)                                               → resolves rows
+          //   .where(...).orderBy(...).limit(N) (bounded fill read, snapshot/dist/execution)  → resolves rows.slice(0, N)
           return Object.assign(Promise.resolve(rows), {
-            orderBy: () => Promise.resolve(rows),
+            orderBy: () =>
+              Object.assign(Promise.resolve(rows), {
+                limit: (n: number) => Promise.resolve(rows.slice(0, n)),
+              }),
           });
         },
         orderBy() {
-          return Promise.resolve(rows);
+          return Object.assign(Promise.resolve(rows), {
+            limit: (n: number) => Promise.resolve(rows.slice(0, n)),
+          });
         },
       };
       return builder;
@@ -356,10 +390,19 @@ describe("getDistributionsSlice — historical observed fills", () => {
           state.joined = true;
           return chain;
         };
-        chain.where = () =>
-          state.joined
-            ? chain
-            : (outcomeRows as unknown as Record<string, unknown>);
+        chain.where = () => {
+          // Outcomes branch resolves immediately (no orderBy/limit).
+          if (!state.joined)
+            return outcomeRows as unknown as Record<string, unknown>;
+          // Joined fill branch supports .orderBy().limit() as the temp
+          // distributions read uses (readWalletFillsTodoCp9).
+          return Object.assign(Promise.resolve(rows), {
+            orderBy: () =>
+              Object.assign(Promise.resolve(rows), {
+                limit: (n: number) => Promise.resolve(rows.slice(0, n)),
+              }),
+          });
+        };
         chain.orderBy = async () => rows;
         return chain;
       },
@@ -395,77 +438,60 @@ describe("getSnapshotSlice — DB-backed (task.5012 CP4)", () => {
     clearTtlCache();
   });
 
-  it("computes snapshot metrics from poly_trader_fills + poly_market_outcomes", async () => {
+  it("computes snapshot metrics from SQL aggregates + poly_market_outcomes", async () => {
+    // Snapshot now reads SQL aggregates (positions / dailyCounts / activity)
+    // via db.execute(sql`...`); resolutions still through .select().from().where().
+    // Fake injects canned aggregate rows in execute-call order matching the slice.
     const addr = "0xabcdef1234567890abcdef1234567890abcdef12";
-    // 1 BUY + 1 SELL on cid-a/asset-win (resolved winner → win),
-    // 1 BUY on cid-b/asset-pending (no outcome row → still open).
-    const fillRows = [
-      {
-        conditionId: "cid-a",
-        tokenId: "asset-win",
-        side: "BUY",
-        price: "0.40000000",
-        shares: "10.00000000",
-        observedAt: new Date("2026-05-01T12:00:00.000Z"),
-        raw: { outcome: "YES", attributes: { title: "Market A" } },
-      },
-      {
-        conditionId: "cid-a",
-        tokenId: "asset-win",
-        side: "SELL",
-        price: "0.80000000",
-        shares: "10.00000000",
-        observedAt: new Date("2026-05-02T12:00:00.000Z"),
-        raw: { outcome: "YES", attributes: { title: "Market A" } },
-      },
-      {
-        conditionId: "cid-b",
-        tokenId: "asset-pending",
-        side: "BUY",
-        price: "0.30000000",
-        shares: "20.00000000",
-        observedAt: new Date("2026-05-03T12:00:00.000Z"),
-        raw: { outcome: "YES", attributes: { title: "Market B" } },
-      },
-    ];
-    const outcomeRows = [
-      { conditionId: "cid-a", tokenId: "asset-win", outcome: "winner" },
-      { conditionId: "cid-a", tokenId: "asset-loss", outcome: "loser" },
-    ];
-    const fakeDb = {
-      select: () => {
-        const state = { joined: false };
-        const chain: Record<string, unknown> = {};
-        chain.from = () => chain;
-        chain.innerJoin = () => {
-          state.joined = true;
-          return chain;
-        };
-        chain.where = () =>
-          state.joined
-            ? chain
-            : (outcomeRows as unknown as Record<string, unknown>);
-        chain.orderBy = async () => fillRows;
-        return chain;
-      },
-    };
+    const fakeDb = makeSqlAggregateFakeDb({
+      positionAggs: [
+        // resolved winner: held=0 (10 buy / 10 sell), pnl = sellUsdc - buyUsdc = +4
+        {
+          conditionId: "cid-a",
+          tokenId: "asset-win",
+          buyUsdc: 4,
+          sellUsdc: 8,
+          buyShares: 10,
+          sellShares: 10,
+          firstBuyTs: 1761998400, // 2026-05-01T12:00 UTC
+          lastTs: 1762084800,
+          title: "Market A",
+        },
+        // open: no outcome row
+        {
+          conditionId: "cid-b",
+          tokenId: "asset-pending",
+          buyUsdc: 6,
+          sellUsdc: 0,
+          buyShares: 20,
+          sellShares: 0,
+          firstBuyTs: 1762171200,
+          lastTs: 1762171200,
+          title: "Market B",
+        },
+      ],
+      dailyCounts: [{ day: "2026-05-03", n: 1 }],
+      activity: { recent30: 3, latestTs: 1762171200 },
+      outcomes: [
+        { conditionId: "cid-a", tokenId: "asset-win", outcome: "winner" },
+        { conditionId: "cid-a", tokenId: "asset-loss", outcome: "loser" },
+      ],
+    });
 
     const result = await getSnapshotSlice(fakeDb as never, addr);
 
     expect(result.kind).toBe("ok");
     if (result.kind !== "ok") return;
-    // 1 resolved token (asset-win is closed+winner), 1 open token (asset-pending,
-    // no outcome row).
     expect(result.value.resolvedPositions).toBe(1);
     expect(result.value.openPositions).toBe(1);
     expect(result.value.uniqueMarkets).toBe(2);
-    // resolvedPositions=1 < default minResolvedForMetrics (5) → trueWinRatePct null.
+    // resolvedPositions=1 < SNAPSHOT_MIN_RESOLVED (5) → trueWinRatePct null.
     expect(result.value.trueWinRatePct).toBeNull();
   });
 
   it("returns warning on DB read failure", async () => {
     const failingDb = {
-      select: () => {
+      execute: () => {
         throw new Error("db down");
       },
     };
@@ -477,4 +503,297 @@ describe("getSnapshotSlice — DB-backed (task.5012 CP4)", () => {
     if (result.kind !== "warn") return;
     expect(result.warning.slice).toBe("snapshot");
   });
+
+  it("scales to 100K positions without truncation (SQL aggregation, not raw fills)", async () => {
+    // Simulates a whale wallet whose fills compress to many distinct markets.
+    // The architectural test: even with 100K position aggregates, the slice
+    // returns ok and uniqueMarkets reflects EVERY market — no truncation cap.
+    // (Pre-CP4-architecture this path loaded raw fills and OOMed; SQL pre-agg
+    // means JS only sees ≈uniqueMarkets rows.)
+    const positionAggs = Array.from({ length: 100_000 }, (_, i) => ({
+      conditionId: `cid-${i}`,
+      tokenId: `tok-${i}`,
+      buyUsdc: 1,
+      sellUsdc: 0,
+      buyShares: 1,
+      sellShares: 0,
+      firstBuyTs: 1761998400 + i,
+      lastTs: 1761998400 + i,
+      title: `Market ${i}`,
+    }));
+    const fakeDb = makeSqlAggregateFakeDb({
+      positionAggs,
+      dailyCounts: [],
+      activity: { recent30: 100_000, latestTs: 1762000000 },
+      outcomes: [],
+    });
+    const result = await getSnapshotSlice(fakeDb as never, ADDR);
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.value.uniqueMarkets).toBe(100_000);
+    expect(result.value.openPositions).toBe(100_000);
+  });
 });
+
+/**
+ * Parity oracle — asserts `composeSnapshotFromAggregates(SQL-aggs, …)` is
+ * output-equivalent to `computeWalletMetrics(raw-fills, …)` for the snapshot
+ * surface fields, across several synthetic wallet shapes. Catches subtle
+ * SQL-vs-JS drift (off-by-one rounding, sort-order differences, etc.) that
+ * RN1's own data wouldn't surface.
+ *
+ * The oracle is a pure-JS test: we synthesize raw fills, then build the
+ * `PositionAggregate[]` exactly as the SQL helper would, then run both paths
+ * and compare. No fake DB shape involved.
+ */
+describe("snapshot parity — SQL-aggregated path matches computeWalletMetrics", () => {
+  const NOW_SEC = 1_762_000_000; // fixed clock for both paths
+
+  /** Build PositionAggregate[] from raw fills, mirroring readPositionAggregatesFromDb. */
+  function jsAggregate(
+    fills: ReadonlyArray<WalletTradeInput>
+  ): PositionAggregate[] {
+    const byToken = new Map<string, PositionAggregate>();
+    for (const t of fills) {
+      const a = byToken.get(t.asset) ?? {
+        conditionId: t.conditionId,
+        tokenId: t.asset,
+        buyUsdc: 0,
+        sellUsdc: 0,
+        buyShares: 0,
+        sellShares: 0,
+        firstBuyTs: -1,
+        lastTs: 0,
+        title: t.title ?? "",
+      };
+      const usd = t.size * t.price;
+      if (t.side.toUpperCase() === "BUY") {
+        a.buyUsdc += usd;
+        a.buyShares += t.size;
+        a.firstBuyTs =
+          a.firstBuyTs < 0 ? t.timestamp : Math.min(a.firstBuyTs, t.timestamp);
+      } else {
+        a.sellUsdc += usd;
+        a.sellShares += t.size;
+      }
+      a.lastTs = Math.max(a.lastTs, t.timestamp);
+      if (t.title && !a.title) a.title = t.title;
+      byToken.set(t.asset, a);
+    }
+    return [...byToken.values()];
+  }
+
+  function jsDailyCounts(
+    fills: ReadonlyArray<WalletTradeInput>,
+    windowDays: number
+  ): Array<{ day: string; n: number }> {
+    const cutoff = NOW_SEC - windowDays * 86_400;
+    const byDay = new Map<string, number>();
+    for (const f of fills) {
+      if (f.timestamp < cutoff) continue;
+      const day = new Date(f.timestamp * 1_000).toISOString().slice(0, 10);
+      byDay.set(day, (byDay.get(day) ?? 0) + 1);
+    }
+    return [...byDay.entries()].map(([day, n]) => ({ day, n }));
+  }
+
+  function jsActivity(fills: ReadonlyArray<WalletTradeInput>): {
+    recent30: number;
+    latestTs: number;
+  } {
+    const cutoff = NOW_SEC - 30 * 86_400;
+    let recent30 = 0;
+    let latestTs = 0;
+    for (const f of fills) {
+      if (f.timestamp >= cutoff) recent30++;
+      if (f.timestamp > latestTs) latestTs = f.timestamp;
+    }
+    return { recent30, latestTs };
+  }
+
+  type Scenario = {
+    name: string;
+    fills: ReadonlyArray<WalletTradeInput>;
+    resolutions: Map<string, MarketResolutionInput>;
+  };
+
+  const scenarios: Scenario[] = [
+    {
+      // 6 resolved (5 wins, 1 loss) so trueWinRatePct surfaces past
+      // SNAPSHOT_MIN_RESOLVED=5; 2 still-open positions on different markets.
+      name: "mixed wins/losses + open positions",
+      fills: (() => {
+        const out: WalletTradeInput[] = [];
+        for (let i = 0; i < 6; i++) {
+          const cid = `cid-w${i}`;
+          const tok = `tok-w${i}`;
+          out.push({
+            conditionId: cid,
+            asset: tok,
+            side: "BUY",
+            size: 10,
+            price: 0.4,
+            timestamp: NOW_SEC - (10 - i) * 3600,
+            title: `Won market ${i}`,
+          });
+          out.push({
+            conditionId: cid,
+            asset: tok,
+            side: "SELL",
+            size: 10,
+            price: i === 0 ? 0.1 : 0.7, // first one is the loss
+            timestamp: NOW_SEC - (9 - i) * 3600,
+            title: `Won market ${i}`,
+          });
+        }
+        out.push({
+          conditionId: "cid-open-1",
+          asset: "tok-open-1",
+          side: "BUY",
+          size: 5,
+          price: 0.6,
+          timestamp: NOW_SEC - 7200,
+          title: "Open A",
+        });
+        out.push({
+          conditionId: "cid-open-2",
+          asset: "tok-open-2",
+          side: "BUY",
+          size: 8,
+          price: 0.3,
+          timestamp: NOW_SEC - 3600,
+          title: "Open B",
+        });
+        return out;
+      })(),
+      resolutions: new Map(
+        Array.from({ length: 6 }, (_, i) => [
+          `cid-w${i}`,
+          {
+            closed: true,
+            tokens: [
+              { token_id: `tok-w${i}`, winner: i !== 0 }, // loss for i=0, wins for i=1..5
+            ],
+          } satisfies MarketResolutionInput,
+        ])
+      ),
+    },
+    {
+      // No resolved positions → metrics that gate on minResolved should be null.
+      name: "all-open wallet (cold start)",
+      fills: [
+        {
+          conditionId: "cid-x",
+          asset: "tok-x",
+          side: "BUY",
+          size: 10,
+          price: 0.4,
+          timestamp: NOW_SEC - 3600,
+          title: "Open Only",
+        },
+      ],
+      resolutions: new Map(),
+    },
+    {
+      // Empty wallet — both paths should agree on zeroed shape.
+      name: "empty wallet",
+      fills: [],
+      resolutions: new Map(),
+    },
+  ];
+
+  for (const sc of scenarios) {
+    it(`parity: ${sc.name}`, () => {
+      const positions = jsAggregate(sc.fills);
+      const dailyRows = jsDailyCounts(sc.fills, 14);
+      const activity = jsActivity(sc.fills);
+
+      // SQL path
+      const sqlOut = composeSnapshotFromAggregates({
+        positions,
+        dailyRows,
+        activity,
+        resolutions: sc.resolutions,
+        window: 14,
+        topLimit: 4,
+        minResolved: 5,
+      });
+
+      // JS reference path
+      const jsOut = computeWalletMetrics(sc.fills, sc.resolutions, {
+        nowSec: NOW_SEC,
+        minResolvedForMetrics: 5,
+        dailyWindow: 14,
+        topMarketsLimit: 4,
+      });
+
+      // Field-by-field equality across the snapshot surface (PnL fields are
+      // intentionally not surfaced by snapshot per PNL_NOT_IN_SNAPSHOT).
+      expect(sqlOut.resolvedPositions).toBe(jsOut.resolvedPositions);
+      expect(sqlOut.wins).toBe(jsOut.wins);
+      expect(sqlOut.losses).toBe(jsOut.losses);
+      expect(sqlOut.trueWinRatePct).toBe(jsOut.trueWinRatePct);
+      expect(sqlOut.medianDurationHours).toBe(jsOut.medianDurationHours);
+      expect(sqlOut.openPositions).toBe(jsOut.openPositions);
+      expect(sqlOut.openNetCostUsdc).toBe(jsOut.openNetCostUsdc);
+      expect(sqlOut.uniqueMarkets).toBe(jsOut.uniqueMarkets);
+      expect(sqlOut.tradesPerDay30d).toBe(jsOut.tradesPerDay30d);
+      expect([...sqlOut.topMarkets]).toEqual([...jsOut.topMarkets]);
+      // dailyCounts: SQL path produces the SAME 14-day window from the same
+      // pre-aggregated input, so day-by-day comparison should hold.
+      // (Both implementations clamp days-since-last-trade similarly.)
+      expect(sqlOut.dailyCounts.length).toBe(jsOut.dailyCounts.length);
+    });
+  }
+});
+
+/**
+ * Fake DB used by the SQL-aggregated snapshot path. Implements:
+ *   - db.execute(sql`...`)  →  returns canned aggregate rows in call order:
+ *       1st call: positionAggs   (readPositionAggregatesFromDb)
+ *       2nd call: dailyCounts    (readDailyCountsFromDb)
+ *       3rd call: activity-row   (readActivityCountsFromDb)
+ *   - db.select().from().where()  →  outcome rows (readResolutionsForConditions)
+ * Order assumption matches `Promise.all([positions, dailyRows, activity])`
+ * in getSnapshotSlice; if the slice is reordered, adjust this fake.
+ */
+function makeSqlAggregateFakeDb(opts: {
+  positionAggs: ReadonlyArray<{
+    conditionId: string;
+    tokenId: string;
+    buyUsdc: number;
+    sellUsdc: number;
+    buyShares: number;
+    sellShares: number;
+    firstBuyTs: number;
+    lastTs: number;
+    title: string;
+  }>;
+  dailyCounts: ReadonlyArray<{ day: string; n: number }>;
+  activity: { recent30: number; latestTs: number };
+  outcomes: ReadonlyArray<{
+    conditionId: string;
+    tokenId: string;
+    outcome: string;
+  }>;
+}) {
+  const executeQueue: Array<unknown> = [
+    opts.positionAggs,
+    opts.dailyCounts,
+    [opts.activity],
+  ];
+  return {
+    execute() {
+      const next = executeQueue.shift() ?? [];
+      // postgres-js shape: array directly. node-pg shape: { rows: [...] }.
+      // Slice handlers are tolerant of both — return array form.
+      return Promise.resolve(next);
+    },
+    select() {
+      const chain: Record<string, unknown> = {};
+      chain.from = () => chain;
+      chain.where = () => Promise.resolve(opts.outcomes);
+      return chain;
+    },
+  };
+}

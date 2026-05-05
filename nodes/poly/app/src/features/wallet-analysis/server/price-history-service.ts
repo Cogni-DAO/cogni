@@ -12,7 +12,7 @@
  *   - PAGE_LOAD_DB_ONLY (task.5018): `readPriceHistoryFromDb` performs no outbound HTTP.
  *   - PRICE_HISTORY_TIMESERIES_KEYED: PK `(asset, fidelity, ts)`. Two fidelities: `1h` covers windows ≤ ~1 month, `1d` covers everything beyond.
  *   - WRITER_TARGETS_OPEN_AND_RECENT_CLOSED: enumerate distinct assets from `poly_trader_current_positions WHERE active=true` UNION `poly_trader_fills` observed in last 7 days.
- *   - WRITERS_RESPECT_CLOB_RATE_LIMITS: per-asset upstream calls go through `pLimit(4)` per spike.5001's measured 24 rps ceiling.
+ *   - WRITERS_RESPECT_CLOB_RATE_LIMITS: per-asset upstream calls run through a 4-worker pool (was `pLimit(4)`; switched to a worker-pool fan-out to bound heap regardless of asset count, bug.5168) per spike.5001's measured 24 rps ceiling.
  *   - DEDUPE_BY_TS: PK collision-safe — duplicate `(asset, fidelity, ts)` rows from a single payload are deduped last-wins before upsert.
  *   - RETENTION_BOUNDED: `1h` rows older than 35 days are pruned by the same job; `1d` kept indefinitely.
  *   - EMPTY_IS_HONEST: zero stored rows for a freshly-opened position returns `[]` — `mapExecutionPositions` handles missing history.
@@ -37,7 +37,6 @@ import {
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import pLimit from "p-limit";
 
 type Db =
   | NodePgDatabase<Record<string, unknown>>
@@ -53,7 +52,7 @@ const HOUR_FIDELITY_RETENTION_DAYS = 35;
 /** Distinct-asset enumeration uses fills observed in this window. */
 const RECENT_FILLS_WINDOW_DAYS = 7;
 
-/** Per-process upstream concurrency cap — design invariant `pLimit(4)` (spike.5001). */
+/** Per-process upstream concurrency cap — design invariant 4 concurrent CLOB calls (spike.5001). */
 const DEFAULT_CONCURRENCY = 4;
 
 let clobPublicClient: PolymarketClobPublicClient | undefined;
@@ -95,7 +94,7 @@ export async function runPriceHistoryTick(
     component: "trader-price-history",
   });
   const client = deps.clobClient ?? getClobPublicClient();
-  const limit = pLimit(deps.concurrency ?? DEFAULT_CONCURRENCY);
+  const concurrency = deps.concurrency ?? DEFAULT_CONCURRENCY;
   const outboundLogger: PriceHistoryOutboundLogger = {
     info: (payload: {
       event: "poly.market-price-history.outbound";
@@ -107,58 +106,82 @@ export async function runPriceHistoryTick(
   };
 
   const assets = await listAssetsToPoll(deps.db);
-  const upsertedPerCall: number[] = [];
+  let upserted = 0;
   let errors = 0;
 
-  await Promise.all(
-    assets.map((asset) =>
-      limit(async () => {
-        try {
-          const hourPoints = await client.getPriceHistory(
+  // Worker-pool fan-out (bug.5168): the prior shape
+  // `Promise.all(assets.map(asset => pLimit(...)))` materialized one wrapper
+  // per asset and held every completed CLOB price-history payload (~30 KB)
+  // in heap until the whole batch resolved. At 10 K+ assets that exceeded
+  // the Tier-0 pod's 384 MB heap and OOM-crashed the node-app pod every
+  // ~4 min while the tick ran. The worker-pool form below maintains the
+  // same upstream concurrency (`concurrency` workers in flight) but each
+  // worker's local payload is GC'd between iterations, so the heap held
+  // for in-flight CLOB results is bounded by `concurrency * payload_size`,
+  // independent of `assets.length`. Same throughput, same per-asset
+  // try/catch error semantics.
+  let cursor = 0;
+  async function worker(): Promise<void> {
+    while (cursor < assets.length) {
+      const asset = assets[cursor++];
+      if (!asset) return;
+      try {
+        const hourPoints = await client.getPriceHistory(
+          asset,
+          { fidelity: 60, interval: "1m" },
+          { logger: outboundLogger, component: "trader-price-history" }
+        );
+        // Local-var-then-add: `upserted += await ...` reads `upserted` BEFORE
+        // the await, so concurrent workers stomp each other (race seen in
+        // CI's component test — only the last writer's count survived).
+        // Reading `upserted` post-await keeps the +=` synchronous-atomic.
+        const n = await upsertPriceHistory(
+          deps.db,
+          asset,
+          HOUR_FIDELITY,
+          hourPoints
+        );
+        upserted += n;
+      } catch (err: unknown) {
+        errors += 1;
+        log.error(
+          {
+            event: "poly.market-price-history.error",
+            phase: "fetch_hour_error",
             asset,
-            { fidelity: 60, interval: "1m" },
-            { logger: outboundLogger, component: "trader-price-history" }
-          );
-          upsertedPerCall.push(
-            await upsertPriceHistory(deps.db, asset, HOUR_FIDELITY, hourPoints)
-          );
-        } catch (err: unknown) {
-          errors += 1;
-          log.error(
-            {
-              event: "poly.market-price-history.error",
-              phase: "fetch_hour_error",
-              asset,
-              err: err instanceof Error ? err.message : String(err),
-            },
-            "price-history hour fetch failed"
-          );
-        }
-        try {
-          const dayPoints = await client.getPriceHistory(
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "price-history hour fetch failed"
+        );
+      }
+      try {
+        const dayPoints = await client.getPriceHistory(
+          asset,
+          { fidelity: 1440, interval: "max" },
+          { logger: outboundLogger, component: "trader-price-history" }
+        );
+        const n = await upsertPriceHistory(
+          deps.db,
+          asset,
+          DAY_FIDELITY,
+          dayPoints
+        );
+        upserted += n;
+      } catch (err: unknown) {
+        errors += 1;
+        log.error(
+          {
+            event: "poly.market-price-history.error",
+            phase: "fetch_day_error",
             asset,
-            { fidelity: 1440, interval: "max" },
-            { logger: outboundLogger, component: "trader-price-history" }
-          );
-          upsertedPerCall.push(
-            await upsertPriceHistory(deps.db, asset, DAY_FIDELITY, dayPoints)
-          );
-        } catch (err: unknown) {
-          errors += 1;
-          log.error(
-            {
-              event: "poly.market-price-history.error",
-              phase: "fetch_day_error",
-              asset,
-              err: err instanceof Error ? err.message : String(err),
-            },
-            "price-history day fetch failed"
-          );
-        }
-      })
-    )
-  );
-  const upserted = upsertedPerCall.reduce((sum, n) => sum + n, 0);
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "price-history day fetch failed"
+        );
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
 
   let prunedHourPoints = 0;
   try {
