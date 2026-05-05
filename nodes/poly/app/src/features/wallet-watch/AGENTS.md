@@ -39,7 +39,7 @@ Generic Polymarket wallet observation primitive. Emits normalized `Fill[]` for a
 
 ## Public Surface
 
-- **Exports (port):** `WalletActivitySource` — `fetchSince(since?: number) → {fills, newSince}`.
+- **Exports (port):** `WalletActivitySource` — `fetchSince(since?: number) → {fills, newSince}`, plus optional `subscribeWake(cb) → unsubscribe` for push-on-wake (sub-second coordinator dispatch on watched-asset WS frames). Sources that omit `subscribeWake` degrade cleanly to safety-net polling.
 - **Exports (adapter):** `createPolymarketWsActivitySource({ client, ws, wallet, logger, metrics, limit?, refreshAssetsIntervalMs? })` — shared Polymarket Market-channel WebSocket as wake-up signal + per-wallet Data-API drain. The only wallet-watch source as of task.0322 (replaced the prior 30s page-poll).
 - **Exports (metrics):** `WALLET_WATCH_METRICS` (drain counters) + `WALLET_WATCH_WS_METRICS` (WS-specific counters).
 - **Exports (types):** `NextFillsResult`, `PolymarketWsActivitySourceDeps`.
@@ -50,6 +50,7 @@ Generic Polymarket wallet observation primitive. Emits normalized `Fill[]` for a
 - **DA_EMPTY_HASH_REJECTED** — the underlying normalizer rejects empty-tx rows + emits `poly_mirror_data_api_skip_total{reason:"empty_transaction_hash"}`. Pinned fill_id shape is `"data-api:<tx>:<asset>:<side>:<ts>"` per task.0315 Phase 0.2.
 - **CURSOR_IS_MAX_TIMESTAMP** — `newSince` = `max(trade.timestamp)` across the returned page (unix seconds). Callers persist + feed back next tick.
 - **WS_NO_WALLET_IDENTITY** — Polymarket's public Market channel does NOT carry maker/taker addresses. The WS only acts as a wake-up signal; canonical fill identity (`transactionHash`, `proxyWallet`) comes from the Data-API drain.
+- **WAKE_FANOUT_ISOLATED** — `subscribeWake` callbacks fire inside `onTrade`. One bad subscriber MUST NOT prevent other subscribers from running, MUST NOT escape `onTrade`, and MUST NOT block the safety-net path. Implementations wrap each callback in try/catch + warn-log.
 
 ## Responsibilities
 

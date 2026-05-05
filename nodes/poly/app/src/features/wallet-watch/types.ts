@@ -38,4 +38,15 @@ export interface NextFillsResult {
 
 export interface WalletActivitySource {
   fetchSince(since?: number): Promise<NextFillsResult>;
+  /**
+   * Optional push-on-wake seam. When implemented, the source invokes every
+   * registered callback synchronously on a watched-asset WS frame, BEFORE the
+   * caller drains via `fetchSince`. Callers wrap this with a single-flight
+   * runner that calls back into their own tick. Implementations MUST NOT throw
+   * out of the `onTrade` path if a callback throws — isolate per-callback so
+   * one bad subscriber cannot break the others.
+   *
+   * Returns an unsubscribe function. Idempotent.
+   */
+  subscribeWake?(callback: () => void): () => void;
 }

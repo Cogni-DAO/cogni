@@ -103,6 +103,7 @@ export function createPolymarketWsActivitySource(
     deps.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
 
   const ownedAssets = new Set<string>();
+  const wakeListeners = new Set<() => void>();
   let pendingWakeup = true;
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -135,6 +136,22 @@ export function createPolymarketWsActivitySource(
       },
       "ws wake-up matched watched asset"
     );
+    // Fan out to push-on-wake subscribers. Per-callback isolation: one bad
+    // subscriber must not break the others or escape `onTrade`.
+    for (const cb of wakeListeners) {
+      try {
+        cb();
+      } catch (err) {
+        log.warn(
+          {
+            event: "poly.wallet_watch.ws.wake_callback_threw",
+            asset_id: event.asset_id,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "wake callback threw — push degraded to safety-net for this frame"
+        );
+      }
+    }
   }
 
   unsubscribeTrade = deps.ws.onTrade(onTrade);
@@ -327,6 +344,12 @@ export function createPolymarketWsActivitySource(
 
       return { fills, newSince };
     },
+    subscribeWake(callback) {
+      wakeListeners.add(callback);
+      return () => {
+        wakeListeners.delete(callback);
+      };
+    },
     stop() {
       if (stopped) return;
       stopped = true;
@@ -348,6 +371,7 @@ export function createPolymarketWsActivitySource(
       }
       for (const asset of ownedAssets) deps.ws.unsubscribeAsset(asset);
       ownedAssets.clear();
+      wakeListeners.clear();
     },
   };
 }
