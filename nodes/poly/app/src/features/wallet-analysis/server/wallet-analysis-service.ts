@@ -433,6 +433,11 @@ async function readPositionAggregatesFromDb(
  * so the IN-list reads exactly `O(candidates × tokens_per_market)` rows
  * (≈ 2 per cid). MAX collapses the two token rows of a binary market to one
  * title.
+ *
+ * The Polymarket Data API position payload stores the market title at
+ * `raw->>'title'` (top-level), unlike the trade payload which nests it under
+ * `attributes`. COALESCE both paths to stay robust if the upstream shape ever
+ * shifts; mirrors the read shape used by `dbPositionToUserPosition`.
  */
 async function readMarketTitlesForConditions(
   db: Db,
@@ -443,7 +448,7 @@ async function readMarketTitlesForConditions(
   const rows = (await db.execute(sql`
     SELECT
       cp.condition_id AS "conditionId",
-      MAX(cp.raw->'attributes'->>'title') AS "title"
+      MAX(COALESCE(cp.raw->>'title', cp.raw->'attributes'->>'title')) AS "title"
     FROM ${polyTraderCurrentPositions} cp
     INNER JOIN ${polyTraderWallets} w ON w.id = cp.trader_wallet_id
     WHERE w.wallet_address = ${walletAddrLower}
