@@ -30,7 +30,7 @@ export function TradesPerDayChart({
     return (
       <div className="flex flex-col gap-3">
         <h4 className="font-semibold text-sm uppercase tracking-widest">
-          Trades / day, last 14 days
+          Trades / day
         </h4>
         <div className="h-28 animate-pulse rounded bg-muted" />
       </div>
@@ -41,7 +41,7 @@ export function TradesPerDayChart({
     return (
       <div className="flex flex-col gap-3">
         <h4 className="font-semibold text-sm uppercase tracking-widest">
-          Trades / day, last 14 days
+          Trades / day
         </h4>
         <div className="flex h-28 items-center justify-center text-muted-foreground text-sm">
           No trade history yet.
@@ -61,7 +61,7 @@ export function TradesPerDayChart({
     <div className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between">
         <h4 className="font-semibold text-sm uppercase tracking-widest">
-          Trades / day, last 14 days
+          Trades / day, last {daily.length} day{daily.length === 1 ? "" : "s"}
         </h4>
         <span className="font-mono text-muted-foreground text-xs">
           {total} total{summarySuffix}
