@@ -31,15 +31,16 @@ What container memory limit + V8 heap configuration should be the default standa
 
 ### What exists today
 
-| Node | App container | Request | Limit | NODE_OPTIONS |
-| --- | --- | ---: | ---: | --- |
-| operator | base | 256Mi | 512Mi | unset |
-| poly | base | 256Mi | 512Mi | unset |
-| poly | **prod overlay** | 384Mi | 1Gi | unset |
-| resy | base | 256Mi | 512Mi | unset |
-| sandbox-openclaw gateway | base | 256Mi | 1Gi | `--max-old-space-size=768` |
+| Node                     | App container    | Request | Limit | NODE_OPTIONS               |
+| ------------------------ | ---------------- | ------: | ----: | -------------------------- |
+| operator                 | base             |   256Mi | 512Mi | unset                      |
+| poly                     | base             |   256Mi | 512Mi | unset                      |
+| poly                     | **prod overlay** |   384Mi |   1Gi | unset                      |
+| resy                     | base             |   256Mi | 512Mi | unset                      |
+| sandbox-openclaw gateway | base             |   256Mi |   1Gi | `--max-old-space-size=768` |
 
 Source files:
+
 - `infra/k8s/base/node-app/deployment.yaml` — base limit 512Mi
 - `infra/k8s/overlays/production/poly/kustomization.yaml:75-79` — only override
 - `infra/k8s/base/sandbox-openclaw/deployment.yaml:59` — only NODE_OPTIONS
@@ -58,13 +59,13 @@ bug.5013: nothing autonomous detected this; human Derek noticed via a chrome 502
 
 Per [Red Hat developer guide on Node 20+ container memory](https://developers.redhat.com/articles/2025/10/10/nodejs-20-memory-management-containers):
 
-| cgroup memory | Auto-detected `max-old-space-size` |
-| ---: | ---: |
-| 512 Mi | ~256 MB |
-| 1 Gi | ~512 MB |
-| 2 Gi | ~1024 MB |
-| 4 Gi | ~2080 MB (caps here) |
-| ≥ 4 Gi | ~2080 MB (no further auto-increase) |
+| cgroup memory |  Auto-detected `max-old-space-size` |
+| ------------: | ----------------------------------: |
+|        512 Mi |                             ~256 MB |
+|          1 Gi |                             ~512 MB |
+|          2 Gi |                            ~1024 MB |
+|          4 Gi |                ~2080 MB (caps here) |
+|        ≥ 4 Gi | ~2080 MB (no further auto-increase) |
 
 This matches the observed 250–258 MB V8 ceiling on poly prod when the cgroup limit was effectively 512Mi. **There is no bug in V8.** The bug is that nothing tells V8 we want more.
 
@@ -72,12 +73,12 @@ This matches the observed 250–258 MB V8 ceiling on poly prod when the cgroup l
 
 [vercel/next.js#75652](https://github.com/vercel/next.js/discussions/75652) (Node 24 alpine, Next.js 15, idle):
 
-| Metric | Value |
-| --- | ---: |
-| RSS | 279 MB |
-| Heap used | 107 MB |
+| Metric     |  Value |
+| ---------- | -----: |
+| RSS        | 279 MB |
+| Heap used  | 107 MB |
 | Heap total | 114 MB |
-| External | 4 MB |
+| External   |   4 MB |
 
 A bare Next.js app idle uses ~280 MB RSS — already over half of our 512Mi base limit, before any user request lands. **The base 512Mi limit has no headroom for a real Next.js app.** Most workloads work at all only because nodes serve very little traffic and V8 GC keeps old-space well below its 256 MB ceiling.
 
@@ -109,7 +110,7 @@ Concurrent active users vs single-pod RSS (typical Next.js node)
   Range: 0.3 MB/user (cached / static-heavy) to 3 MB/user (heavy SSR + DB joins)
 ```
 
-Active *concurrent* users ≠ DAU. As a rule of thumb, peak concurrent ≈ DAU / 100 for a low-engagement product. So 1000 concurrent is roughly 100k DAU — far past where we are today.
+Active _concurrent_ users ≠ DAU. As a rule of thumb, peak concurrent ≈ DAU / 100 for a low-engagement product. So 1000 concurrent is roughly 100k DAU — far past where we are today.
 
 ### F4: V8 heap should be a deliberate fraction of the cgroup limit, with RSS headroom
 
@@ -138,13 +139,14 @@ Result: the boot work is bursty enough to exhaust V8's old-space ceiling (256 MB
 
 ### S1: Three-tier sizing standard for node-template
 
-| Tier | Stage | Container limit | Container request | `--max-old-space-size` | Use when |
-| --- | --- | ---: | ---: | ---: | --- |
-| **Tier 0** | MVP / no users | 512 Mi | 256 Mi | 384 | Default for new nodes; nodes with no live users |
-| **Tier 1** | Real product / pre-scale | 1 Gi | 384 Mi | 768 | Once a node has live, recurring users; is the steady-state we should target for production-relevant nodes |
-| **Tier 2** | Scaled product | 2 Gi | 512 Mi | 1536 | Only with multi-replica HPA wired and a documented load profile |
+| Tier       | Stage                    | Container limit | Container request | `--max-old-space-size` | Use when                                                                                                  |
+| ---------- | ------------------------ | --------------: | ----------------: | ---------------------: | --------------------------------------------------------------------------------------------------------- |
+| **Tier 0** | MVP / no users           |          512 Mi |            256 Mi |                    384 | Default for new nodes; nodes with no live users                                                           |
+| **Tier 1** | Real product / pre-scale |            1 Gi |            384 Mi |                    768 | Once a node has live, recurring users; is the steady-state we should target for production-relevant nodes |
+| **Tier 2** | Scaled product           |            2 Gi |            512 Mi |                   1536 | Only with multi-replica HPA wired and a documented load profile                                           |
 
 **Default for new nodes: Tier 0.** A node should only move up a tier with one of:
+
 - A documented user/load profile that justifies the bump, OR
 - Loki evidence of OOM at the current tier (V8 FATAL, OOMKilled) AND
 - A captured triage note saying "investigated for leak/pathology — see X" before the bump.
@@ -156,7 +158,7 @@ This makes any tier-up a small audit moment, not a silent kustomize edit.
 - `infra/k8s/base/node-app/deployment.yaml`: encode Tier 0 (current 512Mi limit + add `NODE_OPTIONS=--max-old-space-size=384` env var). Today the env is missing entirely — a node-template fork inherits "implicit V8 default" which depends on the host's cgroup behavior. Make it explicit.
 - A small CI check (script in `scripts/`) that scans `infra/k8s/overlays/**/kustomization.yaml`, finds any `resources/limits/memory` patch on the node-app Deployment, and fails the static job if the corresponding `NODE_OPTIONS` is missing or off the per-tier table. This is the "tell us when a node is exceeding standard" signal.
 
-### S3: Apply Tier 1 to poly *and* cap the boot fan-out
+### S3: Apply Tier 1 to poly _and_ cap the boot fan-out
 
 Two changes, one PR (since fixing only the heap papers over the unbounded loop):
 
@@ -167,13 +169,13 @@ This addresses bug.5012 directly and makes the catchup not a tier-up trap.
 
 ### Trade-offs accepted
 
-- **Tier 0 keeps small-default-bias.** A real Next.js app idle uses ~280 MB RSS and our Tier 0 limit is 512 MB. That gives ~230 MB headroom for active load — fine for 0–10 concurrent users, tight beyond that. We accept that any node hitting steady-state load will OOM at Tier 0 and *that's the signal* to either tier up (with an audit moment) or fix a leak.
+- **Tier 0 keeps small-default-bias.** A real Next.js app idle uses ~280 MB RSS and our Tier 0 limit is 512 MB. That gives ~230 MB headroom for active load — fine for 0–10 concurrent users, tight beyond that. We accept that any node hitting steady-state load will OOM at Tier 0 and _that's the signal_ to either tier up (with an audit moment) or fix a leak.
 - **Heap formula leaves ~256 MB RSS headroom.** Could be tighter for cost, but Node 22 + Next 16's fetch / route preload buffers can spike, and cgroup-OOMKilled events are catastrophic vs V8 FATAL (no log). The headroom is cheap insurance.
 - **No HPA at Tier 0/1.** Single replica + manual scale is correct for our actual stage. Add HPA when Tier 2 is reached, not preemptively.
 
 ## Open Questions
 
-1. **Why didn't the existing poly prod 1Gi overlay take effect?** Either the deploy/production branch never picked up the override (kustomize / Argo reconcile gap), or the running pod predates the merge. Must verify before declaring victory on the heap bump. *Action: confirm in `/implement` for bug.5012.*
+1. **Why didn't the existing poly prod 1Gi overlay take effect?** Either the deploy/production branch never picked up the override (kustomize / Argo reconcile gap), or the running pod predates the merge. Must verify before declaring victory on the heap bump. _Action: confirm in `/implement` for bug.5012._
 2. **Is `node:22-alpine` ideal for memory-sensitive Node services?** Alpine's `musl` libc has known overhead in Node memory allocators in some workloads; `node:22-bookworm-slim` is the alternative `scheduler-worker` already uses. Out of scope for now but worth a follow-up if Tier 1 still OOMs.
 3. **What's the actual traffic on poly prod right now?** F3 chart is a model, not measurement. We should confirm with Loki request-rate metrics before Tier 1 alone is judged sufficient.
 
