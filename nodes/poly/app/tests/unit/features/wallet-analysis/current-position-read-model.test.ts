@@ -10,8 +10,8 @@
  * Scope: Pure read-model unit test backed by a fake `db.execute`.
  */
 
-import { describe, expect, it } from "vitest";
 import type { SQL } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
 import { readCurrentWalletPositionModel } from "@/features/wallet-analysis/server/current-position-read-model";
 
 const WALLET = "0xfeedface00000000000000000000000000000001";
