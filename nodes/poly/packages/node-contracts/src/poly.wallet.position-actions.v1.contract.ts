@@ -18,16 +18,26 @@ import { z } from "zod";
 
 export const polyWalletClosePositionOperation = {
   id: "poly.wallet.position_close.v1",
-  summary: "Market SELL to fully exit an open position via CLOB (live market)",
+  summary:
+    "Market SELL to fully exit an open position via CLOB, or classify stale/dust ledger exposure when no sell is possible",
   input: z.object({
     token_id: z.string().min(1),
   }),
-  output: z.object({
-    order_id: z.string(),
-    status: z.string(),
-    client_order_id: z.string(),
-    filled_size_usdc: z.number(),
-  }),
+  output: z.discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("order"),
+      order_id: z.string(),
+      status: z.string(),
+      client_order_id: z.string(),
+      filled_size_usdc: z.number(),
+    }),
+    z.object({
+      kind: z.literal("classified"),
+      status: z.enum(["closed", "dust"]),
+      classification: z.enum(["stale_zero_balance", "below_market_min"]),
+      ledger_rows_updated: z.number().int().nonnegative(),
+    }),
+  ]),
 } as const;
 
 export type PolyWalletClosePositionInput = z.infer<

@@ -260,9 +260,61 @@ describe("createPolyTradeExecutorFactory", () => {
     expect(listUserPositions).toHaveBeenCalledTimes(1);
   });
 
-  it("exitPosition falls back to on-chain CTF balance when Data API omits a legacy holding", async () => {
+  it("exitPosition reads on-chain CTF balance when Data API omits a legacy holding", async () => {
     listUserPositions.mockResolvedValue([]);
     readContract.mockResolvedValue(4_898_000n);
+    const receipt: OrderReceipt = {
+      order_id: "0xexit",
+      client_order_id: "0xclient",
+      status: "filled",
+      filled_size_usdc: 4.8,
+      submitted_at: "2026-04-23T00:00:00.000Z",
+    };
+    sellPositionAtMarket.mockResolvedValue(receipt);
+    const walletPort = makeWalletPort();
+
+    const factory = createPolyTradeExecutorFactory({
+      walletPort,
+      logger: makeLogger() as never,
+      metrics: makeMetrics() as never,
+      host: "https://clob.polymarket.com",
+      polygonRpcUrl: "https://polygon.example",
+    });
+    const executor = await factory.getPolyTradeExecutorFor(BILLING_ACCOUNT_ID);
+
+    const result = await executor.exitPosition({
+      tokenId: "123",
+      client_order_id: "0xclient",
+    });
+
+    expect(result).toEqual(receipt);
+    expect(readContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionName: "balanceOf",
+        args: [FUNDER, 123n],
+      })
+    );
+    expect(sellPositionAtMarket).toHaveBeenCalledWith({
+      tokenId: "123",
+      shares: 4.898,
+      client_order_id: "0xclient",
+      orderType: "FAK",
+    });
+  });
+
+  it("exitPosition reads on-chain CTF balance when Data API reports sub-floor shares", async () => {
+    listUserPositions.mockResolvedValue([
+      {
+        asset: "123",
+        size: 0.67,
+        curPrice: 0.25,
+        conditionId: CONDITION_ID,
+        outcome: "YES",
+        redeemable: false,
+      },
+    ]);
+    readContract.mockResolvedValue(4_898_000n);
+    getMarketConstraints.mockResolvedValue({ minShares: 1 });
     const receipt: OrderReceipt = {
       order_id: "0xexit",
       client_order_id: "0xclient",

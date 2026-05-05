@@ -58,6 +58,8 @@ vi.mock("@/bootstrap/http", () => ({
     async (request: Request) =>
       handler(
         {
+          reqId: "req-test",
+          routeId: "poly.wallet.positions.action",
           log: {
             info: vi.fn(),
             warn: vi.fn(),
@@ -75,6 +77,23 @@ vi.mock("@/bootstrap/capabilities/poly-trade-executor", () => ({
   createPolyTradeExecutorFactory: vi.fn(() => ({
     getPolyTradeExecutorFor: mockGetPolyTradeExecutorFor,
   })),
+  classifyClobCredentialRotationError: (err: unknown) => {
+    const maybe = err as { response?: { status?: number }; status?: number };
+    const httpStatus = maybe.response?.status ?? maybe.status;
+    if (httpStatus === 401) {
+      return { reasonCode: "clob_upstream_unauthorized", httpStatus };
+    }
+    if (httpStatus === 403) {
+      return { reasonCode: "clob_upstream_forbidden", httpStatus };
+    }
+    if (httpStatus === 429) {
+      return { reasonCode: "clob_upstream_rate_limited", httpStatus };
+    }
+    if (httpStatus !== undefined) {
+      return { reasonCode: "clob_upstream_http_error", httpStatus };
+    }
+    return { reasonCode: "clob_upstream_error" };
+  },
   PolyTradeExecutorError: MockPolyTradeExecutorError,
 }));
 
@@ -176,6 +195,7 @@ describe("poly wallet position action routes", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
+      kind: "order",
       order_id: "0xclose",
       status: "filled",
       client_order_id: "0xclient",
@@ -194,7 +214,7 @@ describe("poly wallet position action routes", () => {
     );
   });
 
-  it("close route maps executor authorization / no-position failures to 403 / 409", async () => {
+  it("close route maps executor authorization failures to 403 and classifies stale ledger rows", async () => {
     mockGetPolyTradeExecutorFor
       .mockResolvedValueOnce({
         exitPosition: vi
@@ -238,8 +258,45 @@ describe("poly wallet position action routes", () => {
         token_id: "token-1",
       })
     );
-    expect(missing.status).toBe(409);
+    expect(missing.status).toBe(200);
     await expect(missing.json()).resolves.toEqual({
+      kind: "classified",
+      status: "closed",
+      classification: "stale_zero_balance",
+      ledger_rows_updated: 1,
+    });
+    expect(mockMarkPositionLifecycleByAsset).toHaveBeenCalledWith({
+      billing_account_id: ACCOUNT.id,
+      token_id: "token-1",
+      lifecycle: "closed",
+      updated_at: expect.any(Date),
+    });
+  });
+
+  it("close route keeps returning 409 when no ledger row can be classified", async () => {
+    mockMarkPositionLifecycleByAsset.mockResolvedValueOnce(0);
+    mockGetPolyTradeExecutorFor.mockResolvedValue({
+      exitPosition: vi
+        .fn()
+        .mockRejectedValue(
+          new MockPolyTradeExecutorError(
+            "no_position_to_close",
+            "missing position"
+          )
+        ),
+    });
+
+    const { POST } = await import(
+      "@/app/api/v1/poly/wallet/positions/close/route"
+    );
+    const response = await POST(
+      makeJsonRequest("http://localhost/api/v1/poly/wallet/positions/close", {
+        token_id: "token-1",
+      })
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
       error: "no_position_to_close",
     });
   });
@@ -262,10 +319,10 @@ describe("poly wallet position action routes", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      order_id: "",
+      kind: "classified",
       status: "dust",
-      client_order_id: "",
-      filled_size_usdc: 0,
+      classification: "below_market_min",
+      ledger_rows_updated: 1,
     });
     expect(mockMarkPositionLifecycleByAsset).toHaveBeenCalledWith({
       billing_account_id: ACCOUNT.id,
@@ -276,6 +333,55 @@ describe("poly wallet position action routes", () => {
     expect(mockInvalidateWalletAnalysisCaches).toHaveBeenCalledWith(
       "0xAbCdEf0000000000000000000000000000000001"
     );
+  });
+
+  it("close route surfaces typed CLOB auth errors for credential rotation", async () => {
+    const clobUnauthorized = new Error("invalid api key");
+    (clobUnauthorized as { response?: { status: number } }).response = {
+      status: 401,
+    };
+    mockGetPolyTradeExecutorFor.mockResolvedValue({
+      exitPosition: vi.fn().mockRejectedValue(clobUnauthorized),
+    });
+
+    const { POST } = await import(
+      "@/app/api/v1/poly/wallet/positions/close/route"
+    );
+    const response = await POST(
+      makeJsonRequest("http://localhost/api/v1/poly/wallet/positions/close", {
+        token_id: "token-1",
+      })
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      error: "clob_upstream_unauthorized",
+      httpStatus: 401,
+    });
+  });
+
+  it("close route does not surface raw upstream messages on untyped failures", async () => {
+    mockGetPolyTradeExecutorFor.mockResolvedValue({
+      exitPosition: vi
+        .fn()
+        .mockRejectedValue(
+          new Error("CLOB rejected request with POLY_API_KEY=secret")
+        ),
+    });
+
+    const { POST } = await import(
+      "@/app/api/v1/poly/wallet/positions/close/route"
+    );
+    const response = await POST(
+      makeJsonRequest("http://localhost/api/v1/poly/wallet/positions/close", {
+        token_id: "token-1",
+      })
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      error: "close_failed",
+    });
   });
 
   it("rejects invalid JSON bodies before touching the executor", async () => {
@@ -333,6 +439,7 @@ describe("poly wallet position action routes", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
+      kind: "order",
       order_id: "0xclose",
       status: "filled",
       client_order_id: "0xclient",

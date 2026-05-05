@@ -20,6 +20,8 @@
  *   - EXECUTION_ONLY: current wallet totals live on
  *     `/api/v1/poly/wallet/overview`; this route stays focused on positions
  *     and trade cadence only.
+ *   - BOUNDED_HISTORY_PAYLOAD: closed/redeemed history is preview data for the
+ *     dashboard, not an unbounded archive export.
  * Side-effects: IO (DB read, optional Polymarket Data API + CLOB public reads).
  * Links: nodes/poly/packages/node-contracts/src/poly.wallet.execution.v1.contract.ts,
  *        docs/spec/poly-trader-wallet-port.md,
@@ -55,6 +57,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
+const EXECUTION_HISTORY_LIMIT = 30;
 
 function emptyPayload(
   freshness: PolyWalletExecutionOutput["freshness"],
@@ -242,6 +245,11 @@ export const GET = wrapRouteHandlerWithLogging(
       return [];
     });
 
+    const closedPositionsForResponse = closedPositions.slice(
+      0,
+      EXECUTION_HISTORY_LIMIT
+    );
+
     logEvent(ctx.log, EVENT_NAMES.POLY_WALLET_EXECUTION_COMPLETE, {
       reqId: ctx.reqId,
       routeId: ctx.routeId,
@@ -264,7 +272,8 @@ export const GET = wrapRouteHandlerWithLogging(
       freshness,
       live_positions: livePositions.length,
       market_groups: marketGroups.length,
-      closed_positions: closedPositions.length,
+      closed_positions: closedPositionsForResponse.length,
+      closed_positions_total: closedPositions.length,
       daily_trade_days: dailyTradeCounts.length,
       warnings: warnings.length,
     });
@@ -277,7 +286,7 @@ export const GET = wrapRouteHandlerWithLogging(
         dailyTradeCounts,
         live_positions: livePositions,
         market_groups: marketGroups,
-        closed_positions: closedPositions,
+        closed_positions: closedPositionsForResponse,
         warnings,
       })
     );

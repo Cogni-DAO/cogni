@@ -70,9 +70,8 @@ export function ExecutionActivityCard(): ReactElement {
       const shouldSuppress =
         vars.kind === "redeem"
           ? "tx_hash" in result
-          : "filled_size_usdc" in result &&
-            result.status === "filled" &&
-            result.filled_size_usdc > 0;
+          : "kind" in result &&
+            (result.kind === "order" || result.kind === "classified");
       if (shouldSuppress) {
         setRecentlyClosedIds(
           (prev) => new Set([...prev, vars.position.positionId])

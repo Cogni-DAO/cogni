@@ -42,6 +42,10 @@
  *     or an ops path invalidates that tenant after CLOB credential rotation.
  *   - SHARED_PUBLIC_CLIENT — the `viem.PublicClient` used for RPC reads is a
  *     process-level singleton; wallet clients fan out per tenant.
+ *   - DATA_API_DISCOVERY_HINT_FOR_EXIT — `exitPosition` uses Data API as the
+ *     cheap discovery path only. If a ledger-backed token is omitted there,
+ *     CTF ERC-1155 `balanceOf(funder, tokenId)` is the close authority before
+ *     deciding there is no position to sell.
  * Side-effects: on first `placeIntent` for a new tenant: HTTPS to Polymarket
  *   CLOB + Privy API. Subsequent calls reuse cached clients.
  * Links: work/items/task.0318 (Phase B3), work/items/task.0388,
@@ -145,7 +149,8 @@ export interface PolyTradeExecutor {
   /**
    * User-facing full exit path. Sells the wallet's entire share balance for
    * the token via a market FOK order and bypasses grant caps so users can
-   * always unwind exposure.
+   * always unwind exposure. Data API is only a discovery hint; Data API
+   * omission falls through to CTF ERC-1155 `balanceOf` before refusing close.
    */
   exitPosition: (params: ExitPositionParams) => Promise<OrderReceipt>;
   /** Per-tenant position query for the operator address. */
@@ -173,6 +178,8 @@ export interface PolyTradeExecutor {
   }>;
   /** Per-tenant live open orders from the CLOB. */
   listOpenOrders: () => Promise<OpenOrderSummary[]>;
+  /** CTF ERC-1155 share balance for the tenant wallet and token id. */
+  getPositionShareBalance: (tokenId: string) => Promise<number>;
   /** The tenant's current EOA address (used for profile URLs + position queries). */
   readonly funderAddress: `0x${string}`;
 }
@@ -486,16 +493,17 @@ async function buildExecutor(
     const marketExitAdapter = adapter as typeof adapter & MarketExitAdapter;
     const positions = await dataApiClient.listUserPositions(funderAddress);
     const position = positions.find((p) => p.asset === params.tokenId);
-    let shares = position?.size ?? 0;
+    const dataApiShares = position?.size ?? 0;
+    let shares = dataApiShares;
     let shareSource: "data_api" | "onchain_balance" = "data_api";
-    if (shares <= 0) {
-      const rawBalance = await publicClient.readContract({
-        address: POLYGON_CONDITIONAL_TOKENS,
-        abi: conditionalTokensAbi,
-        functionName: "balanceOf",
-        args: [funderAddress, BigInt(params.tokenId)],
-      });
-      shares = Number(formatUnits(rawBalance, 6));
+    if (dataApiShares > 0) {
+      const { minShares } = await adapter.getMarketConstraints(params.tokenId);
+      if (dataApiShares < minShares) {
+        shares = await getPositionShareBalance(params.tokenId);
+        shareSource = "onchain_balance";
+      }
+    } else {
+      shares = await getPositionShareBalance(params.tokenId);
       shareSource = "onchain_balance";
     }
     if (shares <= 0) {
@@ -538,6 +546,16 @@ async function buildExecutor(
     await adapter.cancelOrder(orderId);
   }
 
+  async function getPositionShareBalance(tokenId: string): Promise<number> {
+    const rawBalance = await publicClient.readContract({
+      address: POLYGON_CONDITIONAL_TOKENS,
+      abi: conditionalTokensAbi,
+      functionName: "balanceOf",
+      args: [funderAddress, BigInt(tokenId)],
+    });
+    return Number(formatUnits(rawBalance, 6));
+  }
+
   const executor: PolyTradeExecutor = {
     billingAccountId,
     placeIntent: authorizedPlace,
@@ -549,6 +567,7 @@ async function buildExecutor(
     getMarketConstraints: adapter.getMarketConstraints.bind(adapter),
     listOpenOrders: async () =>
       (await adapter.listOpenOrders()).map(mapOpenOrderSummary),
+    getPositionShareBalance,
     funderAddress,
   };
 

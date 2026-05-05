@@ -34,6 +34,9 @@ export const EVENT_NAMES = {
 
   POLY_RESEARCH_TRADER_COMPARISON_COMPLETE:
     "feature.poly_research.trader_comparison.complete",
+  POLY_WALLET_REFRESH_COMPLETE: "feature.poly_wallet_refresh.complete",
+  POLY_WALLET_POSITIONS_CLOSE_COMPLETE:
+    "feature.poly_wallet_positions_close.complete",
 } as const;
 
 export type EventName = (typeof EVENT_NAMES)[keyof typeof EVENT_NAMES];
