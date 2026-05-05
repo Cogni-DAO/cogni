@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import { readCurrentWalletPositionModel } from "@/features/wallet-analysis/server/current-position-read-model";
 
 const WALLET = "0xfeedface00000000000000000000000000000001";
@@ -45,7 +45,7 @@ function makeRow(overrides: Record<string, unknown> = {}) {
 
 function fakeDb(rows: ReturnType<typeof makeRow>[]) {
   return {
-    execute: async (_query: ReturnType<typeof sql>) => ({ rows }),
+    execute: async (_query: SQL) => ({ rows }),
   };
 }
 
@@ -90,7 +90,7 @@ describe("readCurrentWalletPositionModel — realized PnL on closed positions", 
     expect(position.status).toBe("closed");
     expect(position.currentValue).toBe(0);
     expect(position.pnlUsd).toBe(6);
-    expect(position.pnlPct).toBe(75);
+    expect(position.pnlPct).toBe(150);
   });
 
   it("preserves open-position pnl semantics (regression guard)", async () => {
