@@ -77,6 +77,12 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/resources/limits/memory
         value: "1Gi"
+      # Tier 1 sizing: paired heap bump for the 1Gi container limit. Without
+      # this, V8 auto-sizes for the base 512Mi cgroup (~256MB heap) and OOMs
+      # well below the configured limit. See docs/research/nextjs-node-memory-sizing.md.
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/value
+        value: "--max-old-space-size=768"
       - op: add
         path: /spec/selector/matchLabels/app.kubernetes.io~1instance
         value: "poly"

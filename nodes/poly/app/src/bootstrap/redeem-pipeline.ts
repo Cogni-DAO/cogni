@@ -36,6 +36,7 @@ import type {
   PolyTraderWalletPort,
 } from "@cogni/poly-wallet";
 import { isNull } from "drizzle-orm";
+import pLimit from "p-limit";
 import type { Logger } from "pino";
 import {
   type Account,
@@ -62,6 +63,7 @@ import { EVENT_NAMES } from "@/shared/observability/events";
 
 const REDEEM_POLL_INTERVAL_MS = 10 * 60 * 1000;
 const REDEEM_WORKER_DRAIN_INTERVAL_MS = 5_000;
+const BACKFILL_ENQUEUE_CONCURRENCY = 4;
 
 export interface RedeemPipelineHandles {
   redeemJobs: RedeemJobsPort;
@@ -300,9 +302,12 @@ async function backfillLifecycleStates(
     },
     "redeem pipeline: classifying current positions"
   );
-  for (const conditionId of conditionIds) {
-    await subscriber.enqueueForCondition(conditionId, positions);
-  }
+  const limit = pLimit(BACKFILL_ENQUEUE_CONCURRENCY);
+  await Promise.all(
+    Array.from(conditionIds, (conditionId) =>
+      limit(() => subscriber.enqueueForCondition(conditionId, positions))
+    )
+  );
   const mem = process.memoryUsage();
   log.info(
     {
