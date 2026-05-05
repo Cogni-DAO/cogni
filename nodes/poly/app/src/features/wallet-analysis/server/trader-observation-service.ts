@@ -42,6 +42,7 @@ import {
 import { and, eq, inArray, isNull, lt, notInArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { refreshMarketMetadata } from "./poly-market-metadata-service";
 import {
   fetchAndPersistTradingWalletPnlHistory,
   pruneOldTradingWalletPnlPoints,
@@ -193,6 +194,37 @@ export async function runTraderObservationTick(
         "trader user-pnl prune failed"
       );
     }
+  }
+
+  // Sweep Polymarket Gamma metadata for every condition the tick has
+  // observed across all wallets. Single canonical write into
+  // `poly_market_metadata`; readers JOIN there instead of scraping
+  // `poly_trader_current_positions.raw->>'endDate'`. Soft-failures so a
+  // bad Gamma response never aborts the wallet observation tick.
+  try {
+    const conditionRows = await deps.db
+      .selectDistinct({
+        conditionId: polyTraderCurrentPositions.conditionId,
+      })
+      .from(polyTraderCurrentPositions);
+    const conditionIds = conditionRows
+      .map((row) => row.conditionId)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+    await refreshMarketMetadata({
+      db: deps.db,
+      client: deps.client,
+      conditionIds,
+      logger: log,
+    });
+  } catch (err: unknown) {
+    log.warn(
+      {
+        event: "poly.trader.observe",
+        phase: "market_metadata_error",
+        err: err instanceof Error ? err.message : String(err),
+      },
+      "market metadata refresh failed"
+    );
   }
 
   log.info(

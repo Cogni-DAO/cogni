@@ -49,6 +49,16 @@ type CurrentPositionRow = {
   redeem_status: string | null;
   redeem_lifecycle_state: WalletExecutionLifecycleState | null;
   market_outcome: "winner" | "loser" | "unknown" | null;
+  /**
+   * `poly_market_metadata` JOIN — canonical Gamma values. Null when the
+   * Gamma sweep has not yet seen this conditionId; the per-row code falls
+   * back to `raw->>` JSONB-scrape so first deploy doesn't flicker.
+   */
+  metadata_market_title: string | null;
+  metadata_market_slug: string | null;
+  metadata_event_title: string | null;
+  metadata_event_slug: string | null;
+  metadata_end_date: Date | string | null;
 };
 
 export interface CurrentWalletPositionReadModel {
@@ -84,7 +94,12 @@ export async function readCurrentWalletPositionModel(params: {
         c.status AS cursor_status,
         r.status AS redeem_status,
         r.lifecycle_state AS redeem_lifecycle_state,
-        pmo.outcome AS market_outcome
+        pmo.outcome AS market_outcome,
+        pmm.market_title AS metadata_market_title,
+        pmm.market_slug AS metadata_market_slug,
+        pmm.event_title AS metadata_event_title,
+        pmm.event_slug AS metadata_event_slug,
+        pmm.end_date AS metadata_end_date
       FROM poly_trader_wallets w
       LEFT JOIN poly_trader_ingestion_cursors c
         ON c.trader_wallet_id = w.id
@@ -100,6 +115,8 @@ export async function readCurrentWalletPositionModel(params: {
       LEFT JOIN poly_market_outcomes pmo
         ON lower(pmo.condition_id) = lower(p.condition_id)
        AND pmo.token_id = p.token_id
+      LEFT JOIN poly_market_metadata pmm
+        ON pmm.condition_id = p.condition_id
       WHERE lower(w.wallet_address) = lower(${params.walletAddress})
         AND w.kind = 'cogni_wallet'
         AND w.active_for_research = true
@@ -187,7 +204,14 @@ function rowToExecutionPosition(
     isoOrNull(row.first_observed_at) ??
     isoOrNull(row.last_observed_at) ??
     capturedAt.toISOString();
-  const endDate = isoString(readOptionalString(raw, "endDate"));
+  // Canonical resolution time: poly_market_metadata.end_date (Gamma).
+  // Fall back to the legacy `raw.endDate` JSONB scrape so the first deploy
+  // (where the metadata table has not yet been populated by the tick) does
+  // not regress the dashboard. The fallback can be dropped in a follow-up
+  // once `poly_market_metadata` is fully backfilled in prod.
+  const endDate =
+    isoOrNull(row.metadata_end_date) ??
+    isoString(readOptionalString(raw, "endDate"));
   const pnlUsd = roundToCents(currentValue - costBasis);
   const pnlPct = costBasis > 0 ? roundToCents((pnlUsd / costBasis) * 100) : 0;
   const syncAgeMs = Math.max(0, capturedAt.getTime() - Date.parse(observedAt));
@@ -203,10 +227,18 @@ function rowToExecutionPosition(
       positionId: `${row.condition_id}:${row.token_id}`,
       conditionId: row.condition_id,
       asset: row.token_id,
-      marketTitle: readOptionalString(raw, "title") ?? "Polymarket",
-      eventTitle: readOptionalString(raw, "eventTitle") ?? null,
-      marketSlug: readOptionalString(raw, "slug") ?? null,
-      eventSlug: readOptionalString(raw, "eventSlug") ?? null,
+      marketTitle:
+        row.metadata_market_title ??
+        readOptionalString(raw, "title") ??
+        "Polymarket",
+      eventTitle:
+        row.metadata_event_title ??
+        readOptionalString(raw, "eventTitle") ??
+        null,
+      marketSlug:
+        row.metadata_market_slug ?? readOptionalString(raw, "slug") ?? null,
+      eventSlug:
+        row.metadata_event_slug ?? readOptionalString(raw, "eventSlug") ?? null,
       marketUrl: marketUrl(raw),
       outcome: readOptionalString(raw, "outcome") ?? "UNKNOWN",
       status,

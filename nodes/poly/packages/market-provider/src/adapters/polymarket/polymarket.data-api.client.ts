@@ -16,6 +16,8 @@ import {
   type ActivityEvent,
   ActivityEventsResponseSchema,
   type ActivityEventType,
+  type GammaMarket,
+  GammaMarketsResponseSchema,
   type GammaProfile,
   GammaPublicSearchResponseSchema,
   type MarketHolder,
@@ -359,6 +361,28 @@ export class PolymarketDataApiClient {
 
     const json = await this.fetchJson(url);
     return parseResponse(MarketTradesResponseSchema, json, "/trades?market=");
+  }
+
+  /**
+   * Gamma `GET /markets?condition_ids=<id1>,<id2>,...` — bulk market metadata
+   * lookup by Polymarket conditionId. Powers the `poly_market_metadata`
+   * cache; the canonical source of truth for `endDate`, titles, slugs, and
+   * event grouping. Markets not found are absent from the response array
+   * (no per-id 404). Caller is responsible for chunking when the input
+   * exceeds Polymarket's per-request limit (we batch at 100 to be safe).
+   *
+   * Note: Gamma is a different host (`gamma-api.polymarket.com`) from the
+   * Data API; this method explicitly targets `this.gammaBaseUrl`.
+   */
+  async getMarketsByConditionIds(
+    conditionIds: readonly string[]
+  ): Promise<GammaMarket[]> {
+    if (conditionIds.length === 0) return [];
+    const url = new URL("/markets", this.gammaBaseUrl);
+    url.searchParams.set("condition_ids", conditionIds.join(","));
+
+    const json = await this.fetchJson(url);
+    return parseResponse(GammaMarketsResponseSchema, json, "gamma:/markets");
   }
 
   /**

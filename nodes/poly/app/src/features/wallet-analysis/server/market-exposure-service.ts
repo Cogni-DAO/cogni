@@ -220,10 +220,27 @@ async function readTargetLegs(params: {
       ftc.label,
       ls.condition_id,
       ls.token_id,
-      COALESCE(NULLIF(ls.raw->>'title', ''), 'Polymarket') AS market_title,
-      NULLIF(ls.raw->>'eventTitle', '') AS event_title,
-      NULLIF(ls.raw->>'slug', '') AS market_slug,
-      NULLIF(ls.raw->>'eventSlug', '') AS event_slug,
+      -- Canonical Gamma metadata via poly_market_metadata; fall back to
+      -- legacy raw->>… JSONB scrape so the first deploy (empty metadata
+      -- table) does not regress. Drop the fallback once the metadata
+      -- table is fully backfilled.
+      COALESCE(
+        NULLIF(pmm.market_title, ''),
+        NULLIF(ls.raw->>'title', ''),
+        'Polymarket'
+      ) AS market_title,
+      COALESCE(
+        NULLIF(pmm.event_title, ''),
+        NULLIF(ls.raw->>'eventTitle', '')
+      ) AS event_title,
+      COALESCE(
+        NULLIF(pmm.market_slug, ''),
+        NULLIF(ls.raw->>'slug', '')
+      ) AS market_slug,
+      COALESCE(
+        NULLIF(pmm.event_slug, ''),
+        NULLIF(ls.raw->>'eventSlug', '')
+      ) AS event_slug,
       COALESCE(NULLIF(ls.raw->>'outcome', ''), 'UNKNOWN') AS outcome,
       ls.shares,
       ls.cost_basis_usdc,
@@ -236,6 +253,8 @@ async function readTargetLegs(params: {
     JOIN latest_snapshots ls
       ON ls.trader_wallet_id = ftc.trader_wallet_id
       AND ls.condition_id = ftc.condition_id
+    LEFT JOIN poly_market_metadata pmm
+      ON pmm.condition_id = ls.condition_id
     ORDER BY ls.current_value_usdc DESC NULLS LAST
   `)) as unknown as TargetPositionRow[];
 

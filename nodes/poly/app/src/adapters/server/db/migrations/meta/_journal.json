@@ -309,6 +309,13 @@
       "when": 1778000700000,
       "tag": "0043_poly_market_price_history",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1778009698573,
+      "tag": "0044_glossy_hardball",
+      "breakpoints": true
     }
   ]
 }

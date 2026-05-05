@@ -355,6 +355,39 @@ export const polyMarketOutcomes = pgTable(
   ]
 );
 
+/**
+ * Cached Polymarket Gamma `/markets/<conditionId>` metadata. One row per
+ * market. Written by the trader-observation tick whenever it touches a
+ * `condition_id`; readers JOIN here for `endDate`, titles, and slugs instead
+ * of scraping `poly_trader_current_positions.raw` JSONB. Single-source-of-
+ * truth for market metadata across the dashboard.
+ *
+ * @public
+ */
+export const polyMarketMetadata = pgTable(
+  "poly_market_metadata",
+  {
+    /** Polymarket conditionId; same shape used across all poly tables. */
+    conditionId: text("condition_id").primaryKey(),
+    eventTitle: text("event_title"),
+    eventSlug: text("event_slug"),
+    marketTitle: text("market_title"),
+    marketSlug: text("market_slug"),
+    /** Resolution time published by Gamma. Null for markets without a fixed close. */
+    endDate: timestamp("end_date", { withTimezone: true }),
+    /** Full Gamma response preserved for forward-compatible field access. */
+    raw: jsonb("raw").$type<Record<string, unknown>>(),
+    /** Wall-clock time of the most recent successful Gamma fetch. */
+    fetchedAt: timestamp("fetched_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("poly_market_metadata_event_slug_idx").on(table.eventSlug),
+    index("poly_market_metadata_end_date_idx").on(table.endDate),
+  ]
+);
+
 export const polyMarketPriceHistory = pgTable(
   "poly_market_price_history",
   {
@@ -400,3 +433,5 @@ export type PolyMarketPriceHistoryPoint =
   typeof polyMarketPriceHistory.$inferSelect;
 export type NewPolyMarketPriceHistoryPoint =
   typeof polyMarketPriceHistory.$inferInsert;
+export type PolyMarketMetadata = typeof polyMarketMetadata.$inferSelect;
+export type NewPolyMarketMetadata = typeof polyMarketMetadata.$inferInsert;

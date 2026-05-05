@@ -252,3 +252,48 @@ export const GammaPublicSearchResponseSchema = z
     profiles: z.array(GammaProfileSchema).optional().default([]),
   })
   .passthrough();
+
+/**
+ * Gamma `/markets?condition_ids=<id1>,<id2>,...` — bulk market metadata
+ * lookup by Polymarket conditionId. Returns one row per matching market;
+ * markets not found are simply absent from the array (no 404 per id). This
+ * is what powers Polymarket's own market pages and is the canonical source
+ * for `endDate`, titles, and slugs.
+ *
+ * Schema is permissive (`passthrough`) so we capture additional fields
+ * Polymarket adds without code changes — readers pull what they need from
+ * the typed columns here, and the full response is preserved server-side
+ * in `poly_market_metadata.raw` for forward-compatibility.
+ */
+export const GammaMarketSchema = z
+  .object({
+    /** Polymarket conditionId; the join key with our DB. */
+    conditionId: z.string().optional().nullable(),
+    /** Market question / title (e.g. "Spread Spurs (-11.5)"). */
+    question: z.string().optional().nullable(),
+    /** Per-market URL slug. */
+    slug: z.string().optional().nullable(),
+    /**
+     * Market resolution time, ISO-8601. Sometimes missing on
+     * markets without a fixed close (categorical / open-ended).
+     */
+    endDate: z.string().optional().nullable(),
+    /** True once the market is closed for trading. */
+    closed: z.boolean().optional().nullable(),
+    /** Parent event(s); first entry typically carries title + slug. */
+    events: z
+      .array(
+        z
+          .object({
+            title: z.string().optional().nullable(),
+            slug: z.string().optional().nullable(),
+          })
+          .passthrough()
+      )
+      .optional()
+      .default([]),
+  })
+  .passthrough();
+export type GammaMarket = z.infer<typeof GammaMarketSchema>;
+
+export const GammaMarketsResponseSchema = z.array(GammaMarketSchema);
