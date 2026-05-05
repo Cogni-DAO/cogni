@@ -13,7 +13,7 @@ namePrefix: poly-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:6a9a9f7ef09c89cc6cda6657296261c4f38552bbfab078e8711db9cb3727b60c"
+    digest: "sha256:ba2dca36eb46c3d5dbfb09b181fb599f3e9fd2dc9fc0646d41ec3ae422907ac8"
 
 patches:
   # Node-specific ConfigMap values.
@@ -71,18 +71,6 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/ports/0/containerPort
         value: 3100
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/requests/memory
-        value: "384Mi"
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/limits/memory
-        value: "1Gi"
-      # Tier 1 sizing: paired heap bump for the 1Gi container limit. Without
-      # this, V8 auto-sizes for the base 512Mi cgroup (~256MB heap) and OOMs
-      # well below the configured limit. See docs/research/nextjs-node-memory-sizing.md.
-      - op: replace
-        path: /spec/template/spec/containers/0/env/0/value
-        value: "--max-old-space-size=768"
       - op: add
         path: /spec/selector/matchLabels/app.kubernetes.io~1instance
         value: "poly"
