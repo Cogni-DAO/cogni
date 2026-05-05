@@ -194,12 +194,6 @@ export const serverSchema = z.object({
   // Required for research graph web search capability
   TAVILY_API_KEY: optionalString,
 
-  // Work items → Notion prototype mirror - Optional
-  // Dolt remains source of truth; these credentials let an internal job mirror exact Cogni IDs into Notion.
-  WORK_ITEMS_NOTION_TOKEN: optionalString,
-  WORK_ITEMS_NOTION_DATA_SOURCE_ID: optionalString,
-  WORK_ITEMS_NOTION_VERSION: optionalString,
-
   // Market Provider: Kalshi - Optional
   // Required for Kalshi market data in poly-brain. Polymarket works without credentials.
   KALSHI_API_KEY: optionalString,

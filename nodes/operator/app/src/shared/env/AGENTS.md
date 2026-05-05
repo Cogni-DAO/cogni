@@ -109,9 +109,6 @@ Optional:
 - PROMETHEUS_READ_PASSWORD - Basic auth password for Prometheus queries (read-only token)
 - ANALYTICS_K_THRESHOLD (int, default 50) - K-anonymity threshold for public analytics
 - ANALYTICS_QUERY_TIMEOUT_MS (int, default 5000) - Prometheus query timeout
-- WORK_ITEMS_NOTION_TOKEN - Notion integration token for the prototype work-item mirror
-- WORK_ITEMS_NOTION_DATA_SOURCE_ID - Notion data source ID for the prototype work-item mirror
-- WORK_ITEMS_NOTION_VERSION - Optional Notion API version override
 
 **Public client (client.ts)**
 
