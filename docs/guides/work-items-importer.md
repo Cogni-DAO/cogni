@@ -2,19 +2,19 @@
 id: work-items-importer-guide
 type: guide
 title: Work-Items Importer — One-Shot Bootstrap
-status: draft
+status: active
 trust: draft
-summary: "How to bootstrap a Cogni Doltgres `work_items` table from the legacy `work/items/*.md` corpus via a single HTTPS POST loop. Source IDs preserved (bug.0153 stays bug.0153)."
-read_when: "Bootstrapping a new env's knowledge_operator Doltgres."
+summary: "How to bootstrap a Cogni Doltgres `work_items` table from the legacy `work/items/*.md` corpus via a single HTTPS POST loop. Source IDs preserved (bug.0153 stays bug.0153). Prod cutover ran 2026-05-04; 477 items imported. The `.md` corpus has been removed from the repo."
+read_when: "Bootstrapping a new env's knowledge_operator Doltgres, or re-running against a fresh DB."
 owner: derekg1729
 created: 2026-04-30
-verified: 2026-04-30
+verified: 2026-05-04
 tags: [work-system, doltgres, importer, operator, bootstrap]
 ---
 
 # Work-Items Importer
 
-> One CLI. POSTs every `work/items/*.md` row to `/api/v1/work/items` with `id` in the body. Server preserves the id. After a successful run the `.md` corpus can be deleted from git.
+> One CLI. POSTs every `work/items/*.md` row to `/api/v1/work/items` with `id` in the body. Server preserves the id. **Prod cutover ran 2026-05-04** — 477 items imported, source IDs preserved, `.md` corpus removed. Re-runs are idempotent (preflight skips IDs already in the target env).
 
 ## How it works
 
@@ -51,7 +51,7 @@ COGNI_KEY=... pnpm --filter operator import:work-items \
   --api https://<env>.cognidao.org
 ```
 
-Args: `--api <baseUrl>` (default `https://preview.cognidao.org`), `--limit <N>`, `--dry-run`.
+Args: `--api <baseUrl>` (default `https://preview.cognidao.org`; pass `https://cognidao.org` for prod), `--limit <N>`, `--dry-run`.
 
 ## Validation
 
@@ -75,10 +75,10 @@ curl "https://<env>.cognidao.org/api/v1/work/items?limit=500" \
 4. Derek approves.
 5. **prod** (`cognidao.org`) — same script, different `--api`.
 
-Each env starts with an empty `work_items` table (or is reset before bootstrap). The importer is **not idempotent** — re-running on a populated table will collide on existing IDs and fail those rows with a clear error.
+The importer **is** idempotent: a preflight `GET /api/v1/work/items?ids=…` skips any source IDs already present, so re-runs against a populated table are safe (already-imported items show as "already present, skipping" and POSTs are not attempted).
 
 ## Out of scope
 
 - Project rows (`proj.*`). Skipped — projects aren't a `WorkItemType`. Future task: schema-level project support.
 - Updates to already-imported items. The importer is bootstrap, not sync. Use `PATCH /api/v1/work/items/:id` for edits afterward.
-- Markdown corpus deletion. Manually run `git rm work/items/*.md` after prod bootstrap is validated.
+- Markdown corpus deletion. Done as part of the prod-cutover PR (2026-05-04).

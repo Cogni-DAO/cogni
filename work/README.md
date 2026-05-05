@@ -18,14 +18,13 @@ tags: [work, meta]
 
 ## Structure
 
-| Directory         | Purpose                                           |
-| ----------------- | ------------------------------------------------- |
-| `charters/`       | Strategic themes (`chr.<slug>.md`)                |
-| `projects/`       | Phased roadmaps (`proj.<slug>.md`)                |
-| `items/`          | Legacy PR-sized work (`<type>.<num>.<slug>.md`)   |
-| `items/_archive/` | Completed items archived by YYYY/MM               |
-| `handoffs/`       | Agent handoff packets (bounded, per work item)    |
-| `_templates/`     | Templates for charters, projects, items, handoffs |
+| Directory     | Purpose                                                                 |
+| ------------- | ----------------------------------------------------------------------- |
+| `charters/`   | Strategic themes (`chr.<slug>.md`)                                      |
+| `projects/`   | Phased roadmaps (`proj.<slug>.md`)                                      |
+| `handoffs/`   | Agent handoff packets (bounded, per work item)                          |
+| `_templates/` | Templates for charters, projects, items, handoffs                       |
+| ~~`items/`~~  | Removed 2026-05-04 — work items now in prod Doltgres at `cognidao.org`. |
 
 ## Work Item Types
 
@@ -230,10 +229,9 @@ Required sections (6 max):
 
 ## Agent Safety
 
-- Agents may scan `work/items/*.md` only for legacy markdown references.
+- All work-item reads and writes go through the Cogni API (`https://cognidao.org/api/v1/work/items`). The legacy `work/items/*.md` corpus was imported 2026-05-04 and removed; do not recreate it.
 - Do not create or update a generated work item index.
-- New work item creation and state changes should go through the Cogni API.
-- Use `pnpm work:next-id` only when maintaining legacy markdown items.
+- The server allocates new IDs in the `5000+` range; legacy IDs (`<5000`) are preserved from the markdown corpus.
 
 ## Related
 
