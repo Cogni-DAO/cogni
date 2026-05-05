@@ -28,6 +28,7 @@ export const EVENT_NAMES = {
   POLY_REDEEM_BACKFILL_COMPLETE: "feature.poly_redeem.backfill.complete",
   POLY_REDEEM_CATCHUP_COMPLETE: "feature.poly_redeem.catchup.complete",
   POLY_REDEEM_CATCHUP_FAILED: "feature.poly_redeem.catchup.failed",
+  POLY_REDEEM_CATCHUP_TICK_SKIPPED: "poly.ctf.redeem.catchup_tick_skipped",
   POLY_REDEEM_LIFECYCLE_MIRRORED: "feature.poly_redeem.lifecycle_mirrored",
   POLY_REDEEM_LIFECYCLE_MIRROR_FAILED:
     "feature.poly_redeem.lifecycle_mirror_failed",

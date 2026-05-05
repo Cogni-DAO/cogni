@@ -7,9 +7,10 @@
  *   For each active `poly_wallet_connections` row, instantiate one
  *   `RedeemSubscriber` (3 viem `watchContractEvent` subscriptions) +
  *   one `RedeemWorker` (drains pending jobs scoped to that funder + reaps
- *   stale submitted rows at N=5 finality) + one catch-up replay against
- *   `last_processed_block`. Replaces the deleted `runRedeemSweep` polling
- *   loop in `poly-trade-executor.ts`.
+ *   stale submitted rows at N=5 finality) + one boot catch-up replay over
+ *   `last_processed_block` and a periodic interval that re-runs the catch-up
+ *   every `REDEEM_CATCHUP_INTERVAL_MS`. Replaces the deleted `runRedeemSweep`
+ *   polling loop in `poly-trade-executor.ts`.
  * Scope: Multi-tenant (task.0412). One pipeline instance per active
  *   `poly_wallet_connections` row. Workers claim jobs with a funder filter
  *   so cross-tenant claims are impossible. 0 active rows → no-op.
@@ -23,6 +24,12 @@
  *     is the only contention-safe surface; cross-tenant claims would sign
  *     a job for funder A with funder B's wallet, which the contract would
  *     revert on but waste gas + emit noisy errors.
+ *   - CATCHUP_IS_THE_RECOVERY_PATH — the live viem subscriber against
+ *     load-balanced HTTP RPC providers (Alchemy) silently drops events when
+ *     filter state doesn't sticky-route across backend nodes. The periodic
+ *     `runRedeemCatchup` interval is the durable recovery path; the live
+ *     subscriber is best-effort latency reduction. Don't remove the timer
+ *     without a proven WS / sticky-filter replacement (bug.5015).
  * Side-effects: IO (DB query at boot, Polygon RPC long-poll while running).
  * Links: docs/design/poly-positions.md, work/items/task.0388,
  *   work/items/task.0412, work/items/task.0318
@@ -64,6 +71,14 @@ import { EVENT_NAMES } from "@/shared/observability/events";
 const REDEEM_POLL_INTERVAL_MS = 10 * 60 * 1000;
 const REDEEM_WORKER_DRAIN_INTERVAL_MS = 5_000;
 const BACKFILL_ENQUEUE_CONCURRENCY = 4;
+// Periodic catch-up interval: re-runs `runRedeemCatchup` every N ms to pick up
+// new ConditionResolution / PayoutRedemption logs the live `watchContractEvent`
+// subscriber missed. viem's HTTP filter polling against load-balanced RPC
+// providers (Alchemy) silently drops events when filter state doesn't sticky-
+// route — observed in prod as 0 live-path policy_decisions across 9h on
+// 112b4b18 once pod restarts stopped masking it (bug.5015). Cursor advance is
+// idempotent, so re-runs are safe and cheap (~300 blocks / 10 min on Polygon).
+const REDEEM_CATCHUP_INTERVAL_MS = 10 * 60 * 1000;
 
 export interface RedeemPipelineHandles {
   redeemJobs: RedeemJobsPort;
@@ -258,6 +273,51 @@ async function startOneTenantPipeline(
     );
   }
 
+  let catchupInFlight = false;
+  const catchupTimer = setInterval(() => {
+    if (catchupInFlight) {
+      log.warn(
+        {
+          event: EVENT_NAMES.POLY_REDEEM_CATCHUP_TICK_SKIPPED,
+          reason: "in_flight",
+        },
+        "redeem pipeline: skipping periodic catchup tick; previous run still in flight"
+      );
+      return;
+    }
+    catchupInFlight = true;
+    const tickStartedAt = Date.now();
+    runRedeemCatchup({
+      redeemJobs,
+      orderLedger: deps.orderLedger,
+      billingAccountId,
+      publicClient,
+      dataApiClient,
+      funderAddress,
+      subscriber,
+      logger: log,
+      initialFromBlock,
+    })
+      .catch((err) => {
+        const mem = process.memoryUsage();
+        log.warn(
+          {
+            event: EVENT_NAMES.POLY_REDEEM_CATCHUP_FAILED,
+            durationMs: Date.now() - tickStartedAt,
+            reason_code: "redeem_catchup_periodic_threw",
+            heap_used_mb: Math.round(mem.heapUsed / 1024 / 1024),
+            rss_mb: Math.round(mem.rss / 1024 / 1024),
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "redeem pipeline: periodic catch-up replay threw; will retry next tick"
+        );
+      })
+      .finally(() => {
+        catchupInFlight = false;
+      });
+  }, REDEEM_CATCHUP_INTERVAL_MS);
+  catchupTimer.unref?.();
+
   log.info(
     {
       event: "poly.ctf.redeem.pipeline_started",
@@ -272,6 +332,7 @@ async function startOneTenantPipeline(
     funderAddress,
     billingAccountId,
     stop: () => {
+      clearInterval(catchupTimer);
       subscriber.stop();
       worker.stop();
     },
