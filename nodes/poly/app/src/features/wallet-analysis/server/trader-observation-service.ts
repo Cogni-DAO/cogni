@@ -10,6 +10,9 @@
  *   - SAME_OBSERVED_TRADE_TABLE: target and Cogni public wallet trades are both stored in `poly_trader_fills`.
  *   - WATERMARKED_INGESTION: reads newest-to-prior-watermark and advances cursor only after DB upserts complete.
  *   - PNL_INGEST_INDEPENDENT: per-wallet user-pnl ingest runs after observation regardless of observe outcome; failures bump `errors` and continue. Retention prune runs once per tick after all wallets.
+ *   - COGNI_POSITION_ABSENCE_NEEDS_AUTHORITY: complete Data API polls do not
+ *     deactivate Cogni-wallet current-position rows unless an injected
+ *     authority classifies the missing row terminal.
  * Side-effects: IO through injected Data API client + optional user-pnl client + injected DB.
  * Links: docs/design/poly-copy-target-performance-benchmark.md, work/items/task.5005, work/items/task.5012
  * @public
@@ -36,7 +39,7 @@ import {
   type PolymarketUserPnlClient,
   type PolymarketUserPosition,
 } from "@cogni/poly-market-provider/adapters/polymarket";
-import { and, eq, isNull, lt, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, notInArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
@@ -82,13 +85,29 @@ export interface CurrentPositionRefreshResult {
   positions: PolymarketUserPosition[];
   positionRows: number;
   complete: boolean;
+  stalePositionRowsDeactivated: number;
+  stalePositionRowsPreserved: number;
 }
 
 type PersistedCurrentPositions = {
   observedPositions: PolymarketUserPosition[];
   positionRows: number;
   complete: boolean;
+  stalePositionRowsDeactivated: number;
+  stalePositionRowsPreserved: number;
 };
+
+export interface MissingCurrentPosition {
+  conditionId: string;
+  tokenId: string;
+  shares: number;
+  currentValueUsdc: number;
+  lastObservedAt: Date;
+}
+
+export type MissingCurrentPositionDecision =
+  | { kind: "deactivate"; reason: "zero_balance" | "dust" }
+  | { kind: "preserve"; reason: "actionable" | "authority_unavailable" };
 
 export async function runTraderObservationTick(
   deps: TraderObservationTickDeps
@@ -205,6 +224,9 @@ export async function refreshCurrentPositionsForWallet(params: {
   client: PolymarketDataApiClient;
   walletAddress: string;
   positionMaxPages?: number;
+  classifyMissingPosition?: (
+    position: MissingCurrentPosition
+  ) => Promise<MissingCurrentPositionDecision>;
 }): Promise<CurrentPositionRefreshResult> {
   const wallet = await upsertCogniObservedWallet(
     params.db,
@@ -217,6 +239,9 @@ export async function refreshCurrentPositionsForWallet(params: {
     ...(params.positionMaxPages === undefined
       ? {}
       : { positionMaxPages: params.positionMaxPages }),
+    ...(params.classifyMissingPosition === undefined
+      ? {}
+      : { classifyMissingPosition: params.classifyMissingPosition }),
   });
 }
 
@@ -510,6 +535,9 @@ async function observePositionsNow(deps: {
   client: PolymarketDataApiClient;
   wallet: PolyTraderWallet;
   positionMaxPages?: number;
+  classifyMissingPosition?: (
+    position: MissingCurrentPosition
+  ) => Promise<MissingCurrentPositionDecision>;
 }): Promise<CurrentPositionRefreshResult> {
   const pageResult = await fetchTraderPositionsPages({
     client: deps.client,
@@ -519,19 +547,29 @@ async function observePositionsNow(deps: {
   const result = await persistObservedCurrentPositions(
     deps.db,
     deps.wallet,
-    pageResult
+    pageResult,
+    deps.classifyMissingPosition === undefined
+      ? undefined
+      : { classifyMissingPosition: deps.classifyMissingPosition }
   );
   return {
     positions: result.observedPositions,
     positionRows: result.positionRows,
     complete: result.complete,
+    stalePositionRowsDeactivated: result.stalePositionRowsDeactivated,
+    stalePositionRowsPreserved: result.stalePositionRowsPreserved,
   };
 }
 
 async function persistObservedCurrentPositions(
   db: Db,
   wallet: PolyTraderWallet,
-  pageResult: { positions: PolymarketUserPosition[]; complete: boolean }
+  pageResult: { positions: PolymarketUserPosition[]; complete: boolean },
+  options?: {
+    classifyMissingPosition?: (
+      position: MissingCurrentPosition
+    ) => Promise<MissingCurrentPositionDecision>;
+  }
 ): Promise<PersistedCurrentPositions> {
   const positions = pageResult.positions;
   const capturedAt = new Date();
@@ -597,7 +635,10 @@ async function persistObservedCurrentPositions(
         },
       });
   }
-  if (pageResult.complete) {
+  const staleDisposition = pageResult.complete
+    ? await classifyStaleCurrentPositionRows(db, wallet, capturedAt, options)
+    : { deactivateTokenIds: [], preservedRows: 0 };
+  if (staleDisposition.deactivateTokenIds.length > 0) {
     await db
       .update(polyTraderCurrentPositions)
       .set({
@@ -612,10 +653,25 @@ async function persistObservedCurrentPositions(
         and(
           eq(polyTraderCurrentPositions.traderWalletId, wallet.id),
           eq(polyTraderCurrentPositions.active, true),
-          lt(polyTraderCurrentPositions.lastObservedAt, capturedAt)
+          lt(polyTraderCurrentPositions.lastObservedAt, capturedAt),
+          inArray(
+            polyTraderCurrentPositions.tokenId,
+            staleDisposition.deactivateTokenIds
+          )
         )
       );
   }
+
+  const cursorStatus = pageResult.complete
+    ? staleDisposition.preservedRows > 0
+      ? "stale"
+      : "ok"
+    : "partial";
+  const cursorErrorMessage = pageResult.complete
+    ? staleDisposition.preservedRows > 0
+      ? `${staleDisposition.preservedRows} previously active position rows were not returned by Data API and were preserved pending chain-authoritative refresh`
+      : null
+    : `position page cap reached at ${positions.length} rows`;
 
   await db
     .insert(polyTraderIngestionCursors)
@@ -623,10 +679,8 @@ async function persistObservedCurrentPositions(
       traderWalletId: wallet.id,
       source: POSITION_SOURCE,
       lastSuccessAt: capturedAt,
-      status: pageResult.complete ? "ok" : "partial",
-      errorMessage: pageResult.complete
-        ? null
-        : `position page cap reached at ${positions.length} rows`,
+      status: cursorStatus,
+      errorMessage: cursorErrorMessage,
       updatedAt: capturedAt,
     })
     .onConflictDoUpdate({
@@ -636,10 +690,8 @@ async function persistObservedCurrentPositions(
       ],
       set: {
         lastSuccessAt: capturedAt,
-        status: pageResult.complete ? "ok" : "partial",
-        errorMessage: pageResult.complete
-          ? null
-          : `position page cap reached at ${positions.length} rows`,
+        status: cursorStatus,
+        errorMessage: cursorErrorMessage,
         updatedAt: capturedAt,
       },
     });
@@ -648,7 +700,70 @@ async function persistObservedCurrentPositions(
     observedPositions: positions,
     positionRows: values.length,
     complete: pageResult.complete,
+    stalePositionRowsDeactivated: staleDisposition.deactivateTokenIds.length,
+    stalePositionRowsPreserved: staleDisposition.preservedRows,
   };
+}
+
+async function classifyStaleCurrentPositionRows(
+  db: Db,
+  wallet: PolyTraderWallet,
+  capturedAt: Date,
+  options?: {
+    classifyMissingPosition?: (
+      position: MissingCurrentPosition
+    ) => Promise<MissingCurrentPositionDecision>;
+  }
+): Promise<{ deactivateTokenIds: string[]; preservedRows: number }> {
+  const staleRows = await db
+    .select({
+      conditionId: polyTraderCurrentPositions.conditionId,
+      tokenId: polyTraderCurrentPositions.tokenId,
+      shares: polyTraderCurrentPositions.shares,
+      currentValueUsdc: polyTraderCurrentPositions.currentValueUsdc,
+      lastObservedAt: polyTraderCurrentPositions.lastObservedAt,
+    })
+    .from(polyTraderCurrentPositions)
+    .where(
+      and(
+        eq(polyTraderCurrentPositions.traderWalletId, wallet.id),
+        eq(polyTraderCurrentPositions.active, true),
+        lt(polyTraderCurrentPositions.lastObservedAt, capturedAt)
+      )
+    );
+  if (staleRows.length === 0) {
+    return { deactivateTokenIds: [], preservedRows: 0 };
+  }
+
+  const classifyMissingPosition = options?.classifyMissingPosition;
+  if (classifyMissingPosition === undefined) {
+    if (wallet.kind === "cogni_wallet") {
+      return { deactivateTokenIds: [], preservedRows: staleRows.length };
+    }
+    return {
+      deactivateTokenIds: staleRows.map((row) => row.tokenId),
+      preservedRows: 0,
+    };
+  }
+
+  const deactivateTokenIds: string[] = [];
+  let preservedRows = 0;
+  for (const row of staleRows) {
+    const decision = await classifyMissingPosition({
+      conditionId: row.conditionId,
+      tokenId: row.tokenId,
+      shares: Number(row.shares),
+      currentValueUsdc: Number(row.currentValueUsdc),
+      lastObservedAt: row.lastObservedAt,
+    });
+    if (decision.kind === "deactivate") {
+      deactivateTokenIds.push(row.tokenId);
+    } else {
+      preservedRows += 1;
+    }
+  }
+
+  return { deactivateTokenIds, preservedRows };
 }
 
 export async function fetchTraderPositionsPages(params: {

@@ -14,6 +14,7 @@
 import { randomUUID } from "node:crypto";
 import {
   polyTraderCurrentPositions,
+  polyTraderIngestionCursors,
   polyTraderWallets,
 } from "@cogni/poly-db-schema";
 import type {
@@ -22,9 +23,12 @@ import type {
   PolymarketUserTrade,
 } from "@cogni/poly-market-provider/adapters/polymarket";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
-import { runTraderObservationTick } from "@/features/wallet-analysis/server/trader-observation-service";
+import {
+  refreshCurrentPositionsForWallet,
+  runTraderObservationTick,
+} from "@/features/wallet-analysis/server/trader-observation-service";
 
 const TARGET_WALLET = "0x5005000000000000000000000000000000005005";
 const MARKET = "condition-5005";
@@ -157,5 +161,103 @@ describe("runTraderObservationTick (component)", () => {
     expect(row?.conditionId).toBe(MARKET);
     expect(row?.tokenId).toBe(TOKEN);
     expect(row?.shares).toBe("2.00000000");
+  });
+
+  it("preserves Data API-omitted Cogni wallet positions when chain authority says actionable", async () => {
+    const walletId = randomUUID();
+    await db.insert(polyTraderWallets).values({
+      id: walletId,
+      walletAddress: TARGET_WALLET,
+      kind: "cogni_wallet",
+      label: "Tenant trading wallet",
+      activeForResearch: true,
+    });
+    await db.insert(polyTraderCurrentPositions).values({
+      traderWalletId: walletId,
+      conditionId: MARKET,
+      tokenId: TOKEN,
+      active: true,
+      shares: "2.00000000",
+      costBasisUsdc: "1.00000000",
+      currentValueUsdc: "1.00000000",
+      avgPrice: "0.50000000",
+      contentHash: "old-position-hash",
+      lastObservedAt: new Date("2026-05-03T00:00:00.000Z"),
+      raw: position() as unknown as Record<string, unknown>,
+    });
+
+    const result = await refreshCurrentPositionsForWallet({
+      db,
+      client: clientWithPositions([]),
+      walletAddress: TARGET_WALLET,
+      classifyMissingPosition: async () => ({
+        kind: "preserve",
+        reason: "actionable",
+      }),
+    });
+
+    expect(result.complete).toBe(true);
+    expect(result.stalePositionRowsPreserved).toBe(1);
+    expect(result.stalePositionRowsDeactivated).toBe(0);
+    const [row] = await db
+      .select()
+      .from(polyTraderCurrentPositions)
+      .where(eq(polyTraderCurrentPositions.traderWalletId, walletId));
+    expect(row?.active).toBe(true);
+    expect(row?.shares).toBe("2.00000000");
+    const [cursor] = await db
+      .select()
+      .from(polyTraderIngestionCursors)
+      .where(
+        and(
+          eq(polyTraderIngestionCursors.traderWalletId, walletId),
+          eq(polyTraderIngestionCursors.source, "data-api-positions")
+        )
+      );
+    expect(cursor?.status).toBe("stale");
+  });
+
+  it("deactivates Data API-omitted Cogni wallet positions when chain authority says terminal", async () => {
+    const walletId = randomUUID();
+    await db.insert(polyTraderWallets).values({
+      id: walletId,
+      walletAddress: TARGET_WALLET,
+      kind: "cogni_wallet",
+      label: "Tenant trading wallet",
+      activeForResearch: true,
+    });
+    await db.insert(polyTraderCurrentPositions).values({
+      traderWalletId: walletId,
+      conditionId: MARKET,
+      tokenId: TOKEN,
+      active: true,
+      shares: "2.00000000",
+      costBasisUsdc: "1.00000000",
+      currentValueUsdc: "1.00000000",
+      avgPrice: "0.50000000",
+      contentHash: "old-position-hash",
+      lastObservedAt: new Date("2026-05-03T00:00:00.000Z"),
+      raw: position() as unknown as Record<string, unknown>,
+    });
+
+    const result = await refreshCurrentPositionsForWallet({
+      db,
+      client: clientWithPositions([]),
+      walletAddress: TARGET_WALLET,
+      classifyMissingPosition: async () => ({
+        kind: "deactivate",
+        reason: "zero_balance",
+      }),
+    });
+
+    expect(result.complete).toBe(true);
+    expect(result.stalePositionRowsPreserved).toBe(0);
+    expect(result.stalePositionRowsDeactivated).toBe(1);
+    const [row] = await db
+      .select()
+      .from(polyTraderCurrentPositions)
+      .where(eq(polyTraderCurrentPositions.traderWalletId, walletId));
+    expect(row?.active).toBe(false);
+    expect(row?.shares).toBe("0.00000000");
   });
 });

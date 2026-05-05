@@ -205,12 +205,48 @@ export const POST = wrapRouteHandlerWithLogging(
 
       const syncedIds = new Set<string>();
       const orderRefreshFailures: string[] = [];
+      const actionabilityByAsset = new Map<
+        string,
+        Promise<PositionActionability>
+      >();
+      const classifyAssetWithPositions = (
+        tokenId: string,
+        dataApiPositions: readonly {
+          asset: string;
+          size: number;
+          currentValue: number;
+        }[]
+      ) => {
+        const existing = actionabilityByAsset.get(tokenId);
+        if (existing !== undefined) return existing;
+        const next = classifyPositionActionability({
+          tokenId,
+          dataApiPositions,
+          readOnchainShares: executor.getPositionShareBalance,
+          readMarketConstraints: executor.getMarketConstraints,
+        });
+        actionabilityByAsset.set(tokenId, next);
+        return next;
+      };
       const currentPositionsPromise = refreshCurrentPositionsForWallet({
         db: container.serviceDb as unknown as NodePgDatabase<
           Record<string, unknown>
         >,
         client: new PolymarketDataApiClient(),
         walletAddress: address,
+        classifyMissingPosition: async ({ tokenId }) => {
+          const actionability = await classifyAssetWithPositions(tokenId, []);
+          if (actionability.kind === "onchain_zero") {
+            return { kind: "deactivate", reason: "zero_balance" };
+          }
+          if (actionability.kind === "onchain_dust") {
+            return { kind: "deactivate", reason: "dust" };
+          }
+          if (actionability.kind === "upstream_error") {
+            return { kind: "preserve", reason: "authority_unavailable" };
+          }
+          return { kind: "preserve", reason: "actionable" };
+        },
       }).then(
         (result) => ({ ok: true as const, result }),
         (err: unknown) => ({ ok: false as const, err })
@@ -263,6 +299,14 @@ export const POST = wrapRouteHandlerWithLogging(
       } else {
         currentPositionsRows = currentPositionsResult.result.positionRows;
         currentPositionsComplete = currentPositionsResult.result.complete;
+        if (
+          (currentPositionsResult.result.stalePositionRowsPreserved ?? 0) > 0
+        ) {
+          warnings.push({
+            code: "positions_reconciliation_preserved_missing",
+            message: `${currentPositionsResult.result.stalePositionRowsPreserved} previously active DB position rows were omitted by Data API and preserved because chain authority did not prove they were closed.`,
+          });
+        }
         if (!currentPositionsResult.result.complete) {
           warnings.push({
             code: "positions_reconciliation_partial",
@@ -271,22 +315,12 @@ export const POST = wrapRouteHandlerWithLogging(
           });
         }
         const positionActionabilityFailures: string[] = [];
-        const actionabilityByAsset = new Map<
-          string,
-          Promise<PositionActionability>
-        >();
         const lifecycleClassifiedAssets = new Set<string>();
         const classifyAsset = (tokenId: string) => {
-          const existing = actionabilityByAsset.get(tokenId);
-          if (existing !== undefined) return existing;
-          const next = classifyPositionActionability({
+          return classifyAssetWithPositions(
             tokenId,
-            dataApiPositions: currentPositionsResult.result.positions,
-            readOnchainShares: executor.getPositionShareBalance,
-            readMarketConstraints: executor.getMarketConstraints,
-          });
-          actionabilityByAsset.set(tokenId, next);
-          return next;
+            currentPositionsResult.result.positions
+          );
         };
         const exposureRows = rows.filter(hasPositionExposure);
         const exposureUpdateCounts = await mapConcurrent(
