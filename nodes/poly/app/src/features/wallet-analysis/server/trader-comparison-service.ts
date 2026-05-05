@@ -8,12 +8,12 @@
  * Invariants:
  *   - PNL_SINGLE_SOURCE: delegates to `getPnlSlice`, the same Polymarket-native source used by wallet analysis.
  *   - TRADE_FLOW_FROM_OBSERVATIONS: counts/notional are SQL windows over `poly_trader_fills`.
+ *   - PAGE_LOAD_DB_ONLY: market resolutions read from `poly_market_outcomes` (CP3 writer); no synchronous CLOB call on render.
  * Side-effects: DB reads plus the upstream P/L read performed by `getPnlSlice`.
- * Links: nodes/poly/packages/node-contracts/src/poly.research-trader-comparison.v1.contract.ts
+ * Links: nodes/poly/packages/node-contracts/src/poly.research-trader-comparison.v1.contract.ts, work/items/task.5012
  * @public
  */
 
-import { PolymarketClobPublicClient } from "@cogni/poly-market-provider/adapters/polymarket";
 import type { MarketResolutionInput } from "@cogni/poly-market-provider/analysis";
 import type {
   PolyResearchTraderComparisonResponse,
@@ -26,8 +26,6 @@ import type {
 import { sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import pLimit from "p-limit";
-import { coalesce } from "./coalesce";
 import { getPnlSlice } from "./wallet-analysis-service";
 
 type Db =
@@ -81,9 +79,6 @@ type ResolutionReader = (
 
 const SIZE_BUCKET_STEP = 5;
 const SIZE_BUCKET_COUNT = 100 / SIZE_BUCKET_STEP;
-const SLICE_TTL_MS = 30_000;
-const upstreamLimit = pLimit(4);
-let clobPublicClient: PolymarketClobPublicClient | undefined;
 
 export async function getTraderComparison(
   db: Db,
@@ -94,7 +89,9 @@ export async function getTraderComparison(
   const capturedAt = new Date().toISOString();
   const warnings: PolyResearchTraderComparisonWarning[] = [];
   const windowStartIso = windowStartFor(interval).toISOString();
-  const readResolution = opts.readResolution ?? defaultReadResolution;
+  const readResolution =
+    opts.readResolution ??
+    ((conditionId) => readResolutionFromDb(db, conditionId));
 
   const traders = await Promise.all(
     wallets.slice(0, 3).map(async (wallet) => {
@@ -514,20 +511,30 @@ function toTradeSizePnlFill(row: TradeSizePnlFillRow): TradeSizePnlFill[] {
   ];
 }
 
-async function defaultReadResolution(
+type MarketOutcomeRow = {
+  token_id: string | null;
+  outcome: string | null;
+};
+
+async function readResolutionFromDb(
+  db: Db,
   conditionId: string
 ): Promise<MarketResolutionInput | null> {
-  if (!clobPublicClient) clobPublicClient = new PolymarketClobPublicClient();
-  return coalesce(
-    `research-resolution:${conditionId}`,
-    () =>
-      upstreamLimit(
-        () =>
-          clobPublicClient?.getMarketResolution(conditionId) ??
-          Promise.resolve(null)
-      ),
-    SLICE_TTL_MS
+  const rows = (await db.execute(sql`
+    SELECT token_id, outcome
+    FROM poly_market_outcomes
+    WHERE condition_id = ${conditionId}
+  `)) as unknown as MarketOutcomeRow[];
+  if (rows.length === 0) return null;
+  const closed = rows.every(
+    (r) => r.outcome !== "unknown" && r.outcome !== null
   );
+  const tokens = rows
+    .filter((r): r is { token_id: string; outcome: string } =>
+      Boolean(r.token_id)
+    )
+    .map((r) => ({ token_id: r.token_id, winner: r.outcome === "winner" }));
+  return { closed, tokens };
 }
 
 export function computeWindowedPnl(
