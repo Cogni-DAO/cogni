@@ -3,15 +3,16 @@
 
 /**
  * Module: `@cogni/poly-db-schema/trader-activity`
- * Purpose: Operational read-model tables for continuously observed Polymarket trader wallets — fills, position snapshots, current positions, attribution, market outcomes, and user-pnl time-series.
+ * Purpose: Operational read-model tables for continuously observed Polymarket trader wallets — fills, position snapshots, current positions, attribution, market outcomes, user-pnl time-series, and per-asset market price history.
  * Scope: Drizzle table definitions only. Runtime observation, attribution, and UI aggregation live in the app.
  * Invariants:
  *   - SAME_OBSERVED_TRADE_TABLE: copy-target and Cogni wallet public trades share `poly_trader_fills`.
  *   - OBSERVATION_INDEPENDENT_OF_COPYING: `active_for_research` is research state, not copy-trade policy.
  *   - NO_FULL_HISTORY_CRAWL: ingestion cursors store forward watermarks; historical backfill is a separate v2 concern.
  *   - PNL_TIMESERIES_KEYED_BY_FIDELITY: `poly_trader_user_pnl_points` PK is `(trader_wallet_id, fidelity, ts)`; reader picks `1h` for short windows, `1d` for long.
+ *   - PRICE_HISTORY_TIMESERIES_KEYED: `poly_market_price_history` PK is `(asset, fidelity, ts)`; reader picks `1h` for windows up to ~1 month, `1d` for longer.
  * Side-effects: none
- * Links: docs/design/poly-copy-target-performance-benchmark.md, work/items/task.5005, work/items/task.5012
+ * Links: docs/design/poly-copy-target-performance-benchmark.md, work/items/task.5005, work/items/task.5012, work/items/task.5018
  * @public
  */
 
@@ -354,6 +355,31 @@ export const polyMarketOutcomes = pgTable(
   ]
 );
 
+export const polyMarketPriceHistory = pgTable(
+  "poly_market_price_history",
+  {
+    asset: text("asset").notNull(),
+    fidelity: text("fidelity").notNull(),
+    ts: timestamp("ts", { withTimezone: true }).notNull(),
+    price: numeric("price", { precision: 18, scale: 8 }).notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.asset, table.fidelity, table.ts] }),
+    check(
+      "poly_market_price_history_fidelity_check",
+      sql`${table.fidelity} IN ('1h','1d')`
+    ),
+    index("poly_market_price_history_read_idx").on(
+      table.asset,
+      table.fidelity,
+      table.ts
+    ),
+  ]
+);
+
 export type PolyTraderWallet = typeof polyTraderWallets.$inferSelect;
 export type NewPolyTraderWallet = typeof polyTraderWallets.$inferInsert;
 export type PolyTraderFill = typeof polyTraderFills.$inferSelect;
@@ -370,3 +396,7 @@ export type PolyTraderUserPnlPoint =
   typeof polyTraderUserPnlPoints.$inferSelect;
 export type NewPolyTraderUserPnlPoint =
   typeof polyTraderUserPnlPoints.$inferInsert;
+export type PolyMarketPriceHistoryPoint =
+  typeof polyMarketPriceHistory.$inferSelect;
+export type NewPolyMarketPriceHistoryPoint =
+  typeof polyMarketPriceHistory.$inferInsert;

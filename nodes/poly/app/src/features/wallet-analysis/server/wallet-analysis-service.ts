@@ -12,7 +12,8 @@
  *   - PAGE_LOAD_DB_ONLY (task.5012): `getPnlSlice` performs no outbound HTTP. The trader-observation job is the only writer to the user-pnl read model.
  *   - PARTIAL_FAILURE_NEVER_THROWS: each slice returns a `{ value | warning }` result; the route surfaces warnings without 5xx-ing.
  *   - CLOB_HISTORY_OPEN_ONLY: `getPriceHistory` is fetched only for open/redeemable positions; closed positions use trade-derived timelines only.
- * Side-effects: IO (Polymarket Data API + Polymarket CLOB public + DB read for user-pnl).
+ *   - PAGE_LOAD_DB_ONLY (task.5018): `getExecutionSlice` reads price-history from `poly_market_price_history` (DB-backed). The price-history bootstrap job is the only writer. Closes the `PAGE_LOAD_DB_ONLY_EXCEPT_PRICE_HISTORY` carve-out from CP5.
+ * Side-effects: IO (Polymarket Data API + DB reads for user-pnl + price-history).
  * Notes: Cache is process-scoped — see `instrumentation.ts` single-replica boot assert.
  * Links: docs/design/wallet-analysis-components.md, nodes/poly/packages/market-provider/src/analysis/wallet-metrics.ts, nodes/poly/packages/node-contracts/src/poly.wallet-analysis.v1.contract.ts, nodes/poly/packages/node-contracts/src/poly.wallet.execution.v1.contract.ts
  * @public
@@ -51,6 +52,10 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import pLimit from "p-limit";
 import { clearTtlCacheByPrefix, coalesce } from "./coalesce";
+import {
+  pickStoredPriceHistoryFidelity,
+  readPriceHistoryFromDb,
+} from "./price-history-service";
 import { getTradingWalletPnlHistory } from "./trading-wallet-overview-service";
 
 /** Cache TTL for every slice. Matches design doc 30 s. */
@@ -488,12 +493,20 @@ export async function getPnlSlice(
 export async function getExecutionSlice(
   addr: string,
   opts: {
-    /** Skip public CLOB price history for refresh paths that only need trade cadence. */
+    /** Skip price-history overlay for refresh paths that only need trade cadence. */
     includePriceHistory?: boolean;
     /** Skip the expensive `/trades` read when the caller only needs current holdings. */
     includeTrades?: boolean;
     /** Optional asset allowlist for DB-row enrichment callers. */
     assets?: readonly string[];
+    /**
+     * Service-role DB used to read `poly_market_price_history` for the
+     * per-position timeline overlay. Required when `includePriceHistory !== false`;
+     * page-load callers pass `container.serviceDb` (task.5018, CP7).
+     * Refresh-style callers that already pass `includePriceHistory: false` need not pass `db`.
+     */
+    db?: NodePgDatabase<Record<string, unknown>>
+      | PostgresJsDatabase<Record<string, unknown>>;
   } = {}
 ): Promise<PolyWalletExecutionOutput> {
   const capturedAt = new Date().toISOString();
@@ -579,8 +592,13 @@ export async function getExecutionSlice(
       : closedCandidates;
 
   let liveForResponse = livePreview;
-  if (opts.includePriceHistory ?? true) {
-    // Fetch CLOB price history for live positions only.
+  if ((opts.includePriceHistory ?? true) && opts.db !== undefined) {
+    // Read per-asset price history from `poly_market_price_history` (task.5018).
+    // The price-history bootstrap job is the only writer; this read is page-load
+    // safe (PAGE_LOAD_DB_ONLY). Cold-start gap on a freshly-opened position
+    // returns an empty series — `mapExecutionPositions` renders flat/empty
+    // until the next 5-min tick ingests.
+    const db = opts.db;
     const priceHistoryByAsset = new Map<
       string,
       Awaited<ReturnType<PolymarketClobPublicClient["getPriceHistory"]>>
@@ -593,19 +611,14 @@ export async function getExecutionSlice(
           Math.floor(new Date(position.openedAt).getTime() / 1000) - 3600
         );
         const endTs = Math.floor(new Date(capturedAt).getTime() / 1000);
-        const fidelity = pickPriceHistoryFidelity(startTs, endTs);
+        const fidelity = pickStoredPriceHistoryFidelity(startTs, endTs);
 
-        const history = await coalesce(
-          `execution-price-history:${position.asset}:${startTs}:${endTs}:${fidelity}`,
-          () =>
-            upstreamLimit(() =>
-              getClobPublicClient().getPriceHistory(position.asset, {
-                startTs,
-                endTs,
-                fidelity,
-              })
-            ),
-          SLICE_TTL_MS
+        const history = await readPriceHistoryFromDb(
+          db,
+          position.asset,
+          startTs,
+          endTs,
+          fidelity
         );
         if (history.length > 0) {
           priceHistoryByAsset.set(position.asset, history);
@@ -613,7 +626,7 @@ export async function getExecutionSlice(
       })
     );
 
-    // Re-map live positions with fetched price history timelines.
+    // Re-map live positions with stored price history timelines.
     const liveAssets = new Set(livePreview.map((p) => p.asset));
     liveForResponse = mapExecutionPositions({
       positions,
@@ -721,15 +734,6 @@ function toExecutionContractPosition(
     timeline: [...position.timeline],
     events: [...position.events],
   };
-}
-
-function pickPriceHistoryFidelity(startTs: number, endTs: number): number {
-  const spanDays = Math.max(1, (endTs - startTs) / 86_400);
-  if (spanDays > 365) return 4320;
-  if (spanDays > 90) return 1440;
-  if (spanDays > 21) return 360;
-  if (spanDays > 3) return 60;
-  return 5;
 }
 
 function buildTopMarkets(

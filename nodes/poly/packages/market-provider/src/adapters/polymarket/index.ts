@@ -47,6 +47,7 @@ export {
   type ClobPriceHistoryParams,
   type ClobPriceHistoryPoint,
   PolymarketClobPublicClient,
+  type PriceHistoryOutboundLogger,
 } from "./polymarket.clob-public.client.js";
 export {
   normalizePolygonConditionId,
