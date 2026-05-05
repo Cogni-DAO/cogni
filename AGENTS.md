@@ -2,6 +2,8 @@
 
 > Scope: repository-wide orientation for all agents. Keep ≤150 lines. Subdir `AGENTS.md` files extend this; they do not override it. Closest file in the tree wins, per the [agents.md open spec](https://agents.md/).
 
+> **If you contribute code in this repo, you follow [the Development Lifecycle](docs/spec/development-lifecycle.md). Full stop.** `/triage → (/design) → /implement → /closeout → /review-implementation`, with a `## Validation` block before `/closeout`, ending in `deploy_verified: true` on candidate-a — proven by you, by hand. Read that spec before opening any PR.
+
 ## Mission
 
 A reproducible, open-source foundation for autonomous AI-powered organizations:
@@ -104,9 +106,8 @@ PRs are the durable artifact of a work item. [`/closeout`](.claude/commands/clos
 
 **Lifecycle, CI/CD, and validation** — read before starting non-trivial work.
 
-- [Development Lifecycle](docs/spec/development-lifecycle.md) — status-driven flow, `/command` dispatch, invariants
+- [Development Lifecycle](docs/spec/development-lifecycle.md) — status-driven flow, `/command` dispatch, invariants, machine-executable contribution graph
 - [CI/CD Pipeline](docs/spec/ci-cd.md) — trunk-based model, candidate-a flight, promotion, source-sha map
-- [Agentic Contribution Loop](docs/spec/development-lifecycle.md) — machine-executable contribution flow from discovery through merge request
 - [Agent-First API Validation](docs/guides/agent-api-validation.md) — reference interaction flow for API features
 
 **Architecture & development**
