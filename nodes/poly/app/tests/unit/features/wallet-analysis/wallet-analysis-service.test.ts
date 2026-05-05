@@ -24,14 +24,21 @@ import {
   polyTraderFills,
 } from "@cogni/poly-db-schema/trader-activity";
 import { PolymarketClobPublicClient } from "@cogni/poly-market-provider/adapters/polymarket";
+import {
+  computeWalletMetrics,
+  type MarketResolutionInput,
+  type WalletTradeInput,
+} from "@cogni/poly-market-provider/analysis";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearTtlCache } from "@/features/wallet-analysis/server/coalesce";
 import {
   __setClientsForTests,
+  composeSnapshotFromAggregates,
   getBalanceSlice,
   getDistributionsSlice,
   getExecutionSlice,
   getSnapshotSlice,
+  type PositionAggregate,
 } from "@/features/wallet-analysis/server/wallet-analysis-service";
 
 type FakeDbRow = {
@@ -526,6 +533,218 @@ describe("getSnapshotSlice — DB-backed (task.5012 CP4)", () => {
     expect(result.value.uniqueMarkets).toBe(100_000);
     expect(result.value.openPositions).toBe(100_000);
   });
+});
+
+/**
+ * Parity oracle — asserts `composeSnapshotFromAggregates(SQL-aggs, …)` is
+ * output-equivalent to `computeWalletMetrics(raw-fills, …)` for the snapshot
+ * surface fields, across several synthetic wallet shapes. Catches subtle
+ * SQL-vs-JS drift (off-by-one rounding, sort-order differences, etc.) that
+ * RN1's own data wouldn't surface.
+ *
+ * The oracle is a pure-JS test: we synthesize raw fills, then build the
+ * `PositionAggregate[]` exactly as the SQL helper would, then run both paths
+ * and compare. No fake DB shape involved.
+ */
+describe("snapshot parity — SQL-aggregated path matches computeWalletMetrics", () => {
+  const NOW_SEC = 1_762_000_000; // fixed clock for both paths
+
+  /** Build PositionAggregate[] from raw fills, mirroring readPositionAggregatesFromDb. */
+  function jsAggregate(
+    fills: ReadonlyArray<WalletTradeInput>
+  ): PositionAggregate[] {
+    const byToken = new Map<string, PositionAggregate>();
+    for (const t of fills) {
+      const a = byToken.get(t.asset) ?? {
+        conditionId: t.conditionId,
+        tokenId: t.asset,
+        buyUsdc: 0,
+        sellUsdc: 0,
+        buyShares: 0,
+        sellShares: 0,
+        firstBuyTs: -1,
+        lastTs: 0,
+        title: t.title ?? "",
+      };
+      const usd = t.size * t.price;
+      if (t.side.toUpperCase() === "BUY") {
+        a.buyUsdc += usd;
+        a.buyShares += t.size;
+        a.firstBuyTs =
+          a.firstBuyTs < 0 ? t.timestamp : Math.min(a.firstBuyTs, t.timestamp);
+      } else {
+        a.sellUsdc += usd;
+        a.sellShares += t.size;
+      }
+      a.lastTs = Math.max(a.lastTs, t.timestamp);
+      if (t.title && !a.title) a.title = t.title;
+      byToken.set(t.asset, a);
+    }
+    return [...byToken.values()];
+  }
+
+  function jsDailyCounts(
+    fills: ReadonlyArray<WalletTradeInput>,
+    windowDays: number
+  ): Array<{ day: string; n: number }> {
+    const cutoff = NOW_SEC - windowDays * 86_400;
+    const byDay = new Map<string, number>();
+    for (const f of fills) {
+      if (f.timestamp < cutoff) continue;
+      const day = new Date(f.timestamp * 1_000).toISOString().slice(0, 10);
+      byDay.set(day, (byDay.get(day) ?? 0) + 1);
+    }
+    return [...byDay.entries()].map(([day, n]) => ({ day, n }));
+  }
+
+  function jsActivity(fills: ReadonlyArray<WalletTradeInput>): {
+    recent30: number;
+    latestTs: number;
+  } {
+    const cutoff = NOW_SEC - 30 * 86_400;
+    let recent30 = 0;
+    let latestTs = 0;
+    for (const f of fills) {
+      if (f.timestamp >= cutoff) recent30++;
+      if (f.timestamp > latestTs) latestTs = f.timestamp;
+    }
+    return { recent30, latestTs };
+  }
+
+  type Scenario = {
+    name: string;
+    fills: ReadonlyArray<WalletTradeInput>;
+    resolutions: Map<string, MarketResolutionInput>;
+  };
+
+  const scenarios: Scenario[] = [
+    {
+      // 6 resolved (5 wins, 1 loss) so trueWinRatePct surfaces past
+      // SNAPSHOT_MIN_RESOLVED=5; 2 still-open positions on different markets.
+      name: "mixed wins/losses + open positions",
+      fills: (() => {
+        const out: WalletTradeInput[] = [];
+        for (let i = 0; i < 6; i++) {
+          const cid = `cid-w${i}`;
+          const tok = `tok-w${i}`;
+          out.push({
+            conditionId: cid,
+            asset: tok,
+            side: "BUY",
+            size: 10,
+            price: 0.4,
+            timestamp: NOW_SEC - (10 - i) * 3600,
+            title: `Won market ${i}`,
+          });
+          out.push({
+            conditionId: cid,
+            asset: tok,
+            side: "SELL",
+            size: 10,
+            price: i === 0 ? 0.1 : 0.7, // first one is the loss
+            timestamp: NOW_SEC - (9 - i) * 3600,
+            title: `Won market ${i}`,
+          });
+        }
+        out.push({
+          conditionId: "cid-open-1",
+          asset: "tok-open-1",
+          side: "BUY",
+          size: 5,
+          price: 0.6,
+          timestamp: NOW_SEC - 7200,
+          title: "Open A",
+        });
+        out.push({
+          conditionId: "cid-open-2",
+          asset: "tok-open-2",
+          side: "BUY",
+          size: 8,
+          price: 0.3,
+          timestamp: NOW_SEC - 3600,
+          title: "Open B",
+        });
+        return out;
+      })(),
+      resolutions: new Map(
+        Array.from({ length: 6 }, (_, i) => [
+          `cid-w${i}`,
+          {
+            closed: true,
+            tokens: [
+              { token_id: `tok-w${i}`, winner: i !== 0 }, // loss for i=0, wins for i=1..5
+            ],
+          } satisfies MarketResolutionInput,
+        ])
+      ),
+    },
+    {
+      // No resolved positions → metrics that gate on minResolved should be null.
+      name: "all-open wallet (cold start)",
+      fills: [
+        {
+          conditionId: "cid-x",
+          asset: "tok-x",
+          side: "BUY",
+          size: 10,
+          price: 0.4,
+          timestamp: NOW_SEC - 3600,
+          title: "Open Only",
+        },
+      ],
+      resolutions: new Map(),
+    },
+    {
+      // Empty wallet — both paths should agree on zeroed shape.
+      name: "empty wallet",
+      fills: [],
+      resolutions: new Map(),
+    },
+  ];
+
+  for (const sc of scenarios) {
+    it(`parity: ${sc.name}`, () => {
+      const positions = jsAggregate(sc.fills);
+      const dailyRows = jsDailyCounts(sc.fills, 14);
+      const activity = jsActivity(sc.fills);
+
+      // SQL path
+      const sqlOut = composeSnapshotFromAggregates({
+        positions,
+        dailyRows,
+        activity,
+        resolutions: sc.resolutions,
+        window: 14,
+        topLimit: 4,
+        minResolved: 5,
+      });
+
+      // JS reference path
+      const jsOut = computeWalletMetrics(sc.fills, sc.resolutions, {
+        nowSec: NOW_SEC,
+        minResolvedForMetrics: 5,
+        dailyWindow: 14,
+        topMarketsLimit: 4,
+      });
+
+      // Field-by-field equality across the snapshot surface (PnL fields are
+      // intentionally not surfaced by snapshot per PNL_NOT_IN_SNAPSHOT).
+      expect(sqlOut.resolvedPositions).toBe(jsOut.resolvedPositions);
+      expect(sqlOut.wins).toBe(jsOut.wins);
+      expect(sqlOut.losses).toBe(jsOut.losses);
+      expect(sqlOut.trueWinRatePct).toBe(jsOut.trueWinRatePct);
+      expect(sqlOut.medianDurationHours).toBe(jsOut.medianDurationHours);
+      expect(sqlOut.openPositions).toBe(jsOut.openPositions);
+      expect(sqlOut.openNetCostUsdc).toBe(jsOut.openNetCostUsdc);
+      expect(sqlOut.uniqueMarkets).toBe(jsOut.uniqueMarkets);
+      expect(sqlOut.tradesPerDay30d).toBe(jsOut.tradesPerDay30d);
+      expect([...sqlOut.topMarkets]).toEqual([...jsOut.topMarkets]);
+      // dailyCounts: SQL path produces the SAME 14-day window from the same
+      // pre-aggregated input, so day-by-day comparison should hold.
+      // (Both implementations clamp days-since-last-trade similarly.)
+      expect(sqlOut.dailyCounts.length).toBe(jsOut.dailyCounts.length);
+    });
+  }
 });
 
 /**

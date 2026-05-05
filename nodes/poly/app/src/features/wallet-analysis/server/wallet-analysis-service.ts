@@ -340,8 +340,13 @@ export async function getDistributionsSlice(
  * wallet — i.e. unique markets traded, NOT total fills. This is what makes the
  * snapshot path scale to wallets with millions of fills: SQL collapses the
  * fill stream to a few thousand position rows before we ever touch JS heap.
+ *
+ * Exported for the parity test that asserts `composeSnapshotFromAggregates`
+ * stays output-equivalent to `computeWalletMetrics` for the snapshot fields.
+ *
+ * @internal
  */
-type PositionAggregate = {
+export type PositionAggregate = {
   conditionId: string;
   tokenId: string;
   buyUsdc: number;
@@ -452,7 +457,8 @@ async function readActivityCountsFromDb(
  * for the fields snapshot surfaces; PnL fields are intentionally omitted per
  * `PNL_NOT_IN_SNAPSHOT`.
  */
-function composeSnapshotFromAggregates(input: {
+/** @internal — exported for parity testing only. */
+export function composeSnapshotFromAggregates(input: {
   positions: ReadonlyArray<PositionAggregate>;
   dailyRows: ReadonlyArray<{ day: string; n: number }>;
   activity: { recent30: number; latestTs: number };
