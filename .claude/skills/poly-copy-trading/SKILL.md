@@ -10,19 +10,19 @@ You are the expert for the mirror loop — everything that turns "target wallet 
 ## Architecture in one pass
 
 ```
-Data-API /trades?user=<target>        (polled every 30s per target)
+wallet-watch source                   (WS wake-up + Data-API drain, or legacy source in old branches)
     │
     ▼
-wallet-watch/polymarket-source.ts     (parse → Fill; skip if too-old / unmirror-able)
+features/wallet-watch                 (normalize → Fill; no decisions, no writes)
     │
     ▼
-mirror-coordinator.ts::runOnce        (dedup via fill_id; check caps; INSERT ledger row)
+mirror-pipeline.ts::runMirrorTick     (dedup, target policy, position context)
     │
     ▼ INSERT_BEFORE_PLACE              (correctness gate — at-most-once)
-poly_copy_trade_fills row lands       (status=open, idempotency_key set)
+poly_copy_trade_fills row lands       (status=pending, client_order_id set)
     │
     ▼
-PolymarketClobAdapter.place(order)    (Privy HSM sign; CLOB submit)
+PolyTradeExecutor.placeIntent         (authorizeIntent → CLOB adapter)
     │
     ▼
 ledger updated + decision row written (placed | skipped | error)
@@ -30,55 +30,53 @@ ledger updated + decision row written (placed | skipped | error)
 
 **Invariant order matters.** Flipping INSERT and PLACE means a successful CLOB submit whose ledger row never committed → next poll double-mirrors. Never reorder.
 
+Durable flowchart: [Poly Order And Position Lifecycle § Mirror Decision To Limit Order](../../../docs/spec/poly-order-position-lifecycle.md#0-mirror-decision-to-limit-order).
+
 ## Key code landmarks
 
-- `nodes/poly/app/src/features/copy-trade/mirror-coordinator.ts` — `runOnce` glue
-- `nodes/poly/app/src/features/copy-trade/decide.ts` — decision branches
-- `nodes/poly/app/src/features/wallet-watch/polymarket-source.ts` — Data-API source
-- `nodes/poly/app/src/bootstrap/jobs/copy-trade-mirror.job.ts` — poll shim + hardcoded v0 caps
-- `nodes/poly/app/src/features/copy-trade/target-source.ts` — `dbTargetSource` + `envTargetSource`
+- `nodes/poly/app/src/features/copy-trade/mirror-pipeline.ts` — `runMirrorTick` glue
+- `nodes/poly/app/src/features/copy-trade/plan-mirror.ts` — pure mirror decision policy
+- `nodes/poly/app/src/features/wallet-watch/` — wallet observation source, no decisions
+- `nodes/poly/app/src/bootstrap/jobs/copy-trade-mirror.job.ts` — poll shim + target-config hydration
+- `nodes/poly/app/src/features/copy-trade/target-source.ts` — `dbTargetSource` + `envTargetSource`; target policy fields
 - `nodes/poly/packages/db-schema/src/copy-trade.ts` — schema for `poly_copy_trade_*` tables
 - `nodes/poly/app/src/features/trading/order-ledger.ts` — ledger writes + sync-truth reads
 
 ## Tables (RLS-scoped, per-tenant)
 
-| Table                       | Purpose                                                                                 |
-| --------------------------- | --------------------------------------------------------------------------------------- |
-| `poly_copy_trade_targets`   | Per-tenant tracked target wallets. RLS via `created_by_user_id`.                        |
-| `poly_copy_trade_config`    | Per-tenant kill-switch (`enabled`). task.0347 will add sizing + caps here or adjacent.  |
-| `poly_copy_trade_fills`     | The ledger. Row per decision. `idempotency_key = keccak256(target_id + ':' + fill_id)`. |
-| `poly_copy_trade_decisions` | Append-only audit log of every `decide()` outcome. Never updated or deleted.            |
+| Table                       | Purpose                                                                                    |
+| --------------------------- | ------------------------------------------------------------------------------------------ |
+| `poly_copy_trade_targets`   | Per-tenant tracked target wallets plus target policy fields. RLS via `created_by_user_id`. |
+| `poly_copy_trade_fills`     | The ledger. Row per decision. `idempotency_key = keccak256(target_id + ':' + fill_id)`.    |
+| `poly_copy_trade_decisions` | Append-only audit log of every `decide()` outcome. Never updated or deleted.               |
 
 `dbTargetSource.listForActor(actorId)` — RLS-clamped via `appDb`, used by per-user routes.
 `dbTargetSource.listAllActive()` — under `serviceDb`, the **ONE sanctioned BYPASSRLS read** across tenants. Only called by the mirror-poll enumerator in `container.ts`. If you find a second caller, that is a bug.
 
 ## Runtime config — candidate-a
 
-**Enable switch** (per-tenant kill-switch):
-
-```sql
-UPDATE poly_copy_trade_config SET enabled=true WHERE billing_account_id='<billing-account-uuid>';
-```
-
-Flipping one tenant's row has zero effect on others. The system tenant (`COGNI_SYSTEM_BILLING_ACCOUNT_ID`) is seeded `enabled=true` by migration 0029 so the legacy single-operator candidate-a flight still places. Takes effect within one poll tick (≤30s).
+**Enable switch:** there is no per-tenant kill-switch table. An active target row plus active wallet connection plus active grant is the opt-in gate. Remove or disable the target row to stop mirroring that wallet.
 
 **Poll cadence:** 30s. Warmup backlog: 60s. Hardcoded in `copy-trade-mirror.job.ts`. Bounds our latency floor at ~30-60s (task.0322 P4 swaps to CLOB WebSocket).
 
-**Live-money caps (hardcoded v0):** `$1/trade, $10/day, 5 fills/hr`. Per-tenant lift tracked in [task.0347](../../../work/items/task.0347.poly-wallet-preferences-sizing-config.md). Changing now = edit source + redeploy + scorecard review.
+**Target policy:** `poly_copy_trade_targets` carries `mirror_filter_percentile` and `mirror_max_usdc_per_trade`. The enumerator threads these through `buildMirrorTargetConfig` into `MirrorTargetConfig.sizing`.
+
+**Grant caps:** `poly_wallet_grants` carries `per_order_usdc_cap`, `daily_usdc_cap`, and `hourly_fills_cap`. These are enforced by `authorizeIntent`, downstream of `planMirrorFromFill`.
 
 **Tracked wallets** — add via dashboard `+` or `POST /api/v1/poly/copy-trade/targets`; remove via `−` or `DELETE /api/v1/poly/copy-trade/targets/[id]`. Never seed wallets via env vars (the Phase-A `envTargetSource` exists for local-dev only).
 
 ## Observability — mirror signals
 
-| Signal                                                       | Where           | Good state                                                 |
-| ------------------------------------------------------------ | --------------- | ---------------------------------------------------------- |
-| `poly.mirror.poll.singleton_claim`                           | Loki            | Fires exactly once per pod start                           |
-| `poly.wallet_watch.fetch`                                    | Loki, every 30s | `raw=N, fills=N, phase=ok`                                 |
-| `poly.mirror.decision outcome=placed`                        | Loki            | Emitted when mirror fires                                  |
-| `poly.mirror.decision outcome=skipped reason=already_placed` | Loki            | Dedup. Noisy — reducing noise is in task.0323 §1.          |
-| `poly.mirror.decision outcome=skipped reason=cap_exceeded_*` | Loki            | Hitting caps. Expected under load; investigate if spiking. |
-| `poly.mirror.poll.tick_error`                                | Loki            | **ZERO**. Any hit = bug.                                   |
-| `poly_copy_trade_fills`                                      | poly DB         | Row per mirror decision                                    |
+| Signal                                                             | Where   | Good state                                                              |
+| ------------------------------------------------------------------ | ------- | ----------------------------------------------------------------------- |
+| `poly.mirror.poll.singleton_claim`                                 | Loki    | Fires exactly once per pod start                                        |
+| `poly.wallet_watch.fetch`                                          | Loki    | `raw=N, fills=N, phase=ok` when a drain runs                            |
+| `poly.wallet_watch.ws.wakeup_total`                                | Metrics | Increments when watched assets trade                                    |
+| `poly.mirror.decision outcome=placed`                              | Loki    | Emitted when mirror fires                                               |
+| `poly.mirror.decision outcome=skipped reason=already_placed`       | Loki    | Dedup. Noisy — reducing noise is in task.0323 §1.                       |
+| `poly.mirror.decision outcome=skipped reason=position_cap_reached` | Loki    | Hitting target-policy cap. Expected under load; investigate if spiking. |
+| `poly.mirror.poll.tick_error`                                      | Loki    | **ZERO**. Any hit = bug.                                                |
+| `poly_copy_trade_fills`                                            | poly DB | Row per mirror decision                                                 |
 
 **Status-sync gotcha (task.0323 §2 / task.0328):** `poly_copy_trade_fills.status=open` is written at INSERT time and **never re-read from CLOB**. Actual CLOB state may be filled, canceled, or partial. Don't trust the ledger's `status` column alone — cross-check Data-API `/positions?user=<addr>` or the `synced_at` staleness window exposed via `/api/v1/poly/sync-health`.
 

@@ -56,6 +56,53 @@ Poly tracks three related but different state machines:
 
 ## Human Flowcharts
 
+### 0. Mirror Decision To Limit Order
+
+This is the order-entry path before the CLOB order row joins the lifecycle
+tables below. It is intentionally split into observation, pure planning,
+ledger-first execution, authorization, and CLOB placement.
+
+```mermaid
+flowchart TD
+  A[Target wallet trades] --> B[wallet-watch source]
+  B --> C[runMirrorTick fetchSince]
+  C --> D[processFill]
+  D --> E[clientOrderIdFor target_id + fill_id]
+  D --> F[ledger.snapshotState]
+  D --> G[getMarketConstraints tokenId]
+  D --> H[ledger.cumulativeIntentForMarket]
+  D --> I[getTargetConditionPosition]
+  F --> J[planMirrorFromFill]
+  G --> J
+  H --> J
+  I --> J
+  J --> K{MirrorPlan}
+  K -->|skip| L[record decision skipped]
+  K -->|place| M[hasOpenForMarket]
+  M -->|already resting| L
+  M -->|clear| N[executeMirrorOrder]
+  N --> O[ledger.insertPending]
+  O --> P[PolyTradeExecutor.placeIntent]
+  P --> Q[walletPort.authorizeIntent]
+  Q --> R[PolymarketClobAdapter.placeOrder]
+  R --> S[read placement equals limit]
+  S --> T[createAndPostOrder GTC]
+  T --> U[ledger.markOrderId plus record placed]
+```
+
+Review boundaries:
+
+- `wallet-watch` only observes and emits normalized fills. It must not decide,
+  write ledger rows, or place orders.
+- `planMirrorFromFill` is pure policy. It receives target config, runtime
+  snapshot, market constraints, and target-position context as input.
+- `ledger.insertPending` runs before `placeIntent`. This is the
+  at-most-once gate.
+- `authorizeIntent` is downstream of planning and upstream of signing. Grant
+  caps and revocation live there, not in the planner.
+- CLOB placement reads `OrderIntent.attributes.placement`; mirror limit orders
+  route to GTC `createAndPostOrder`.
+
 ### 1. CLOB Order Row
 
 ```mermaid
