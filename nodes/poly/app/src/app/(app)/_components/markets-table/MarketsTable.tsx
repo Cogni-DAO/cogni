@@ -39,6 +39,7 @@ import {
   useReactTable,
   type VisibilityState,
 } from "@tanstack/react-table";
+import { Flame } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -48,8 +49,16 @@ import {
 } from "@/components/reui/data-grid/data-grid";
 import { DataGridPagination } from "@/components/reui/data-grid/data-grid-pagination";
 import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
+import { Toggle } from "@/components/vendor/shadcn/toggle";
 
 import { makeColumns } from "./columns";
+
+/** Group is an "alpha leak": we are red, target is green. */
+function isAlphaLeak(group: WalletExecutionMarketGroup): boolean {
+  // edgeGapUsdc = targetPnl − ourPnl. So targetPnl = ourPnl + edgeGapUsdc.
+  const targetPnl = group.pnlUsd + group.edgeGapUsdc;
+  return group.pnlUsd < 0 && targetPnl > 0;
+}
 
 export type MarketsTableProps = {
   groups?: readonly WalletExecutionMarketGroup[] | undefined;
@@ -75,7 +84,16 @@ export function MarketsTable({
   isLoading = false,
   emptyMessage = "No open market exposure.",
 }: MarketsTableProps): ReactElement {
-  const data = useMemo(() => (groups ? Array.from(groups) : []), [groups]);
+  const allGroups = useMemo(() => (groups ? Array.from(groups) : []), [groups]);
+  const [alphaLeakOnly, setAlphaLeakOnly] = useState(false);
+  const data = useMemo(
+    () => (alphaLeakOnly ? allGroups.filter(isAlphaLeak) : allGroups),
+    [allGroups, alphaLeakOnly]
+  );
+  const alphaLeakCount = useMemo(
+    () => allGroups.filter(isAlphaLeak).length,
+    [allGroups]
+  );
 
   const columns = useMemo(() => makeColumns(), []);
 
@@ -123,26 +141,47 @@ export function MarketsTable({
   });
 
   return (
-    <DataGrid
-      table={table}
-      recordCount={data.length}
-      isLoading={isLoading}
-      loadingMode="skeleton"
-      tableLayout={{
-        headerSticky: true,
-        headerBackground: true,
-        rowBorder: true,
-        dense: true,
-        columnsVisibility: true,
-      }}
-      emptyMessage={emptyMessage}
-    >
-      <DataGridContainer className="overflow-x-auto">
-        <DataGridTable />
-      </DataGridContainer>
-      {data.length >= PAGE_SIZE ? (
-        <DataGridPagination sizes={[...PAGE_SIZE_OPTIONS]} />
-      ) : null}
-    </DataGrid>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-end">
+        <Toggle
+          size="sm"
+          variant="outline"
+          pressed={alphaLeakOnly}
+          onPressedChange={setAlphaLeakOnly}
+          aria-label="Show only markets where we lost and the copy target won"
+          title="Markets where we are red and the copy target is green"
+          className="gap-1.5"
+        >
+          <Flame className="size-3.5" aria-hidden="true" />
+          <span className="text-xs">Alpha leak only</span>
+          <span className="font-mono text-muted-foreground text-xs tabular-nums">
+            ({alphaLeakCount})
+          </span>
+        </Toggle>
+      </div>
+      <DataGrid
+        table={table}
+        recordCount={data.length}
+        isLoading={isLoading}
+        loadingMode="skeleton"
+        tableLayout={{
+          headerSticky: true,
+          headerBackground: true,
+          rowBorder: true,
+          dense: true,
+          columnsVisibility: true,
+        }}
+        emptyMessage={
+          alphaLeakOnly ? "No alpha-leak markets right now." : emptyMessage
+        }
+      >
+        <DataGridContainer className="overflow-x-auto">
+          <DataGridTable />
+        </DataGridContainer>
+        {data.length >= PAGE_SIZE ? (
+          <DataGridPagination sizes={[...PAGE_SIZE_OPTIONS]} />
+        ) : null}
+      </DataGrid>
+    </div>
   );
 }
