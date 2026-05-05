@@ -99,13 +99,66 @@ function formatEdgeGapPct(value: number | null): string {
   return `${sign}${(Math.abs(value) * 100).toFixed(1)}%`;
 }
 
+/**
+ * Best human-readable label for a market group. Prefer the server-hydrated
+ * `eventTitle`, then a prettified `eventSlug`, then the first line's
+ * `marketTitle`, then a literal placeholder. Slugs like
+ * `nba-min-sas-2026-05-04` should never reach the user untouched.
+ */
 function groupLabel(group: WalletExecutionMarketGroup): string {
   return (
     group.eventTitle ??
-    group.eventSlug ??
+    prettifyEventSlug(group.eventSlug, group.lines[0]?.marketTitle ?? "") ??
     group.lines[0]?.marketTitle ??
+    group.eventSlug ??
     "Market"
   );
+}
+
+/**
+ * Convert a polymarket event slug like `nba-min-sas-2026-05-04` to a
+ * human-readable label like `NBA MIN SAS`. Mirrors the helper in
+ * `positions-table/columns.tsx` (Links field below). Strips the trailing
+ * date and any `-more-markets` suffix; uppercases ≤3-letter tokens (team
+ * codes), otherwise title-cases. Returns null when the prettified label is
+ * already a substring of the line's marketTitle (avoids double-display).
+ */
+function prettifyEventSlug(
+  slug: string | null | undefined,
+  marketTitle: string
+): string | null {
+  if (!slug) return null;
+  const stripped = slug
+    .replace(/-more-markets$/, "")
+    .replace(/-\d{4}-\d{2}-\d{2}(?=-|$)/, "")
+    .replace(/-\d{4}$/, "");
+  if (!stripped) return null;
+  const label = stripped
+    .split("-")
+    .filter(Boolean)
+    .map((w) =>
+      w.length <= 3 ? w.toUpperCase() : (w[0] ?? "").toUpperCase() + w.slice(1)
+    )
+    .join(" ");
+  if (!label) return null;
+  if (marketTitle.toLowerCase().includes(label.toLowerCase())) return null;
+  return label;
+}
+
+function polymarketEventUrl(eventSlug: string | null): string | null {
+  if (!eventSlug) return null;
+  return `https://polymarket.com/event/${eventSlug}`;
+}
+
+function polymarketMarketUrl(
+  eventSlug: string | null,
+  marketSlug: string | null
+): string | null {
+  if (eventSlug && marketSlug) {
+    return `https://polymarket.com/event/${eventSlug}/${marketSlug}`;
+  }
+  if (marketSlug) return `https://polymarket.com/market/${marketSlug}`;
+  return polymarketEventUrl(eventSlug);
 }
 
 export function makeColumns(): AnyCol[] {
@@ -153,9 +206,29 @@ export function makeColumns(): AnyCol[] {
       cell: ({ row }) => {
         const group = row.original;
         const label = groupLabel(group);
+        // Prefer the event-level URL; fall back to the first line's
+        // market URL when the group has no event slug (single-market events).
+        const href =
+          polymarketEventUrl(group.eventSlug) ??
+          polymarketMarketUrl(
+            group.eventSlug,
+            group.lines[0]?.marketSlug ?? null
+          );
         return (
           <div className="flex flex-col gap-0.5">
-            <span className="font-medium text-sm">{label}</span>
+            {href ? (
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="font-medium text-sm underline-offset-4 hover:underline"
+              >
+                {label}
+              </a>
+            ) : (
+              <span className="font-medium text-sm">{label}</span>
+            )}
             <span className="text-muted-foreground text-xs">
               {group.marketCount} line{group.marketCount === 1 ? "" : "s"}
             </span>
@@ -326,7 +399,11 @@ function MarketGroupExpandedBody({
   return (
     <div className="space-y-4 bg-muted/10 px-4 py-3">
       {group.lines.map((line) => (
-        <MarketLineBlock key={line.conditionId} line={line} />
+        <MarketLineBlock
+          key={line.conditionId}
+          line={line}
+          eventSlug={group.eventSlug}
+        />
       ))}
     </div>
   );
@@ -334,14 +411,29 @@ function MarketGroupExpandedBody({
 
 function MarketLineBlock({
   line,
+  eventSlug,
 }: {
   line: WalletExecutionMarketLine;
+  eventSlug: string | null;
 }): ReactElement {
+  const href = polymarketMarketUrl(eventSlug, line.marketSlug);
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-medium text-sm">{line.marketTitle}</p>
+          {href ? (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="block truncate font-medium text-sm underline-offset-4 hover:underline"
+            >
+              {line.marketTitle}
+            </a>
+          ) : (
+            <p className="truncate font-medium text-sm">{line.marketTitle}</p>
+          )}
           <p className="text-muted-foreground text-xs">
             {line.participants.length} trader
             {line.participants.length === 1 ? "" : "s"}
