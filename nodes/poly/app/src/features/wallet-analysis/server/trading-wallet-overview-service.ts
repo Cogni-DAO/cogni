@@ -140,7 +140,15 @@ export async function fetchAndPersistTradingWalletPnlHistory(input: {
         : undefined
     );
     if (points.length === 0) continue;
-    const rows = points.map((point) => ({
+    // Polymarket's /user-pnl returns the current day/hour twice during the
+    // active bucket (last reading + running aggregate); Postgres ON CONFLICT
+    // DO UPDATE rejects a batch that hits the same conflict target twice
+    // ("command cannot affect row a second time"). Dedupe by `t` last-wins.
+    const dedupedByT = new Map<number, (typeof points)[number]>();
+    for (const point of points) {
+      dedupedByT.set(point.t, point);
+    }
+    const rows = Array.from(dedupedByT.values()).map((point) => ({
       traderWalletId: input.traderWalletId,
       fidelity: plan.fidelity,
       ts: new Date(point.t * 1_000),

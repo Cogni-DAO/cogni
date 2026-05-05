@@ -120,6 +120,38 @@ describe("fetchAndPersistTradingWalletPnlHistory", () => {
     );
   });
 
+  it("dedupes upstream points sharing the same t (Polymarket returns current bucket twice)", async () => {
+    // bug.5011: Polymarket /user-pnl?interval=all returns the current day twice
+    // (running-aggregate + final). Without dedup, INSERT ... ON CONFLICT DO UPDATE
+    // throws "command cannot affect row a second time" and the whole writer fails.
+    const fake = fakeDbForInsertOnly();
+    const dupTs = 1_777_939_200;
+    const getUserPnl = vi.fn(async (_wallet, params) => {
+      if (params.fidelity === "1d") {
+        return [
+          { t: dupTs - 86_400, p: 1 },
+          { t: dupTs, p: 2 },
+          { t: dupTs, p: 3 }, // duplicate t — last wins
+        ];
+      }
+      return [];
+    });
+    const fakeClient = { getUserPnl } as unknown as Parameters<
+      typeof fetchAndPersistTradingWalletPnlHistory
+    >[0]["client"];
+
+    const result = await fetchAndPersistTradingWalletPnlHistory({
+      db: fake.db,
+      traderWalletId: TRADER_WALLET_ID,
+      walletAddress: WALLET,
+      client: fakeClient,
+    });
+
+    // Expect 2 rows (deduped from 3), all under fidelity '1d'.
+    expect(fake.insertCalls).toEqual([{ fidelity: "1d", rowCount: 2 }]);
+    expect(result.inserted).toBe(2);
+  });
+
   it("skips a fidelity when upstream returns no points", async () => {
     const fake = fakeDbForInsertOnly();
     const getUserPnl = vi.fn(async (_wallet, params) => {
