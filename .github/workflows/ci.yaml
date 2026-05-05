@@ -136,6 +136,7 @@ jobs:
              && jq -e 'index("operator") != null' <<<"$MATCHED" >/dev/null \
              && jq -e 'all(
                . == "pnpm-lock.yaml"
+               or . == "biome.json"
                or startswith("work/")
                or startswith("docs/")
                or . == ".claude/skills/poly-dev-manager/SKILL.md"

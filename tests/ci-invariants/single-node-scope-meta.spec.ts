@@ -164,6 +164,11 @@ describe("single-node-scope workflow gate · structural pins", () => {
     ).toContain("pnpm-lock.yaml");
     expect(
       enforce.run,
+      "ride-along whitelist must include biome.json in the inline run: block " +
+        "(must mirror RIDE_ALONG_PATTERNS in tests/ci-invariants/classify.ts)"
+    ).toContain('. == "biome.json"');
+    expect(
+      enforce.run,
       "ride-along whitelist must include work/ prefix in the inline run: block " +
         "(must mirror RIDE_ALONG_PATTERNS in tests/ci-invariants/classify.ts)"
     ).toContain('startswith("work/")');

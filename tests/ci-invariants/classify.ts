@@ -36,6 +36,10 @@ const OPERATOR_NODE = "operator";
  * → Dolt). Adding to this list weakens the gate; do so deliberately.
  *
  * - `pnpm-lock.yaml`: mechanical side-effect of node-level package.json edits.
+ * - `biome.json`: repo-wide formatter/linter config. Same biome rule changes
+ *   surface as lint failures across every node simultaneously, so the fix
+ *   needs to ride along with whichever node-PR happens to be open when biome
+ *   ships an upgrade or rule.
  * - `work/**`: per-task work items, projects, charters; high merge-conflict +
  *   index-regen churn. Ride-along until task tracking moves to Dolt.
  * - `docs/**`: cross-cutting prose updates that accompany a node change.
@@ -45,6 +49,7 @@ const OPERATOR_NODE = "operator";
  */
 const RIDE_ALONG_PATTERNS: ReadonlyArray<(p: string) => boolean> = [
   (p) => p === "pnpm-lock.yaml",
+  (p) => p === "biome.json",
   (p) => p.startsWith("work/"),
   (p) => p.startsWith("docs/"),
   (p) => p === ".claude/skills/poly-dev-manager/SKILL.md",
