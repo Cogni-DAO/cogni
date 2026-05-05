@@ -899,6 +899,7 @@ After=docker.service
 Type=oneshot
 WorkingDirectory=/opt/cogni-template-runtime
 ExecStart=${DOCKER_BIN} compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml --profile backup up --force-recreate --no-deps --abort-on-container-exit --exit-code-from db-backup db-backup
+ExecStartPost=-${DOCKER_BIN} compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml --profile backup rm -f db-backup
 TimeoutStartSec=2h
 SYSTEMD_SERVICE_EOF
 
@@ -924,7 +925,18 @@ systemctl reset-failed cogni-db-backup.service 2>/dev/null || true
 log_info "db-backup timer installed with interval ${BACKUP_INTERVAL_SECONDS}s"
 
 log_info "Running db-backup validation backup..."
+# `up --force-recreate` keeps the Exited container briefly so alloy scrapes
+# `db_backup.completed` into Loki (relied on by candidate-flight-infra). The
+# explicit `rm -f` after prevents the next timer fire from colliding on the
+# container name; the systemd unit's ExecStartPost mirrors this for the timer.
+# A pre-cleanup at line ~888 + the existing top-level [FATAL] ERR trap handle
+# the case where validation aborts mid-flight and leaves a leftover. (bug.5169)
 $RUNTIME_COMPOSE --profile backup up --force-recreate --no-deps --abort-on-container-exit --exit-code-from db-backup db-backup
+$RUNTIME_COMPOSE --profile backup logs --tail 80 db-backup | grep 'db_backup.completed' || {
+  $RUNTIME_COMPOSE --profile backup rm -f db-backup 2>/dev/null || true
+  log_error "db-backup completed logs missing after validation backup"
+  exit 1
+}
 $RUNTIME_COMPOSE --profile backup run --rm --no-deps --entrypoint bash db-backup -lc '
   set -euo pipefail
   for cluster in app temporal; do
@@ -934,10 +946,7 @@ $RUNTIME_COMPOSE --profile backup run --rm --no-deps --entrypoint bash db-backup
     echo "db-backup manifest verified: ${latest}/MANIFEST.sha256"
   done
 '
-$RUNTIME_COMPOSE --profile backup logs --tail 80 db-backup | grep 'db_backup.completed' || {
-  log_error "db-backup completed logs missing after validation backup"
-  exit 1
-}
+$RUNTIME_COMPOSE --profile backup rm -f db-backup 2>/dev/null || true
 emit_deployment_event "infra_deployment.db_backup_scheduled" "success" "db-backup timer installed and validation backup completed"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
