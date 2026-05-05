@@ -240,29 +240,29 @@ End-to-end run that proved the pipeline against the real candidate-a `cogni_poly
 
 **Step 4 — verify in DB:**
 
-| day | total fills | from this backfill | unique markets |
-|---|---:|---:|---:|
-| 2026-04-26 | 29,813 | 29,813 | 772 |
-| 2026-04-27 | 20,451 | 20,451 | 288 |
-| 2026-04-28 | 24,198 | 24,198 | 265 |
-| 2026-04-29 | 23,803 | 23,803 | 345 |
-| 2026-04-30 | 23,256 | 23,256 | 311 |
-| 2026-05-01 | 14,093 | 14,093 | 390 |
-| 2026-05-02 | 27,746 | 27,746 | 957 |
-| 2026-05-03 | 5,619 | 2,227 | 216 |
-| 2026-05-04 | 17,983 | 0 (live tick) | 327 |
-| 2026-05-05 | 4,984 | 0 (live tick) | 75 |
-| **TOTAL** | **191,946** | **165,577** | **3,681** |
+| day        | total fills | from this backfill | unique markets |
+| ---------- | ----------: | -----------------: | -------------: |
+| 2026-04-26 |      29,813 |             29,813 |            772 |
+| 2026-04-27 |      20,451 |             20,451 |            288 |
+| 2026-04-28 |      24,198 |             24,198 |            265 |
+| 2026-04-29 |      23,803 |             23,803 |            345 |
+| 2026-04-30 |      23,256 |             23,256 |            311 |
+| 2026-05-01 |      14,093 |             14,093 |            390 |
+| 2026-05-02 |      27,746 |             27,746 |            957 |
+| 2026-05-03 |       5,619 |              2,227 |            216 |
+| 2026-05-04 |      17,983 |      0 (live tick) |            327 |
+| 2026-05-05 |       4,984 |      0 (live tick) |             75 |
+| **TOTAL**  | **191,946** |        **165,577** |      **3,681** |
 
 **Step 5 — what the dashboard sees today:**
 
-| reader slice | source on `main` | renders backfilled data? |
-|---|---|---|
-| `?include=pnl` | `poly_trader_user_pnl_points` (CP1) | yes for the points the live tick wrote — but no historical `pnl_points` exist (separate backfill, future work) |
-| `?include=snapshot` | live Data API, capped at 500 trades | **no — shows `tradesPerDay30d: 16.67`, `uniqueMarkets: 21`** instead of 21K-trades / 3.6K-markets in DB |
-| `?include=distributions` (default `live`) | live Data API, capped at 500 | no — same cap |
-| `?include=distributions&distributionMode=historical` | `poly_trader_fills` (DB-backed!) | wired but **502s on big wallets** because it then fetches per-cid resolution from CLOB serially → overruns Caddy timeout. Fix: populate `poly_market_outcomes` (CP3 / `task.5018`) so resolution lookup hits DB. |
-| `?include=trades` (CP2 #1245) | `poly_trader_fills` after CP2 lands | **will render backfill once CP2 merges** — no further work needed on the writer side |
+| reader slice                                         | source on `main`                    | renders backfilled data?                                                                                                                                                                                         |
+| ---------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `?include=pnl`                                       | `poly_trader_user_pnl_points` (CP1) | yes for the points the live tick wrote — but no historical `pnl_points` exist (separate backfill, future work)                                                                                                   |
+| `?include=snapshot`                                  | live Data API, capped at 500 trades | **no — shows `tradesPerDay30d: 16.67`, `uniqueMarkets: 21`** instead of 21K-trades / 3.6K-markets in DB                                                                                                          |
+| `?include=distributions` (default `live`)            | live Data API, capped at 500        | no — same cap                                                                                                                                                                                                    |
+| `?include=distributions&distributionMode=historical` | `poly_trader_fills` (DB-backed!)    | wired but **502s on big wallets** because it then fetches per-cid resolution from CLOB serially → overruns Caddy timeout. Fix: populate `poly_market_outcomes` (CP3 / `task.5018`) so resolution lookup hits DB. |
+| `?include=trades` (CP2 #1245)                        | `poly_trader_fills` after CP2 lands | **will render backfill once CP2 merges** — no further work needed on the writer side                                                                                                                             |
 
 **Conclusion of demo:** the writer side is functional. The full 1-year corpus for both wallets can be loaded with this same flow in **~30 min wall-clock** (12 monthly windows × 2 wallets). The dashboard will start consuming the corpus as CP2 / CP3 / CP4 / CP6 merge — backfilling more does not unblock those PRs, but having the corpus already resident means the user-facing render lights up the moment those readers ship.
 
