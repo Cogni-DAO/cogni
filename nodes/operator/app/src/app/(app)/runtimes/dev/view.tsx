@@ -247,7 +247,7 @@ export function RuntimesDevView(): ReactElement {
       )}
 
       {capabilities && installedRuntimes.length === 0 && (
-        <div className="mb-4 rounded border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm">
+        <div className="mb-4 rounded border bg-muted/40 p-3 text-sm">
           Connected, but neither <code>claude</code> nor <code>codex</code> is
           on this device's PATH.
         </div>
