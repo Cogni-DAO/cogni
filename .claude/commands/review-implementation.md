@@ -109,13 +109,15 @@ Output a structured review:
 
 ### Post-Verdict Actions
 
-**If APPROVE:**
+**Are you reviewing your own PR (self-review)?** Then YOU are the implementer — go to "Self-Review" below. Filing follow-up bugs, flighting, or handing to `/validate-candidate` is NOT a substitute for fixing.
+
+**If APPROVE (peer review):**
 
 1. Set work item `status: done`, update `updated:` date.
 2. Run `pnpm check:docs` and fix any errors until clean.
 3. Commit all changes on the work item's branch. Push to remote.
 
-**If REQUEST CHANGES:**
+**If REQUEST CHANGES (peer review):**
 
 1. Increment `revision:` field in work item frontmatter (e.g., `revision: 0` → `revision: 1`).
 2. **LOOP_LIMIT check**: If `revision >= 5`, set `status: blocked` with `blocked_by: Review loop limit — escalate to human` instead of sending back to implement.
@@ -123,6 +125,25 @@ Output a structured review:
 4. Add blocking issues to the work item's `## Review Feedback` section.
 5. Run `pnpm check:docs` and fix any errors until clean.
 6. Commit all changes on the work item's branch. Push to remote.
+
+### Self-Review (you wrote the code AND are reviewing it)
+
+The whole point of self-review is to fix issues before they reach a human. Listing blockers and walking away defeats the loop. This is the most common failure mode for this skill — read carefully.
+
+**Required sequence after writing the verdict:**
+
+1. **Address every BLOCKING issue in code on the same branch.** Do not flight, do not request human review, do not move on. If the verdict says REQUEST CHANGES, the next action is `Edit`/`Write`, not `gh pr ...` or `vcs/flight`.
+2. **Apply every SIMPLIFYING suggestion** (dead code, redundant abstractions, inlinable constants, removable shims). Simplifications on your own diff are free wins; the cost of skipping them is the cruft compounding. Non-simplifying suggestions (style nits, doc tweaks) are optional.
+3. **Filing a follow-up `bug.*` work item is NOT fixing.** Only file a follow-up when the blocker is genuinely out of scope (touches a different node, requires a different spec, expands the PR beyond its `outcome`). State the scoping reason explicitly in the bug body. "I'd rather move on" is not a scoping reason.
+4. **Do not flight (`vcs/flight`) until the self-review blockers are fixed and pushed.** Flighting a build the reviewer (you) just said REQUEST CHANGES on burns the candidate-a slot and lies to the validation loop.
+5. After fixes are pushed and CI is green, re-run the verdict pass on the new HEAD. Only then proceed to flight + `/validate-candidate`.
+
+**Allowed deferrals:**
+
+- Cross-surface consistency issues that would multiply the diff size — file a follow-up bug, link it from the PR description, AND explicitly scope the current PR in its description (not just in chat).
+- Issues whose fix requires a spec/architecture decision the user hasn't made.
+
+Anything else: fix it now.
 
 ---
 
@@ -135,3 +156,6 @@ Output a structured review:
 - **OSS_OVER_BESPOKE** — flag custom code that duplicates well-maintained OSS functionality
 - **TEST_THE_EDGES** — if edge cases aren't tested, flag them as missing coverage
 - **LOOP_LIMIT** — if `revision >= 5` after increment, auto-block instead of sending back to implement
+- **FIX_DON'T_DEFER** — on self-review, every BLOCKING issue gets fixed in this pass; filing a follow-up bug or flighting first is forbidden unless the blocker is genuinely out of scope (and you state the scoping reason in the bug body)
+- **APPLY_SIMPLIFICATIONS** — on self-review, simplifying suggestions on your own diff (dead code, removable abstractions, inlinable constants) are applied, not just listed
+- **NO_FLIGHT_BEFORE_FIX** — never dispatch `vcs/flight` on a SHA you (the reviewer) just verdicted REQUEST CHANGES. Fix, push, re-verdict, then flight
