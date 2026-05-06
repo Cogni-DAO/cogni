@@ -53,24 +53,34 @@ type TradeSummaryRow = {
   market_count: string | number | null;
 };
 
-type TradeSizePnlFillRow = {
+type TokenAggRow = {
   condition_id: string | null;
   token_id: string | null;
-  side: string | null;
-  price: string | number | null;
-  shares: string | number | null;
-  size_usdc: string | number | null;
-  observed_at: Date | string | null;
+  buy_usdc: string | number | null;
+  sell_usdc: string | number | null;
+  buy_shares: string | number | null;
+  sell_shares: string | number | null;
 };
 
-type TradeSizePnlFill = {
+type WindowedBuyRow = {
+  condition_id: string | null;
+  token_id: string | null;
+  size_usdc: string | number | null;
+};
+
+type TokenAgg = {
   conditionId: string;
   tokenId: string;
-  side: "BUY" | "SELL";
-  price: number;
-  shares: number;
+  buyUsdc: number;
+  sellUsdc: number;
+  buyShares: number;
+  sellShares: number;
+};
+
+type WindowedBuy = {
+  conditionId: string;
+  tokenId: string;
   sizeUsdc: number;
-  observedAt: Date;
 };
 
 type ResolutionReader = (
@@ -136,26 +146,46 @@ async function readTradeSizePnl(
   windowStartIso: string,
   readResolution: ResolutionReader
 ): Promise<PolyResearchTraderSizePnl> {
-  const rows = (await db.execute(sql`
+  // Per-token aggregates over ALL fills (constant cardinality — one row per
+  // unique token, ~thousands max regardless of fill count). bug.5012-shape
+  // unbounded SELECT eliminated: we never hydrate raw fills in V8.
+  const tokenAggRows = (await db.execute(sql`
     SELECT
       f.condition_id,
       f.token_id,
-      f.side,
-      f.price,
-      f.shares,
-      f.size_usdc,
-      f.observed_at
+      COALESCE(SUM(f.size_usdc::numeric) FILTER (WHERE f.side = 'BUY'), 0)  AS buy_usdc,
+      COALESCE(SUM(f.size_usdc::numeric) FILTER (WHERE f.side = 'SELL'), 0) AS sell_usdc,
+      COALESCE(SUM(f.shares::numeric)    FILTER (WHERE f.side = 'BUY'), 0)  AS buy_shares,
+      COALESCE(SUM(f.shares::numeric)    FILTER (WHERE f.side = 'SELL'), 0) AS sell_shares
     FROM poly_trader_wallets w
     INNER JOIN poly_trader_fills f
       ON f.trader_wallet_id = w.id
     WHERE w.wallet_address = ${address}
-    ORDER BY f.observed_at ASC
-  `)) as unknown as TradeSizePnlFillRow[];
-  const fills = rows.flatMap(toTradeSizePnlFill);
-  if (fills.length === 0) return emptyTradeSizePnl();
+    GROUP BY f.condition_id, f.token_id
+  `)) as unknown as TokenAggRow[];
+  const tokenAggs = tokenAggRows.flatMap(toTokenAgg);
+  if (tokenAggs.length === 0) return emptyTradeSizePnl();
+
+  // Windowed buys for size-percentile bucket assignment. Bounded by the
+  // active interval (1D / 1W / 1M / ALL); SELLs and out-of-window fills are
+  // filtered at the SQL boundary.
+  const windowedBuyRows = (await db.execute(sql`
+    SELECT
+      f.condition_id,
+      f.token_id,
+      f.size_usdc
+    FROM poly_trader_wallets w
+    INNER JOIN poly_trader_fills f
+      ON f.trader_wallet_id = w.id
+    WHERE w.wallet_address = ${address}
+      AND f.side = 'BUY'
+      AND f.observed_at >= ${windowStartIso}::timestamptz
+    ORDER BY f.size_usdc::numeric ASC
+  `)) as unknown as WindowedBuyRow[];
+  const windowedBuys = windowedBuyRows.flatMap(toWindowedBuy);
 
   const resolutions = new Map<string, MarketResolutionInput>();
-  const conditionIds = [...new Set(fills.map((fill) => fill.conditionId))];
+  const conditionIds = [...new Set(tokenAggs.map((t) => t.conditionId))];
   await Promise.all(
     conditionIds.map((conditionId) =>
       readResolution(conditionId).then((resolution) => {
@@ -164,7 +194,7 @@ async function readTradeSizePnl(
     )
   );
 
-  return buildTradeSizePnl(fills, resolutions, new Date(windowStartIso));
+  return buildTradeSizePnl(tokenAggs, windowedBuys, resolutions);
 }
 
 async function readTradeSummary(
@@ -244,21 +274,19 @@ function toTrader(params: {
 }
 
 function buildTradeSizePnl(
-  fills: readonly TradeSizePnlFill[],
-  resolutions: ReadonlyMap<string, MarketResolutionInput>,
-  windowStart: Date
+  tokenAggs: readonly TokenAgg[],
+  windowedBuys: readonly WindowedBuy[],
+  resolutions: ReadonlyMap<string, MarketResolutionInput>
 ): PolyResearchTraderSizePnl {
-  const hedgeTokenIds = classifyHedgeTokenIds(fills);
-  const tokenPnls = computeTokenPnls(fills, resolutions);
-  const buys = fills
-    .filter((fill) => fill.side === "BUY" && fill.observedAt >= windowStart)
-    .sort((a, b) => a.sizeUsdc - b.sizeUsdc);
+  const hedgeTokenIds = classifyHedgeTokenIds(tokenAggs);
+  const tokenPnls = computeTokenPnls(tokenAggs, resolutions);
+  // windowedBuys is already SQL-sorted ASC by size_usdc.
   const buckets = emptyTradeSizePnl().buckets.map((bucket) => ({ ...bucket }));
 
-  buys.forEach((fill, index) => {
+  windowedBuys.forEach((fill, index) => {
     const bucketIndex = Math.min(
       SIZE_BUCKET_COUNT - 1,
-      Math.floor((index / Math.max(1, buys.length)) * SIZE_BUCKET_COUNT)
+      Math.floor((index / Math.max(1, windowedBuys.length)) * SIZE_BUCKET_COUNT)
     );
     const bucket = buckets[bucketIndex];
     if (!bucket) return;
@@ -391,46 +419,20 @@ function emptyTradeSizePnl(): PolyResearchTraderSizePnl {
 }
 
 function computeTokenPnls(
-  fills: readonly TradeSizePnlFill[],
+  tokenAggs: readonly TokenAgg[],
   resolutions: ReadonlyMap<string, MarketResolutionInput>
 ): Map<string, { buyUsdc: number; pnl: number; resolved: boolean }> {
-  const tokens = new Map<
-    string,
-    {
-      conditionId: string;
-      buyUsdc: number;
-      sellUsdc: number;
-      buyShares: number;
-      sellShares: number;
-    }
-  >();
-  for (const fill of fills) {
-    const existing = tokens.get(fill.tokenId) ?? {
-      conditionId: fill.conditionId,
-      buyUsdc: 0,
-      sellUsdc: 0,
-      buyShares: 0,
-      sellShares: 0,
-    };
-    if (fill.side === "BUY") {
-      existing.buyUsdc += fill.sizeUsdc;
-      existing.buyShares += fill.shares;
-    } else {
-      existing.sellUsdc += fill.sizeUsdc;
-      existing.sellShares += fill.shares;
-    }
-    tokens.set(fill.tokenId, existing);
-  }
-
   const out = new Map<
     string,
     { buyUsdc: number; pnl: number; resolved: boolean }
   >();
-  for (const [tokenId, token] of tokens.entries()) {
+  for (const token of tokenAggs) {
     const resolution = resolutions.get(token.conditionId);
-    const tokenInfo = resolution?.tokens.find((x) => x.token_id === tokenId);
+    const tokenInfo = resolution?.tokens.find(
+      (x) => x.token_id === token.tokenId
+    );
     if (!resolution?.closed || !tokenInfo) {
-      out.set(tokenId, {
+      out.set(token.tokenId, {
         buyUsdc: token.buyUsdc,
         pnl: 0,
         resolved: false,
@@ -439,7 +441,7 @@ function computeTokenPnls(
     }
     const held = token.buyShares - token.sellShares;
     const payout = held > 0 && tokenInfo.winner ? held : 0;
-    out.set(tokenId, {
+    out.set(token.tokenId, {
       buyUsdc: token.buyUsdc,
       pnl: token.sellUsdc + payout - token.buyUsdc,
       resolved: true,
@@ -449,18 +451,15 @@ function computeTokenPnls(
 }
 
 function classifyHedgeTokenIds(
-  fills: readonly TradeSizePnlFill[]
+  tokenAggs: readonly TokenAgg[]
 ): ReadonlySet<string> {
   const byCondition = new Map<string, Map<string, number>>();
-  for (const fill of fills) {
-    if (fill.side !== "BUY") continue;
+  for (const token of tokenAggs) {
+    if (token.buyUsdc <= 0) continue;
     const condition =
-      byCondition.get(fill.conditionId) ?? new Map<string, number>();
-    condition.set(
-      fill.tokenId,
-      (condition.get(fill.tokenId) ?? 0) + fill.sizeUsdc
-    );
-    byCondition.set(fill.conditionId, condition);
+      byCondition.get(token.conditionId) ?? new Map<string, number>();
+    condition.set(token.tokenId, token.buyUsdc);
+    byCondition.set(token.conditionId, condition);
   }
 
   const hedgeTokenIds = new Set<string>();
@@ -476,37 +475,34 @@ function classifyHedgeTokenIds(
   return hedgeTokenIds;
 }
 
-function toTradeSizePnlFill(row: TradeSizePnlFillRow): TradeSizePnlFill[] {
+function toTokenAgg(row: TokenAggRow): TokenAgg[] {
   if (!row.condition_id || !row.token_id) return [];
-  const side = row.side === "BUY" || row.side === "SELL" ? row.side : null;
-  const observedAt =
-    row.observed_at instanceof Date
-      ? row.observed_at
-      : row.observed_at
-        ? new Date(row.observed_at)
-        : null;
-  const price = toNumber(row.price);
-  const shares = toNumber(row.shares);
-  const sizeUsdc = toNumber(row.size_usdc);
-  if (
-    !side ||
-    !observedAt ||
-    Number.isNaN(observedAt.getTime()) ||
-    price <= 0 ||
-    shares <= 0 ||
-    sizeUsdc <= 0
-  ) {
-    return [];
-  }
+  const buyUsdc = toNumber(row.buy_usdc);
+  const sellUsdc = toNumber(row.sell_usdc);
+  const buyShares = toNumber(row.buy_shares);
+  const sellShares = toNumber(row.sell_shares);
+  if (buyUsdc <= 0 && sellUsdc <= 0) return [];
   return [
     {
       conditionId: row.condition_id,
       tokenId: row.token_id,
-      side,
-      price,
-      shares,
+      buyUsdc,
+      sellUsdc,
+      buyShares,
+      sellShares,
+    },
+  ];
+}
+
+function toWindowedBuy(row: WindowedBuyRow): WindowedBuy[] {
+  if (!row.condition_id || !row.token_id) return [];
+  const sizeUsdc = toNumber(row.size_usdc);
+  if (sizeUsdc <= 0) return [];
+  return [
+    {
+      conditionId: row.condition_id,
+      tokenId: row.token_id,
       sizeUsdc,
-      observedAt,
     },
   ];
 }
