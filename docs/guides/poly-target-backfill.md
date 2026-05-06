@@ -157,3 +157,37 @@ Same shape as candidate-a; key in `.local/{env}-vm-key`, password in `.env.{prev
 - **CP9** — SQL-aggregate `getDistributionsSlice`. Removes the 25 K cap; `summariseOrderFlow`'s histograms become `width_bucket` + `PERCENTILE_DISC` queries. Pattern: snapshot's implementation in `wallet-analysis-service.ts` is the reference.
 - **PR #1265 wiring** — once that lands, drop the "Gamma rate-limit gotcha" and the `poly_market_metadata` row of this guide can point at PR 1265's writer instead.
 - **Backfill-source provenance** — current loader tags `raw.backfill_source = 'spike.5024'`. Future loaders should pass a `--source-tag` flag so each backfill batch is independently revertable.
+
+## How to verify a backfill (and where it will NOT show up)
+
+Two `*_fills` tables exist; they look interchangeable but feed different surfaces. Confusing them is the #1 way to misjudge a backfill as broken.
+
+| table                   | source                                                  | what UI reads it                                                                                                                                                |
+| ----------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `poly_trader_fills`     | polymarket Data API `/activity?type=TRADE`              | research slices: `getTradesSlice`, `getDistributionsSlice`, `getSnapshotSlice`, `getBalanceSlice`, `getExecutionSlice` (`/api/v1/poly/wallets/[addr]?slices=…`) |
+| `poly_copy_trade_fills` | local mirror order ledger (one row per attempted order) | dashboard `TRADES / DAY` chart + Open/History tabs via `orderLedger.listTenantPositions` (`/api/v1/poly/wallet/execution`)                                      |
+
+**The backfill scripts (`walk.ts` + `load.ts`) only write `poly_trader_fills`.** They do NOT write `poly_copy_trade_fills` — that table is local-event-driven (mirror coordinator writes one row per order placement; no polymarket equivalent). So:
+
+- ✅ A successful backfill **will** show in research slices, P/L charts (after `pnl-backfill.ts`), Markets/Distributions/Snapshot.
+- ❌ A successful backfill **will NOT** show in the dashboard's TRADES/DAY bar chart — that surface is bounded by when the local mirror coordinator was running and authenticated.
+
+### Verification checklist (do these, not "look at the chart")
+
+1. **Row-count parity**: pull polymarket `/activity?user=…&type=TRADE&limit=500` for a recent slice; dedupe by `(transactionHash, asset, side)`; compare against `SELECT count(*) FROM poly_trader_fills WHERE trader_wallet_id = …` for the same time window. Expect 99–100% match (1–3% delta = walk's pagination boundary-dedupe rate).
+2. **Spot-check 5 newest tx_hashes**: pick 5 from polymarket inside the walk window, `WHERE tx_hash IN (...)`. Should be 5/5 present with matching shares + observed_at.
+3. **Sample 100 mid-window**: same as above with 100 random txs from inside `[walk.start, walk.end - 30min]`. Expect ≥99% present.
+4. **Hit the API directly**: `curl https://<env>.cognidao.org/api/v1/poly/wallets/<addr>?slices=trades` returns the JSON the research view consumes — easier than spelunking through tabs.
+
+### Gotcha: error-row spam can blank the TRADES/DAY chart even when real fills exist
+
+If CLOB auth is failing in your env (e.g. candidate-a `stale_api_key`), the mirror generates ~5K `status='error'` rows/day in `poly_copy_trade_fills`. The chart's underlying query is `SELECT … WHERE status IN (… 'error') ORDER BY observed_at DESC LIMIT 2000` (`DASHBOARD_LEDGER_POSITION_LIMIT` in `_lib/ledger-positions.ts`). The error rows flood the LIMIT window and push real `filled` rows past the cutoff → `shouldCountLedgerTrade` returns 0 trades for every day. **Symptom looks identical to "backfill failed".**
+
+Mitigation:
+
+- One-shot for a stuck candidate-a env: `DELETE FROM poly_copy_trade_fills WHERE billing_account_id='<your-ba>' AND status='error' AND observed_at >= now() - interval '14 days'`. Idempotent — mirror just re-errors. Unmasks the real fills immediately.
+- Permanent fix: drop `'error'` from `DASHBOARD_LEDGER_POSITION_STATUSES` in `_lib/ledger-positions.ts:39`, or split the chart query from the lifecycle query.
+
+### Gotcha: P/L chart vs TRADES/DAY chart will look out of sync during a backfill
+
+P/L chart reads `poly_trader_user_pnl_points` (full-history via `pnl-backfill.ts`). TRADES/DAY reads `poly_copy_trade_fills` (mirror-uptime-bounded). After a fresh backfill onto an env where the mirror only recently came online, P/L will show full history while TRADES/DAY shows only the mirror-uptime tail. **This is expected; not a bug.**
