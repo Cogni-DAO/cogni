@@ -22,15 +22,13 @@
  *     redefining cashPnl, stale row drift) does not silently mis-aggregate.
  *     COALESCE retains the prior derivation as a defensive fallback when `raw`
  *     is null or lacks `cashPnl`.
- *   - FRESH_OBSERVATION_ONLY: aggregations exclude rows whose
- *     `last_observed_at` is older than `STALE_POSITION_TTL` (6h). Phantom
- *     rows accumulate when /positions pagination caps out for big wallets
- *     and the writer skips its complete-only deactivation path
- *     (trader-observation-service.ts:656-658). Filtering at read-time keeps
- *     the bucket honest without depending on the writer being fixed
- *     (bug.5025 owns the upstream fix). A wallet whose observation tick has
- *     stalled for >6h reports zero counts here — preferable to summing
- *     stale frozen values.
+ *   - LIVE_POSITION_ONLY: aggregations include only positions that are
+ *     `active=true AND shares>0 AND last_observed_at >= NOW() - 6h` —
+ *     `liveCurrentPositionSql` from `current-position-staleness.ts`.
+ *     Excludes (a) closed positions Polymarket still echoes back when we
+ *     poll with `sizeThreshold=0` (size=0, frozen costBasis, currentValue=0
+ *     — would otherwise sum the historical buy-in as a phantom loss), and
+ *     (b) rows whose observation tick has stalled (writer-side bug.5025).
  * Side-effects: DB reads only.
  * Links: docs/design/poly-copy-target-performance-benchmark.md, work/items/task.5005
  * @public
@@ -46,7 +44,7 @@ import type {
 import { eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { freshActiveSql } from "./current-position-staleness";
+import { liveCurrentPositionSql } from "./current-position-staleness";
 
 type Db =
   | NodePgDatabase<Record<string, unknown>>
@@ -145,7 +143,7 @@ async function readOverlapRows(
           p.current_value_usdc::numeric - p.cost_basis_usdc::numeric
         ) AS pnl_usdc
       FROM poly_trader_current_positions p
-      WHERE ${freshActiveSql("p")}
+      WHERE ${liveCurrentPositionSql("p")}
         AND p.trader_wallet_id IN (${rn1WalletId}, ${swisstonyWalletId})
     ),
     markets AS (

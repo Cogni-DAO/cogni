@@ -26,7 +26,7 @@ import type {
   WalletExecutionWarning,
 } from "@cogni/poly-node-contracts";
 import { type SQL, sql } from "drizzle-orm";
-import { freshActiveSql } from "./current-position-staleness";
+import { liveCurrentPositionSql } from "./current-position-staleness";
 
 type Db = {
   execute(query: SQL): Promise<unknown>;
@@ -107,8 +107,7 @@ export async function readCurrentWalletPositionModel(params: {
        AND c.source = ${OBSERVATION_SOURCE}
       LEFT JOIN poly_trader_current_positions p
         ON p.trader_wallet_id = w.id
-       AND ${freshActiveSql("p")}
-       AND p.shares > 0
+       AND ${liveCurrentPositionSql("p")}
       LEFT JOIN poly_redeem_jobs r
         ON lower(r.funder_address) = lower(w.wallet_address)
        AND lower(r.condition_id) = lower(p.condition_id)
