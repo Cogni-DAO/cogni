@@ -146,6 +146,33 @@ describe("getTargetOverlapSlice — PnL source (bug.5020)", () => {
     expect(byKey.swisstony_only?.swisstony.pnlUsdc).toBeLessThanOrEqual(-40);
   });
 
+  it("excludes rows whose last_observed_at is older than STALE_POSITION_TTL (FRESH_OBSERVATION_ONLY)", async () => {
+    const sevenHoursAgo = new Date(Date.now() - 7 * 60 * 60 * 1000);
+    // Stale row: cashPnl = +9_999_999 (huge magnitude). If the staleness
+    // filter regresses, this row pollutes the aggregate and the assertion
+    // below fails by orders of magnitude.
+    await db.insert(polyTraderCurrentPositions).values({
+      traderWalletId: rn1Id,
+      conditionId: COND_RN1,
+      tokenId: TOKEN_RN1,
+      active: true,
+      shares: "100.00000000",
+      costBasisUsdc: "100.00000000",
+      currentValueUsdc: "10.00000000",
+      avgPrice: "1.00000000",
+      contentHash: "hash-bug5020-stale",
+      lastObservedAt: sevenHoursAgo,
+      firstObservedAt: sevenHoursAgo,
+      raw: rawPosition(9_999_999),
+    });
+
+    const result = await getTargetOverlapSlice(db, "ALL");
+    const rn1Bucket = result.buckets.find((b) => b.key === "rn1_only");
+    // The stale row's cashPnl (+9.9M) MUST NOT appear in the aggregate. Any
+    // total >= 1_000_000 means the filter regressed.
+    expect(rn1Bucket?.rn1.pnlUsdc ?? 0).toBeLessThan(1_000_000);
+  });
+
   it("falls back to currentValue − costBasis when raw lacks cashPnl (defensive)", async () => {
     await db.insert(polyTraderCurrentPositions).values({
       traderWalletId: rn1Id,

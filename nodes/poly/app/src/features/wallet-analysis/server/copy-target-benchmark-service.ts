@@ -294,7 +294,7 @@ async function readSummary(
         w.kind
       FROM poly_trader_current_positions p
       JOIN poly_trader_wallets w ON w.id = p.trader_wallet_id
-      WHERE p.active = true
+      WHERE ${freshActiveSql("p")}
       ORDER BY p.trader_wallet_id, p.condition_id, p.token_id, p.last_observed_at DESC
     )
       SELECT
@@ -367,7 +367,7 @@ async function readActiveGaps(
         w.kind
       FROM poly_trader_current_positions p
       JOIN poly_trader_wallets w ON w.id = p.trader_wallet_id
-      WHERE p.active = true
+      WHERE ${freshActiveSql("p")}
       ORDER BY p.trader_wallet_id, p.condition_id, p.token_id, p.last_observed_at DESC
     ),
     cogni AS (
@@ -398,13 +398,13 @@ async function readHedgePolicyRows(
   return (await db.execute(sql`
     WITH active_target AS (
       SELECT
-        condition_id,
-        token_id,
-        cost_basis_usdc::numeric AS cost_basis_usdc
-      FROM poly_trader_current_positions
-      WHERE trader_wallet_id = ${targetWalletId}
-        AND active = true
-        AND cost_basis_usdc > 0
+        p.condition_id,
+        p.token_id,
+        p.cost_basis_usdc::numeric AS cost_basis_usdc
+      FROM poly_trader_current_positions p
+      WHERE p.trader_wallet_id = ${targetWalletId}
+        AND ${freshActiveSql("p")}
+        AND p.cost_basis_usdc > 0
     ),
     binary_conditions AS (
       SELECT

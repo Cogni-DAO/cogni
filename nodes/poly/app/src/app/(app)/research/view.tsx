@@ -14,8 +14,10 @@
  *   - WALLET_TABLE_SINGLETON: renders via `@app/(app)/_components/wallets-table`.
  *     Sort/filter/hide controls live in each column header (reui kit) —
  *     no parallel toolbar chips.
- *   - URL_DRIVEN_STATE: q / period / tracked / sort all round-trip through
- *     the URL for shareable views.
+ *   - URL_DRIVEN_STATE: q / period / tracked / sort round-trip through the
+ *     URL for shareable views. `pageInterval` (the research benchmark board's
+ *     time window) is intentionally session-only today — adding it to the URL
+ *     requires lifting state out of `ResearchBenchmarkBoard`; see bug.5026.
  *   - COPY_TARGETS_QUERY_KEY shared with the dashboard copy-target controls so flips
  *     reflect across surfaces.
  * Side-effects: IO (React Query — fetchTopWallets, fetchCopyTargets,

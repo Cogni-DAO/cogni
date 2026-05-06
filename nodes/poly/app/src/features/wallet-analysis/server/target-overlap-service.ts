@@ -46,12 +46,11 @@ import type {
 import { eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { freshActiveSql } from "./current-position-staleness";
 
 type Db =
   | NodePgDatabase<Record<string, unknown>>
   | PostgresJsDatabase<Record<string, unknown>>;
-
-const STALE_POSITION_TTL = "6 hours";
 
 const RN1 = {
   label: "RN1" as const,
@@ -146,8 +145,7 @@ async function readOverlapRows(
           p.current_value_usdc::numeric - p.cost_basis_usdc::numeric
         ) AS pnl_usdc
       FROM poly_trader_current_positions p
-      WHERE p.active = true
-        AND p.last_observed_at >= NOW() - INTERVAL '${sql.raw(STALE_POSITION_TTL)}'
+      WHERE ${freshActiveSql("p")}
         AND p.trader_wallet_id IN (${rn1WalletId}, ${swisstonyWalletId})
     ),
     markets AS (

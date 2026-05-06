@@ -55,6 +55,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { clearTtlCacheByPrefix, coalesce } from "./coalesce";
+import { freshActiveCurrentPositions } from "./current-position-staleness";
 import {
   pickStoredPriceHistoryFidelity,
   readPriceHistoryFromDb,
@@ -988,7 +989,7 @@ async function readCurrentPositionsFromDb(
     .where(
       and(
         eq(polyTraderWallets.walletAddress, addr.toLowerCase()),
-        eq(polyTraderCurrentPositions.active, true)
+        freshActiveCurrentPositions()
       )
     );
   return rows as DbCurrentPositionRow[];
