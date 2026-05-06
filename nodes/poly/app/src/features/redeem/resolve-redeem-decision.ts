@@ -104,7 +104,9 @@ export async function resolveRedeemCandidatesForCondition(deps: {
 
   const allPositions =
     deps.positions ??
-    (await deps.dataApiClient.listUserPositions(deps.funderAddress));
+    (await deps.dataApiClient.listUserPositions(deps.funderAddress, {
+      market: conditionId,
+    }));
   const matches = allPositions.filter((p) => {
     try {
       return normalizePolygonConditionId(p.conditionId) === conditionId;

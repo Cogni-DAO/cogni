@@ -204,7 +204,7 @@ async function replayConditionResolutions(
     }
     const positions =
       conditionIds.size > 0
-        ? await deps.dataApiClient.listUserPositions(deps.funderAddress)
+        ? await deps.dataApiClient.listAllUserPositions(deps.funderAddress)
         : [];
     if (conditionIds.size > 0) stats.positionFetches += 1;
     stats.conditionIds += conditionIds.size;

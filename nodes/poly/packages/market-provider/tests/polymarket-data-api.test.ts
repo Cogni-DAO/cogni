@@ -261,6 +261,77 @@ describe("PolymarketDataApiClient.listUserPositions", () => {
   });
 });
 
+describe("PolymarketDataApiClient.listAllUserPositions", () => {
+  const wallet = "0x9f2fe025f84839ca81dd8e0338892605702d2ca8";
+
+  function makePosition(asset: string) {
+    return {
+      proxyWallet: wallet,
+      asset,
+      conditionId: `c-${asset}`,
+      size: 1,
+      avgPrice: 0.5,
+      initialValue: 0.5,
+      currentValue: 0.5,
+      cashPnl: 0,
+      percentPnl: 0,
+      realizedPnl: 0,
+      curPrice: 0.5,
+      redeemable: false,
+    };
+  }
+
+  it("walks pages until a short page is returned and concatenates rows", async () => {
+    const fullPage = Array.from({ length: 500 }, (_, i) => makePosition(`a${i}`));
+    const tailPage = Array.from({ length: 17 }, (_, i) => makePosition(`b${i}`));
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(fullPage))
+      .mockResolvedValueOnce(jsonResponse(tailPage));
+    const client = new PolymarketDataApiClient({ fetch: fetchImpl });
+
+    const all = await client.listAllUserPositions(wallet);
+
+    expect(all).toHaveLength(517);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const firstUrl = fetchImpl.mock.calls[0]?.[0] as string;
+    const secondUrl = fetchImpl.mock.calls[1]?.[0] as string;
+    expect(firstUrl).toContain("limit=500");
+    expect(firstUrl).toContain("offset=0");
+    expect(secondUrl).toContain("limit=500");
+    expect(secondUrl).toContain("offset=500");
+  });
+
+  it("stops at the first page when fewer than PAGE_SIZE rows are returned", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([makePosition("only")]));
+    const client = new PolymarketDataApiClient({ fetch: fetchImpl });
+
+    const all = await client.listAllUserPositions(wallet);
+
+    expect(all).toHaveLength(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns [] when the wallet holds no positions", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse([]));
+    const client = new PolymarketDataApiClient({ fetch: fetchImpl });
+    expect(await client.listAllUserPositions(wallet)).toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards baseParams (sizeThreshold) on every page", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse([]));
+    const client = new PolymarketDataApiClient({ fetch: fetchImpl });
+    await client.listAllUserPositions(wallet, { sizeThreshold: 5 });
+    const url = fetchImpl.mock.calls[0]?.[0] as string;
+    expect(url).toContain("sizeThreshold=5");
+    expect(url).toContain("limit=500");
+    expect(url).toContain("offset=0");
+  });
+});
+
 describe("PolymarketDataApiClient.listActivity", () => {
   const wallet = "0x9f2fe025f84839ca81dd8e0338892605702d2ca8";
 

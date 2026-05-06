@@ -346,7 +346,7 @@ async function backfillLifecycleStates(
   log: Logger
 ): Promise<void> {
   const startedAt = Date.now();
-  const positions = await dataApiClient.listUserPositions(funderAddress);
+  const positions = await dataApiClient.listAllUserPositions(funderAddress);
   const conditionIds = new Set<`0x${string}`>();
   for (const p of positions) {
     if (!p.conditionId) continue;

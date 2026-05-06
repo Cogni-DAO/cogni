@@ -41,7 +41,7 @@ describe("runRedeemCatchup", () => {
         ];
       }
     );
-    const listUserPositions = vi.fn(async () => POSITIONS);
+    const listAllUserPositions = vi.fn(async () => POSITIONS);
     const enqueueForCondition = vi.fn(async () => undefined);
     const setLastProcessedBlock = vi.fn(async () => undefined);
 
@@ -56,7 +56,7 @@ describe("runRedeemCatchup", () => {
         getBlockNumber: vi.fn(async () => 5_001n),
         getLogs,
       } as unknown as PublicClient,
-      dataApiClient: { listUserPositions } as never,
+      dataApiClient: { listAllUserPositions } as never,
       funderAddress: FUNDER,
       subscriber: { enqueueForCondition } as unknown as RedeemSubscriber,
       logger: {
@@ -73,7 +73,7 @@ describe("runRedeemCatchup", () => {
     expect(conditionRanges).toHaveLength(11);
     expect(conditionRanges[0]).toEqual([1n, 500n]);
     expect(conditionRanges.at(-1)).toEqual([5_001n, 5_001n]);
-    expect(listUserPositions).toHaveBeenCalledTimes(11);
+    expect(listAllUserPositions).toHaveBeenCalledTimes(11);
     expect(enqueueForCondition).toHaveBeenCalledTimes(11);
     for (const call of enqueueForCondition.mock.calls) {
       expect(call).toEqual([CONDITION_ID, POSITIONS]);
