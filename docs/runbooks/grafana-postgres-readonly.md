@@ -27,157 +27,110 @@ This mirrors the log-access model in `.claude/commands/logs.md`:
 
 The PDC signing token is not an agent read credential. It is a deploy-time tunnel credential used by the PDC agent to get an SSH certificate from Grafana Cloud. Agents should normally only need `GRAFANA_URL` + `GRAFANA_SERVICE_ACCOUNT_TOKEN` to query an already-provisioned datasource.
 
-## Human Unblock: Candidate-A PDC
+## Bootstrap: PDC for a New Environment
 
-Current state: the Grafana service-account token can create datasources. Candidate-a is only missing the PDC values that let Grafana Cloud reach private `postgres:5432` without opening Postgres to the internet.
+Bootstrapping Grafana Cloud Postgres read access for an environment (`candidate-a`, `preview`, `production`) is a **three-stage** flow. Skipping any stage produces a connected agent that Grafana cannot route to. The error you see when stage 3 is missing is `socks connect ... ->postgres:5432: unknown error network unreachable`.
 
-This is a **Docker Compose runtime** setup, not a k8s setup. Candidate-a Postgres runs in the VM Compose stack, and the PDC agent runs in that same Compose project/network next to Postgres. Grafana Cloud reaches the Docker-internal host `postgres:5432` through PDC. K8s only consumes Postgres through existing EndpointSlice bridges; do not deploy the PDC agent in k8s for this path.
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ Stage 1: Mint a PDC signing token                       (Grafana UI)  │
+│ Stage 2: Drop secrets into env + run infra deploy       (CLI + CI)    │
+│ Stage 3: Bind each datasource to the PDC network        (Grafana UI)  │
+└──────────────────────────────────────────────────────────────────────┘
+```
 
-Human does this once through `setup-secrets`. Grafana generates one secret here, the PDC signing token, and also prints two non-secret command fields that must be stored with it:
+### Stable concepts
 
-- `GCLOUD_PDC_SIGNING_TOKEN` → `GRAFANA_PDC_SIGNING_TOKEN`
-- `-cluster ...` → `GRAFANA_PDC_CLUSTER`
-- `-gcloud-hosted-grafana-id ...` → `GRAFANA_PDC_HOSTED_GRAFANA_ID`
+These don't change between environments and don't need to be re-derived:
 
-Do not derive `GRAFANA_PDC_HOSTED_GRAFANA_ID` from the token payload. In the candidate-a failure, the token payload field was `1604239`, while Grafana's generated Docker command used hosted Grafana ID `1454488`; the signer accepts the latter.
+- **PDC network** — one per Grafana org by default. For this org: `pdc-derekg1729-default`. Multiple environments can share one network; they are distinguished by separate signing tokens, not separate networks.
+- **`GRAFANA_PDC_HOSTED_GRAFANA_ID`** — stable per Grafana org. Copy from the Docker snippet on the **Configuration Details** tab of the PDC network.
+- **`GRAFANA_PDC_CLUSTER`** — stable per Grafana org region (e.g. `prod-ap-southeast-1`). Copy from the same Docker snippet.
 
-### UI Landmarks
+These vary per environment:
 
-There are two similar-looking Grafana surfaces. They are not interchangeable:
+- **`GRAFANA_PDC_SIGNING_TOKEN`** — generate one fresh `glc_…` per environment so tokens can be revoked independently.
+- The runtime `pdc-agent` container — runs in each env's Compose stack, on the `internal` network alongside `postgres`.
 
-1. **Datasource edit page** — verifies which PDC network a datasource uses.
+### Footguns proven in the field
 
-   Candidate-a operator datasource:
+- The token JWT payload's `.n` field is the **token name**, not the network identifier. Do not feed it to anything as a network id.
+- `GRAFANA_PDC_HOSTED_GRAFANA_ID` cannot be derived from the token payload — it does not appear there. Always copy it from the Docker snippet.
+- `secureSocksProxyUsername` set on a datasource via the API is **not sufficient**. Grafana Cloud routes by the datasource ↔ PDC binding established through the Connection > **Private data source connect** dropdown on the datasource page (Stage 3 below). Without that, the agent connects, the SOCKS gateway is reachable, and queries still fail with `network unreachable`.
 
-   <https://derekg1729.grafana.net/connections/datasources/edit/cogni-candidate-a-operator-postgres>
+### Stage 1 — Mint a signing token
 
-   Use this page to confirm:
+UI:
 
-   - datasource UID: `cogni-candidate-a-operator-postgres`
-   - datasource URL: `postgres:5432`
-   - private data source connect network: `pdc-derekg1729-default-candidate-a-postgres`
+1. Open **Connections → Private data source connections**: <https://derekg1729.grafana.net/connections/private-data-source-connections>
+2. Open the org PDC network (`pdc-derekg1729-default`).
+3. **Configuration Details** tab → **Use a PDC signing token** → **Create a new token**.
+4. Token name: `<env>-postgres-YYYYMMDD` (descriptive only; routing does not use this name).
+5. Expiration: `No expiry` is acceptable for v0; rotate on a calendar otherwise.
+6. **Create token**, then immediately copy three things from the generated Docker snippet — Grafana shows the token value once:
 
-   Do not create PDC signing tokens from the datasource page; it is only the datasource attachment point.
+   - `glc_…` value (after `-token`) — store as `GRAFANA_PDC_SIGNING_TOKEN`
+   - integer (after `-gcloud-hosted-grafana-id`) — store as `GRAFANA_PDC_HOSTED_GRAFANA_ID`
+   - region string (after `-cluster`) — store as `GRAFANA_PDC_CLUSTER`
 
-2. **PDC network page** — creates/manages the PDC signing token used by the agent.
-
-   Breadcrumb shown by Grafana:
-
-   ```text
-   Connections > Private data source connect > pdc-derekg1729-default
-   ```
-
-   This page has:
-
-   - `Overview` tab — shows network name, connection status, token table, and data sources using the network
-   - `Configuration Details` tab — shows Docker/Kubernetes/Binary install instructions and the token-generation form
-
-   The existing candidate-a datasource is attached to this PDC network. On the Overview tab, the Tokens table should show a token row named like `candidate-a-postgres ...`; that existing row proves a token was created before, but Grafana does not show the secret value again. Use **Add token** or the **Configuration Details** tab to generate a fresh secret value.
-
-Run:
+### Stage 2 — Drop secrets into the env and deploy
 
 ```bash
-pnpm setup:secrets --env candidate-a --only GRAFANA_PDC --all
+pnpm setup:secrets --env <env> --only GRAFANA_PDC --all
 ```
 
-When the prompts ask for PDC values:
+This writes both the GitHub `<env>` environment secrets and the local `.env.<env>` file. Do not store the signing token in `.env.cogni`; that file is for agent-read credentials only.
 
-1. Open the candidate-a datasource edit page:
-   <https://derekg1729.grafana.net/connections/datasources/edit/cogni-candidate-a-operator-postgres>
-2. Confirm its private data source connect network is `pdc-derekg1729-default-candidate-a-postgres`.
-3. Navigate one level up to the PDC network page:
-   `Connections > Private data source connect > pdc-derekg1729-default`.
-4. On the PDC network page, use either:
-   - `Overview` tab → `Tokens` section → **Add token**, or
-   - `Configuration Details` tab → `Use a PDC signing token` → **Create a new token**
-5. Token name: `candidate-a-postgres-YYYYMMDD` (or similarly descriptive).
-6. Expiration: for the candidate-a prototype, `No expiry` is acceptable; once stable, rotate on a calendar or choose an expiry that matches the rotation process.
-7. Click **Create token**.
-8. Copy the generated token value. Grafana only shows the secret once.
-9. From the Docker command snippet, also copy:
-   - the value after `-cluster`
-   - the value after `-gcloud-hosted-grafana-id`
-10. Paste those values into the matching `setup-secrets` prompts.
+Preflight the token before triggering CI (catches a bad token in 2 seconds rather than 5 minutes):
 
 ```bash
-GRAFANA_PDC_SIGNING_TOKEN=<GCLOUD_PDC_SIGNING_TOKEN from Grafana>
-GRAFANA_PDC_CLUSTER=prod-ap-southeast-1
-GRAFANA_PDC_HOSTED_GRAFANA_ID=1454488
+COGNI_ENV_FILE=.env.<env> bash scripts/grafana-pdc-token-preflight.sh
 ```
 
-Do not store this token in `.env.cogni`. It is a deploy secret and belongs in the GitHub `candidate-a` environment. `setup-secrets` writes it there.
+Expected: `[grafana-pdc-preflight] signer preflight passed: HTTP 200`. HTTP 401 means the signing token + hosted-grafana-id pair is wrong; redo Stage 1.
 
-If the candidate-a run shows this PDC agent error:
+Then run the env's infra deploy (for `candidate-a`, `gh workflow run candidate-flight-infra.yml --ref <branch>`; for `preview`/`production`, the standard promote/deploy path). The deploy:
 
-```text
-key signing request failed: invalid credentials
-```
+- starts the `pdc-agent` Compose service alongside the existing infra,
+- prints the agent's first ~40 log lines into the workflow output (look for `Authenticated to private-datasource-connect…` and `This is Grafana Private Datasource Connect!`),
+- runs `scripts/ci/provision-grafana-postgres-datasources.sh` to create one datasource per node DB.
 
-the token is not usable by PDC. Per Grafana troubleshooting, generate a fresh token from the same **Configuration Details** screen and replace `GRAFANA_PDC_SIGNING_TOKEN`; do not debug Postgres or Grafana datasource JSON first.
+After this stage, two of three signals are green:
 
-Before storing or deploying a replacement token, preflight it directly against Grafana's signer:
+| Signal | Where | Expected |
+| --- | --- | --- |
+| Tunnel up | workflow output | `connected` / `Authenticated` lines |
+| Datasource exists | `GET /api/datasources/uid/cogni-<env>-<node>-postgres` | HTTP 200 |
+| Datasource ↔ PDC bound | UI dropdown on datasource page | **not yet** |
+
+The provision script's `select current_user` validation will **fail with `network unreachable`** until Stage 3 is done. That is expected — proceed.
+
+### Stage 3 — Bind each datasource to the PDC network (Grafana UI)
+
+For each datasource the provision script created:
+
+1. Open the datasource edit page:
+   `<grafana-url>/connections/datasources/edit/cogni-<env>-<node>-postgres`
+2. Scroll to the **Connection** section.
+3. Set the **Private data source connect** dropdown to **`pdc-derekg1729-default`**.
+4. Click **Save & test**. Expect: green `Database Connection OK`. The datasource will now appear under "Data sources using this network" on the PDC network's Overview tab.
+
+This step is currently manual because Grafana Cloud writes additional internal state when the dropdown is set that the public API does not (yet) accept on a JSON `PUT`. Until that is captured and reproduced in `provision-grafana-postgres-datasources.sh`, the bootstrap is two-clicks-per-datasource at the end.
+
+### Verify end-to-end (agent-side, no SSH)
 
 ```bash
-GRAFANA_PDC_SIGNING_TOKEN='<GCLOUD_PDC_SIGNING_TOKEN from Grafana>' \
-  scripts/grafana-pdc-token-preflight.sh
+COGNI_ENV_FILE=/path/to/.env.cogni \
+  scripts/grafana-postgres-query.sh \
+    'select current_user, count(*)::int as fills from poly_copy_trade_fills' \
+    cogni-<env>-poly-postgres | jq .
 ```
 
-Expected success:
+Expected: `current_user = app_readonly`, `fills` is an integer.
 
-```text
-[grafana-pdc-preflight] signer preflight passed: HTTP 200
-```
+### Recovery: `key signing request failed: invalid credentials`
 
-If this returns HTTP 401, the token's embedded signing key is not accepted by Grafana Cloud. Do not rerun `candidate-flight-infra`; it will fail later with the same PDC agent error.
-
-When the human gives the agent a replacement token directly, the agent must write it to both places:
-
-```bash
-gh secret set GRAFANA_PDC_SIGNING_TOKEN \
-  --repo Cogni-DAO/node-template \
-  --env candidate-a \
-  --body "$GRAFANA_PDC_SIGNING_TOKEN"
-
-{
-  rg -v '^GRAFANA_PDC_SIGNING_TOKEN=' .env.candidate-a 2>/dev/null || true
-  printf "GRAFANA_PDC_SIGNING_TOKEN='%s'\n" "$GRAFANA_PDC_SIGNING_TOKEN"
-} > .env.candidate-a.tmp
-mv .env.candidate-a.tmp .env.candidate-a
-```
-
-Then tell the agent:
-
-```text
-GRAFANA_PDC_SIGNING_TOKEN is set in the candidate-a GitHub environment. Finish candidate-a Grafana Postgres.
-```
-
-Agent verifies the secret exists, then runs this from the PR branch:
-
-```bash
-gh secret list --repo Cogni-DAO/node-template --env candidate-a | rg '^GRAFANA_PDC_SIGNING_TOKEN[[:space:]]'
-gh workflow run candidate-flight-infra.yml \
-  --repo Cogni-DAO/node-template \
-  --ref codex/grafana-postgres-readonly
-```
-
-After that run finishes, the agent validates:
-
-```bash
-env_file=/Users/derek/dev/cogni-template/.env.cogni
-export GRAFANA_URL="$(rg -m1 '^GRAFANA_URL=' "$env_file" | sed 's/^GRAFANA_URL=//' | awk '{print $1}')"
-export GRAFANA_SERVICE_ACCOUNT_TOKEN="$(rg -m1 '^GRAFANA_SERVICE_ACCOUNT_TOKEN=' "$env_file" | sed 's/^GRAFANA_SERVICE_ACCOUNT_TOKEN=//' | awk '{print $1}')"
-
-scripts/grafana-postgres-query.sh \
-  'select current_user, count(*)::int as fills from poly_copy_trade_fills' \
-  cogni-candidate-a-poly-postgres | jq .
-```
-
-Expected:
-
-```text
-current_user = app_readonly
-fills > 0
-```
+This is a stale or wrong-paired signing token. Mint a fresh one (Stage 1), preflight, re-run Stage 2 only — Stage 3 bindings persist across token rotations because they bind to the network, not the token.
 
 ## Provision
 
@@ -202,7 +155,7 @@ APP_DB_READONLY_PASSWORD=<derived from POSTGRES_ROOT_PASSWORD>
 GRAFANA_PDC_SIGNING_TOKEN=<token from PDC Configuration Details>
 ```
 
-`GRAFANA_PDC_CLUSTER` and `GRAFANA_PDC_NETWORK_ID` can be derived from `GRAFANA_PDC_SIGNING_TOKEN`. `GRAFANA_PDC_HOSTED_GRAFANA_ID` must come from Grafana's generated PDC agent command.
+`GRAFANA_PDC_CLUSTER` and `GRAFANA_PDC_HOSTED_GRAFANA_ID` come from Grafana's generated PDC agent Docker command (Configuration Details tab). They are stable per Grafana org and do not need to be re-copied per environment. `GRAFANA_PDC_NETWORK_ID` is intentionally not used by the runtime path — `secureSocksProxyUsername` in the datasource config does not establish PDC routing on Grafana Cloud; the UI dropdown does (Stage 3). The legacy `GRAFANA_PDC_NETWORK_ID` env var remains read in places only as historical baggage.
 
 ## Grafana Datasource
 
@@ -310,9 +263,9 @@ Expected: the write probe fails with permission/read-only errors.
 Both helpers source from the first present file in `$COGNI_ENV_FILE`, then `./.env.canary`, then `./.env.local`:
 
 - `GRAFANA_URL` (e.g. `https://<org>.grafana.net`)
-- `GRAFANA_SERVICE_ACCOUNT_TOKEN` (`glsa_…`, with `datasources:read` + `datasources:query`)
+- `GRAFANA_SERVICE_ACCOUNT_TOKEN` (`glsa_…`)
 
-If `GRAFANA_SERVICE_ACCOUNT_TOKEN` returns HTTP 401 against `${GRAFANA_URL}/api/datasources`, the local copy is stale relative to the GitHub `candidate-a` env secret — rotate the local file (don't rotate the GitHub secret) by re-pasting from Grafana → Administration → Service accounts.
+The same `glsa_…` token is used by CI to provision datasources and by agents to read them, so it needs all four datasource permissions: `datasources:read`, `datasources:query`, `datasources:create`, `datasources:write`. The simplest way to satisfy this is to attach the token to a service account with role **Editor** (or **Admin**); a `Viewer`-role SA will 403 on PUT during provisioning.
 
 The PDC signing token (`glc_…`) is not used at agent-read time. It only authenticates the runtime `pdc-agent` container at deploy time.
 

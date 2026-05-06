@@ -47,19 +47,15 @@ derive_pdc_defaults_from_token() {
   decoded="$(base64url_decode "${GRAFANA_PDC_SIGNING_TOKEN#glc_}" 2>/dev/null || true)"
   [[ -n "$decoded" ]] || return 0
 
-  local network_id cluster hosted_id
+  local network_id cluster
   network_id="$(printf '%s' "$decoded" | jq -r '.n // empty')"
   cluster="$(printf '%s' "$decoded" | jq -r '.m.r // empty')"
-  hosted_id="$(printf '%s' "$decoded" | jq -r '.o // empty')"
 
   if missing_or_placeholder "${GRAFANA_PDC_NETWORK_ID:-}" && [[ -n "$network_id" ]]; then
     GRAFANA_PDC_NETWORK_ID="$network_id"
   fi
   if missing_or_placeholder "${GRAFANA_PDC_CLUSTER:-}" && [[ -n "$cluster" ]]; then
     GRAFANA_PDC_CLUSTER="$cluster"
-  fi
-  if missing_or_placeholder "${GRAFANA_PDC_HOSTED_GRAFANA_ID:-}" && [[ -n "$hosted_id" ]]; then
-    GRAFANA_PDC_HOSTED_GRAFANA_ID="$hosted_id"
   fi
 }
 
@@ -86,7 +82,17 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 derive_pdc_defaults_from_token
-: "${GRAFANA_PDC_NETWORK_ID:?GRAFANA_PDC_NETWORK_ID not set and could not be derived from GRAFANA_PDC_SIGNING_TOKEN; refusing to provision public Postgres datasources}"
+# GRAFANA_PDC_NETWORK_UUID is the *internal* Grafana network identifier that
+# binds a datasource to a PDC network. The legacy GRAFANA_PDC_NETWORK_ID
+# (derived from the signing-token payload) is the human network NAME and is
+# *not* what Grafana Cloud routes by — see docs/runbooks/grafana-postgres-readonly.md.
+#
+# The UUID is stable per Grafana org. Discover it once via:
+#   curl -H "Authorization: Bearer $GRAFANA_SERVICE_ACCOUNT_TOKEN" \
+#     "$GRAFANA_URL/api/datasources/uid/<any-bound-datasource>" \
+#     | jq -r '.jsonData.secureSocksProxyUsername'
+# Store it as the env-level GitHub secret GRAFANA_PDC_NETWORK_UUID.
+: "${GRAFANA_PDC_NETWORK_UUID:?GRAFANA_PDC_NETWORK_UUID not set; copy from the secureSocksProxyUsername field of an existing UI-bound Postgres datasource and store as the GRAFANA_PDC_NETWORK_UUID env secret. See runbook.}"
 
 grafana_base="${GRAFANA_URL%/}"
 datasource_host="${GRAFANA_POSTGRES_HOST:-postgres:5432}"
@@ -121,11 +127,11 @@ for db_name in "${grafana_dbs[@]}"; do
     --arg user "$readonly_user" \
     --arg database "$db_name" \
     --arg password "$readonly_password" \
-    --arg pdc_network_id "$GRAFANA_PDC_NETWORK_ID" \
+    --arg pdc_network_uuid "$GRAFANA_PDC_NETWORK_UUID" \
     '{
       name: $name,
       uid: $uid,
-      type: "postgres",
+      type: "grafana-postgresql-datasource",
       access: "proxy",
       url: $url,
       user: $user,
@@ -135,7 +141,8 @@ for db_name in "${grafana_dbs[@]}"; do
         postgresVersion: 1500,
         timescaledb: false,
         enableSecureSocksProxy: true,
-        secureSocksProxyUsername: $pdc_network_id
+        secureSocksProxyUsername: $pdc_network_uuid,
+        pdcInjected: true
       },
       secureJsonData: {
         password: $password
@@ -187,7 +194,9 @@ for db_name in "${grafana_dbs[@]}"; do
     -H "Authorization: Bearer ${GRAFANA_SERVICE_ACCOUNT_TOKEN}" \
     -H "content-type: application/json" \
     --data @"$query_file")
-  if [[ "$validate_status" != "200" ]]; then
+  if [[ "$validate_status" == "200" ]]; then
+    log "validated ${uid}: PDC routing reachable, app_readonly auth OK"
+  else
     echo "Grafana datasource validation failed for ${uid}: HTTP ${validate_status}" >&2
     jq . "$validate_response_file" >&2 || cat "$validate_response_file" >&2 || true
     exit 1

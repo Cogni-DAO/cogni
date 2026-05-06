@@ -110,6 +110,7 @@ jobs:
       GRAFANA_PDC_HOSTED_GRAFANA_ID: ${{ secrets.GRAFANA_PDC_HOSTED_GRAFANA_ID }}
       GRAFANA_PDC_CLUSTER: ${{ secrets.GRAFANA_PDC_CLUSTER }}
       GRAFANA_PDC_NETWORK_ID: ${{ secrets.GRAFANA_PDC_NETWORK_ID }}
+      GRAFANA_PDC_NETWORK_UUID: ${{ secrets.GRAFANA_PDC_NETWORK_UUID }}
       GH_REVIEW_APP_ID: ${{ secrets.GH_REVIEW_APP_ID }}
       GH_REVIEW_APP_PRIVATE_KEY_BASE64: ${{ secrets.GH_REVIEW_APP_PRIVATE_KEY_BASE64 }}
       GH_REPOS: ${{ vars.GH_REPOS }}
@@ -180,6 +181,10 @@ jobs:
             exit 1
           fi
           echo "✅ SSH connection successful"
+
+      - name: Preflight Grafana PDC signing token
+        if: env.VM_HOST != '' && env.GRAFANA_PDC_SIGNING_TOKEN != ''
+        run: bash scripts/grafana-pdc-token-preflight.sh
 
       - name: Deploy Compose infra to candidate-a VM
         if: env.VM_HOST != ''

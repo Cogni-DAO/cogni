@@ -403,6 +403,7 @@ jobs:
       GRAFANA_PDC_HOSTED_GRAFANA_ID: ${{ secrets.GRAFANA_PDC_HOSTED_GRAFANA_ID }}
       GRAFANA_PDC_CLUSTER: ${{ secrets.GRAFANA_PDC_CLUSTER }}
       GRAFANA_PDC_NETWORK_ID: ${{ secrets.GRAFANA_PDC_NETWORK_ID }}
+      GRAFANA_PDC_NETWORK_UUID: ${{ secrets.GRAFANA_PDC_NETWORK_UUID }}
       GH_REVIEW_APP_ID: ${{ secrets.GH_REVIEW_APP_ID }}
       GH_REVIEW_APP_PRIVATE_KEY_BASE64: ${{ secrets.GH_REVIEW_APP_PRIVATE_KEY_BASE64 }}
       GH_REPOS: ${{ vars.GH_REPOS }}
@@ -437,6 +438,10 @@ jobs:
           echo "${{ secrets.SSH_DEPLOY_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Preflight Grafana PDC signing token
+        if: env.VM_HOST != '' && env.GRAFANA_PDC_SIGNING_TOKEN != ''
+        run: bash scripts/grafana-pdc-token-preflight.sh
 
       - name: Deploy infrastructure
         if: env.VM_HOST != ''
