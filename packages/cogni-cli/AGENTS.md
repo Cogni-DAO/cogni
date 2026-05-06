@@ -5,7 +5,7 @@
 ## Metadata
 
 - **Owners:** @cogni-dao
-- **Status:** prototype
+- **Status:** draft
 
 ## Purpose
 
@@ -23,15 +23,66 @@ The CLI never holds Anthropic / OpenAI credentials; it just shells out to whatev
 ```json
 {
   "layer": "packages",
-  "may_import": ["node:*"]
+  "may_import": [],
+  "must_not_import": [
+    "app",
+    "features",
+    "ports",
+    "core",
+    "adapters",
+    "shared",
+    "services",
+    "packages"
+  ]
 }
 ```
 
-The CLI is dependency-free at runtime — only Node builtins + spawned subprocesses (`claude`, `codex`, `cloudflared`).
+**External deps:** none — only Node builtins (`node:http`, `node:child_process`, `node:net`) plus spawned subprocesses (`claude`, `codex`, `cloudflared`) that the user already has on PATH.
 
-## Non-goals (v0)
+## Public Surface
 
-- No DB persistence (the operator never sees the tunnel; only the browser does).
-- No always-on bridge / no operator-side socket gateway.
-- No live token streaming (uses `claude --print` / `codex exec` batch mode; chunked stdout, not token-by-token).
-- No Codex Channels equivalent — Codex degrades gracefully to "completed-artifact" UX.
+- **Exports (root `@cogni/cli`):** `detectRuntimes`, `parseTunnelUrl`, plus `Runtime` / `RuntimeKind` types — re-exported for tests only.
+- **Bin (`cogni`):** `dist/cli.js` is the executable entry point. Subcommand: `cogni dev`.
+- **Files considered API:** `src/index.ts` (library barrel), `src/cli.ts` (binary entry).
+
+## Ports (optional)
+
+- **Uses ports:** none
+- **Implements ports:** none (this is a leaf consumer that talks only to local subprocesses)
+
+## Responsibilities
+
+- This directory **does**: detect installed local agent runtimes; expose them on a 127.0.0.1 HTTP server; spawn cloudflared; print the studio URL; open a browser.
+- This directory **does not**: hold Anthropic / OpenAI credentials, persist any state across runs, talk to the operator's database, or implement any operator API endpoint.
+
+## Usage
+
+```bash
+pnpm --filter @cogni/cli build
+pnpm --filter @cogni/cli typecheck
+pnpm --filter @cogni/cli test
+node packages/cogni-cli/dist/cli.js dev
+```
+
+## Standards
+
+- No npm runtime dependencies. Node builtins only.
+- The local server binds to `127.0.0.1` exclusively; public reachability is the cloudflared tunnel's job and the user's choice.
+- CORS allow-list never contains `*`.
+
+## Dependencies
+
+- **Internal:** none (leaf package)
+- **External:** none at runtime; `tsup`, `typescript`, `vitest` for build/test only.
+
+## Change Protocol
+
+- Update this file when subcommands, the local HTTP API, or the runtime detection probes change.
+- Coordinate with the BYO Agent Runtime Bridge research doc for any transport / pairing-flow changes.
+
+## Notes
+
+- v0 ships behind no feature flag; the page lives at `/runtimes/dev` and only does anything if `?baseUrl=` is supplied by the CLI. Without that param the page renders pairing instructions and is otherwise inert.
+- Cloudflare quick tunnels are flaky by design. If the tunnel disconnects mid-session, restart `cogni dev` — the studio URL changes each restart.
+- `claude remote-control` requires a TTY today; for headless servers, wrap `cogni dev` in `tmux` until Anthropic ships a daemon mode (tracked upstream).
+- Codex has no Channels equivalent; the page falls back to "completed-artifact" UX rather than live token streaming for both runtimes in v0.
