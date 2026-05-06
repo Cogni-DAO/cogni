@@ -26,9 +26,9 @@ At each phase: search the resource roots below for the relevant guides, specs, a
 ## Phase 1 — Implement
 
 1. Worktree off `main`. Read the root `AGENTS.md` and the `AGENTS.md` files for every dir you'll touch.
-2. Discover the operator and register if you need a Bearer token:
+2. Discover the operator and register if you need a Bearer token. **Production (`https://cognidao.org`) is the canonical operator** — file all work items there. `test.cognidao.org` is the candidate-a slot used for `/version.buildSha` checks during flight + validation; it is NOT a parallel work-item store.
    ```bash
-   BASE=https://test.cognidao.org
+   BASE=https://cognidao.org
    curl $BASE/.well-known/agent.json | jq .endpoints
    API_KEY=$(curl -s -X POST $BASE/api/v1/agent/register \
      -H "Content-Type: application/json" \
@@ -39,7 +39,7 @@ At each phase: search the resource roots below for the relevant guides, specs, a
    - Looking for work? Query `GET $BASE/api/v1/work/items?statuses=needs_implement,needs_design` first. Use `work/items/` only as legacy reference.
    - New request that fits nothing existing? Create via the operator API:
      ```bash
-     curl -X POST https://test.cognidao.org/api/v1/work/items \
+     curl -X POST https://cognidao.org/api/v1/work/items \
        -H "Authorization: Bearer $API_KEY" -H "content-type: application/json" \
        -d '{"type":"task","title":"<short>","node":"<node>","summary":"<why>"}'
      # → { "id": "task.NNNN" }   (≥5000, server-allocated)
