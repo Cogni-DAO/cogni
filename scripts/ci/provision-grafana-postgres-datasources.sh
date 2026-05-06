@@ -153,52 +153,33 @@ for db_name in "${grafana_dbs[@]}"; do
     -H "Authorization: Bearer ${GRAFANA_SERVICE_ACCOUNT_TOKEN}" \
     "${grafana_base}/api/datasources/uid/${uid}")
 
-  if [[ "$status" == "200" ]]; then
-    log "updating ${uid}"
-    curl -fsS -X PUT "${grafana_base}/api/datasources/uid/${uid}" \
-      -H "Authorization: Bearer ${GRAFANA_SERVICE_ACCOUNT_TOKEN}" \
-      -H "content-type: application/json" \
-      --data @"$payload_file" >/dev/null
-  elif [[ "$status" == "404" ]]; then
+  # Always finish with a PUT against the UID. Grafana's per-datasource query
+  # path latches onto whatever decrypted password it derives on first read after
+  # POST; if that read happens before the password is fully persisted, the bad
+  # value persists indefinitely (observed SQLSTATE 28P01 lasting >1min after a
+  # fresh POST, with no recovery until the next deploy's PUT). PUT forces
+  # re-decrypt and refreshes the cached connector. We POST when the UID is
+  # absent, then unconditionally PUT — both fresh-create and steady-state
+  # redeploy take the cache-bust path.
+  if [[ "$status" == "404" ]]; then
     log "creating ${uid}"
     curl -fsS -X POST "${grafana_base}/api/datasources" \
       -H "Authorization: Bearer ${GRAFANA_SERVICE_ACCOUNT_TOKEN}" \
       -H "content-type: application/json" \
       --data @"$payload_file" >/dev/null
-  else
+  elif [[ "$status" != "200" ]]; then
     echo "Grafana datasource lookup failed for ${uid}: HTTP ${status}" >&2
     cat "$response_file" >&2 || true
     exit 1
   fi
 
-  jq -n \
-    --arg uid "$uid" \
-    '{
-      from: "now-5m",
-      to: "now",
-      queries: [
-        {
-          refId: "A",
-          datasource: { uid: $uid, type: "postgres" },
-          rawSql: "select current_user",
-          format: "table",
-          maxDataPoints: 1000,
-          intervalMs: 1000
-        }
-      ]
-    }' > "$query_file"
-
-  log "validating ${uid}"
-  validate_response_file="${tmpdir}/${uid}.validate.response.json"
-  validate_status=$(curl -sS -o "$validate_response_file" -w "%{http_code}" -X POST "${grafana_base}/api/ds/query" \
+  log "putting ${uid} (cache-bust)"
+  curl -fsS -X PUT "${grafana_base}/api/datasources/uid/${uid}" \
     -H "Authorization: Bearer ${GRAFANA_SERVICE_ACCOUNT_TOKEN}" \
     -H "content-type: application/json" \
-    --data @"$query_file")
-  if [[ "$validate_status" == "200" ]]; then
-    log "validated ${uid}: PDC routing reachable, app_readonly auth OK"
-  else
-    echo "Grafana datasource validation failed for ${uid}: HTTP ${validate_status}" >&2
-    jq . "$validate_response_file" >&2 || cat "$validate_response_file" >&2 || true
-    exit 1
-  fi
+    --data @"$payload_file" >/dev/null
+
+  log "provisioned ${uid}"
 done
+
+log "all datasources provisioned; runtime connectivity is verified separately by verify-grafana-postgres-datasources.sh"
