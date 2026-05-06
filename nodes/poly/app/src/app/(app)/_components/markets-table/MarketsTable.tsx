@@ -92,12 +92,19 @@ const DEFAULT_VISIBILITY: VisibilityState = {
   targetReturn: true,
   rateGap: true,
   sizeScaledGap: true,
-  // Tertiary, hidden by default per redesign §4.4 (visual rules).
+  // Tertiary, hidden by default per redesign §4.4 (visual rules). The
+  // `status` column is hidden but its filter is still applied (§6
+  // Decision #4 — default Live-only) — re-show via column dropdown to
+  // toggle to closed.
   status: false,
   pnl: false,
   hedges: false,
 };
 const DEFAULT_SORT: SortingState = [{ id: "sizeScaledGap", desc: true }];
+// Default to Live only — "what's bleeding now" is the headline question;
+// closed positions become visible by re-showing + clearing the Status
+// column filter. Per redesign §6 Decision #4.
+const DEFAULT_FILTERS: ColumnFiltersState = [{ id: "status", value: ["live"] }];
 const PAGE_SIZE = 25;
 const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 
@@ -120,7 +127,8 @@ export function MarketsTable({
 
   const [columnVisibility, setColumnVisibility] =
     useState<VisibilityState>(DEFAULT_VISIBILITY);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnFilters, setColumnFilters] =
+    useState<ColumnFiltersState>(DEFAULT_FILTERS);
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORT);
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
@@ -172,8 +180,8 @@ export function MarketsTable({
           pressed={alphaLeakOnly}
           onPressedChange={setAlphaLeakOnly}
           disabled={isLoading || allGroups.length === 0}
-          aria-label="Show only markets where we lost and the copy target won"
-          title="Markets where we are red and the copy target is green"
+          aria-label="Show only markets where targets are meaningfully ahead of us"
+          title="Markets where targets beat us by ≥5pp on a position with positive dollar gap"
           className="gap-1.5"
         >
           <Flame className="size-3.5" aria-hidden="true" />

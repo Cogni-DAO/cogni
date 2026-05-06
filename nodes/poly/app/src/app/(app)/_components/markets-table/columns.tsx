@@ -594,13 +594,13 @@ function ParticipantsTable({
             </TableHead>
             <TableHead
               className="h-8 px-2 text-right"
-              colSpan={2}
+              colSpan={3}
               aria-label="Net across legs"
             >
               <div className="flex flex-col items-end">
                 <span className="font-medium text-foreground">Net</span>
                 <span className="font-normal text-[var(--text-xs)] text-muted-foreground">
-                  Value · P/L
+                  Value · P/L · Return%
                 </span>
               </div>
             </TableHead>
@@ -703,6 +703,15 @@ function NetPair({
         )}
       >
         {formatSignedUsd(net.pnlUsdc)}
+      </TableCell>
+      <TableCell
+        className={cn(
+          "py-1.5 text-right font-medium tabular-nums",
+          returnClass(net.roundTripReturnPct)
+        )}
+        title="Round-trip USDC return on this trader's deployed capital for this market"
+      >
+        {formatReturnPct(net.roundTripReturnPct)}
       </TableCell>
     </>
   );

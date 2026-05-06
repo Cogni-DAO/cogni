@@ -186,6 +186,15 @@ export const WalletExecutionMarketParticipantRowSchema = z.object({
     currentValueUsdc: z.number().nonnegative(),
     costBasisUsdc: z.number().nonnegative(),
     pnlUsdc: z.number(),
+    /**
+     * Round-trip USDC return on this participant's deployed capital for
+     * this condition, computed Modified-Dietz-style from fills (same
+     * formula as the per-line `ourReturnPct` / `targetReturnPct`). Lets
+     * the expansion grid surface a winner-loser split when the line's
+     * blended `targetReturnPct` hides one. Null when the participant has
+     * no observed buy notional. See §3.5 of the redesign brief.
+     */
+    roundTripReturnPct: z.number().nullable(),
   }),
   lastObservedAt: z.string().nullable(),
 });

@@ -339,7 +339,7 @@ function groupParticipants(
   >();
 
   for (const [conditionId, conditionLegs] of byCondition.entries()) {
-    const participants = pivotParticipants(conditionLegs);
+    const participants = pivotParticipants(conditionLegs, rollups);
     const anchor = pickAnchor(conditionLegs);
     if (anchor === null) continue;
     const eventSlug =
@@ -582,7 +582,8 @@ function aggregateWalletReturn(
 // smaller cost-basis leg is the hedge; the other is primary. Singletons go to
 // primary with hedge=null.
 function pivotParticipants(
-  legs: readonly RawLeg[]
+  legs: readonly RawLeg[],
+  rollups: ReadonlyMap<string, FillRollup>
 ): WalletExecutionMarketParticipantRow[] {
   const byWallet = new Map<string, RawLeg[]>();
   for (const leg of legs) {
@@ -614,6 +615,18 @@ function pivotParticipants(
         .sort()
         .pop() ?? null;
 
+    // Per-participant round-trip return on this condition. Same formula
+    // as the line-level `ourReturnPct` / `targetReturnPct`. Surfaces a
+    // winner-loser split when the line's blended `targetReturnPct`
+    // averages two divergent targets.
+    const useFallback = anchor.side === "our_wallet";
+    const agg = aggregateWalletReturn(walletLegs, rollups, useFallback);
+    const roundTripReturnPct = positionReturnPct({
+      totalBuyNotional: agg.totalBuyNotional,
+      realizedCash: agg.realizedCash,
+      currentMarkValue: agg.currentMarkValue,
+    });
+
     rows.push({
       side: anchor.side,
       source: anchor.source,
@@ -630,6 +643,7 @@ function pivotParticipants(
           (primary?.costBasisUsdc ?? 0) + (hedge?.costBasisUsdc ?? 0)
         ),
         pnlUsdc: roundMoney((primary?.pnlUsdc ?? 0) + (hedge?.pnlUsdc ?? 0)),
+        roundTripReturnPct,
       },
       lastObservedAt,
     });
