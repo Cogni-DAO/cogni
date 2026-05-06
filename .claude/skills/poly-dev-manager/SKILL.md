@@ -9,50 +9,47 @@ You are the orientation layer for Cogni's poly node. This file is intentionally 
 
 ## What the poly node does (one paragraph)
 
-Takes a Polymarket wallet that demonstrably trades with edge and mirrors its fills onto a Cogni-controlled trading wallet. Target wallet trades → `wallet-watch` detects via Polymarket Data-API `/trades` poll → `mirror-coordinator` decides → `INSERT_BEFORE_PLACE` ledger row lands → `PolymarketClobAdapter` signs via Privy HSM → CLOB receipt. v0 shipped single-operator. Phase A shipped RLS on copy-trade tables. Phase B shipped per-tenant Privy trading wallets (`deploy_verified` 2026-04-22 on candidate-a, via [task.0318](../../../work/items/task.0318.poly-wallet-multi-tenant-auth.md)). Phase 4 will swap the 30s poll for CLOB WebSocket + adversarial-robust target ranking.
+Takes a Polymarket wallet that demonstrably trades with edge and mirrors its fills onto a Cogni-controlled trading wallet. Target wallet trades → `wallet-watch` detects (Data-API `/trades` poll, with WS wake-up after #1172) → `mirror-coordinator` decides → `INSERT_BEFORE_PLACE` ledger row lands → `PolymarketClobAdapter` signs via Privy HSM → CLOB receipt. v0 shipped single-operator; Phase A shipped RLS on copy-trade tables; Phase B (task.0318, `deploy_verified` 2026-04-22) shipped per-tenant Privy trading wallets. Phase 4 (task.0322) will swap the 30s poll for CLOB WebSocket + adversarial-robust target ranking.
 
-## Current Status Card (2026-05-03)
+## Current Status Card (2026-05-06)
 
-**Latest copy-policy branch:** PR #1203 lineage. Candidate-a was re-flighted at
-`74afb6a76d4c361b4c54b91c2bb2ba3d3cb71a6b`; re-flight again after any pXX
-snapshot edit.
+**Where the work is right now:** the mirror loop is stable; energy has shifted to the **research / data-science surface** and the **historical backfill** that powers it. Most active code lives under `nodes/poly/app/src/features/wallet-analysis/server/` and `app/(app)/research/`, not in the mirror coordinator. When in doubt about where a new task belongs, default to: trading-algorithm tuning ⇒ `poly-copy-trading`; building or querying a research view ⇒ `data-research`; backfill / data-coverage gap ⇒ both.
 
-**Active copy-trade behavior:**
+**Recent ground-shifts to know before editing anything:**
+
+- **SQL-aggregation is the standard for any read over `poly_trader_fills` / `poly_trader_position_snapshots` / `poly_market_*`.** bug.5012 (2026-05-05) — poly OOM-crashlooped on RN1's 825k-fill backfill; fix was a per-field SQL refactor of `wallet-analysis-service.ts` across cp1–cp7. Naively writing `db.select().from(polyTraderFills).where(...)` is the canonical anti-pattern. See [`data-research`](../data-research/SKILL.md).
+- **Backfill is the live operational concern.** Several derived tables (`poly_trader_position_snapshots`, `poly_market_metadata`, `poly_market_outcomes`, `poly_market_price_history`) started writing only May 1–5; pre-cutover history must be backfilled from `poly_trader_fills` (SQL-derived), `poly_copy_trade_decisions.receipt` (JSONB-derived), or Polymarket APIs (reuse the forward-fill writer with a one-shot driver — never hand-rolled). See coverage caveats in the operational-data-tables block below.
+- **Canonical market-metadata table (#1265, #1270).** `poly_market_metadata` is now the source of titles/event metadata. Older code paths that decoded titles out of jsonb on every query are being retired.
+- **Research tab is the active product surface.** target-overlap, market-exposure, P/L overlay, target-size PnL, trader-comparison, copy-target benchmarks, market-aggregation views all landed since #1215. New views must follow [`data-research`](../data-research/SKILL.md).
+
+**Active copy-trade behavior (mirror policy v0):**
 
 - New entries for curated targets use `target_percentile_scaled`: the target condition/token position cost basis must be at or above that wallet's configured pXX threshold before we mirror it.
-- Default pXX is p75. The per-target UI/config slider may choose another percentile. p50/p75/p90/p95/p99 are hardcoded; unsupported values interpolate between known points and clamp outside the known range.
+- Default pXX is p75. p50/p75/p90/p95/p99 are hardcoded; unsupported values interpolate between known points and clamp outside the known range.
 - Accepted BUY branches size from market minimum toward `max_usdc_per_trade`, scaled by how far the target position is between pXX and p99.
-- Individual target orders are triggers only. Do not add a second order-size pXX gate.
-- Existing mirror positions add branch context through `position_followup`: same-token `layer`, opposite-token `hedge`, or SELL `sell_close`.
-- Follow-ups still require market floors, per-position caps, and local mirror exposure thresholds. They do not bypass `already_resting`, idempotency, tenant grant authorization, or CLOB placement checks.
+- Existing mirror positions add branch context through `position_followup`: same-token `layer`, opposite-token `hedge`, SELL `sell_close`. Follow-ups still respect market floors, per-position caps, local mirror exposure thresholds, idempotency, tenant grant authorization, and CLOB placement checks.
 
-**Hardcoded position pXX currently baked into bootstrap config:**
+**Hardcoded position pXX baked into bootstrap config (still current as of 2026-05-06):**
 
 | target    | p50 |  p75 |  p90 |    p95 |    p99 | sample                                                                                   |
 | --------- | --: | ---: | ---: | -----: | -----: | ---------------------------------------------------------------------------------------- |
 | RN1       | $40 | $200 | $733 | $1,811 | $5,659 | 3,990 token positions, Data API `/positions?sizeThreshold=0`, captured 2026-05-03T02:34Z |
 | swisstony | $31 | $146 | $665 | $1,394 | $4,809 | 1,085 token positions, Data API `/positions?sizeThreshold=0`, captured 2026-05-03T02:34Z |
 
-**Position follow-up defaults for curated targets:**
+Position follow-up defaults: `min_mirror_position_usdc=5`, `market_floor_multiple=5`, `min_target_hedge_ratio=0.02`, `min_target_hedge_usdc=5`, `max_hedge_fraction_of_position=0.25`, `max_layer_fraction_of_position=0.5`. Source of truth: `nodes/poly/app/src/bootstrap/jobs/copy-trade-mirror.job.ts`. Re-flight after any edit to that file.
 
-- `min_mirror_position_usdc = 5`
-- `market_floor_multiple = 5`
-- `min_target_hedge_ratio = 0.02`
-- `min_target_hedge_usdc = 5`
-- `max_hedge_fraction_of_position = 0.25`
-- `max_layer_fraction_of_position = 0.5`
-
-**Observability reality:** Loki is the current operational truth. Query `event="poly.mirror.decision"` for processed fills; position-aware branches include `position_branch`, `position_qty_shares`, `position_token_id`, `target_position_usdc`, and `target_hedge_ratio`. Metrics are still wired through `noopMetrics` in candidate-a bootstrap, so do not assume Prometheus counters exist yet.
+**Observability reality:** Loki is the current operational truth. Query `event="poly.mirror.decision"` for processed fills; position-aware branches include `position_branch`, `position_qty_shares`, `position_token_id`, `target_position_usdc`, `target_hedge_ratio`. Research-view emissions follow `feature.poly_research.<view>.complete`. Metrics are still mostly `noopMetrics` in candidate-a bootstrap; do not assume Prometheus counters exist.
 
 ## Which skill to load
 
-| If you're doing…                                                                                                                                                              | Load                                                 |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| Mirror pipeline, coordinator, wallet-watch, `poly_copy_trade_*` tables, v0 caps, poll cadence, shared-poller, Phase-4 streaming prep                                          | [`poly-copy-trading`](../poly-copy-trading/SKILL.md) |
-| CLOB order placement, Data-API reads, fill-id semantics, EOA-vs-Safe-proxy gotchas, target-wallet screening / ranking research                                                | [`poly-market-data`](../poly-market-data/SKILL.md)   |
-| Per-tenant `/api/v1/poly/wallet/connect`, Privy provisioning, `poly_wallet_connections`, CTF + USDC.e approvals, AEAD at rest, CustodialConsent, validating `deploy_verified` | [`poly-auth-wallets`](../poly-auth-wallets/SKILL.md) |
+| If you're doing…                                                                                                                                                                            | Load                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Mirror pipeline, coordinator, wallet-watch, `poly_copy_trade_*` tables, v0 caps, poll cadence, shared-poller, Phase-4 streaming prep                                                        | [`poly-copy-trading`](../poly-copy-trading/SKILL.md) |
+| CLOB order placement, Data-API reads, fill-id semantics, EOA-vs-Safe-proxy gotchas, target-wallet screening / ranking research                                                              | [`poly-market-data`](../poly-market-data/SKILL.md)   |
+| Per-tenant `/api/v1/poly/wallet/connect`, Privy provisioning, `poly_wallet_connections`, CTF + USDC.e approvals, AEAD at rest, CustodialConsent, validating `deploy_verified`               | [`poly-auth-wallets`](../poly-auth-wallets/SKILL.md) |
+| Research views, dashboard slices, P/L curves, histograms, comparison panels, SQL-vs-V8 aggregation, OOM diagnosis on `poly_trader_fills` / `poly_trader_position_snapshots` reads, backfill | [`data-research`](../data-research/SKILL.md)         |
 
-Load all three if you're reviewing a PR that cuts across them (the `/connect` → mirror path on a real tenant, for example). Each specialty skill is self-contained; there is no "base" you have to load first.
+Load multiple if you're crossing domains (e.g., a research view that drives a target-ranking change is `data-research` + `poly-copy-trading`). Each specialty skill is self-contained; there is no "base" you have to load first.
 
 ## Canonical references (cross-cutting)
 
@@ -78,18 +75,30 @@ Load all three if you're reviewing a PR that cuts across them (the `/connect` �
 - [docs/guides/poly-wallet-provisioning.md](../../../docs/guides/poly-wallet-provisioning.md) — per-tenant flow + honest architecture accounting
 - [docs/guides/polymarket-account-setup.md](../../../docs/guides/polymarket-account-setup.md) — shared-operator onboarding (legacy)
 
+**Operational data tables (where research / data-science work lands):**
+
+| Table                                                   | Owner / writer                                                   | Coverage caveats                                                                              |
+| ------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `poly_trader_fills`                                     | `wallet-watch` + spike.5024 historical walker                    | Full Polymarket history for tracked wallets after spike.5024 (RN1, swisstony walked from Apr) |
+| `poly_trader_position_snapshots`                        | `wallet-analysis-service` snapshot writer                        | **Started writing 2026-05-03**; pre-May-3 must be derived from fills (cumsum) for backfill    |
+| `poly_trader_current_positions`                         | dashboard refresh path                                           | Live, refreshed on read; not a historical record                                              |
+| `poly_trader_user_pnl_points`                           | db-backed user-pnl read model (#1242)                            | Walked back via spike.5024 corpus                                                             |
+| `poly_market_metadata`                                  | canonical Gamma persistence (#1265, #1270)                       | **Started writing 2026-05-05**; backfill via Gamma `/markets/{conditionId}` per condition     |
+| `poly_market_outcomes`                                  | `runMarketOutcomeTick` — condition-iterating writer (cp3, #1247) | **Started writing 2026-05-05**; reuse forward-fill loop with one-shot driver over conditions  |
+| `poly_market_price_history`                             | cp7 db mirror (#1251)                                            | **Started writing 2026-05-05**; backfill via CLOB `/price-history?market={tokenId}`           |
+| `poly_copy_trade_{targets,fills,decisions,attribution}` | mirror coordinator                                               | See [`poly-copy-trading`](../poly-copy-trading/SKILL.md) for invariants + RLS                 |
+| `poly_redeem_jobs`                                      | redeem worker (Capability B, #1242)                              | event-driven; cleared by completion                                                           |
+| `poly_wallet_{connections,grants}`                      | per-tenant onboarding                                            | See [`poly-auth-wallets`](../poly-auth-wallets/SKILL.md)                                      |
+
 **Project charter + work items:**
 
-- [proj.poly-copy-trading](../../../work/projects/proj.poly-copy-trading.md) — full roadmap, open bugs, constraints
-- [task.0315](../../../work/items/task.0315.poly-copy-trade-prototype.md) — v0 prototype (Phase 1)
-- [task.0318](../../../work/items/task.0318.poly-wallet-multi-tenant-auth.md) — multi-tenant auth (Phase A + B)
-- [task.0322](../../../work/items/task.0322.poly-copy-trade-phase4-design-prep.md) — Phase 4 streaming + ranking
-- [task.0323](../../../work/items/task.0323.poly-copy-trade-v1-hardening.md) — v1 hardening bucket
-- [task.0332](../../../work/items/task.0332.poly-mirror-shared-poller.md) — shared batched poller
-- [task.0346](../../../work/items/task.0346.poly-wallet-orphan-sweep.md) — Privy orphan cleanup
-- [task.0347](../../../work/items/task.0347.poly-wallet-preferences-sizing-config.md) — retire hardcoded caps + funding suggestions
-- [bug.0329](../../../work/items/bug.0329.poly-sell-neg-risk-empty-reject.md) — SELL on neg_risk empty reject
-- [bug.0335](../../../work/items/bug.0335.poly-clob-buy-empty-reject-candidate-a.md) — shared operator BUY empty reject on candidate-a
+The markdown work-item corpus was retired on 2026-04-25 (PR #1241). Items now live in Doltgres and are read via the operator API:
+
+- [proj.poly-copy-trading](../../../work/projects/proj.poly-copy-trading.md) — full roadmap, open bugs, constraints (still markdown)
+- Active poly items: `GET https://cognidao.org/api/v1/work/items?node=poly&statuses=needs_implement,needs_design,in_review`
+- Specific item: `GET https://cognidao.org/api/v1/work/items/{id}` (e.g. `task.5012`, `task.0322`, `bug.5012`, `spike.5024`)
+
+Charter still references `../items/*.md` paths — those links are stale; use the API or follow links from the operator dashboard.
 
 ## Anti-patterns that bite everywhere (regardless of specialty)
 
