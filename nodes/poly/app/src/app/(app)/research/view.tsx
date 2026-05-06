@@ -467,8 +467,12 @@ function ResearchBenchmarkBoard({
 }) {
   const [activeResearchView, setActiveResearchView] =
     useState<ResearchComparisonViewKey>("targetOverlap");
-  const [overlapInterval, setOverlapInterval] =
-    useState<PolyWalletOverviewInterval>("ALL");
+  // PAGE_LEVEL_INTERVAL: one toggle drives every block on the research benchmark
+  // board (target overlap, trader comparison, size/PnL). Per-block intervals are
+  // a known anti-pattern — they let two charts on the same screen disagree about
+  // "the time window" and erode trust on adjacent numbers.
+  const [pageInterval, setPageInterval] =
+    useState<PolyWalletOverviewInterval>("1W");
   const comparisonWallets = useMemo(
     () => buildComparisonWallets(userWalletAddress, targets),
     [userWalletAddress, targets]
@@ -477,8 +481,6 @@ function ResearchBenchmarkBoard({
     () => comparisonWallets.slice(0, 3),
     [comparisonWallets]
   );
-  const [comparisonInterval, setComparisonInterval] =
-    useState<PolyWalletOverviewInterval>("1W");
   const traderComparisonActive = isTraderComparisonView(activeResearchView);
   const distributionComparisonActive =
     isDistributionComparisonView(activeResearchView);
@@ -489,13 +491,13 @@ function ResearchBenchmarkBoard({
   } = useQuery({
     queryKey: [
       "research-trader-comparison",
-      comparisonInterval,
+      pageInterval,
       headlineWallets.map((wallet) => wallet.address).join(","),
     ],
     queryFn: () =>
       fetchTraderComparison({
         wallets: headlineWallets,
-        interval: comparisonInterval,
+        interval: pageInterval,
       }),
     enabled: traderComparisonActive && headlineWallets.length > 0,
     staleTime: 30_000,
@@ -503,8 +505,8 @@ function ResearchBenchmarkBoard({
     retry: 1,
   });
   const overlapQuery = useQuery({
-    queryKey: ["research-target-overlap", overlapInterval],
-    queryFn: () => fetchTargetOverlap(overlapInterval),
+    queryKey: ["research-target-overlap", pageInterval],
+    queryFn: () => fetchTargetOverlap(pageInterval),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     retry: 1,
@@ -549,13 +551,13 @@ function ResearchBenchmarkBoard({
           targetOverlap={overlapQuery.data}
           targetOverlapLoading={overlapQuery.isLoading}
           targetOverlapError={overlapQuery.isError}
-          targetOverlapInterval={overlapInterval}
-          onTargetOverlapIntervalChange={setOverlapInterval}
+          targetOverlapInterval={pageInterval}
+          onTargetOverlapIntervalChange={setPageInterval}
           traderComparison={traderComparison}
           traderComparisonLoading={traderComparisonLoading}
           traderComparisonError={traderComparisonError}
-          traderInterval={comparisonInterval}
-          onTraderIntervalChange={setComparisonInterval}
+          traderInterval={pageInterval}
+          onTraderIntervalChange={setPageInterval}
         />
         {!userWalletAddress ? (
           <p className="mt-3 text-muted-foreground text-xs">

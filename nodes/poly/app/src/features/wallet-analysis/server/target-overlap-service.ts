@@ -22,6 +22,15 @@
  *     redefining cashPnl, stale row drift) does not silently mis-aggregate.
  *     COALESCE retains the prior derivation as a defensive fallback when `raw`
  *     is null or lacks `cashPnl`.
+ *   - FRESH_OBSERVATION_ONLY: aggregations exclude rows whose
+ *     `last_observed_at` is older than `STALE_POSITION_TTL` (6h). Phantom
+ *     rows accumulate when /positions pagination caps out for big wallets
+ *     and the writer skips its complete-only deactivation path
+ *     (trader-observation-service.ts:656-658). Filtering at read-time keeps
+ *     the bucket honest without depending on the writer being fixed
+ *     (bug.5025 owns the upstream fix). A wallet whose observation tick has
+ *     stalled for >6h reports zero counts here — preferable to summing
+ *     stale frozen values.
  * Side-effects: DB reads only.
  * Links: docs/design/poly-copy-target-performance-benchmark.md, work/items/task.5005
  * @public
@@ -41,6 +50,8 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 type Db =
   | NodePgDatabase<Record<string, unknown>>
   | PostgresJsDatabase<Record<string, unknown>>;
+
+const STALE_POSITION_TTL = "6 hours";
 
 const RN1 = {
   label: "RN1" as const,
@@ -136,6 +147,7 @@ async function readOverlapRows(
         ) AS pnl_usdc
       FROM poly_trader_current_positions p
       WHERE p.active = true
+        AND p.last_observed_at >= NOW() - INTERVAL '${sql.raw(STALE_POSITION_TTL)}'
         AND p.trader_wallet_id IN (${rn1WalletId}, ${swisstonyWalletId})
     ),
     markets AS (

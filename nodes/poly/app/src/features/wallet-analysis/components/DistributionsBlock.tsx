@@ -27,7 +27,7 @@ import { type ReactElement, type ReactNode, useState } from "react";
 
 import { cn } from "@/shared/util/cn";
 import type { WalletDistributionsViewMode } from "../types/wallet-analysis";
-import { IntervalToggle } from "./IntervalToggle";
+import { IntervalToggle, TARGET_OVERLAP_INTERVALS } from "./IntervalToggle";
 import { TargetOverlapBlock } from "./TargetOverlapBlock";
 import {
   TRADER_COMPARISON_INTERVALS,
@@ -219,6 +219,13 @@ export function DistributionComparisonBlock({
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            {isTargetOverlapView ? (
+              <IntervalToggle
+                interval={targetOverlapInterval}
+                intervals={TARGET_OVERLAP_INTERVALS}
+                onChange={onTargetOverlapIntervalChange}
+              />
+            ) : null}
             {activeTraderView || isTraderSizePnlView ? (
               <IntervalToggle
                 interval={traderInterval}
@@ -241,8 +248,6 @@ export function DistributionComparisonBlock({
               data={targetOverlap}
               isLoading={targetOverlapLoading}
               isError={targetOverlapError}
-              interval={targetOverlapInterval}
-              onIntervalChange={onTargetOverlapIntervalChange}
             />
           ) : null}
           {isTraderPnlView ? (
