@@ -12,6 +12,13 @@ export {
   runRedeemCatchup,
 } from "./redeem-catchup";
 export {
+  computeRedeemDiff,
+  REDEEM_DIFF_ENQUEUE_CONCURRENCY,
+  REDEEM_DIFF_STALE_UNRESOLVED_MS,
+  type RunDiffTickDeps,
+  runRedeemDiffTick,
+} from "./redeem-diff";
+export {
   RedeemSubscriber,
   type RedeemSubscriberDeps,
 } from "./redeem-subscriber";

@@ -61,6 +61,21 @@ export interface EnqueueRedeemJobResult {
   alreadyExisted: boolean;
 }
 
+/**
+ * Slim projection of an enqueued redeem job — `(condition, lifecycle, age)` —
+ * used by the Layer-3 position-diff loop to detect (a) which Data-API
+ * conditions we have NOT yet classified for this funder and (b) which
+ * `unresolved`/`resolving` rows have been stuck long enough to re-classify.
+ *
+ * Returned by `listKnownConditionsForFunder`; deliberately narrow to keep
+ * heap bounded by `O(known × ~80 bytes)` instead of full-row × N.
+ */
+export interface KnownRedeemCondition {
+  conditionId: `0x${string}`;
+  lifecycleState: RedeemLifecycleState;
+  enqueuedAt: Date;
+}
+
 /** Adapter throws this when a job row referenced by id doesn't exist. */
 export class RedeemJobNotFoundPortError extends Error {
   constructor(public readonly jobId: string) {
@@ -145,6 +160,17 @@ export interface RedeemJobsPort {
   ): Promise<RedeemJob | null>;
 
   listForFunder(funderAddress: `0x${string}`): Promise<RedeemJob[]>;
+
+  /**
+   * Slim per-tick read for the Layer-3 position-diff loop. Returns one row per
+   * `(funder, condition_id)` known to the redeem queue with just the columns
+   * the diff predicate needs — `condition_id`, `lifecycle_state`, `enqueued_at`.
+   * Heap budget is the rationale: a full `listForFunder` for a funder with
+   * thousands of historical jobs would dominate the diff tick's memory.
+   */
+  listKnownConditionsForFunder(
+    funderAddress: `0x${string}`
+  ): Promise<readonly KnownRedeemCondition[]>;
 
   /** Block cursor read for catch-up replay. Returns `null` on first run. */
   getLastProcessedBlock(

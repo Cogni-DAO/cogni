@@ -34,6 +34,7 @@ import type {
 import type {
   EnqueueRedeemJobInput,
   EnqueueRedeemJobResult,
+  KnownRedeemCondition,
   RedeemJobsPort,
   RedeemSubscriptionId,
 } from "@/ports";
@@ -367,6 +368,24 @@ export class DrizzleRedeemJobsAdapter implements RedeemJobsPort {
       .from(polyRedeemJobs)
       .where(eq(polyRedeemJobs.funderAddress, funderAddress));
     return rows.map(mapRow);
+  }
+
+  async listKnownConditionsForFunder(
+    funderAddress: `0x${string}`
+  ): Promise<readonly KnownRedeemCondition[]> {
+    const rows = await this.db
+      .select({
+        conditionId: polyRedeemJobs.conditionId,
+        lifecycleState: polyRedeemJobs.lifecycleState,
+        enqueuedAt: polyRedeemJobs.enqueuedAt,
+      })
+      .from(polyRedeemJobs)
+      .where(eq(polyRedeemJobs.funderAddress, funderAddress));
+    return rows.map((r) => ({
+      conditionId: r.conditionId as `0x${string}`,
+      lifecycleState: r.lifecycleState as RedeemLifecycleState,
+      enqueuedAt: r.enqueuedAt,
+    }));
   }
 
   async getLastProcessedBlock(

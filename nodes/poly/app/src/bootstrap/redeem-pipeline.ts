@@ -9,8 +9,10 @@
  *   one `RedeemWorker` (drains pending jobs scoped to that funder + reaps
  *   stale submitted rows at N=5 finality) + one boot catch-up replay over
  *   `last_processed_block` and a periodic interval that re-runs the catch-up
- *   every `REDEEM_CATCHUP_INTERVAL_MS`. Replaces the deleted `runRedeemSweep`
- *   polling loop in `poly-trade-executor.ts`.
+ *   every `REDEEM_CATCHUP_INTERVAL_MS`. Layer-3 position diff
+ *   (`runRedeemDiffTick`) runs on its own staggered timer to detect
+ *   conditions Layer 2 missed (bug.5028). Replaces the deleted
+ *   `runRedeemSweep` polling loop in `poly-trade-executor.ts`.
  * Scope: Multi-tenant (task.0412). One pipeline instance per active
  *   `poly_wallet_connections` row. Workers claim jobs with a funder filter
  *   so cross-tenant claims are impossible. 0 active rows → no-op.
@@ -30,6 +32,13 @@
  *     `runRedeemCatchup` interval is the durable recovery path; the live
  *     subscriber is best-effort latency reduction. Don't remove the timer
  *     without a proven WS / sticky-filter replacement (bug.5015).
+ *   - DIFF_IS_GAP_DETECTOR — Layer-3 position diff is a rare safety net
+ *     for what Layers 1+2 miss (pre-`initialFromBlock` resolutions, lagged
+ *     Data-API flips, filter-drift drops outside catchup horizon). Steady-
+ *     state cost is one Data-API read + one DB query — diff is empty when
+ *     chain-log catchup is healthy. Replaces the boot-coupled full sweep
+ *     `backfillLifecycleStates` that scaled O(positions × multicall) and
+ *     would OOM at 5k+ positions per funder (bug.5028).
  * Side-effects: IO (DB query at boot, Polygon RPC long-poll while running).
  * Links: docs/design/poly-positions.md, work/items/task.0388,
  *   work/items/task.0412, work/items/task.0318
@@ -43,7 +52,6 @@ import type {
   PolyTraderWalletPort,
 } from "@cogni/poly-wallet";
 import { isNull } from "drizzle-orm";
-import pLimit from "p-limit";
 import type { Logger } from "pino";
 import {
   type Account,
@@ -63,6 +71,7 @@ import {
   RedeemSubscriber,
   RedeemWorker,
   runRedeemCatchup,
+  runRedeemDiffTick,
 } from "@/features/redeem";
 import type { LedgerLifecycleMirrorPort } from "@/features/redeem/mirror-ledger-lifecycle";
 import type { RedeemJobsPort } from "@/ports";
@@ -70,7 +79,6 @@ import { EVENT_NAMES } from "@/shared/observability/events";
 
 const REDEEM_POLL_INTERVAL_MS = 10 * 60 * 1000;
 const REDEEM_WORKER_DRAIN_INTERVAL_MS = 5_000;
-const BACKFILL_ENQUEUE_CONCURRENCY = 4;
 // Periodic catch-up interval: re-runs `runRedeemCatchup` every N ms to pick up
 // new ConditionResolution / PayoutRedemption logs the live `watchContractEvent`
 // subscriber missed. viem's HTTP filter polling against load-balanced RPC
@@ -79,6 +87,20 @@ const BACKFILL_ENQUEUE_CONCURRENCY = 4;
 // 112b4b18 once pod restarts stopped masking it (bug.5015). Cursor advance is
 // idempotent, so re-runs are safe and cheap (~300 blocks / 10 min on Polygon).
 const REDEEM_CATCHUP_INTERVAL_MS = 10 * 60 * 1000;
+// Periodic Layer-3 position-diff interval. Re-runs `runRedeemDiffTick` so
+// any conditions Layer 2 missed (pre-`initialFromBlock` resolutions, lagged
+// Data-API flips, filter-drift drops outside catchup horizon) are caught.
+// Cadence is intentionally looser than catchup: Layer 2 owns the ≤10-min
+// recovery SLO; Layer 3 is a rare gap-detector. Steady-state cost is one
+// Data-API read + one DB query — diff is empty when chain-log catchup is
+// healthy. (bug.5028)
+const REDEEM_DIFF_INTERVAL_MS = 60 * 60 * 1000;
+// First-tick delay cap. Each tenant pipeline waits `random() * MAX` ms
+// before its first diff tick to break the boot-thundering-herd across N
+// tenants without making fresh-tenant classify wait an hour. Subsequent
+// ticks fire on `setInterval(REDEEM_DIFF_INTERVAL_MS)` and inherit the
+// per-tenant phase offset naturally. (bug.5028)
+const REDEEM_DIFF_FIRST_TICK_MAX_DELAY_MS = 60 * 1000;
 
 export interface RedeemPipelineHandles {
   redeemJobs: RedeemJobsPort;
@@ -256,22 +278,53 @@ async function startOneTenantPipeline(
   subscriber.start();
   worker.start();
 
-  try {
-    await backfillLifecycleStates(
-      funderAddress,
+  let diffInFlight = false;
+  const runDiffTick = (): void => {
+    if (diffInFlight) {
+      log.warn(
+        {
+          event: EVENT_NAMES.POLY_REDEEM_DIFF_TICK_SKIPPED,
+          reason: "in_flight",
+        },
+        "redeem pipeline: skipping diff tick; previous run still in flight"
+      );
+      return;
+    }
+    diffInFlight = true;
+    runRedeemDiffTick({
+      redeemJobs,
       dataApiClient,
       subscriber,
-      log
-    );
-  } catch (err) {
-    log.warn(
-      {
-        event: "poly.ctf.redeem.backfill_failed",
-        err: err instanceof Error ? err.message : String(err),
-      },
-      "redeem pipeline: lifecycle-state backfill threw; continuing"
-    );
-  }
+      funderAddress,
+      log,
+    })
+      .catch((err) => {
+        const mem = process.memoryUsage();
+        log.warn(
+          {
+            event: EVENT_NAMES.POLY_REDEEM_DIFF_TICK_FAILED,
+            err: err instanceof Error ? err.message : String(err),
+            heap_used_mb: Math.round(mem.heapUsed / 1024 / 1024),
+            rss_mb: Math.round(mem.rss / 1024 / 1024),
+          },
+          "redeem pipeline: diff tick threw; will retry next tick"
+        );
+      })
+      .finally(() => {
+        diffInFlight = false;
+      });
+  };
+
+  // First-tick stagger: random delay up to REDEEM_DIFF_FIRST_TICK_MAX_DELAY_MS.
+  // Spreads the initial diff tick across tenants so they don't all hit
+  // Polymarket Data-API simultaneously at boot. (bug.5028)
+  const firstDiffDelayMs = Math.floor(
+    Math.random() * REDEEM_DIFF_FIRST_TICK_MAX_DELAY_MS
+  );
+  const firstDiffTimeout = setTimeout(runDiffTick, firstDiffDelayMs);
+  firstDiffTimeout.unref?.();
+  const diffTimer = setInterval(runDiffTick, REDEEM_DIFF_INTERVAL_MS);
+  diffTimer.unref?.();
 
   let catchupInFlight = false;
   const catchupTimer = setInterval(() => {
@@ -332,54 +385,11 @@ async function startOneTenantPipeline(
     funderAddress,
     billingAccountId,
     stop: () => {
+      clearTimeout(firstDiffTimeout);
+      clearInterval(diffTimer);
       clearInterval(catchupTimer);
       subscriber.stop();
       worker.stop();
     },
   };
-}
-
-async function backfillLifecycleStates(
-  funderAddress: `0x${string}`,
-  dataApiClient: PolymarketDataApiClient,
-  subscriber: RedeemSubscriber,
-  log: Logger
-): Promise<void> {
-  const startedAt = Date.now();
-  const positions = await dataApiClient.listAllUserPositions(funderAddress);
-  const conditionIds = new Set<`0x${string}`>();
-  for (const p of positions) {
-    if (!p.conditionId) continue;
-    const id = p.conditionId.startsWith("0x")
-      ? (p.conditionId as `0x${string}`)
-      : (`0x${p.conditionId}` as `0x${string}`);
-    conditionIds.add(id);
-  }
-  log.info(
-    {
-      event: "poly.ctf.redeem.backfill_started",
-      funder: funderAddress,
-      condition_count: conditionIds.size,
-    },
-    "redeem pipeline: classifying current positions"
-  );
-  const limit = pLimit(BACKFILL_ENQUEUE_CONCURRENCY);
-  await Promise.all(
-    Array.from(conditionIds, (conditionId) =>
-      limit(() => subscriber.enqueueForCondition(conditionId, positions))
-    )
-  );
-  const mem = process.memoryUsage();
-  log.info(
-    {
-      event: EVENT_NAMES.POLY_REDEEM_BACKFILL_COMPLETE,
-      durationMs: Date.now() - startedAt,
-      funder: funderAddress,
-      position_count: positions.length,
-      condition_count: conditionIds.size,
-      heap_used_mb: Math.round(mem.heapUsed / 1024 / 1024),
-      rss_mb: Math.round(mem.rss / 1024 / 1024),
-    },
-    "redeem pipeline: lifecycle-state backfill complete"
-  );
 }

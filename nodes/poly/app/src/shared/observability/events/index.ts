@@ -25,10 +25,12 @@ export const EVENT_NAMES = {
   ADAPTER_POLY_WALLET_RESOLVE_ERROR: "adapter.poly_wallet.resolve_error",
 
   // Poly redeem lifecycle bridge (task.5006)
-  POLY_REDEEM_BACKFILL_COMPLETE: "feature.poly_redeem.backfill.complete",
   POLY_REDEEM_CATCHUP_COMPLETE: "feature.poly_redeem.catchup.complete",
   POLY_REDEEM_CATCHUP_FAILED: "feature.poly_redeem.catchup.failed",
   POLY_REDEEM_CATCHUP_TICK_SKIPPED: "poly.ctf.redeem.catchup_tick_skipped",
+  POLY_REDEEM_DIFF_TICK_COMPLETE: "feature.poly_redeem.diff_tick.complete",
+  POLY_REDEEM_DIFF_TICK_FAILED: "feature.poly_redeem.diff_tick.failed",
+  POLY_REDEEM_DIFF_TICK_SKIPPED: "poly.ctf.redeem.diff_tick_skipped",
   POLY_REDEEM_LIFECYCLE_MIRRORED: "feature.poly_redeem.lifecycle_mirrored",
   POLY_REDEEM_LIFECYCLE_MIRROR_FAILED:
     "feature.poly_redeem.lifecycle_mirror_failed",

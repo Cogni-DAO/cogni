@@ -167,6 +167,7 @@ export type {
 export {
   type EnqueueRedeemJobInput,
   type EnqueueRedeemJobResult,
+  type KnownRedeemCondition,
   RedeemJobNotFoundPortError,
   type RedeemJobsPort,
   type RedeemSubscriptionId,
