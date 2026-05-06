@@ -79,6 +79,15 @@ const ctfBalanceAbi = parseAbi([
   "function balanceOf(address account, uint256 id) view returns (uint256)",
 ]);
 
+/** Per-call polling cadence for `waitForTransactionReceipt`. Polygon block
+ * time is ~2s, so 4s is the lowest cadence that is still cheap and matches
+ * viem's pre-`f961f2e81` HTTP-transport default. The shared `publicClient`'s
+ * client-level `pollingInterval` is 10 min (throttled for the live
+ * subscriber's `watchContractEvent`) — without this override every redeem
+ * costs 180s (viem's hardcoded `waitForTransactionReceipt` timeout) before
+ * the catch-block manually fetches the receipt. (bug.5030) */
+const RECEIPT_POLL_INTERVAL_MS = 4_000;
+
 // keccak256(TransferSingle(address,address,address,uint256,uint256))
 const TRANSFER_SINGLE_TOPIC = keccak256(
   toBytes("TransferSingle(address,address,address,uint256,uint256)")
@@ -409,6 +418,7 @@ export class RedeemWorker {
     try {
       return await this.deps.publicClient.waitForTransactionReceipt({
         hash: txHash,
+        pollingInterval: RECEIPT_POLL_INTERVAL_MS,
       });
     } catch (waitErr) {
       try {

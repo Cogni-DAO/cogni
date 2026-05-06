@@ -166,7 +166,10 @@ describe("RedeemWorker cadence", () => {
 
     await worker.tick();
 
-    expect(waitForTransactionReceipt).toHaveBeenCalledWith({ hash: TX_HASH });
+    expect(waitForTransactionReceipt).toHaveBeenCalledWith({
+      hash: TX_HASH,
+      pollingInterval: 4_000,
+    });
     expect(getTransactionReceipt).toHaveBeenCalledWith({ hash: TX_HASH });
     expect(redeemJobs.markSubmitted).toHaveBeenCalledWith({
       jobId: "redeem-job-1",
