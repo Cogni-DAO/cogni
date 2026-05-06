@@ -174,9 +174,9 @@ describe("single-node-scope workflow gate · structural pins", () => {
     ).toContain('startswith("docs/")');
     expect(
       enforce.run,
-      "ride-along whitelist must include the exact poly manager skill path " +
+      "ride-along whitelist must include the .claude/skills/ prefix " +
         "(must mirror RIDE_ALONG_PATTERNS in tests/ci-invariants/classify.ts)"
-    ).toContain('".claude/skills/poly-dev-manager/SKILL.md"');
+    ).toContain('startswith(".claude/skills/")');
     expect(
       enforce.run,
       "ride-along whitelist must include the exact CI workflow path " +

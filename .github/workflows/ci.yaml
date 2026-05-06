@@ -138,8 +138,7 @@ jobs:
                . == "pnpm-lock.yaml"
                or startswith("work/")
                or startswith("docs/")
-               or . == ".claude/skills/poly-dev-manager/SKILL.md"
-               or . == ".claude/skills/data-research/SKILL.md"
+               or startswith(".claude/skills/")
                or . == ".github/workflows/ci.yaml"
                or . == "packages/repo-spec/AGENTS.md"
                or . == "packages/repo-spec/src/accessors.ts"
