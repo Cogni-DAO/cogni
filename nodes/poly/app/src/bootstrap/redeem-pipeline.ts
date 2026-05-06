@@ -79,6 +79,15 @@ const BACKFILL_ENQUEUE_CONCURRENCY = 4;
 // 112b4b18 once pod restarts stopped masking it (bug.5015). Cursor advance is
 // idempotent, so re-runs are safe and cheap (~300 blocks / 10 min on Polygon).
 const REDEEM_CATCHUP_INTERVAL_MS = 10 * 60 * 1000;
+// Periodic Data-API position backfill interval. Mirrors the catchup timer's
+// role for the chain-log surface: re-runs `backfillLifecycleStates` so the
+// redeem lifecycle classification stays fresh without depending on pod
+// restarts (bug.5028). Heavier per tick than `runRedeemCatchup` because it
+// paginates Polymarket Data-API across thousands of token positions per
+// tenant — chosen as 30 min to bound Data-API load while still keeping
+// post-resolution detection latency well under typical deploy cadence.
+// `subscriber.enqueueForCondition` is idempotent across overlapping ticks.
+const REDEEM_BACKFILL_INTERVAL_MS = 30 * 60 * 1000;
 
 export interface RedeemPipelineHandles {
   redeemJobs: RedeemJobsPort;
@@ -256,22 +265,44 @@ async function startOneTenantPipeline(
   subscriber.start();
   worker.start();
 
-  try {
-    await backfillLifecycleStates(
-      funderAddress,
-      dataApiClient,
-      subscriber,
-      log
-    );
-  } catch (err) {
-    log.warn(
-      {
-        event: "poly.ctf.redeem.backfill_failed",
-        err: err instanceof Error ? err.message : String(err),
-      },
-      "redeem pipeline: lifecycle-state backfill threw; continuing"
-    );
-  }
+  let backfillInFlight = false;
+  const runBackfillTick = (): void => {
+    if (backfillInFlight) {
+      log.warn(
+        {
+          event: EVENT_NAMES.POLY_REDEEM_BACKFILL_TICK_SKIPPED,
+          reason: "in_flight",
+        },
+        "redeem pipeline: skipping backfill tick; previous run still in flight"
+      );
+      return;
+    }
+    backfillInFlight = true;
+    backfillLifecycleStates(funderAddress, dataApiClient, subscriber, log)
+      .catch((err) => {
+        log.warn(
+          {
+            event: EVENT_NAMES.POLY_REDEEM_BACKFILL_FAILED,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "redeem pipeline: lifecycle-state backfill threw; will retry next tick"
+        );
+      })
+      .finally(() => {
+        backfillInFlight = false;
+      });
+  };
+
+  // Fire boot-time backfill non-blocking — readiness completes once subscriber
+  // + worker are started; lifecycle classification runs in background and is
+  // re-run on the periodic timer below. (bug.5028)
+  runBackfillTick();
+
+  const backfillTimer = setInterval(
+    runBackfillTick,
+    REDEEM_BACKFILL_INTERVAL_MS
+  );
+  backfillTimer.unref?.();
 
   let catchupInFlight = false;
   const catchupTimer = setInterval(() => {
@@ -333,6 +364,7 @@ async function startOneTenantPipeline(
     billingAccountId,
     stop: () => {
       clearInterval(catchupTimer);
+      clearInterval(backfillTimer);
       subscriber.stop();
       worker.stop();
     },

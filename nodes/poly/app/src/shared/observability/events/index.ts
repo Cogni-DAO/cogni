@@ -26,6 +26,8 @@ export const EVENT_NAMES = {
 
   // Poly redeem lifecycle bridge (task.5006)
   POLY_REDEEM_BACKFILL_COMPLETE: "feature.poly_redeem.backfill.complete",
+  POLY_REDEEM_BACKFILL_FAILED: "feature.poly_redeem.backfill.failed",
+  POLY_REDEEM_BACKFILL_TICK_SKIPPED: "poly.ctf.redeem.backfill_tick_skipped",
   POLY_REDEEM_CATCHUP_COMPLETE: "feature.poly_redeem.catchup.complete",
   POLY_REDEEM_CATCHUP_FAILED: "feature.poly_redeem.catchup.failed",
   POLY_REDEEM_CATCHUP_TICK_SKIPPED: "poly.ctf.redeem.catchup_tick_skipped",
