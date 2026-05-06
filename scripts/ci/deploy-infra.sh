@@ -949,6 +949,35 @@ fi
 # Steps 6.6b–6.6c (OpenClaw config hash + readiness gate) removed — sandbox-openclaw disabled.
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 6.6d: Checksum-gated restart for Alloy config changes
+# Alloy's config is bind-mounted; `compose up -d` does not detect content
+# changes in mounted files, so a `restart` is required to pick up updates
+# (e.g. discovery.relabel keep-regex changes that gate which containers
+# ship logs to Loki). Mirrors Step 6.6a (LiteLLM).
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ALLOY_CONFIG="/opt/cogni-template-runtime/configs/alloy-config.metrics.alloy"
+ALLOY_HASH_FILE="$HASH_DIR/alloy-config.sha256"
+
+if [[ ! -f "$ALLOY_CONFIG" ]]; then
+  log_warn "Alloy config missing at $ALLOY_CONFIG, skipping restart check"
+else
+  mkdir -p "$HASH_DIR"
+  NEW_HASH=$(hash_file "$ALLOY_CONFIG")
+  OLD_HASH=$(cat "$ALLOY_HASH_FILE" 2>/dev/null || echo "none")
+
+  if [[ "$NEW_HASH" != "$OLD_HASH" && "$NEW_HASH" != "no-hash-tool" ]]; then
+    log_info "Alloy config changed (hash: ${NEW_HASH:0:12}...), restarting container..."
+    emit_deployment_event "infra_deployment.alloy_restart" "in_progress" "Restarting Alloy due to config change"
+    $RUNTIME_COMPOSE restart alloy
+    echo "$NEW_HASH" > "$ALLOY_HASH_FILE"
+    log_info "Alloy restarted with new config"
+    emit_deployment_event "infra_deployment.alloy_restart_complete" "success" "Alloy restarted successfully"
+  else
+    log_info "Alloy config unchanged (hash: ${NEW_HASH:0:12}...), no restart needed"
+  fi
+fi
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 6.7: Ensure Temporal namespace exists (idempotent)
 # App pods need cogni-${env} namespace registered in Temporal before /readyz passes.
 # Same script used by provision-test-vm.sh — one shared primitive.
