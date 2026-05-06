@@ -26,10 +26,7 @@
  * @public
  */
 
-import type {
-  PolymarketDataApiClient,
-  PolymarketUserPosition,
-} from "@cogni/poly-market-provider/adapters/polymarket";
+import type { PolymarketDataApiClient } from "@cogni/poly-market-provider/adapters/polymarket";
 import pLimit from "p-limit";
 import type { Logger } from "pino";
 
@@ -128,20 +125,9 @@ export async function runRedeemDiffTick(deps: RunDiffTickDeps): Promise<void> {
     deps.funderAddress
   );
   const apiConditionIds = new Set<`0x${string}`>();
-  const positionsByCondition = new Map<
-    `0x${string}`,
-    PolymarketUserPosition[]
-  >();
   for (const p of positions) {
     if (!p.conditionId) continue;
-    const id = normalizeConditionId(p.conditionId);
-    apiConditionIds.add(id);
-    const list = positionsByCondition.get(id);
-    if (list === undefined) {
-      positionsByCondition.set(id, [p]);
-    } else {
-      list.push(p);
-    }
+    apiConditionIds.add(normalizeConditionId(p.conditionId));
   }
 
   const known = await deps.redeemJobs.listKnownConditionsForFunder(
