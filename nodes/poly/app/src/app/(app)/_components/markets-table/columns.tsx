@@ -212,7 +212,7 @@ export function makeColumns(): AnyCol[] {
             event.stopPropagation();
             row.toggleExpanded();
           }}
-          className="text-muted-foreground hover:bg-muted/40 hover:text-foreground inline-flex size-6 items-center justify-center rounded-md"
+          className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/40 hover:text-foreground"
         >
           {row.getIsExpanded() ? (
             <ChevronDown className="size-4" aria-hidden="true" />
@@ -257,12 +257,12 @@ export function makeColumns(): AnyCol[] {
                 target="_blank"
                 rel="noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="text-sm font-medium underline-offset-4 hover:underline"
+                className="font-medium text-sm underline-offset-4 hover:underline"
               >
                 {label}
               </a>
             ) : (
-              <span className="text-sm font-medium">{label}</span>
+              <span className="font-medium text-sm">{label}</span>
             )}
             <span className="text-muted-foreground text-xs">
               {group.marketCount} line{group.marketCount === 1 ? "" : "s"}
@@ -300,7 +300,7 @@ export function makeColumns(): AnyCol[] {
         ),
       size: 120,
       cell: (info) => (
-        <div className="text-muted-foreground text-right text-sm tabular-nums">
+        <div className="text-right text-muted-foreground text-sm tabular-nums">
           {formatUsd(info.getValue())}
         </div>
       ),
@@ -477,7 +477,7 @@ export function makeColumns(): AnyCol[] {
         ),
       size: 90,
       cell: (info) => (
-        <div className="text-muted-foreground text-right text-sm tabular-nums">
+        <div className="text-right text-muted-foreground text-sm tabular-nums">
           {info.getValue()}
         </div>
       ),
@@ -495,7 +495,7 @@ function MarketGroupExpandedBody({
   group: WalletExecutionMarketGroup;
 }): ReactElement {
   return (
-    <div className="bg-muted/10 space-y-4 px-4 py-3">
+    <div className="space-y-4 bg-muted/10 px-4 py-3">
       {group.lines.map((line) => (
         <MarketLineBlock
           key={line.conditionId}
@@ -525,12 +525,12 @@ function MarketLineBlock({
               target="_blank"
               rel="noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="block truncate text-sm font-medium underline-offset-4 hover:underline"
+              className="block truncate font-medium text-sm underline-offset-4 hover:underline"
             >
               {line.marketTitle}
             </a>
           ) : (
-            <p className="truncate text-sm font-medium">{line.marketTitle}</p>
+            <p className="truncate font-medium text-sm">{line.marketTitle}</p>
           )}
           <p className="text-muted-foreground text-xs">
             {line.participants.length} trader
@@ -604,7 +604,7 @@ function ParticipantsAlignedGrid({
   }
 
   return (
-    <div className="bg-background/40 rounded-md border">
+    <div className="rounded-md border bg-background/40">
       {rows.map((row) => (
         <ParticipantAlignedRow key={row.key} row={row} line={line} />
       ))}
@@ -632,7 +632,7 @@ function ParticipantAlignedRow({
 
   return (
     <div
-      className="hover:bg-muted/20 grid items-center border-b last:border-b-0"
+      className="grid items-center border-b last:border-b-0 hover:bg-muted/20"
       style={{ gridTemplateColumns }}
     >
       {visibleCols.map((column) => (
@@ -679,12 +679,12 @@ function ParticipantAlignedCell({
         leg.vwap < ourSameSideVwap;
       return (
         <div className="flex flex-col gap-0.5 py-1.5 ps-8 pe-2">
-          <span className="text-sm font-medium">{traderLabel}</span>
+          <span className="font-medium text-sm">{traderLabel}</span>
           <span className="text-muted-foreground text-xs tabular-nums">
             {isHedge ? `${leg.outcome} (hedge)` : leg.outcome} · VWAP{" "}
             <span
               className={cn(
-                cheaper && "text-destructive font-medium",
+                cheaper && "font-medium text-destructive",
                 !cheaper && isOurs && "text-foreground/80"
               )}
               title={
@@ -710,7 +710,7 @@ function ParticipantAlignedCell({
 
     case "targets":
       return (
-        <div className="text-muted-foreground px-2 py-1.5 text-right text-sm tabular-nums">
+        <div className="px-2 py-1.5 text-right text-muted-foreground text-sm tabular-nums">
           {isTarget ? formatUsd(leg.currentValueUsdc) : "—"}
         </div>
       );
@@ -720,7 +720,7 @@ function ParticipantAlignedCell({
       // hedge row skips it (it's the same value).
       if (!isOurs || isHedge)
         return (
-          <div className="text-muted-foreground px-2 py-1.5 text-right">—</div>
+          <div className="px-2 py-1.5 text-right text-muted-foreground">—</div>
         );
       const v = participant.net.roundTripReturnPct;
       return (
@@ -738,7 +738,7 @@ function ParticipantAlignedCell({
     case "targetReturn": {
       if (!isTarget || isHedge)
         return (
-          <div className="text-muted-foreground px-2 py-1.5 text-right">—</div>
+          <div className="px-2 py-1.5 text-right text-muted-foreground">—</div>
         );
       const v = participant.net.roundTripReturnPct;
       return (
@@ -758,7 +758,7 @@ function ParticipantAlignedCell({
       // Only on target primary-leg rows.
       if (!isTarget || isHedge)
         return (
-          <div className="text-muted-foreground px-2 py-1.5 text-right">—</div>
+          <div className="px-2 py-1.5 text-right text-muted-foreground">—</div>
         );
       const t = participant.net.roundTripReturnPct;
       const u = line.ourReturnPct;
@@ -783,7 +783,7 @@ function ParticipantAlignedCell({
     case "status":
       // Group-level only — leave child cells blank to preserve alignment.
       return (
-        <div className="text-muted-foreground px-2 py-1.5 text-right">—</div>
+        <div className="px-2 py-1.5 text-right text-muted-foreground">—</div>
       );
 
     default:
