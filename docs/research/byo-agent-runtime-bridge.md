@@ -145,37 +145,76 @@ From the operator survey (graph executor + connections side):
 5. **Conductor integration**: would Conductor ever _be_ the bridge (i.e., a Conductor workspace registers itself as a Cogni-paired runtime)? Tempting, but Conductor has no API surface today; out of scope unless they ship one.
 6. **Headless server target**: Cogni-DAO contributors may want to pair a cloud VM, not a laptop. The TTY constraint on `claude remote-control` argues for `tmux`-wrapped invocation in the bridge CLI; needs a smoke test before the v0 launch.
 
-## Proposed Layout
+## v0 critical review (post-prototype, 2026-05-06)
 
-Loose, directional — not binding.
+The walking skeleton landed and works. PR #1280 ships a `cogni dev` CLI + a bespoke `/runtimes/dev` page; both screenshots and live demo confirm Claude Code and Codex round-trip from the candidate-a operator UI through a Cloudflare quick tunnel into this workspace.
 
-### Project
+But the prototype made **two architectural shortcuts that a v1 cannot keep**:
 
-`proj.byo-agent-runtime-bridge` — single project, three phases roughly mapping onto the v0 / hardening / v1 split:
+### Shortcut 1: bypassed the GraphExecutor contract
 
-- **Phase 0 — Spec & Contract**: define the run-envelope schema, the device-pairing flow, the `BridgedRuntimeProvider` interface, and the device-side CLI shape. One spec, no code.
-- **Phase 1 — Walking skeleton** (v0 above): paired-device flow + Cloudflare-tunnel transport + Claude Code dispatch (`claude --print`). One paired device runs one work item end-to-end from `cognidao.org/runtimes`.
-- **Phase 2 — Codex + reliability**: Codex parity, tailscale-funnel fallback, "device offline" UX, retry / resumption semantics.
-- **Phase 3 — Operator-mediated transport (optional)**: if the v0 seams justify it, introduce the SSE/POST gateway service. Otherwise skip.
+The page hand-rolls a chat UI and POSTs directly from the browser to the user's tunnel. Every other graph-running surface in the system (in-proc langgraph, langgraph-dev, sandbox) flows through `GraphExecutorPort` server-side and emits `ChatDeltaEvent`s into the existing `assistant-ui` Thread. The bridge should look identical from the consumer's perspective — a paired device is just a `LlmProvider`/`GraphExecutor` whose runtime happens to live behind a signed channel on the user's machine. The page goes away; bridge devices appear as entries in the existing `/chat` model picker (`provider: "bridge", connectionId: <device_id>`). Conversation continuity, threads, prompt cards, persistence all "just work" because they're already implemented for the canonical chat surface.
 
-### Specs
+This also flips the transport: instead of browser → tunnel direct, the operator's `BridgeRuntimeProvider` server-side fetches the tunnel using a per-device secret it holds (AEAD-encrypted in the existing `connections` table or a sibling `device_connections` table). The browser never sees the tunnel URL. That is what closes most of the security surface in one move.
 
-- `docs/spec/byo-agent-runtime-bridge.md` (new) — the as-built once Phase 1 lands. Key invariants:
-  - **Operator-never-holds-LLM-credentials** (parallel to BYO-AI).
-  - **Device-key-on-every-request**: tunnel URL is public; auth lives on the request, not the tunnel.
-  - **Single-namespace dispatch**: every run flows through `GraphExecutorPort` namespace `"bridge"`; no side-channel from the UI to the device that bypasses run accounting.
-- Update `docs/spec/architecture.md` to add `BridgedRuntimeProvider` to the GraphExecutor adapter list.
-- Update `docs/guides/agent-api-validation.md` if the device-pairing flow exposes new endpoints worth validating.
+### Shortcut 2: no isolation on the agent's host
 
-### Tasks (rough sequence)
+`claude` and `codex exec` currently run with `cwd = process.cwd()` of `cogni dev`, which on Derek's machine is the entire monorepo worktree. `claude` also reads/writes `$HOME/.claude` for memories. A malicious prompt is a supply-chain attack against the user's primary repo and cross-session persistent state. **No further user can touch this prototype until isolation lands.**
 
-1. `task` — Spec the run-envelope + device-pairing endpoints (`POST /api/v1/runtimes/announce`, device-key issuance reuse, capability advertisement schema). Output: spec doc; no implementation.
-2. `task` — Add `device_connections` table + drizzle schema; `pnpm db:generate:operator`; migration. Use the `schema-update` skill.
-3. `task` — Implement `BridgedRuntimeProvider implements GraphExecutorPort`, register in `createGraphExecutor()` factory. Stub transport (no real device call yet); unit-test the namespace routing.
-4. `task` — Build the `cogni-bridge` CLI as a new package under `packages/bridge-cli/` (or as a thin npm package outside the monorepo if we want it independently versioned). Capability detection + Cloudflare quick-tunnel spawn + local `POST /run` → `claude --print` shell-out.
-5. `task` — Operator UI: `/runtimes` page, pair-device flow, list-of-devices view. Reuses existing `/work` patterns.
-6. `task` — Wire `BridgedRuntimeProvider` to the real device (drop the stub from task 3); E2E from `cognidao.org/runtimes` → user's laptop runs Claude Code on a small work item.
-7. `spike` — Codex parity smoke test on a known-good Codex install; only after Phase 1 is green.
-8. `spike` — Headless-server / `tmux` wrapper target; only after Phase 1 is green.
+The fix: `cogni dev` does not run agents in `process.cwd()`. Each session provisions a fresh isolated worktree under `~/.cogni/sessions/<uuid>/` (configurable). Agent processes spawn with `cwd` pointed there and `HOME` overridden to a session-local directory, so `claude`'s memories and `codex`'s state are scoped to the session and disappear with it. v0 invariant: **no escalation pathway possible** — the agent cannot read or write outside the session worktree, period. v-next: explicit grant flow for the user to mount additional read-only or read-write paths on a per-session basis.
 
-Open routing question for the work items: Phase 0/1 belongs on `node = operator`; the CLI package may want `node = sandbox-runtime` or a new node — defer to triage.
+## Roadmap
+
+Single API work item: `task.5000`. Each phase below ships as one PR; the work item is updated, not decomposed.
+
+### Phase 0 — current PR (#1280, "Derek's machine only")
+
+- **Status**: shipped, validated on candidate-a, NOT for any second user.
+- **Bound by**: tunnel URL == only secret; agents have full disk access; UI is a debug console, not the polished chat.
+- **Action**: merge as-is for the artifact and the live demo; flag clearly as untrusted prototype in the PR body and the page itself.
+
+### Phase 1 — Isolation (HARD GATE before user N=2)
+
+- `cogni dev` provisions a fresh session worktree under `~/.cogni/sessions/<uuid>/`. Bootstrap: `git init` + optional `git clone <url>` if the user passes `--repo`.
+- Spawned `claude` / `codex` get `cwd = <session>`, `HOME = <session>/.home`, `TMPDIR = <session>/tmp`. No env passthrough of `PATH`, `OPENAI_*`, or other secrets the user has lying around.
+- Dropped: `--workdir` flag (the agent never picks the host's cwd).
+- v0-strict invariant: **no path outside the session is reachable by the agent.** This is enforceable today via env override + `cwd`; it is not a sandbox in the kernel sense, but it removes the obvious supply-chain footgun and the `$HOME/.claude` cross-session leak.
+- Validates by: prompt the agent to `ls /Users/derek` or `cat ~/.ssh/id_rsa` — must come back empty.
+
+### Phase 2 — GraphExecutor contract alignment (kills the page; kills 200+ lines of duplicated UI)
+
+- New port adapter: `BridgeRuntimeProvider implements GraphExecutorPort`, registered server-side at namespace `bridge:claude` and `bridge:codex` in the factory at `nodes/operator/app/src/bootstrap/graph-executor.factory.ts`.
+- `runGraph()` looks up the device's signed channel, makes a server-side `POST /run` to the tunnel with the prompt **piped via stdin** (kills the `ARG_MAX` and shell-special-char issues), parses the SSE chunks, re-emits as `ChatDeltaEvent`. The runtime's wire format on the user's machine becomes the same envelope every other graph executor consumes.
+- Bridge devices appear as model-picker entries in the existing `/chat` page — paired by user, identified by display name, e.g. "claude on derek-mbp".
+- `nodes/operator/app/src/app/(app)/runtimes/dev/{page,view}.tsx` deleted; the entire 250-line bespoke chat goes to the trash.
+- Conversation continuity, thread persistence, prompt cards, attach/mic, gradient send button, all polish from `image-v1.png` — all inherited for free.
+- The `cogni dev` CLI loses `--print-url-only`, `--no-tunnel`, `--allow-empty`, and the hardcoded operator-origin allowlist.
+
+### Phase 3 — Per-user device pairing (multi-tenant correct)
+
+- `cogni dev` becomes `cogni pair` (one-time) + `cogni dev` (recurring foreground). Pair flow: device emits a code, user confirms in the operator UI under `/settings/runtimes`, operator issues a per-device secret stored AEAD in `connections`/`device_connections` with AAD `{billing_account_id, device_id, provider="cogni-bridge"}`.
+- Every `/run` and `/capabilities` request carries `Authorization: Bearer <device-secret>`; the local server rejects everything else. CORS becomes a defence-in-depth layer, not the primary control.
+- The tunnel URL is operator-side state, never in the browser or the URL bar. Closes findings 1, 2, 6, 8 from the security review.
+- New endpoints under `/api/v1/runtimes/devices/...` (announce, list, revoke, send).
+
+### Phase 4 — Hardening
+
+- Concurrency cap (=1 for v0 of this phase), per-message wallclock timeout (5 min), per-minute rate limit, request-body size cap (256 KB).
+- Audit log: every `/run` records `principal_id`, `device_id`, `prompt_hash`, `binary_path`, exit code, duration. Lands in the operator's existing AI-runs activity feed.
+- Error sanitization in SSE — no raw stderr leaks of file paths or env hints.
+- `Referrer-Policy: no-referrer` and a tight CSP on the chat page so no cross-site resource leaks the bridge identity.
+
+### Phase 5 — Beyond batch (post-MVP)
+
+- Conversation continuity via `claude --resume <session-id>` and persistent codex sessions.
+- Token-by-token streaming (Channels mode) once Anthropic ships daemonization (`claude remote-control --headless`); until then, batch.
+- Headless cloud-VM target with a tmux wrapper for the TTY constraint.
+- v-next isolation: explicit grant flow letting the user mount additional paths (e.g. "agent may read-only access `~/dev/cogni-template`") with revocation, per-grant audit.
+
+## Specs (fold-in points, not new files yet)
+
+- Update `docs/spec/architecture.md` to list `BridgeRuntimeProvider` alongside the other GraphExecutor adapters once Phase 2 lands.
+- Add a short section to `docs/spec/security-auth.md` covering the device-secret model and AEAD AAD binding when Phase 3 lands.
+- A standalone `docs/spec/byo-agent-runtime-bridge.md` only after Phase 3 — earlier specs would just rot. Per `SPECS_ARE_AS_BUILT`.
+
+Routing: all phases stay on `node = operator`; the `@cogni/cli` package is a workspace-level tool, no node tag.
