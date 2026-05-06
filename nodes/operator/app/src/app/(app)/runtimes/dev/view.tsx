@@ -161,14 +161,14 @@ export function RuntimesDevView(): ReactElement {
   if (!baseUrl) {
     return (
       <main className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 py-12">
-        <h1 className="text-2xl font-semibold">Runtimes · dev console</h1>
+        <h1 className="font-semibold text-2xl">Runtimes · dev console</h1>
         <p className="text-muted-foreground">
           Pair your local Claude Code or Codex installation with this page by
           running the
-          <code className="bg-muted mx-1 rounded px-1.5 py-0.5">cogni dev</code>
+          <code className="mx-1 rounded bg-muted px-1.5 py-0.5">cogni dev</code>
           CLI on your device.
         </p>
-        <pre className="bg-muted/40 rounded border p-4 text-sm whitespace-pre-wrap">
+        <pre className="whitespace-pre-wrap rounded border bg-muted/40 p-4 text-sm">
           {PAIRING_HINT}
         </pre>
       </main>
@@ -216,7 +216,7 @@ export function RuntimesDevView(): ReactElement {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMessage.id
-            ? { ...m, text: m.text + `\n[error: ${message}]` }
+            ? { ...m, text: `${m.text}\n[error: ${message}]` }
             : m
         )
       );
@@ -233,15 +233,15 @@ export function RuntimesDevView(): ReactElement {
   return (
     <main className="mx-auto flex h-full w-full max-w-3xl flex-col px-6 py-6">
       <header className="mb-4 flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold">Runtimes · dev console</h1>
+        <h1 className="font-semibold text-2xl">Runtimes · dev console</h1>
         <span className="text-muted-foreground text-sm">
           tunnel:{" "}
-          <code className="bg-muted rounded px-1.5 py-0.5">{baseUrl}</code>
+          <code className="rounded bg-muted px-1.5 py-0.5">{baseUrl}</code>
         </span>
       </header>
 
       {error && (
-        <div className="border-destructive/40 bg-destructive/10 text-destructive mb-4 rounded border p-3 text-sm">
+        <div className="mb-4 rounded border border-destructive/40 bg-destructive/10 p-3 text-destructive text-sm">
           {error}
         </div>
       )}
@@ -253,7 +253,7 @@ export function RuntimesDevView(): ReactElement {
         </div>
       )}
 
-      <ol className="bg-muted/20 mb-4 flex-1 space-y-3 overflow-auto rounded border p-4">
+      <ol className="mb-4 flex-1 space-y-3 overflow-auto rounded border bg-muted/20 p-4">
         {messages.length === 0 && (
           <li className="text-muted-foreground text-sm">
             Send a message — it will run on your local <code>{runtime}</code>{" "}
@@ -265,11 +265,11 @@ export function RuntimesDevView(): ReactElement {
             key={m.id}
             className={
               m.role === "user"
-                ? "bg-background rounded px-3 py-2 text-sm"
-                : "bg-background rounded border px-3 py-2 font-mono text-sm whitespace-pre-wrap"
+                ? "rounded bg-background px-3 py-2 text-sm"
+                : "whitespace-pre-wrap rounded border bg-background px-3 py-2 font-mono text-sm"
             }
           >
-            <div className="text-muted-foreground mb-1 text-xs">
+            <div className="mb-1 text-muted-foreground text-xs">
               {m.role === "user" ? "you" : `${m.runtime ?? "agent"} →`}
             </div>
             {m.text || (m.role === "assistant" && running ? "…" : "")}
@@ -287,7 +287,7 @@ export function RuntimesDevView(): ReactElement {
             <select
               value={runtime}
               onChange={(e) => setRuntime(e.target.value as "claude" | "codex")}
-              className="bg-background rounded border px-2 py-1"
+              className="rounded border bg-background px-2 py-1"
               disabled={running || installedRuntimes.length === 0}
             >
               {installedRuntimes.map((r) => (
@@ -311,7 +311,7 @@ export function RuntimesDevView(): ReactElement {
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="Ask your local agent…"
           rows={3}
-          className="bg-background w-full resize-y rounded border px-3 py-2 text-sm"
+          className="w-full resize-y rounded border bg-background px-3 py-2 text-sm"
           disabled={running}
         />
         <div className="flex justify-end gap-2">
@@ -329,7 +329,7 @@ export function RuntimesDevView(): ReactElement {
             disabled={
               running || !prompt.trim() || installedRuntimes.length === 0
             }
-            className="bg-primary text-primary-foreground rounded px-3 py-1.5 text-sm disabled:opacity-50"
+            className="rounded bg-primary px-3 py-1.5 text-primary-foreground text-sm disabled:opacity-50"
           >
             {running ? "Running…" : "Send"}
           </button>

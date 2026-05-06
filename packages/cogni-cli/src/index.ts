@@ -11,6 +11,6 @@
  * @public
  */
 
-export { detectRuntimes } from "./dev/runtime.js";
 export type { Runtime, RuntimeKind } from "./dev/runtime.js";
+export { detectRuntimes } from "./dev/runtime.js";
 export { parseTunnelUrl } from "./dev/tunnel.js";
