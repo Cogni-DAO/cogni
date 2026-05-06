@@ -1,0 +1,32 @@
+{
+  "name": "@cogni/cli",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "sideEffects": false,
+  "bin": {
+    "cogni": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "postbuild": "node -e \"const fs=require('fs'); if(!fs.existsSync('dist/cli.js')){console.error('ERROR: dist/cli.js missing'); process.exit(1)}\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "typescript": "^5",
+    "vitest": "^3.1.4"
+  }
+}
