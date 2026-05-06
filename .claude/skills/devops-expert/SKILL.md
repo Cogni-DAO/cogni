@@ -120,12 +120,20 @@ Support:
 
 The sanctioned path — and the only one an agent should rely on — is what [`docs/guides/multi-node-deploy.md`](../../../docs/guides/multi-node-deploy.md) documents: `scripts/setup/provision-test-vm.sh` writes the SSH private key + VM IP to `.local/` (gitignored) at provision time.
 
-| File                  | Purpose                            |
-| --------------------- | ---------------------------------- |
-| `.local/{env}-vm-key` | SSH private key for `root@<VM_IP>` |
-| `.local/{env}-vm-ip`  | VM IP address (single line)        |
+| File                          | Purpose                                                       |
+| ----------------------------- | ------------------------------------------------------------- |
+| `.local/{env}-vm-key`         | SSH private key (ed25519) for `root@<VM_IP>`                  |
+| `.local/{env}-vm-ip`          | VM IP address (single line)                                   |
+| `.local/{env}-vm-secrets.env` | Provision-time secrets (Argo bootstrap, sealed-secrets, etc.) |
+| `.local/{env}-vm-age-key`     | age key for sealed-secrets / sops on the VM                   |
+
+`{env}` matches `DEPLOY_ENV` in `provision-test-vm.sh` — currently `candidate-a`, `preview`, `production`, `test`. The provisioner public key is committed at `infra/provision/cherry/base/keys/cogni_{env}_deploy.pub`.
 
 Usage (candidate-a only; read-only): `ssh -i .local/candidate-a-vm-key root@$(cat .local/candidate-a-vm-ip) "kubectl -n argocd get applications"`.
+
+**`.local/` lives on the provisioner device, not in worktrees.** It's gitignored, so a freshly cloned worktree (anything under a conductor / agent workspace path) will not have it. The canonical copy lives in the dev's primary cogni-template clone — reach for keys there, not in the active worktree. If you don't know your own primary-clone path, ask the human running the device; never hard-code home-directory paths into committed files (this skill is in a public repo).
+
+**Legacy `canary` naming.** Keys provisioned before the canary→candidate-a rename are still on disk under `.local/canary-vm-*` and are what the live VM accepts today. A re-provision under `DEPLOY_ENV=candidate-a` would write `candidate-a-vm-*` and rotate the authorized key. Until that re-provision lands, treat `canary-vm-key` / `canary-vm-ip` as the authoritative candidate-a coordinates.
 
 If `.local/{env}-vm-key` isn't present for the env you need, this device isn't the provisioner for that env. Do not improvise — don't source shell aliases from personal dotfiles, don't paste IPs from Slack, don't copy keys from a teammate. Either re-run `provision-test-vm.sh` (candidate-a only) or drive the change through the pipeline.
 
