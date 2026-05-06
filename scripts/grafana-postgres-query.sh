@@ -9,15 +9,48 @@
 #   GRAFANA_SERVICE_ACCOUNT_TOKEN   token with datasource query permission
 #
 # Usage:
-#   scripts/grafana-postgres-query.sh '<select ...>' [datasource_uid]
+#   # Positional UID:
+#   scripts/grafana-postgres-query.sh '<select ...>' cogni-<env>-<node>-postgres
+#
+#   # Flag-built UID (uses cogni-<env>-<node>-postgres convention):
+#   scripts/grafana-postgres-query.sh '<select ...>' --env candidate-a --node poly
+#
+#   # Default datasource (env: GRAFANA_POSTGRES_DATASOURCE_UID):
+#   GRAFANA_POSTGRES_DATASOURCE_UID=cogni-candidate-a-operator-postgres \
+#     scripts/grafana-postgres-query.sh '<select ...>'
 
 set -euo pipefail
 
 SQL="${1:-}"
-DS_UID="${2:-${GRAFANA_POSTGRES_DATASOURCE_UID:-cogni-candidate-a-poly-postgres}}"
+shift || true
 
 if [[ -z "$SQL" ]]; then
-  sed -n '2,18p' "$0" >&2
+  sed -n '2,21p' "$0" >&2
+  exit 2
+fi
+
+DS_UID=""
+ENV_NAME=""
+NODE_NAME=""
+while (( $# )); do
+  case "$1" in
+    --env)  ENV_NAME="${2:-}";  shift 2 ;;
+    --node) NODE_NAME="${2:-}"; shift 2 ;;
+    --uid)  DS_UID="${2:-}";    shift 2 ;;
+    --) shift; break ;;
+    -*) echo "unknown flag: $1" >&2; exit 2 ;;
+    *)  if [[ -z "$DS_UID" ]]; then DS_UID="$1"; shift; else
+          echo "extra positional arg: $1" >&2; exit 2
+        fi ;;
+  esac
+done
+
+if [[ -z "$DS_UID" && -n "$ENV_NAME" && -n "$NODE_NAME" ]]; then
+  DS_UID="cogni-${ENV_NAME}-${NODE_NAME}-postgres"
+fi
+DS_UID="${DS_UID:-${GRAFANA_POSTGRES_DATASOURCE_UID:-}}"
+if [[ -z "$DS_UID" ]]; then
+  echo "datasource UID not set: pass positionally, via --env <env> --node <node>, or set GRAFANA_POSTGRES_DATASOURCE_UID" >&2
   exit 2
 fi
 
@@ -60,7 +93,10 @@ payload=$(
     }'
 )
 
-curl -fsS -X POST "${GRAFANA_URL%/}/api/ds/query" \
+# -sS (not -fsS) so the JSON error body from Grafana reaches stdout when a
+# query fails — callers expect to parse JSON either way and silently swallowed
+# errors are debug-hostile.
+curl -sS -X POST "${GRAFANA_URL%/}/api/ds/query" \
   -H "Authorization: Bearer ${GRAFANA_SERVICE_ACCOUNT_TOKEN}" \
   -H "content-type: application/json" \
   --data "$payload"

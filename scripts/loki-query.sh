@@ -33,12 +33,13 @@ if [[ -z "$QUERY" ]]; then
   exit 2
 fi
 
-# Env fallback — source a local .env if the two required vars aren't already set.
+# Env fallback — source every present file in priority order. Any single file
+# may hold only part of the credential set (e.g. .env.cogni has GRAFANA_URL
+# while .env.<env> holds the env-scoped GRAFANA_SERVICE_ACCOUNT_TOKEN).
 if [[ -z "${GRAFANA_URL:-}" || -z "${GRAFANA_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
-  for candidate in "${COGNI_ENV_FILE:-}" ./.env.canary ./.env.local; do
+  for candidate in "${COGNI_ENV_FILE:-}" ./.env.cogni ./.env.canary ./.env.local; do
     if [[ -n "$candidate" && -f "$candidate" ]]; then
       set -a; . "$candidate"; set +a
-      break
     fi
   done
 fi
