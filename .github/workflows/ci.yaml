@@ -83,9 +83,10 @@ jobs:
   # node-level package.json changes), work/** (per-task work items, projects,
   # charters; high merge-conflict + index-regen churn until task tracking
   # moves to Dolt), docs/** (cross-cutting prose updates linked to a node
-  # change), the poly manager skill status card, and exact single-node-scope
-  # policy maintenance files. Whitelist must mirror RIDE_ALONG_PATTERNS in
-  # tests/ci-invariants/classify.ts.
+  # change), .claude/skills/** (agent-facing skill docs that codify the
+  # principle a node-scoped fix demonstrates; treated like docs/), and exact
+  # single-node-scope policy maintenance files. Whitelist must mirror
+  # RIDE_ALONG_PATTERNS in tests/ci-invariants/classify.ts.
   # Lands non-required initially; promote via gh api after a real cross-node
   # test PR proves the diagnostic (see work/items/task.0381.* §Manual Steps).
   single-node-scope:

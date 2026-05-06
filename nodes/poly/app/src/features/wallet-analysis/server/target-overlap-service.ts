@@ -16,9 +16,12 @@
  *     facts; fill volume is filtered by the selected interval.
  *   - PNL_FROM_VENDOR_CASHPNL: per-position PnL reads Polymarket's authoritative
  *     `cashPnl` from the persisted `/positions` payload (`raw->>'cashPnl'`).
- *     Subtracting `current_value_usdc - cost_basis_usdc` would diverge whenever
- *     Polymarket's cash P/L includes realized components beyond
- *     `currentValue - initialValue`.
+ *     On a fresh position (no realized fills), this matches the prior
+ *     `currentValue - costBasis` derivation; the invariant exists to make the
+ *     vendor field the source of truth so any future divergence (Polymarket
+ *     redefining cashPnl, stale row drift) does not silently mis-aggregate.
+ *     COALESCE retains the prior derivation as a defensive fallback when `raw`
+ *     is null or lacks `cashPnl`.
  * Side-effects: DB reads only.
  * Links: docs/design/poly-copy-target-performance-benchmark.md, work/items/task.5005
  * @public

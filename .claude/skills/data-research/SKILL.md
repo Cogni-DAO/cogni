@@ -138,16 +138,16 @@ The Research tab pattern is **comparative + time-windowed**: most views show 2�
 
 ### 8. Avoid the band-aids you'll be tempted to use
 
-| Band-aid                                                 | Why it's wrong                                                                                           | Real fix                                  |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| Call Polymarket (CLOB / Data API / Gamma) from a route   | Violates `PAGE_LOAD_DB_ONLY`. Couples page latency + uptime to a vendor. Per-user fan-out scales badly.  | Persist via observation tick, read DB.    |
+| Band-aid                                                 | Why it's wrong                                                                                           | Real fix                                                           |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Call Polymarket (CLOB / Data API / Gamma) from a route   | Violates `PAGE_LOAD_DB_ONLY`. Couples page latency + uptime to a vendor. Per-user fan-out scales badly.  | Persist via observation tick, read DB.                             |
 | Re-derive a metric the vendor already returns            | If `cashPnl`, `redeemable`, `curPrice`, etc. are in the response, derivation invents drift (bug.5020).   | Persist full payload as `raw jsonb`, read `(raw->>'field')::type`. |
-| `.limit(N)` on raw fills                                 | Silently truncates power-traders to most-recent-N. Defeats the backfill goal.                            | SQL aggregation.                          |
-| `--max-old-space-size` bump                              | Buys a quarter-decade. Next backfill breaks.                                                             | SQL aggregation.                          |
-| Streaming pg cursor + JS fold                            | Works for sums; breaks on quantiles, sorts, medians. Same byte cost.                                     | SQL aggregation.                          |
-| Pre-aggregate to per-position synthetic rows then run JS | Bypasses dailyCounts, tradesLast30 — still need SQL for those. More code, no win.                        | SQL aggregation, fully.                   |
-| Cache the aggregate result client-side or in Redis       | Adds invalidation as a new bug class. The query is fast in SQL — cache only when EXPLAIN says you can't. | EXPLAIN first; cache only as proven need. |
-| Bump container Tier                                      | See heap bump.                                                                                           | SQL aggregation.                          |
+| `.limit(N)` on raw fills                                 | Silently truncates power-traders to most-recent-N. Defeats the backfill goal.                            | SQL aggregation.                                                   |
+| `--max-old-space-size` bump                              | Buys a quarter-decade. Next backfill breaks.                                                             | SQL aggregation.                                                   |
+| Streaming pg cursor + JS fold                            | Works for sums; breaks on quantiles, sorts, medians. Same byte cost.                                     | SQL aggregation.                                                   |
+| Pre-aggregate to per-position synthetic rows then run JS | Bypasses dailyCounts, tradesLast30 — still need SQL for those. More code, no win.                        | SQL aggregation, fully.                                            |
+| Cache the aggregate result client-side or in Redis       | Adds invalidation as a new bug class. The query is fast in SQL — cache only when EXPLAIN says you can't. | EXPLAIN first; cache only as proven need.                          |
+| Bump container Tier                                      | See heap bump.                                                                                           | SQL aggregation.                                                   |
 
 If you find yourself reaching for any of these without first writing the SQL aggregation, stop. The SQL is almost always shorter and always more correct.
 
