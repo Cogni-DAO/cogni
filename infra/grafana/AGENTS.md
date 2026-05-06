@@ -28,6 +28,13 @@ Grafana Cloud observability resources managed from git. This directory owns dash
 }
 ```
 
+## Public Surface
+
+- **Exports:** none (declarative resources only)
+- **Routes (if any):** none
+- **Env/Config keys:** none — datasource secrets and Grafana API tokens live in CI/runtime env, not in this directory.
+- **Files considered API:** `dashboards/**/*.json` (Grafana Git Sync target), `alerts/**` (Grafana-managed alerting resources)
+
 ## Responsibilities
 
 - This directory **does**: Define Grafana dashboards, alert rule source files, and alert routing/contact-point code.
@@ -45,3 +52,8 @@ Grafana Cloud observability resources managed from git. This directory owns dash
 
 - Update `README.md` when adding a new synced path, alerting provisioning method, or dashboard ownership rule.
 - Test dashboard JSON locally with the dev Grafana stack before promoting to Grafana Cloud.
+
+## Notes
+
+- Scaffolding only at present — `dashboards/{operator,nodes}/` are placeholder dirs. The first real dashboards land in a follow-up.
+- Grafana Git Sync does not yet support alerting resources; `alerts/README.md` documents the manual provisioning path until upstream support exists.
