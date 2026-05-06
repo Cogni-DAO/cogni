@@ -165,7 +165,7 @@ The fix: `cogni dev` does not run agents in `process.cwd()`. Each session provis
 
 ## Roadmap
 
-Single API work item: `task.5000`. Each phase below ships as one PR; the work item is updated, not decomposed.
+Single API work item: `task.5025`. Each phase below ships as one PR; the work item is updated, not decomposed.
 
 ### Phase 0 — current PR (#1280, "Derek's machine only")
 
