@@ -22,7 +22,7 @@ import {
   polyTraderWallets,
 } from "@cogni/poly-db-schema";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { getTargetOverlapSlice } from "@/features/wallet-analysis/server/target-overlap-service";
 

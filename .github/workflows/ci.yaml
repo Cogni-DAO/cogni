@@ -139,6 +139,7 @@ jobs:
                or startswith("work/")
                or startswith("docs/")
                or . == ".claude/skills/poly-dev-manager/SKILL.md"
+               or . == ".claude/skills/data-research/SKILL.md"
                or . == ".github/workflows/ci.yaml"
                or . == "packages/repo-spec/AGENTS.md"
                or . == "packages/repo-spec/src/accessors.ts"

@@ -1,0 +1,12 @@
+{
+  "name": "ride-along: poly node files + data-research skill standard",
+  "paths": [
+    "nodes/poly/app/src/features/wallet-analysis/server/target-overlap-service.ts",
+    ".claude/skills/data-research/SKILL.md"
+  ],
+  "expected": {
+    "domains": ["poly"],
+    "pass": true,
+    "rideAlongApplied": true
+  }
+}
