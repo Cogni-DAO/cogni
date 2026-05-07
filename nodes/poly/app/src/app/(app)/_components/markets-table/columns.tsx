@@ -34,7 +34,6 @@ import type { ReactElement, ReactNode } from "react";
 
 import { Skeleton } from "@/components";
 import { Badge } from "@/components/reui/badge";
-import { DataGridColumnFilter } from "@/components/reui/data-grid/data-grid-column-filter";
 import { DataGridColumnHeader } from "@/components/reui/data-grid/data-grid-column-header";
 import {
   Table,
@@ -278,21 +277,7 @@ export function makeColumns(): AnyCol[] {
     col.accessor((row) => row.status, {
       id: "status",
       header: ({ column }) => (
-        <DataGridColumnHeader
-          column={column}
-          title="Status"
-          visibility
-          filter={
-            <DataGridColumnFilter
-              column={column}
-              title="Status"
-              options={[
-                { label: "Live", value: "live" },
-                { label: "Closed", value: "closed" },
-              ]}
-            />
-          }
-        />
+        <DataGridColumnHeader column={column} title="Status" visibility />
       ),
       size: 90,
       cell: (info) => {
@@ -305,10 +290,6 @@ export function makeColumns(): AnyCol[] {
             {status === "live" ? "Live" : "Closed"}
           </Badge>
         );
-      },
-      filterFn: (row, _id, value: string[]) => {
-        if (!value || value.length === 0) return true;
-        return value.includes(row.getValue<string>("status"));
       },
       meta: {
         headerTitle: "Status",
