@@ -106,7 +106,7 @@ function makeOpenRow(
 }
 
 describe("runMirrorTick — already_resting", () => {
-  it("hasOpenForMarket fast-path skips placement when prior open row exists", async () => {
+  it("findOpenForMarket fast-path skips placement when prior open row has no limit_price (legacy/fail-closed)", async () => {
     const ledger = new FakeOrderLedger({
       initial: [makeOpenRow("data-api:0xprior:0xasset:BUY:1713300000")],
     });

@@ -418,20 +418,7 @@ async function processFill(
   );
 }
 
-/**
- * bug.5035: detect when a resting BUY/SELL order's limit_price is materially
- * out-of-band vs the new intent. Returns true when at least one resting row
- * is stale enough that we should cancel-and-replace rather than skip.
- *
- * - BUY: stale when new_intent.price >= resting.price + STALE_DELTA (target
- *   layered up at higher prices; our resting bid is too low to fill).
- * - SELL: stale when new_intent.price <= resting.price - STALE_DELTA (target
- *   exits at lower prices; our resting ask is too high to fill).
- *
- * Pending rows (`order_id === null`) are treated as not-stale so we don't race
- * with an in-flight placement. Rows missing limit_price (legacy / malformed)
- * are also treated as not-stale — fail-closed to existing skip behavior.
- */
+/** bug.5035: true if any resting order's limit_price is ≥STALE_RESTING_PRICE_DELTA disadvantageously out of band vs the new intent. Pending rows (no order_id) and rows missing limit_price are not stale — fail-closed to the existing skip-as-already_resting path. */
 const STALE_RESTING_PRICE_DELTA = 0.03;
 function isRestingPriceStale(
   open: OpenOrderRow[],

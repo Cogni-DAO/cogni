@@ -810,7 +810,9 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
           targetId: polyCopyTradeFills.targetId,
           marketId: polyCopyTradeFills.marketId,
           createdAt: polyCopyTradeFills.createdAt,
-          limitPrice: sql<string | null>`${polyCopyTradeFills.attributes}->>'limit_price'`,
+          limitPrice: sql<
+            string | null
+          >`${polyCopyTradeFills.attributes}->>'limit_price'`,
         })
         .from(polyCopyTradeFills)
         .where(
@@ -846,7 +848,9 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
           targetId: polyCopyTradeFills.targetId,
           marketId: polyCopyTradeFills.marketId,
           createdAt: polyCopyTradeFills.createdAt,
-          limitPrice: sql<string | null>`${polyCopyTradeFills.attributes}->>'limit_price'`,
+          limitPrice: sql<
+            string | null
+          >`${polyCopyTradeFills.attributes}->>'limit_price'`,
         })
         .from(polyCopyTradeFills)
         .where(
