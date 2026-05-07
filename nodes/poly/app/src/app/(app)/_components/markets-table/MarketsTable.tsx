@@ -54,16 +54,15 @@ import { Toggle } from "@/components/vendor/shadcn/toggle";
 import { makeColumns } from "./columns";
 
 /**
- * Group is an "alpha leak": we are red, target is green. Null `edgeGapUsdc`
- * means we have no target legs to compare against — that's not a leak, it's
- * a solo market.
+ * Group is an "alpha leak": we lost money AND the targets' blended return
+ * outperformed ours on this market. Uses `edgeGapPct =
+ * targetReturnPct − ourReturnPct`; positive = targets ahead. Null gap
+ * (no comparable target legs, or undefined return) → not a leak.
  * Exported so the predicate can be unit-tested without rendering React.
  */
 export function isAlphaLeak(group: WalletExecutionMarketGroup): boolean {
-  if (group.edgeGapUsdc === null) return false;
-  // edgeGapUsdc = targetPnl − ourPnl. So targetPnl = ourPnl + edgeGapUsdc.
-  const targetPnl = group.pnlUsd + group.edgeGapUsdc;
-  return group.pnlUsd < 0 && targetPnl > 0;
+  if (group.edgeGapPct === null) return false;
+  return group.pnlUsd < 0 && group.edgeGapPct > 0;
 }
 
 export type MarketsTableProps = {

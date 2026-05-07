@@ -214,18 +214,16 @@ export const WalletExecutionMarketLineSchema = z.object({
   targetVwap: z.number().min(0).nullable(),
   hedgeCount: z.number().int().nonnegative(),
   /**
-   * `targetPnlUsdc - ourPnlUsdc` summed across our_wallet + copy_target
-   * participants. Positive = targets are outperforming us on this market
-   * (the alpha-loss signal). Negative = we are ahead of (or equal to) the
-   * targets we copied. Null when no copy-target legs exist on this line —
-   * "edge gap vs. no target" is undefined, not zero.
+   * `edgeGapPct × ourTotalBuyNotional`. Bounded to OUR book scale; never
+   * the legacy divide-by-near-zero artifact. Null when either return is
+   * undefined (no copy-target legs with positive buy notional, or our
+   * wallet has no observed buys yet).
    */
   edgeGapUsdc: z.number().nullable(),
   /**
-   * `edgeGapUsdc` normalized by `|sum(ourCostBasisUsdc)|`. Null when there
-   * are no copy-target legs to compare against, or our cost basis is zero
-   * (e.g. market never funded), so the UI can render `—` rather than a
-   * divide-by-zero or a meaningless solo-market percentage.
+   * `targetReturnPct − ourReturnPct` (Modified-Dietz, fractional). Positive
+   * = targets are ahead = alpha leaking from us. Null when either side's
+   * return cannot be computed.
    */
   edgeGapPct: z.number().nullable(),
   participants: z.array(WalletExecutionMarketParticipantRowSchema),
@@ -245,13 +243,16 @@ export const WalletExecutionMarketGroupSchema = z.object({
   targetValueUsdc: z.number().nonnegative(),
   pnlUsd: z.number(),
   /**
-   * Sum of `edgeGapUsdc` across lines that have target legs. Null when no
-   * line in the group has any copy-target leg.
+   * Group-level `edgeGapPct × groupOurTotalBuyNotional`, where the
+   * percentages are cost-basis-weighted blends across the group's lines.
+   * Bounded to our book scale. Null when either blended return is
+   * undefined.
    */
   edgeGapUsdc: z.number().nullable(),
   /**
-   * `edgeGapUsdc` divided by group-level `|sum(ourCostBasisUsdc)|`. Null
-   * when the group has no comparable target legs or our cost basis is zero.
+   * Cost-basis-weighted blend of per-line `targetReturnPct − ourReturnPct`
+   * across the group. Positive = targets ahead = alpha leaking. Null when
+   * either side's blend is undefined.
    */
   edgeGapPct: z.number().nullable(),
   hedgeCount: z.number().int().nonnegative(),
