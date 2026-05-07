@@ -87,12 +87,7 @@ export interface PolymarketWsActivitySourceDeps {
    * {@link DEFAULT_PAGE_LIMIT} (20). The data-api client's `/trades` cache is
    * stale at limits >20, so per-page size is capped low and burst capacity
    * comes from {@link maxPages} instead. bug.5032.
-   *
-   * @deprecated alias for {@link pageLimit}; kept for back-compat. New callers
-   * should set `pageLimit` instead.
    */
-  limit?: number;
-  /** Per-page row count. See {@link limit}. bug.5032. */
   pageLimit?: number;
   /**
    * Maximum number of pages to walk on a single drain. With `pageLimit=20`
@@ -146,7 +141,7 @@ export function createPolymarketWsActivitySource(
     deps.safetyNetDrainIntervalMs ?? DEFAULT_SAFETY_NET_DRAIN_INTERVAL_MS;
   const heartbeatIntervalMs =
     deps.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
-  const pageLimit = deps.pageLimit ?? deps.limit ?? DEFAULT_PAGE_LIMIT;
+  const pageLimit = deps.pageLimit ?? DEFAULT_PAGE_LIMIT;
   const maxPages = Math.max(1, deps.maxPages ?? DEFAULT_MAX_PAGES);
   const coldStartLookbackMs =
     deps.coldStartLookbackMs ?? DEFAULT_COLD_START_LOOKBACK_MS;
@@ -333,10 +328,10 @@ export function createPolymarketWsActivitySource(
       // would otherwise try to walk back through whatever the Data-API serves.
       // Forward-looking-only: pin `effectiveSince` to `now - coldStartLookbackMs`
       // so cumulative drain is bounded by the lookback window. bug.5032.
-      const wasColdStart = since === undefined;
-      const effectiveSince = wasColdStart
-        ? Math.floor((start - coldStartLookbackMs) / 1000)
-        : (since as number);
+      const effectiveSince =
+        since === undefined
+          ? Math.floor((start - coldStartLookbackMs) / 1000)
+          : since;
 
       // Paginated drain. Mirrors the polling source
       // (`packages/market-provider/.../polymarket.activity-source.ts`) which
@@ -371,9 +366,11 @@ export function createPolymarketWsActivitySource(
         {}
       );
 
-      // On cold-start with no trades, advance the cursor to the clamped
-      // `effectiveSince` so the next call doesn't replay the same lookback.
-      let newSince = wasColdStart ? effectiveSince : (since as number);
+      // newSince starts at effectiveSince (the floor we drained from) and
+      // advances to the max trade timestamp seen. On cold-start with no
+      // trades, the cursor still advances past the clamped lookback so the
+      // next call doesn't re-trigger the same backfill window.
+      let newSince = effectiveSince;
       const fills: Fill[] = [];
       let skipped = 0;
       const skipsByReason: Partial<
@@ -426,7 +423,7 @@ export function createPolymarketWsActivitySource(
           page_limit: pageLimit,
           max_pages: maxPages,
           reached_since: reachedSince,
-          cold_start_clamp: wasColdStart,
+          cold_start_clamp: since === undefined,
           effective_since: effectiveSince,
         },
         "wallet-watch ws fetch: ok"

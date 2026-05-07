@@ -156,8 +156,13 @@ describe("createPolymarketWsActivitySource", () => {
   });
 
   it("first fetchSince after construction drains the Data-API (cold-start prime)", async () => {
+    // Anchor system time so the cold-start clamp's `now - 60s` floor lands
+    // before the trade timestamp; otherwise the new clamp filters the
+    // synthetic trade out of the cursor advance. bug.5032.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2_000_000_000_000));
     const ws = makeFakeWs();
-    const trade = makeTrade({ timestamp: 1_700_000_000 });
+    const trade = makeTrade({ timestamp: 1_999_999_990 });
     const source = createPolymarketWsActivitySource({
       client: makeStubClient({
         positions: [makePosition(ASSET_ID)],
@@ -168,7 +173,8 @@ describe("createPolymarketWsActivitySource", () => {
       logger: noopLogger,
       metrics: createRecordingMetrics(),
     });
-    await flushMicrotasks();
+    await Promise.resolve();
+    await Promise.resolve();
 
     const { fills, newSince } = await source.fetchSince();
     expect(fills).toHaveLength(1);
@@ -657,12 +663,11 @@ describe("createPolymarketWsActivitySource", () => {
     });
 
     it("clamps cold-start (since=undefined) to now - coldStartLookbackMs", async () => {
+      vi.useFakeTimers();
+      const fixedNow = 2_000_000_000_000; // ms epoch
+      vi.setSystemTime(new Date(fixedNow));
       const ws = makeFakeWs();
       const captured: Array<{ sinceTs?: number }> = [];
-      const fixedNow = 2_000_000_000_000; // ms epoch
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date(fixedNow));
-
       const client = {
         async listUserPositions() {
           return [makePosition(ASSET_ID)];
@@ -681,7 +686,10 @@ describe("createPolymarketWsActivitySource", () => {
         metrics: createRecordingMetrics(),
         coldStartLookbackMs: 60_000,
       });
-      await flushMicrotasks();
+      // Use Promise.resolve(), not setImmediate-based flush — fake timers stub
+      // setImmediate so flushMicrotasks would never resolve.
+      await Promise.resolve();
+      await Promise.resolve();
 
       const { fills, newSince } = await source.fetchSince(undefined);
       expect(captured).toHaveLength(1);
@@ -691,6 +699,38 @@ describe("createPolymarketWsActivitySource", () => {
       // re-trigger the same backfill window.
       expect(newSince).toBe(expectedSinceSec);
       expect(fills).toHaveLength(0);
+      source.stop();
+    });
+
+    it("cold-start with a recent trade advances cursor to the trade timestamp", async () => {
+      vi.useFakeTimers();
+      const fixedNow = 2_000_000_000_000;
+      vi.setSystemTime(new Date(fixedNow));
+      const ws = makeFakeWs();
+      const recentTrade = makeTrade({ timestamp: 1_999_999_990 }); // 10s ago
+      const client = {
+        async listUserPositions() {
+          return [makePosition(ASSET_ID)];
+        },
+        async listUserActivity() {
+          return [recentTrade];
+        },
+      } as unknown as PolymarketDataApiClient;
+
+      const source = createPolymarketWsActivitySource({
+        client,
+        ws,
+        wallet: TARGET_WALLET,
+        logger: noopLogger,
+        metrics: createRecordingMetrics(),
+        coldStartLookbackMs: 60_000,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const { fills, newSince } = await source.fetchSince();
+      expect(fills).toHaveLength(1);
+      expect(newSince).toBe(recentTrade.timestamp);
       source.stop();
     });
 
