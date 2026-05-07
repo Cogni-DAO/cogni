@@ -36,7 +36,6 @@ import {
   getPaginationRowModel,
   getSortedRowModel,
   type PaginationState,
-  type SortingState,
   useReactTable,
   type VisibilityState,
 } from "@tanstack/react-table";
@@ -44,37 +43,26 @@ import { Flame } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-import { Toggle } from "@/components";
 import {
   DataGrid,
   DataGridContainer,
 } from "@/components/reui/data-grid/data-grid";
 import { DataGridPagination } from "@/components/reui/data-grid/data-grid-pagination";
 import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
+import { Toggle } from "@/components/vendor/shadcn/toggle";
 
 import { makeColumns } from "./columns";
 
 /**
- * Threshold for "this is a meaningful pick-quality gap, not noise."
- * 5 percentage points. Exposed for the test suite to lock the constant.
- */
-export const ALPHA_LEAK_RATE_GAP_THRESHOLD = 0.05;
-
-/**
- * Group is an "alpha leak" when targets are ahead of us by both:
- *   - a meaningful rate-of-return gap (>= 5pp pick-quality signal), AND
- *   - a positive dollar gap on our book (some real money is at stake).
- *
- * Both gates are required so we don't flag $0.10 leaks on a +0.01pp gap or
- * 50pp gaps where our position size is zero. Either-side null → not a leak
- * (no target legs / undefined comparison).
- *
+ * Group is an "alpha leak": we lost money AND the targets' blended return
+ * outperformed ours on this market. Uses `edgeGapPct =
+ * targetReturnPct − ourReturnPct`; positive = targets ahead. Null gap
+ * (no comparable target legs, or undefined return) → not a leak.
  * Exported so the predicate can be unit-tested without rendering React.
  */
 export function isAlphaLeak(group: WalletExecutionMarketGroup): boolean {
-  const { rateGapPct, sizeScaledGapUsdc } = group;
-  if (rateGapPct === null || sizeScaledGapUsdc === null) return false;
-  return rateGapPct >= ALPHA_LEAK_RATE_GAP_THRESHOLD && sizeScaledGapUsdc > 0;
+  if (group.edgeGapPct === null) return false;
+  return group.pnlUsd < 0 && group.edgeGapPct > 0;
 }
 
 export type MarketsTableProps = {
@@ -88,23 +76,11 @@ const DEFAULT_VISIBILITY: VisibilityState = {
   market: true,
   ourValue: true,
   targets: true,
-  ourReturn: true,
-  targetReturn: true,
-  rateGap: true,
-  sizeScaledGap: true,
-  // Tertiary, hidden by default per redesign §4.4 (visual rules). The
-  // `status` column is hidden but its filter is still applied (§6
-  // Decision #4 — default Live-only) — re-show via column dropdown to
-  // toggle to closed.
-  status: false,
-  pnl: false,
-  hedges: false,
+  status: true,
+  edgeGap: true,
+  pnl: true,
+  hedges: true,
 };
-const DEFAULT_SORT: SortingState = [{ id: "sizeScaledGap", desc: true }];
-// Default to Live only — "what's bleeding now" is the headline question;
-// closed positions become visible by re-showing + clearing the Status
-// column filter. Per redesign §6 Decision #4.
-const DEFAULT_FILTERS: ColumnFiltersState = [{ id: "status", value: ["live"] }];
 const PAGE_SIZE = 25;
 const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 
@@ -127,9 +103,7 @@ export function MarketsTable({
 
   const [columnVisibility, setColumnVisibility] =
     useState<VisibilityState>(DEFAULT_VISIBILITY);
-  const [columnFilters, setColumnFilters] =
-    useState<ColumnFiltersState>(DEFAULT_FILTERS);
-  const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORT);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: PAGE_SIZE,
@@ -163,10 +137,9 @@ export function MarketsTable({
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
-    state: { columnVisibility, columnFilters, sorting, pagination, expanded },
+    state: { columnVisibility, columnFilters, pagination, expanded },
     onColumnVisibilityChange: setColumnVisibility,
     onColumnFiltersChange: setColumnFilters,
-    onSortingChange: setSorting,
     onPaginationChange: setPagination,
     onExpandedChange: setExpanded,
   });
@@ -180,8 +153,8 @@ export function MarketsTable({
           pressed={alphaLeakOnly}
           onPressedChange={setAlphaLeakOnly}
           disabled={isLoading || allGroups.length === 0}
-          aria-label="Show only markets where targets are meaningfully ahead of us"
-          title="Markets where targets beat us by ≥5pp on a position with positive dollar gap"
+          aria-label="Show only markets where we lost and the copy target won"
+          title="Markets where we are red and the copy target is green"
           className="gap-1.5"
         >
           <Flame className="size-3.5" aria-hidden="true" />

@@ -40,17 +40,19 @@
  *     from `poly_trader_fills` (BUY notional + SELL realized cash) when
  *     available, falling back to position-derived cost basis for our wallet
  *     when no fills row exists yet. Targets always use fills (always observed).
- *   - GAP_NULL_WITHOUT_TARGETS: `rateGapPct` and `sizeScaledGapUsdc` are null
+ *   - EDGE_GAP_NULL_WITHOUT_TARGETS: `edgeGapUsdc` and `edgeGapPct` are null
  *     on lines/groups with zero target legs that have positive buy notional.
  *     "Edge gap vs. nobody" is undefined, not `-ourPnl`.
- *   - SIGN_TARGET_MINUS_US: `rateGapPct = targetReturnPct − ourReturnPct`;
- *     positive = target ahead = alpha leaking from us. Default sort
- *     descending by `sizeScaledGapUsdc` puts the worst leak on top.
+ *   - SIGN_TARGET_AHEAD_POSITIVE: `edgeGapPct = targetReturnPct − ourReturnPct`
+ *     (in fractional pp, internally `rateGapPct`); positive = target ahead =
+ *     alpha leaking from us. `edgeGapUsdc = edgeGapPct × ourTotalBuyNotional`
+ *     (internally `sizeScaledGapUsdc`) — bounded by our book, never the
+ *     legacy divide-by-zero `−1.7M%` artifact. Default sort descending by
+ *     `edgeGapUsdc` puts the worst leak on top.
  * Side-effects: DB read across `poly_copy_trade_targets`,
  *   `poly_trader_wallets`, `poly_trader_position_snapshots`,
  *   `poly_trader_fills`. No upstream Polymarket calls.
- * Links: docs/design/poly-markets-aggregation-redesign.md,
- *        docs/design/poly-hedge-followup-policy.md
+ * Links: docs/design/poly-hedge-followup-policy.md
  * @internal
  */
 
@@ -327,6 +329,11 @@ function groupParticipants(
     ourTotalBuyNotional: number;
     /** Combined target buy notional across ALL targets on this line. */
     targetTotalBuyNotional: number;
+    /** Internal: per-line our return (Modified-Dietz). Used to roll up
+     * group-level edgeGap. Not in the public contract. */
+    ourReturnPct: number | null;
+    /** Internal: per-line blended target return. Not in the public contract. */
+    targetReturnPct: number | null;
   };
 
   const groupBuckets = new Map<
@@ -407,6 +414,11 @@ function groupParticipants(
       ? "live"
       : "closed";
 
+    // OLD CONTRACT FIELD MAPPING — populate `edgeGapUsdc`/`edgeGapPct` from
+    // the new math (Modified-Dietz Rate gap + size-scaled $ gap). Same sign
+    // convention as the legacy formula (positive = target ahead = leak), but
+    // bounded — no more divide-by-near-zero −1.7M% values. See
+    // .context/revert-poly-markets-ui-prompt.md for rationale.
     const line: Line = {
       conditionId,
       marketTitle: anchor.marketTitle,
@@ -417,10 +429,8 @@ function groupParticipants(
       targetValueUsdc,
       ourVwap: weightedVwap(ourLegs),
       targetVwap: weightedVwap(targetLegs),
-      ourReturnPct,
-      targetReturnPct,
-      rateGapPct,
-      sizeScaledGapUsdc,
+      edgeGapUsdc: sizeScaledGapUsdc,
+      edgeGapPct: rateGapPct,
       hedgeCount: participants.filter((p) => p.hedge !== null).length,
       participants,
     };
@@ -437,6 +447,8 @@ function groupParticipants(
       line,
       ourTotalBuyNotional: ourAgg.totalBuyNotional,
       targetTotalBuyNotional,
+      ourReturnPct,
+      targetReturnPct,
     });
     groupBuckets.set(groupKey, bucket);
   }
@@ -459,13 +471,13 @@ function groupParticipants(
       const groupOurReturnPct = blendTargetReturns(
         sorted.map((entry) => ({
           totalBuyNotional: entry.ourTotalBuyNotional,
-          returnPct: entry.line.ourReturnPct,
+          returnPct: entry.ourReturnPct,
         }))
       );
       const groupTargetReturnPct = blendTargetReturns(
         sorted.map((entry) => ({
           totalBuyNotional: entry.targetTotalBuyNotional,
-          returnPct: entry.line.targetReturnPct,
+          returnPct: entry.targetReturnPct,
         }))
       );
       const groupOurTotalBuyNotional = sorted.reduce(
@@ -500,19 +512,18 @@ function groupParticipants(
             0
           )
         ),
-        ourReturnPct: groupOurReturnPct,
-        targetReturnPct: groupTargetReturnPct,
-        rateGapPct: groupGap.rateGapPct,
-        sizeScaledGapUsdc: groupGap.sizeScaledGapUsdc,
+        edgeGapUsdc: groupGap.sizeScaledGapUsdc,
+        edgeGapPct: groupGap.rateGapPct,
         hedgeCount: lines.reduce((sum, line) => sum + line.hedgeCount, 0),
         lines,
       };
     })
     .sort((left, right) => {
-      // Default sort: largest alpha leak first. Null gaps sort last so
+      // Default sort: largest alpha leak first by `edgeGapUsdc` (which is now
+      // the bounded sizeScaledGapUsdc value). Null gaps sort last so
       // unmatched markets don't crowd the head.
-      const lv = left.sizeScaledGapUsdc;
-      const rv = right.sizeScaledGapUsdc;
+      const lv = left.edgeGapUsdc;
+      const rv = right.edgeGapUsdc;
       if (lv === null && rv === null) {
         return right.ourValueUsdc - left.ourValueUsdc;
       }
@@ -583,7 +594,7 @@ function aggregateWalletReturn(
 // primary with hedge=null.
 function pivotParticipants(
   legs: readonly RawLeg[],
-  rollups: ReadonlyMap<string, FillRollup>
+  _rollups: ReadonlyMap<string, FillRollup>
 ): WalletExecutionMarketParticipantRow[] {
   const byWallet = new Map<string, RawLeg[]>();
   for (const leg of legs) {
@@ -615,18 +626,6 @@ function pivotParticipants(
         .sort()
         .pop() ?? null;
 
-    // Per-participant round-trip return on this condition. Same formula
-    // as the line-level `ourReturnPct` / `targetReturnPct`. Surfaces a
-    // winner-loser split when the line's blended `targetReturnPct`
-    // averages two divergent targets.
-    const useFallback = anchor.side === "our_wallet";
-    const agg = aggregateWalletReturn(walletLegs, rollups, useFallback);
-    const roundTripReturnPct = positionReturnPct({
-      totalBuyNotional: agg.totalBuyNotional,
-      realizedCash: agg.realizedCash,
-      currentMarkValue: agg.currentMarkValue,
-    });
-
     rows.push({
       side: anchor.side,
       source: anchor.source,
@@ -643,7 +642,6 @@ function pivotParticipants(
           (primary?.costBasisUsdc ?? 0) + (hedge?.costBasisUsdc ?? 0)
         ),
         pnlUsdc: roundMoney((primary?.pnlUsdc ?? 0) + (hedge?.pnlUsdc ?? 0)),
-        roundTripReturnPct,
       },
       lastObservedAt,
     });

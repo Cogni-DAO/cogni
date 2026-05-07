@@ -175,7 +175,6 @@ export {
   TableHeader,
   TableRow,
 } from "./vendor/shadcn/table";
-export { Toggle } from "./vendor/shadcn/toggle";
 export { ToggleGroup, ToggleGroupItem } from "./vendor/shadcn/toggle-group";
 export {
   Tooltip,

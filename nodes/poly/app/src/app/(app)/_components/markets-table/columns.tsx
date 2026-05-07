@@ -34,9 +34,16 @@ import type { ReactElement, ReactNode } from "react";
 
 import { Skeleton } from "@/components";
 import { Badge } from "@/components/reui/badge";
-import { useDataGrid } from "@/components/reui/data-grid/data-grid";
 import { DataGridColumnFilter } from "@/components/reui/data-grid/data-grid-column-filter";
 import { DataGridColumnHeader } from "@/components/reui/data-grid/data-grid-column-header";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/vendor/shadcn/table";
 import { cn } from "@/shared/util/cn";
 
 // biome-ignore lint/suspicious/noExplicitAny: heterogeneous TanStack column array
@@ -76,62 +83,21 @@ function pnlClass(value: number): string {
 }
 
 /**
- * Sign convention (per docs/design/poly-markets-aggregation-redesign.md §3.2):
- *   positive = target ahead = alpha leaking from us → destructive
- *   negative = we are ahead → success
- *   null     = undefined comparison → muted
- * Applied uniformly to `rateGapPct` and `sizeScaledGapUsdc`.
+ * Δ = `targetReturnPct − ourReturnPct` (pp), and the $ companion is that
+ * scaled by our cost basis. Positive = targets ahead → destructive.
+ * Negative = we are ahead → success. Null = no target legs → muted (`—`).
  */
-function gapClass(value: number | null): string {
+function edgeGapClass(value: number | null): string {
   if (value === null) return "text-muted-foreground";
   if (value > 0) return "text-destructive";
   if (value < 0) return "text-success";
   return "text-muted-foreground";
 }
 
-function formatReturnPct(value: number | null): string {
+function formatEdgeGapPct(value: number | null): string {
   if (value === null) return "—";
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
   return `${sign}${(Math.abs(value) * 100).toFixed(1)}%`;
-}
-
-function formatRateGapPp(value: number | null): string {
-  if (value === null) return "—";
-  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
-  return `${sign}${(Math.abs(value) * 100).toFixed(1)}pp`;
-}
-
-/**
- * Returns and dollar-deltas use the same sign-aware coloring as the gap
- * columns: green when we're ahead (positive own-return; negative own loss),
- * red when behind. For pure return cells without a comparison axis, this
- * keeps directionality consistent with the rest of the row.
- */
-function returnClass(value: number | null): string {
-  if (value === null) return "text-muted-foreground";
-  if (value > 0) return "text-success";
-  if (value < 0) return "text-destructive";
-  return "text-muted-foreground";
-}
-
-/**
- * TanStack sortingFn for a nullable numeric accessor. Nulls always sort to
- * the tail regardless of direction so unmatched markets don't crowd the head.
- */
-function nullableNumberSort(
-  pick: (row: WalletExecutionMarketGroup) => number | null
-) {
-  return (
-    left: { original: WalletExecutionMarketGroup },
-    right: { original: WalletExecutionMarketGroup }
-  ) => {
-    const lv = pick(left.original);
-    const rv = pick(right.original);
-    if (lv === null && rv === null) return 0;
-    if (lv === null) return 1;
-    if (rv === null) return -1;
-    return lv - rv;
-  };
 }
 
 /**
@@ -349,104 +315,43 @@ export function makeColumns(): AnyCol[] {
         skeleton: <Skeleton className="h-4 w-12" />,
       },
     }),
-    col.accessor((row) => row.ourReturnPct, {
-      id: "ourReturn",
+    col.accessor((row) => row.edgeGapPct, {
+      id: "edgeGap",
       header: ({ column }) =>
         rightHeader(
-          <DataGridColumnHeader column={column} title="Our ret%" visibility />
+          <DataGridColumnHeader column={column} title="Δ" visibility />
         ),
-      size: 100,
-      sortingFn: nullableNumberSort((g) => g.ourReturnPct),
+      size: 90,
+      sortingFn: (left, right) => {
+        const lv = left.original.edgeGapPct;
+        const rv = right.original.edgeGapPct;
+        if (lv === null && rv === null) return 0;
+        if (lv === null) return 1;
+        if (rv === null) return -1;
+        return lv - rv;
+      },
       cell: ({ row }) => {
-        const v = row.original.ourReturnPct;
+        const pct = row.original.edgeGapPct;
+        const usdc = row.original.edgeGapUsdc;
+        const tooltip =
+          usdc === null
+            ? "No copy-target legs in this market"
+            : `Δ return × our notional = ${formatSignedUsd(usdc)}`;
         return (
           <div
-            className={cn("text-right text-sm tabular-nums", returnClass(v))}
-            title="Round-trip USDC return on our deployed capital for this market"
+            className={cn(
+              "text-right text-sm tabular-nums",
+              edgeGapClass(usdc)
+            )}
+            title={tooltip}
           >
-            {formatReturnPct(v)}
+            {formatEdgeGapPct(pct)}
           </div>
         );
       },
       meta: {
-        headerTitle: "Our ret%",
-        skeleton: <Skeleton className="ms-auto h-3.5 w-12" />,
-      },
-    }),
-    col.accessor((row) => row.targetReturnPct, {
-      id: "targetReturn",
-      header: ({ column }) =>
-        rightHeader(
-          <DataGridColumnHeader column={column} title="Tgt ret%" visibility />
-        ),
-      size: 100,
-      sortingFn: nullableNumberSort((g) => g.targetReturnPct),
-      cell: ({ row }) => {
-        const v = row.original.targetReturnPct;
-        return (
-          <div
-            className={cn("text-right text-sm tabular-nums", returnClass(v))}
-            title="Cost-basis-weighted blend across active copy-target legs"
-          >
-            {formatReturnPct(v)}
-          </div>
-        );
-      },
-      meta: {
-        headerTitle: "Tgt ret%",
-        skeleton: <Skeleton className="ms-auto h-3.5 w-12" />,
-      },
-    }),
-    col.accessor((row) => row.rateGapPct, {
-      id: "rateGap",
-      header: ({ column }) =>
-        rightHeader(
-          <DataGridColumnHeader column={column} title="Rate gap" visibility />
-        ),
-      size: 100,
-      sortingFn: nullableNumberSort((g) => g.rateGapPct),
-      cell: ({ row }) => {
-        const v = row.original.rateGapPct;
-        return (
-          <div
-            className={cn("text-right text-sm tabular-nums", gapClass(v))}
-            title="Target return − our return. Positive = target ahead = alpha leak"
-          >
-            {formatRateGapPp(v)}
-          </div>
-        );
-      },
-      meta: {
-        headerTitle: "Rate gap",
-        skeleton: <Skeleton className="ms-auto h-3.5 w-12" />,
-      },
-    }),
-    col.accessor((row) => row.sizeScaledGapUsdc, {
-      id: "sizeScaledGap",
-      header: ({ column }) =>
-        rightHeader(
-          <DataGridColumnHeader
-            column={column}
-            title="$ gap on us"
-            visibility
-          />
-        ),
-      size: 110,
-      sortingFn: nullableNumberSort((g) => g.sizeScaledGapUsdc),
-      cell: ({ row }) => {
-        const v = row.original.sizeScaledGapUsdc;
-        return (
-          <div
-            className={cn("text-right text-sm tabular-nums", gapClass(v))}
-            title="Rate gap × our buy notional. Dollar cost on OUR book"
-          >
-            {v === null ? "—" : formatSignedUsd(v)}
-          </div>
-        );
-      },
-      meta: {
-        headerTitle: "$ gap on us",
-        skeleton: <Skeleton className="ms-auto h-3.5 w-16" />,
+        headerTitle: "Δ",
+        skeleton: <Skeleton className="ms-auto h-3.5 w-10" />,
       },
     }),
     col.accessor((row) => row.pnlUsd, {
@@ -545,248 +450,158 @@ function MarketLineBlock({
           {formatUsd(line.targetValueUsdc)}
         </div>
       </div>
-      <ParticipantsAlignedGrid line={line} />
+      <ParticipantsTable line={line} />
     </div>
   );
 }
 
-/**
- * Renders one row per (trader × leg) inside the expansion. Each row is a
- * CSS grid whose `gridTemplateColumns` is read from the outer DataGrid's
- * visible-leaf-columns, so the trader-leg cells slot **directly** under
- * the parent table's columns. No more inner `<table>` with its own
- * widths fighting the outer; no more floating Primary/Hedge/Net
- * sub-headers.
- *
- * Cells are dispatched per outer column id — when the column doesn't
- * apply to a given (trader, leg) (e.g. `Tgt $` on an our-wallet row),
- * the cell renders an em-dash so the visual columns stay legible.
- */
-function ParticipantsAlignedGrid({
+function ParticipantsTable({
   line,
 }: {
   line: WalletExecutionMarketLine;
 }): ReactElement {
-  // Build (trader × leg) rows. Solo positions emit one row, hedged two.
-  const rows: {
-    key: string;
-    participant: WalletExecutionMarketParticipantRow;
-    leg: WalletExecutionMarketLeg;
-    isHedge: boolean;
-    /** Our wallet's same-outcome VWAP, for cheaper-entry coloring. */
-    ourSameSideVwap: number | null;
-  }[] = [];
-  const ourByOutcome = new Map<string, number | null>();
-  const ours = line.participants.find((p) => p.side === "our_wallet");
-  if (ours) {
-    if (ours.primary) ourByOutcome.set(ours.primary.outcome, ours.primary.vwap);
-    if (ours.hedge) ourByOutcome.set(ours.hedge.outcome, ours.hedge.vwap);
-  }
-  for (const p of line.participants) {
-    if (p.primary) {
-      rows.push({
-        key: `${p.walletAddress}:primary`,
-        participant: p,
-        leg: p.primary,
-        isHedge: false,
-        ourSameSideVwap: ourByOutcome.get(p.primary.outcome) ?? null,
-      });
-    }
-    if (p.hedge) {
-      rows.push({
-        key: `${p.walletAddress}:hedge`,
-        participant: p,
-        leg: p.hedge,
-        isHedge: true,
-        ourSameSideVwap: ourByOutcome.get(p.hedge.outcome) ?? null,
-      });
-    }
-  }
-
   return (
-    <div className="rounded-md border bg-background/40">
-      {rows.map((row) => (
-        <ParticipantAlignedRow key={row.key} row={row} line={line} />
-      ))}
-    </div>
-  );
-}
-
-function ParticipantAlignedRow({
-  row,
-  line,
-}: {
-  row: {
-    participant: WalletExecutionMarketParticipantRow;
-    leg: WalletExecutionMarketLeg;
-    isHedge: boolean;
-    ourSameSideVwap: number | null;
-  };
-  line: WalletExecutionMarketLine;
-}): ReactElement {
-  const { table } = useDataGrid();
-  const visibleCols = table.getVisibleLeafColumns();
-  const gridTemplateColumns = visibleCols
-    .map((c) => `${c.getSize()}px`)
-    .join(" ");
-
-  return (
-    <div
-      className="grid items-center border-b last:border-b-0 hover:bg-muted/20"
-      style={{ gridTemplateColumns }}
-    >
-      {visibleCols.map((column) => (
-        <ParticipantAlignedCell
-          key={column.id}
-          columnId={column.id}
-          row={row}
-          line={line}
-        />
-      ))}
-    </div>
-  );
-}
-
-function ParticipantAlignedCell({
-  columnId,
-  row,
-  line,
-}: {
-  columnId: string;
-  row: {
-    participant: WalletExecutionMarketParticipantRow;
-    leg: WalletExecutionMarketLeg;
-    isHedge: boolean;
-    ourSameSideVwap: number | null;
-  };
-  line: WalletExecutionMarketLine;
-}): ReactElement | null {
-  const { participant, leg, isHedge, ourSameSideVwap } = row;
-  const isOurs = participant.side === "our_wallet";
-  const isTarget = participant.side === "copy_target";
-
-  switch (columnId) {
-    case "expand":
-      // Empty cell — the chevron lives only on the parent row.
-      return <div className="px-2 py-1.5" />;
-
-    case "market": {
-      const traderLabel = isOurs ? "Our wallet" : participant.label;
-      const cheaper =
-        isTarget &&
-        leg.vwap !== null &&
-        ourSameSideVwap !== null &&
-        leg.vwap < ourSameSideVwap;
-      return (
-        <div className="flex flex-col gap-0.5 py-1.5 ps-8 pe-2">
-          <span className="font-medium text-sm">{traderLabel}</span>
-          <span className="text-muted-foreground text-xs tabular-nums">
-            {isHedge ? `${leg.outcome} (hedge)` : leg.outcome} · VWAP{" "}
-            <span
-              className={cn(
-                cheaper && "font-medium text-destructive",
-                !cheaper && isOurs && "text-foreground/80"
-              )}
-              title={
-                cheaper
-                  ? "Target entered at a lower VWAP than us — pricing alpha source"
-                  : "Volume-weighted average entry price"
-              }
+    <div className="overflow-hidden rounded-md border bg-background">
+      <Table className="text-xs">
+        <TableHeader>
+          <TableRow className="bg-muted/40">
+            <TableHead className="h-8 px-2">Trader</TableHead>
+            <TableHead
+              className="h-8 px-2 text-right"
+              colSpan={3}
+              aria-label="Primary leg"
             >
-              {formatPrice(leg.vwap)}
-            </span>{" "}
-            · {formatShares(leg.shares)} sh
+              <div className="flex flex-col items-end">
+                <span className="font-medium text-foreground">Primary</span>
+                <span className="font-normal text-[10px] text-muted-foreground">
+                  Value · VWAP · P/L
+                </span>
+              </div>
+            </TableHead>
+            <TableHead
+              className="h-8 px-2 text-right"
+              colSpan={3}
+              aria-label="Hedge leg"
+            >
+              <div className="flex flex-col items-end">
+                <span className="font-medium text-foreground">Hedge</span>
+                <span className="font-normal text-[10px] text-muted-foreground">
+                  Value · VWAP · P/L
+                </span>
+              </div>
+            </TableHead>
+            <TableHead
+              className="h-8 px-2 text-right"
+              colSpan={2}
+              aria-label="Net across legs"
+            >
+              <div className="flex flex-col items-end">
+                <span className="font-medium text-foreground">Net</span>
+                <span className="font-normal text-[10px] text-muted-foreground">
+                  Value · P/L
+                </span>
+              </div>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {line.participants.map((participant) => (
+            <ParticipantRow
+              key={`${participant.walletAddress}:${participant.conditionId}`}
+              participant={participant}
+            />
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function ParticipantRow({
+  participant,
+}: {
+  participant: WalletExecutionMarketParticipantRow;
+}): ReactElement {
+  return (
+    <TableRow>
+      <TableCell className="py-1.5 align-top">
+        <div className="flex flex-col gap-0.5">
+          <span className="font-medium text-sm">
+            {participant.side === "our_wallet"
+              ? "Our wallet"
+              : participant.label}
           </span>
+          {participant.primary ? (
+            <span className="text-[11px] text-muted-foreground">
+              {participant.primary.outcome}
+              {" · "}
+              {formatShares(participant.primary.shares)} sh
+            </span>
+          ) : null}
         </div>
-      );
-    }
+      </TableCell>
+      <LegTriple leg={participant.primary} />
+      <LegTriple leg={participant.hedge} />
+      <NetPair net={participant.net} />
+    </TableRow>
+  );
+}
 
-    case "ourValue":
-      return (
-        <div className="px-2 py-1.5 text-right text-sm tabular-nums">
-          {isOurs ? formatUsd(leg.currentValueUsdc) : "—"}
-        </div>
-      );
-
-    case "targets":
-      return (
-        <div className="px-2 py-1.5 text-right text-muted-foreground text-sm tabular-nums">
-          {isTarget ? formatUsd(leg.currentValueUsdc) : "—"}
-        </div>
-      );
-
-    case "ourReturn": {
-      // Show this trader's per-condition return on the primary leg row only;
-      // hedge row skips it (it's the same value).
-      if (!isOurs || isHedge)
-        return (
-          <div className="px-2 py-1.5 text-right text-muted-foreground">—</div>
-        );
-      const v = participant.net.roundTripReturnPct;
-      return (
-        <div
-          className={cn(
-            "px-2 py-1.5 text-right text-sm tabular-nums",
-            returnClass(v)
-          )}
-        >
-          {formatReturnPct(v)}
-        </div>
-      );
-    }
-
-    case "targetReturn": {
-      if (!isTarget || isHedge)
-        return (
-          <div className="px-2 py-1.5 text-right text-muted-foreground">—</div>
-        );
-      const v = participant.net.roundTripReturnPct;
-      return (
-        <div
-          className={cn(
-            "px-2 py-1.5 text-right text-sm tabular-nums",
-            returnClass(v)
-          )}
-        >
-          {formatReturnPct(v)}
-        </div>
-      );
-    }
-
-    case "rateGap": {
-      // Per-target rate gap: target's return − our line return, in pp.
-      // Only on target primary-leg rows.
-      if (!isTarget || isHedge)
-        return (
-          <div className="px-2 py-1.5 text-right text-muted-foreground">—</div>
-        );
-      const t = participant.net.roundTripReturnPct;
-      const u = line.ourReturnPct;
-      const v =
-        t === null || u === null ? null : Math.round((t - u) * 10_000) / 10_000;
-      return (
-        <div
-          className={cn(
-            "px-2 py-1.5 text-right text-sm tabular-nums",
-            gapClass(v)
-          )}
-          title="This target's return − our return for this condition"
-        >
-          {formatRateGapPp(v)}
-        </div>
-      );
-    }
-
-    case "sizeScaledGap":
-    case "pnl":
-    case "hedges":
-    case "status":
-      // Group-level only — leave child cells blank to preserve alignment.
-      return (
-        <div className="px-2 py-1.5 text-right text-muted-foreground">—</div>
-      );
-
-    default:
-      return <div className="px-2 py-1.5" />;
+function LegTriple({
+  leg,
+}: {
+  leg: WalletExecutionMarketLeg | null;
+}): ReactElement {
+  if (leg === null) {
+    return (
+      <>
+        <TableCell className="py-1.5 text-right text-muted-foreground tabular-nums">
+          —
+        </TableCell>
+        <TableCell className="py-1.5 text-right text-muted-foreground tabular-nums">
+          —
+        </TableCell>
+        <TableCell className="py-1.5 text-right text-muted-foreground tabular-nums">
+          —
+        </TableCell>
+      </>
+    );
   }
+  return (
+    <>
+      <TableCell className="py-1.5 text-right tabular-nums">
+        {formatUsd(leg.currentValueUsdc)}
+      </TableCell>
+      <TableCell className="py-1.5 text-right text-muted-foreground tabular-nums">
+        {formatPrice(leg.vwap)}
+      </TableCell>
+      <TableCell
+        className={cn("py-1.5 text-right tabular-nums", pnlClass(leg.pnlUsdc))}
+      >
+        {formatSignedUsd(leg.pnlUsdc)}
+      </TableCell>
+    </>
+  );
+}
+
+function NetPair({
+  net,
+}: {
+  net: WalletExecutionMarketParticipantRow["net"];
+}): ReactElement {
+  return (
+    <>
+      <TableCell className="py-1.5 text-right font-medium tabular-nums">
+        {formatUsd(net.currentValueUsdc)}
+      </TableCell>
+      <TableCell
+        className={cn(
+          "py-1.5 text-right font-medium tabular-nums",
+          pnlClass(net.pnlUsdc)
+        )}
+      >
+        {formatSignedUsd(net.pnlUsdc)}
+      </TableCell>
+    </>
+  );
 }

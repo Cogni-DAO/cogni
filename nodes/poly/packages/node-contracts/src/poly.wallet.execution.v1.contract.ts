@@ -186,15 +186,6 @@ export const WalletExecutionMarketParticipantRowSchema = z.object({
     currentValueUsdc: z.number().nonnegative(),
     costBasisUsdc: z.number().nonnegative(),
     pnlUsdc: z.number(),
-    /**
-     * Round-trip USDC return on this participant's deployed capital for
-     * this condition, computed Modified-Dietz-style from fills (same
-     * formula as the per-line `ourReturnPct` / `targetReturnPct`). Lets
-     * the expansion grid surface a winner-loser split when the line's
-     * blended `targetReturnPct` hides one. Null when the participant has
-     * no observed buy notional. See §3.5 of the redesign brief.
-     */
-    roundTripReturnPct: z.number().nullable(),
   }),
   lastObservedAt: z.string().nullable(),
 });
@@ -223,34 +214,18 @@ export const WalletExecutionMarketLineSchema = z.object({
   targetVwap: z.number().min(0).nullable(),
   hedgeCount: z.number().int().nonnegative(),
   /**
-   * Cost-basis-deployed return on our position for this condition,
-   * computed Modified-Dietz-style with V_begin = 0:
-   *   (realizedCash + currentMarkValue − totalBuyNotional) / totalBuyNotional
-   * Null when our totalBuyNotional ≤ 0 (no comparable buy fills).
-   * See docs/design/poly-markets-aggregation-redesign.md §3.1.
+   * `edgeGapPct × ourTotalBuyNotional`. Bounded to OUR book scale; never
+   * the legacy divide-by-near-zero artifact. Null when either return is
+   * undefined (no copy-target legs with positive buy notional, or our
+   * wallet has no observed buys yet).
    */
-  ourReturnPct: z.number().nullable(),
+  edgeGapUsdc: z.number().nullable(),
   /**
-   * Cost-basis-weighted blend across all active copy-target legs on this
-   * line. Each target's per-position return is weighted by its
-   * totalBuyNotional. Null when no target leg has positive buy notional.
-   * Per-target rows in `participants` carry the unblended values.
-   * See §3.5.
+   * `targetReturnPct − ourReturnPct` (Modified-Dietz, fractional). Positive
+   * = targets are ahead = alpha leaking from us. Null when either side's
+   * return cannot be computed.
    */
-  targetReturnPct: z.number().nullable(),
-  /**
-   * `targetReturnPct − ourReturnPct`. Positive = target ahead = alpha
-   * leaking from us. Null when either side is null.
-   * Size-independent pick-quality signal — comparable across markets
-   * regardless of either trader's deployment.
-   */
-  rateGapPct: z.number().nullable(),
-  /**
-   * `rateGapPct × ourTotalBuyNotional`. Dollar cost denominated in OUR
-   * book — not target's whale book. Null when rate-gap is undefined or
-   * our totalBuyNotional ≤ 0. Default sort column for the Markets table.
-   */
-  sizeScaledGapUsdc: z.number().nullable(),
+  edgeGapPct: z.number().nullable(),
   participants: z.array(WalletExecutionMarketParticipantRowSchema),
 });
 export type WalletExecutionMarketLine = z.infer<
@@ -268,28 +243,18 @@ export const WalletExecutionMarketGroupSchema = z.object({
   targetValueUsdc: z.number().nonnegative(),
   pnlUsd: z.number(),
   /**
-   * Cost-basis-weighted aggregate of `ourReturnPct` across lines in the
-   * group, weighted by each line's our `totalBuyNotional`. Null when no
-   * line has positive our-side buy notional.
+   * Group-level `edgeGapPct × groupOurTotalBuyNotional`, where the
+   * percentages are cost-basis-weighted blends across the group's lines.
+   * Bounded to our book scale. Null when either blended return is
+   * undefined.
    */
-  ourReturnPct: z.number().nullable(),
+  edgeGapUsdc: z.number().nullable(),
   /**
-   * Cost-basis-weighted aggregate of `targetReturnPct` across lines in
-   * the group. Null when no target leg with positive buy notional exists
-   * on any line.
+   * Cost-basis-weighted blend of per-line `targetReturnPct − ourReturnPct`
+   * across the group. Positive = targets ahead = alpha leaking. Null when
+   * either side's blend is undefined.
    */
-  targetReturnPct: z.number().nullable(),
-  /**
-   * `targetReturnPct − ourReturnPct` at the group level. Same
-   * size-independent pick-quality signal as the per-line metric.
-   */
-  rateGapPct: z.number().nullable(),
-  /**
-   * Sum of per-line `sizeScaledGapUsdc` across lines that have it
-   * defined. Group-level "what is target ahead by, on our book." Default
-   * sort column for the Markets table.
-   */
-  sizeScaledGapUsdc: z.number().nullable(),
+  edgeGapPct: z.number().nullable(),
   hedgeCount: z.number().int().nonnegative(),
   lines: z.array(WalletExecutionMarketLineSchema),
 });

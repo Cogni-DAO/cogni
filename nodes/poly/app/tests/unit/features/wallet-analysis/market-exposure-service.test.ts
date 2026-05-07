@@ -110,11 +110,10 @@ describe("buildMarketExposureGroups", () => {
     expect(groups).toHaveLength(1);
     const group = groups[0];
     expect(group?.lines).toHaveLength(1);
-    expect(group?.lines[0]?.rateGapPct).toBeNull();
-    expect(group?.lines[0]?.sizeScaledGapUsdc).toBeNull();
-    expect(group?.lines[0]?.targetReturnPct).toBeNull();
-    expect(group?.rateGapPct).toBeNull();
-    expect(group?.sizeScaledGapUsdc).toBeNull();
+    expect(group?.lines[0]?.edgeGapUsdc).toBeNull();
+    expect(group?.lines[0]?.edgeGapPct).toBeNull();
+    expect(group?.edgeGapUsdc).toBeNull();
+    expect(group?.edgeGapPct).toBeNull();
     // Our leg still renders.
     expect(group?.lines[0]?.participants).toHaveLength(1);
     expect(group?.lines[0]?.participants[0]?.side).toBe("our_wallet");
@@ -170,15 +169,11 @@ describe("buildMarketExposureGroups", () => {
     expect(line).toBeDefined();
     const sides = line?.participants.map((p) => p.side).sort();
     expect(sides).toEqual(["copy_target", "our_wallet"]);
-    // Target: bought $20 → mark $80 = +300% return.
-    expect(line?.targetReturnPct).toBeCloseTo(3.0, 2);
-    // Our fallback cost basis = 9.99 − 7.95 = $2.04; mark $9.99 → ~+390% return.
-    expect(line?.ourReturnPct).not.toBeNull();
-    // rateGapPct = targetReturn − ourReturn; our return is huge here so the
-    // gap is actually negative (we're "ahead" because cost basis is tiny).
-    // The point: rateGapPct is computed and non-null when both sides have
-    // positive notional.
-    expect(line?.rateGapPct).not.toBeNull();
-    expect(line?.sizeScaledGapUsdc).not.toBeNull();
+    // edgeGap fields are populated using the new (Modified-Dietz) math but
+    // emitted under the legacy contract field names — see the service's
+    // OLD_CONTRACT_FIELD_MAPPING comment. Both sides have positive buy
+    // notional in this test, so the values are non-null.
+    expect(line?.edgeGapPct).not.toBeNull();
+    expect(line?.edgeGapUsdc).not.toBeNull();
   });
 });
