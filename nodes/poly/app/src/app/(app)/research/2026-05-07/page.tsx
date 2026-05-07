@@ -59,21 +59,37 @@ const PRE_VS_POST = {
   post_fix_cov_pct: 100,
 } as const;
 
-const RECIPE_5_DRIFT = {
-  // open-position cost_basis_usdc, swisstony only, captured 2026-05-07 ~16:00 UTC
-  positions: 824,
-  live_p50: 28.71,
-  live_p75: 154.09,
-  live_p80: 209.71,
-  live_p90: 506.87,
-  live_p95: 1251.34,
-  live_p99: 4483.06,
-  live_max: 16_572.23,
-  // baseline frozen in copy-trade-mirror.job.ts (2026-05-03)
-  baseline_p95: 7394,
-  baseline_p99: 9809,
-  drift_p95_pct: -83, // (1251 - 7394) / 7394
-  drift_p99_pct: -54,
+// Apples-to-apples filter comparison: swisstony fill size_usdc over the last
+// 48h (n=30,216) vs the snapshot frozen in copy-trade-mirror.job.ts on
+// 2026-05-03 (n=1085). The baseline n is itself biased — that snapshot was
+// captured while bug.5032 was silently dropping ~76% of swisstony's fills,
+// so the surviving 1085 skewed toward the largest recent fills.
+const PXX_DRIFT: ReadonlyArray<{
+  pct: number;
+  live: number;
+  baseline: number | null;
+}> = [
+  { pct: 0, live: 0, baseline: null },
+  { pct: 10, live: 0.72, baseline: null },
+  { pct: 20, live: 1.43, baseline: null },
+  { pct: 30, live: 2.33, baseline: null },
+  { pct: 40, live: 3.6, baseline: null },
+  { pct: 50, live: 6.14, baseline: 31 },
+  { pct: 60, live: 11.44, baseline: null },
+  { pct: 70, live: 23.29, baseline: null },
+  { pct: 75, live: 34.4, baseline: 146 },
+  { pct: 80, live: 56.15, baseline: null }, // active filter percentile
+  { pct: 90, live: 176, baseline: 665 },
+  { pct: 95, live: 372.42, baseline: 1394 },
+  { pct: 99, live: 1200.02, baseline: 4809 },
+  { pct: 100, live: 36_160.8, baseline: null },
+];
+
+const PXX_META = {
+  live_n: 30_216,
+  live_window: "trailing 48h ending 2026-05-07 ~16:00 UTC",
+  baseline_n: 1085,
+  baseline_captured: "2026-05-03 02:34 UTC",
 } as const;
 
 const ERROR_BUCKETS_1D: ReadonlyArray<{ reason: string; n: number }> = [
@@ -328,8 +344,9 @@ const ROWS: ReadonlyArray<MarketRow> = [
     top_skip_reason: "below_target_percentile",
     top_error_reason: "placement_failed",
     diagnosis:
-      "Canonical post-fix taxonomy mode 6 case. 100% emit coverage, but 122/138 swisstony fills (88%) skipped as below_target_percentile. The hardcoded p80 in bet-sizer-v1 is filtering out fills that swisstony actively placed. See Recipe 5 drift table — p95 has dropped 83% from baseline.",
-    notes: "Highest-priority debug — the leak that the fix made VISIBLE.",
+      "Highest-priority debug — the leak the fix made VISIBLE. 100% emit coverage on 138 fills. Skip breakdown: 32 below_target_percentile (avg $9.59), 31 target_position_below_threshold (avg $58.94), 16 already_resting (avg $757.67 — large swisstony entries we missed at our own resting prices), 15 followup_position_too_small, 15 position_cap_reached, 13 followup_not_needed. 6 placement errors. 10 placed (3 ok at avg $651, 7 layer_scale_in at avg $145). Biggest lost edge is already_resting × $757 avg — those were sizable bets we should have caught.",
+    notes:
+      "Skip histogram captured directly from poly_copy_trade_decisions on 2026-05-07.",
   },
   {
     condition_id:
@@ -622,94 +639,73 @@ export default async function AlphaLeakReportPage() {
 
       <section>
         <h2 className="mb-2 font-medium text-lg">
-          Recipe 5 — pXX drift on swisstony open positions (taxonomy mode 6)
+          pXX drift on swisstony fill <code>size_usdc</code> (the metric{" "}
+          <code>bet-sizer-v1</code> filters on)
         </h2>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Percentile</TableHead>
-              <TableHead className="text-right">Live (824 positions)</TableHead>
               <TableHead className="text-right">
-                Baseline (2026-05-03)
+                Live (n={PXX_META.live_n.toLocaleString()},{" "}
+                {PXX_META.live_window})
+              </TableHead>
+              <TableHead className="text-right">
+                Baseline (n={PXX_META.baseline_n.toLocaleString()},{" "}
+                {PXX_META.baseline_captured})
               </TableHead>
               <TableHead className="text-right">Drift</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow>
-              <TableCell>p50</TableCell>
-              <TableCell className="text-right">
-                {fmtUsd(RECIPE_5_DRIFT.live_p50)}
-              </TableCell>
-              <TableCell className="text-right text-muted-foreground">
-                —
-              </TableCell>
-              <TableCell className="text-right text-muted-foreground">
-                —
-              </TableCell>
-            </TableRow>
-            <TableRow>
-              <TableCell>p80 (active filter)</TableCell>
-              <TableCell className="text-right">
-                {fmtUsd(RECIPE_5_DRIFT.live_p80)}
-              </TableCell>
-              <TableCell className="text-right text-muted-foreground">
-                —
-              </TableCell>
-              <TableCell className="text-right text-muted-foreground">
-                —
-              </TableCell>
-            </TableRow>
-            <TableRow>
-              <TableCell>p95</TableCell>
-              <TableCell className="text-right">
-                {fmtUsd(RECIPE_5_DRIFT.live_p95)}
-              </TableCell>
-              <TableCell className="text-right">
-                {fmtUsd(RECIPE_5_DRIFT.baseline_p95, 0)}
-              </TableCell>
-              <TableCell className="text-right text-destructive">
-                {RECIPE_5_DRIFT.drift_p95_pct}%
-              </TableCell>
-            </TableRow>
-            <TableRow>
-              <TableCell>p99</TableCell>
-              <TableCell className="text-right">
-                {fmtUsd(RECIPE_5_DRIFT.live_p99)}
-              </TableCell>
-              <TableCell className="text-right">
-                {fmtUsd(RECIPE_5_DRIFT.baseline_p99, 0)}
-              </TableCell>
-              <TableCell className="text-right text-destructive">
-                {RECIPE_5_DRIFT.drift_p99_pct}%
-              </TableCell>
-            </TableRow>
-            <TableRow>
-              <TableCell>max</TableCell>
-              <TableCell className="text-right">
-                {fmtUsd(RECIPE_5_DRIFT.live_max)}
-              </TableCell>
-              <TableCell className="text-right text-muted-foreground">
-                —
-              </TableCell>
-              <TableCell className="text-right text-muted-foreground">
-                —
-              </TableCell>
-            </TableRow>
+            {PXX_DRIFT.map((r) => {
+              const drift =
+                r.baseline !== null && r.baseline > 0
+                  ? Math.round(((r.live - r.baseline) / r.baseline) * 100)
+                  : null;
+              const isFilter = r.pct === 80;
+              return (
+                <TableRow key={r.pct}>
+                  <TableCell>
+                    p{r.pct}
+                    {isFilter ? " (active filter)" : ""}
+                  </TableCell>
+                  <TableCell className="text-right">{fmtUsd(r.live)}</TableCell>
+                  <TableCell className="text-right">
+                    {r.baseline !== null ? (
+                      fmtUsd(r.baseline, 0)
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {drift !== null ? (
+                      <span className="text-destructive">{drift}%</span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
         <p className="mt-2 text-muted-foreground text-xs">
-          Hardcoded baseline lives in{" "}
+          Live distribution is computed against{" "}
+          <code>poly_trader_fills.size_usdc</code> for swisstony over the last
+          48h — the same shape <code>bet-sizer-v1</code> filters against.
+          Baseline percentiles are frozen in{" "}
           <code>
             nodes/poly/app/src/bootstrap/jobs/copy-trade-mirror.job.ts
-          </code>
-          . Drift well past the recipe's 25% threshold. Two non-exclusive
-          explanations: (a) bug.5032 surfaced many small fills the broken
-          pagination missed, pulling tail percentiles down; (b) swisstony's live
-          distribution genuinely moved smaller as the election cycle quieted.
-          Either way the static p80 is too high relative to current activity —
-          visible in the leak table as 36% of post-fix decisions rejected as{" "}
-          <code>below_target_percentile</code>.
+          </code>{" "}
+          (<code>TOP_TARGET_SIZE_SNAPSHOTS</code>, captured 2026-05-03 from a
+          1085-fill sample). Every comparable percentile drifted{" "}
+          <strong>−73% to −80%</strong>. The most likely explanation is that the
+          baseline was itself captured while bug.5032 was silently dropping ~76%
+          of swisstony's fills — the surviving 1085 was biased toward the
+          largest recent fills, so the snapshot percentiles are inflated by the
+          same factor we just fixed. <code>bet-sizer-v1</code> needs a re-snap
+          against the now-complete pipeline.
         </p>
       </section>
 
