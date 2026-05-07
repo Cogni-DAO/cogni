@@ -70,6 +70,12 @@ export interface OrderLedgerDeps {
 /** Postgres unique-violation SQLSTATE — partial unique index rejection. */
 const PG_UNIQUE_VIOLATION = "23505";
 
+function parseLimitPrice(raw: string | null): number | null {
+  if (raw === null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
 const DEFAULT_LIST_LIMIT = 50;
 const nonTerminalPositionLifecycle = sql`(${polyCopyTradeFills.positionLifecycle} IS NULL OR ${polyCopyTradeFills.positionLifecycle} NOT IN ('closed','redeemed','loser','dust','abandoned'))`;
 const activeRestingPositionLifecycle = sql`(${polyCopyTradeFills.positionLifecycle} IS NULL OR ${polyCopyTradeFills.positionLifecycle} IN ('unresolved','open','closing'))`;
@@ -804,6 +810,7 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
           targetId: polyCopyTradeFills.targetId,
           marketId: polyCopyTradeFills.marketId,
           createdAt: polyCopyTradeFills.createdAt,
+          limitPrice: sql<string | null>`${polyCopyTradeFills.attributes}->>'limit_price'`,
         })
         .from(polyCopyTradeFills)
         .where(
@@ -823,6 +830,7 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
         target_id: r.targetId,
         market_id: r.marketId,
         created_at: r.createdAt,
+        limit_price: parseLimitPrice(r.limitPrice),
       }));
     },
 
@@ -838,6 +846,7 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
           targetId: polyCopyTradeFills.targetId,
           marketId: polyCopyTradeFills.marketId,
           createdAt: polyCopyTradeFills.createdAt,
+          limitPrice: sql<string | null>`${polyCopyTradeFills.attributes}->>'limit_price'`,
         })
         .from(polyCopyTradeFills)
         .where(
@@ -858,6 +867,7 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
         target_id: r.targetId,
         market_id: r.marketId,
         created_at: r.createdAt,
+        limit_price: parseLimitPrice(r.limitPrice),
       }));
     },
 

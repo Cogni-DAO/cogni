@@ -4,11 +4,13 @@
 /**
  * Module: `@tests/unit/features/copy-trade/mirror-pipeline-already-resting.test`
  * Purpose: A second BUY fill on a market with an already-open mirror order
- *   skips with `reason='already_resting'` and never calls `placeIntent`.
- *   Covers the `hasOpenForMarket` fast-path gate AND the `AlreadyRestingError`
- *   DB-backstop conversion path. task.5001.
+ *   either skips with `reason='already_resting'` (same-price-band resting) or
+ *   cancels-then-places (bug.5035: resting price materially stale vs new
+ *   intent). Covers the `findOpenForMarket` price-aware gate, the
+ *   `AlreadyRestingError` DB-backstop conversion path, and the cancel-and-
+ *   replace path. task.5001 / bug.5035.
  * Side-effects: none
- * Links: src/features/copy-trade/mirror-pipeline.ts, work/items/task.5001
+ * Links: src/features/copy-trade/mirror-pipeline.ts, work/items/task.5001, work/items/bug.5035
  * @internal
  */
 
@@ -78,17 +80,24 @@ function makeSource(fills: Fill[]): WalletActivitySource {
   };
 }
 
-function makeOpenRow(fillId: string): LedgerRow {
+function makeOpenRow(
+  fillId: string,
+  overrides?: { limit_price?: number; order_id?: string | null }
+): LedgerRow {
   const now = new Date();
+  const attributes: Record<string, unknown> = { market_id: MARKET_ID };
+  if (overrides?.limit_price !== undefined) {
+    attributes.limit_price = overrides.limit_price;
+  }
   return {
     target_id: TARGET_ID,
     fill_id: fillId,
     observed_at: now,
     client_order_id: clientOrderIdFor(TARGET_ID, fillId),
-    order_id: "0xprior-order",
+    order_id: overrides?.order_id ?? "0xprior-order",
     status: "open",
     position_lifecycle: null,
-    attributes: { market_id: MARKET_ID },
+    attributes,
     synced_at: null,
     created_at: now,
     updated_at: now,
@@ -135,13 +144,11 @@ describe("runMirrorTick — already_resting", () => {
   });
 
   it("DB AlreadyRestingError thrown by insertPending also converts to skip/already_resting", async () => {
-    // Stub a ledger whose `hasOpenForMarket` lies (returns false) so the
-    // pipeline reaches `insertPending`, which then throws — proves the DB
-    // backstop conversion path.
+    // Empty resting rows → pipeline reaches `insertPending`, which throws —
+    // proves the DB backstop conversion path.
     const baseLedger = new FakeOrderLedger({});
     const ledger: OrderLedger = {
       ...baseLedger,
-      hasOpenForMarket: async () => false,
       insertPending: async () => {
         throw new AlreadyRestingError(
           COGNI_SYSTEM_BILLING_ACCOUNT_ID,
@@ -153,6 +160,7 @@ describe("runMirrorTick — already_resting", () => {
       snapshotState: baseLedger.snapshotState.bind(baseLedger),
       cumulativeIntentForMarket:
         baseLedger.cumulativeIntentForMarket.bind(baseLedger),
+      findOpenForMarket: baseLedger.findOpenForMarket.bind(baseLedger),
       recordDecision: baseLedger.recordDecision.bind(baseLedger),
     };
     const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
@@ -184,7 +192,6 @@ describe("runMirrorTick — already_resting", () => {
     const baseLedger = new FakeOrderLedger({});
     const ledger: OrderLedger = {
       ...baseLedger,
-      hasOpenForMarket: async () => false,
       insertPending: async () => {
         throw new PositionCapReachedError(
           COGNI_SYSTEM_BILLING_ACCOUNT_ID,
@@ -197,6 +204,7 @@ describe("runMirrorTick — already_resting", () => {
       snapshotState: baseLedger.snapshotState.bind(baseLedger),
       cumulativeIntentForMarket:
         baseLedger.cumulativeIntentForMarket.bind(baseLedger),
+      findOpenForMarket: baseLedger.findOpenForMarket.bind(baseLedger),
       recordDecision: baseLedger.recordDecision.bind(baseLedger),
     };
     const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
@@ -234,5 +242,131 @@ describe("runMirrorTick — already_resting", () => {
         e.labels?.placement === "limit"
     );
     expect(skipMetric).toBeDefined();
+  });
+
+  it("same-price-band resting (price delta < 3pp) still skips as already_resting", async () => {
+    // Resting at 0.50; new fill at 0.51 → delta 1pp, below 3pp threshold.
+    const ledger = new FakeOrderLedger({
+      initial: [
+        makeOpenRow("data-api:0xprior:0xasset:BUY:1713300000", {
+          limit_price: 0.5,
+        }),
+      ],
+    });
+    const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
+    const cancelOrder = vi.fn<(id: string) => Promise<void>>();
+    const metrics = createRecordingMetrics();
+    let cursor: number | undefined;
+
+    await runMirrorTick({
+      source: makeSource([
+        makeFill("data-api:0xnew:0xasset:BUY:1713301000", { price: 0.51 }),
+      ]),
+      ledger,
+      placeIntent,
+      cancelOrder,
+      target: TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
+      getCursor: () => cursor,
+      setCursor: (n) => {
+        cursor = n;
+      },
+      logger: noopLogger,
+      metrics,
+    });
+
+    expect(placeIntent).not.toHaveBeenCalled();
+    expect(cancelOrder).not.toHaveBeenCalled();
+    const skipDec = ledger.decisions.find(
+      (d) => d.outcome === "skipped" && d.reason === "already_resting"
+    );
+    expect(skipDec).toBeDefined();
+  });
+
+  it("stale-price resting (BUY price delta ≥ 3pp) cancels then places new order — bug.5035", async () => {
+    // Resting at 0.50; new fill at 0.55 → delta 5pp, triggers cancel+replace.
+    const ledger = new FakeOrderLedger({
+      initial: [
+        makeOpenRow("data-api:0xprior:0xasset:BUY:1713300000", {
+          limit_price: 0.5,
+        }),
+      ],
+    });
+    const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>(
+      async (intent) => ({
+        client_order_id: intent.client_order_id,
+        order_id: "0xnew-order",
+        status: "open",
+        filled_size_usdc: 0,
+        submitted_at: new Date().toISOString(),
+      })
+    );
+    const cancelOrder = vi.fn<(id: string) => Promise<void>>();
+    const metrics = createRecordingMetrics();
+    let cursor: number | undefined;
+
+    await runMirrorTick({
+      source: makeSource([
+        makeFill("data-api:0xnew:0xasset:BUY:1713301000", { price: 0.55 }),
+      ]),
+      ledger,
+      placeIntent,
+      cancelOrder,
+      target: TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
+      getCursor: () => cursor,
+      setCursor: (n) => {
+        cursor = n;
+      },
+      logger: noopLogger,
+      metrics,
+    });
+
+    expect(cancelOrder).toHaveBeenCalledWith("0xprior-order");
+    expect(placeIntent).toHaveBeenCalledTimes(1);
+    const skipDec = ledger.decisions.find(
+      (d) => d.outcome === "skipped" && d.reason === "already_resting"
+    );
+    expect(skipDec).toBeUndefined();
+  });
+
+  it("pending-status resting (order_id null) skips cancel-replace to avoid race with in-flight placement", async () => {
+    // bug.5035: pending = CLOB ack hasn't returned yet. Treat as not-stale.
+    const ledger = new FakeOrderLedger({
+      initial: [
+        makeOpenRow("data-api:0xprior:0xasset:BUY:1713300000", {
+          limit_price: 0.5,
+          order_id: null,
+        }),
+      ],
+    });
+    const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
+    const cancelOrder = vi.fn<(id: string) => Promise<void>>();
+    const metrics = createRecordingMetrics();
+    let cursor: number | undefined;
+
+    await runMirrorTick({
+      source: makeSource([
+        makeFill("data-api:0xnew:0xasset:BUY:1713301000", { price: 0.6 }),
+      ]),
+      ledger,
+      placeIntent,
+      cancelOrder,
+      target: TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
+      getCursor: () => cursor,
+      setCursor: (n) => {
+        cursor = n;
+      },
+      logger: noopLogger,
+      metrics,
+    });
+
+    expect(cancelOrder).not.toHaveBeenCalled();
+    expect(placeIntent).not.toHaveBeenCalled();
+    const skipDec = ledger.decisions.find(
+      (d) => d.outcome === "skipped" && d.reason === "already_resting"
+    );
+    expect(skipDec).toBeDefined();
   });
 });
