@@ -16,6 +16,8 @@
 
 import { spawn } from "node:child_process";
 
+import type { SpawnEnv } from "./session.js";
+
 export type RuntimeKind = "claude" | "codex";
 
 export interface Runtime {
@@ -81,7 +83,8 @@ export async function detectRuntimes(
 export interface RunInvocation {
   kind: RuntimeKind;
   prompt: string;
-  workdir: string;
+  /** Sanitized cwd + env handed to the spawned agent (see `session.provisionSession`). */
+  spawnEnv: SpawnEnv;
   signal: AbortSignal;
 }
 
@@ -101,10 +104,11 @@ export interface RunResult {
 export async function* runOnce(
   invocation: RunInvocation
 ): AsyncIterable<RunChunk> {
-  const { kind, prompt, workdir, signal } = invocation;
+  const { kind, prompt, spawnEnv, signal } = invocation;
   const args = kind === "claude" ? ["--print", prompt] : ["exec", prompt];
   const child = spawn(kind, args, {
-    cwd: workdir,
+    cwd: spawnEnv.cwd,
+    env: spawnEnv.env,
     stdio: ["ignore", "pipe", "pipe"],
     signal,
   });

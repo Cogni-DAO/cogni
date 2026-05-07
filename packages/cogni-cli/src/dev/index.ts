@@ -18,12 +18,12 @@ import { spawn } from "node:child_process";
 
 import { detectRuntimes } from "./runtime.js";
 import { startServer } from "./server.js";
+import { provisionSession } from "./session.js";
 import { startTunnel } from "./tunnel.js";
 
 interface DevOptions {
   host: string;
   port: number;
-  workdir: string;
   open: boolean;
   tunnel: boolean;
   printUrlOnly: boolean;
@@ -34,7 +34,6 @@ function parseArgs(argv: string[]): DevOptions {
   const opts: DevOptions = {
     host: "test.cognidao.org",
     port: 0,
-    workdir: process.cwd(),
     open: true,
     tunnel: true,
     printUrlOnly: false,
@@ -45,8 +44,6 @@ function parseArgs(argv: string[]): DevOptions {
     if (arg === "--host") opts.host = mustNext(argv, ++i, "--host");
     else if (arg === "--port")
       opts.port = Number(mustNext(argv, ++i, "--port"));
-    else if (arg === "--workdir")
-      opts.workdir = mustNext(argv, ++i, "--workdir");
     else if (arg === "--no-open") opts.open = false;
     else if (arg === "--no-tunnel") opts.tunnel = false;
     else if (arg === "--print-url-only") {
@@ -102,9 +99,14 @@ export async function runDev(argv: string[]): Promise<number> {
     return 2;
   }
 
+  const session = await provisionSession();
+  process.stdout.write(
+    `cogni dev: session = ${session.sessionId} (${session.sessionDir})\n`
+  );
+
   const server = await startServer({
     port: opts.port,
-    workdir: opts.workdir,
+    spawnEnv: session.spawnEnv,
     runtimes,
     allowedOrigins: buildAllowedOrigins(opts.host),
   });
@@ -112,7 +114,6 @@ export async function runDev(argv: string[]): Promise<number> {
   process.stdout.write(
     `cogni dev: local server on http://127.0.0.1:${server.port}\n`
   );
-  process.stdout.write(`cogni dev: workdir = ${opts.workdir}\n`);
   for (const r of runtimes) {
     process.stdout.write(
       `  ${r.installed ? "✓" : "✗"} ${r.kind}${r.version ? ` (${r.version})` : ""}\n`
@@ -147,7 +148,11 @@ export async function runDev(argv: string[]): Promise<number> {
       } catch {
         // ignore
       }
-      void server.close().then(() => resolve());
+      void server
+        .close()
+        .then(() => session.teardown())
+        .catch(() => undefined)
+        .then(() => resolve());
     };
     process.once("SIGINT", () => shutdown("SIGINT"));
     process.once("SIGTERM", () => shutdown("SIGTERM"));

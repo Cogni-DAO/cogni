@@ -15,7 +15,8 @@ The CLI never holds Anthropic / OpenAI credentials; it just shells out to whatev
 
 ## Pointers
 
-- [BYO Agent Runtime Bridge research](../../docs/research/byo-agent-runtime-bridge.md): the design this implements
+- [BYO Agent Runtime Bridge research](../../docs/research/byo-agent-runtime-bridge.md): the original spike
+- [BYO Agent Runtime Bridge spec](../../docs/spec/byo-agent-runtime-bridge.md): the chat-integrated design this CLI plugs into
 - [Packages Architecture](../../docs/spec/packages-architecture.md): package conventions
 
 ## Boundaries
@@ -52,8 +53,17 @@ The CLI never holds Anthropic / OpenAI credentials; it just shells out to whatev
 
 ## Responsibilities
 
-- This directory **does**: detect installed local agent runtimes; expose them on a 127.0.0.1 HTTP server; spawn cloudflared; print the studio URL; open a browser.
-- This directory **does not**: hold Anthropic / OpenAI credentials, persist any state across runs, talk to the operator's database, or implement any operator API endpoint.
+- This directory **does**: detect installed local agent runtimes; provision a per-session workspace dir under `~/.cogni/sessions/<id>/`; expose a 127.0.0.1 HTTP server; spawn agents with `HOME` overridden to the session dir and a pruned env; spawn cloudflared; print the studio URL; open a browser.
+- This directory **does not**: hold Anthropic / OpenAI credentials, persist any state across runs (the session dir is torn down on shutdown), talk to the operator's database, or implement any operator API endpoint.
+
+## Isolation contract (Phase 1)
+
+`provisionSession()` (`src/dev/session.ts`) is the single seam for soft isolation:
+
+- Spawned agents see `cwd = HOME = ~/.cogni/sessions/<id>/`.
+- The env passed to spawn contains only the `ENV_ALLOWLIST` keys (`PATH`, `USER`, `LOGNAME`, `SHELL`, `TERM`, `LANG`, `LC_*`, `TMPDIR`, `NODE_PATH`) plus the overridden `HOME`. Secrets like `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `COGNI_API_KEY_*`, `AWS_*`, `GITHUB_TOKEN` never reach the agent.
+- `~/.claude` and `~/.codex` are surfaced into the session dir via symlinks so the user's existing local CLI auth keeps working — but nothing else from the real home is reachable through `~`.
+- This is **soft** isolation: an agent that runs `cat /Users/<u>/.ssh/id_rsa` (absolute path) still succeeds. Hard sandbox containment (Docker, user namespaces) is a Phase 4 follow-up tracked in the spec.
 
 ## Usage
 
