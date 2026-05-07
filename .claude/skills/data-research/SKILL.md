@@ -40,6 +40,43 @@ The decision is not "add a LIMIT" or "bump the heap." The decision is **whether 
 
 If the cardinality of what you need scales with N (where N is fill count, market count, target-trade count), the work belongs in SQL.
 
+## Core principle 3: name the metric you're querying — primitive vs decision-relevant
+
+Many research questions look like "what's the pXX of swisstony's bets?" That phrasing hides a fork: there is a **primitive** (each individual fill's `size_usdc`, recorded in `poly_trader_fills`) and a **decision-relevant aggregate** (cumulative cost basis on a (token, side) position, recorded in `poly_trader_current_positions.cost_basis_usdc` and reflected in mirror logs as `target_token_cost_usdc`). They are not interchangeable. The dollar figures look similar in shape; they answer different questions.
+
+- **Primitive (`poly_trader_fills.size_usdc`)** — descriptive of bet-shape behavior. "How big is each individual fill?" Useful for histograms of trade-size distribution, hour-of-day patterns, fill-size vs market-resolution analysis.
+- **Decision-relevant (`poly_trader_current_positions.cost_basis_usdc` / log field `target_token_cost_usdc`)** — what bet-sizer-v1 and most other gates actually compare against. "How much capital has the target accumulated on this token-side?" Useful for filter-staleness checks, position-cap analysis, anything tied to a config knob in `copy-trade-mirror.job.ts`.
+
+Before writing the query, ask: **does the comparison the dashboard makes use the primitive or the aggregate?** Read the relevant mirror code or log line — they make this explicit. If you compare a primitive percentile to a baseline that was captured against the aggregate, you will produce numbers that look credible (USD, similar magnitude) and are completely meaningless. bug.5034 (filed 2026-05-07, closed without action) was this exact failure: a 30,216-fill `size_usdc` distribution compared against a 1,085-position baseline, surfacing -73% to -80% drift that did not exist on the filter-relevant metric.
+
+Where this matters in practice:
+
+- `bet-sizer-v1` filter (`sizing_min_target_usdc` interpolated from `TOP_TARGET_SIZE_SNAPSHOTS`) compares to `target_token_cost_usdc` — **decision-relevant**.
+- `mirror_max_usdc_per_trade` is a hard cap on our intent's `size_usdc` — **primitive**.
+- "Trade size distribution" histograms on the Research tab — **primitive**.
+- "Position size distribution" / cost-basis histograms — **decision-relevant**.
+
+When in doubt, surface **both** and label which one drives the decision. Future agents should not have to redo the metric-shape analysis to know what they're looking at.
+
+## KPIs the Research tab tracks
+
+When a new research view ships, its purpose is usually to answer one of the questions below. If your view doesn't fit any of these, ask before building it — we may already have a better surface for it.
+
+| KPI                                           | Source                                                                                              | What it answers                                                              | Invariant                                                                                                                                                           |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Decision coverage**                         | `count(poly_copy_trade_decisions) / count(poly_trader_fills)` per (target, hour)                    | "Did the mirror pipeline emit a decision for every observed target fill?"    | Should be ≈1.0 post bug.5032 cutover (2026-05-07 05:19 UTC). Sustained <0.95 is an ingestion regression.                                                            |
+| **Placed-rate**                               | `count(decisions.outcome='placed') / count(decisions)` per (target, day)                            | "What fraction of emitted decisions resulted in a placed mirror order?"      | Health metric. Drops indicate filter or executor regression.                                                                                                        |
+| **Skip-by-reason histogram**                  | `count(*) FILTER (WHERE outcome='skipped') GROUP BY reason` per (target, day)                       | "Why did we skip the rest?"                                                  | Use to surface filter staleness, layer-up blocking, hedge-leg gaps.                                                                                                 |
+| **VWAP gap (us vs target)**                   | weighted avg of `price * size_usdc` per (token, side, wallet), see Recipe 4                         | "When we did mirror, did we pay materially worse?"                           | <2% absolute on the median market; >2% surfaces taxonomy mode 3.                                                                                                    |
+| **Position cost-basis pXX (filter-relevant)** | `percentile_disc(*) on poly_trader_current_positions.cost_basis_usdc` per target                    | "Is the bet-sizer-v1 baseline still calibrated?"                             | Drift on each pXX < 25% vs frozen baseline (Recipe 5 threshold).                                                                                                    |
+| **Fill size_usdc pXX (descriptive)**          | `percentile_disc(*) on poly_trader_fills.size_usdc` per target, time-windowed                       | "How is the target's bet shape evolving?"                                    | No invariant — purely descriptive. Always pair with the position-cost view above; never substitute for it.                                                          |
+| **Already-resting hit-rate**                  | `count(*) FILTER (WHERE outcome='skipped' AND reason='already_resting') / count(decisions emitted)` | "How often does the dedupe gate block a layer-up?"                           | Tracks bug.5035 fix progress. Pre-fix this should be high on bursty markets; post-fix should approach the rate at which we genuinely have material covering orders. |
+| **Realized P/L per market (us vs target)**    | `(s.raw->>'cashPnl')::numeric` from latest `poly_trader_position_snapshots` per (wallet, condition) | "Where did the leak land in real cash terms?"                                | Used to rank alpha-leak markets. Drives the dated `/research/<date>` report cadence.                                                                                |
+| **Cost-basis ratio (us/target)** per market   | `our.cost / their.cost` per condition                                                               | "How much smaller are we sized than the target?"                             | Defines the floor on capturable edge — a 1000× ratio means we capture ≤0.1% even on a perfect mirror.                                                               |
+| **Coverage-gap by reason**                    | Recipe 6 — per-market histogram                                                                     | "Of the fills the mirror missed, was it never_emitted, errored, or skipped?" | Diagnoses taxonomy mode 2 vs others on a single market.                                                                                                             |
+
+If a metric a research view depends on isn't in this table, write down which question it answers in the page's module docstring, and consider whether it deserves promotion here. If two views depend on the same metric, define the SQL once and reuse — don't reinvent the aggregation per page.
+
 ## The pattern
 
 For every research view, follow this sequence. Don't skip steps; the order matters.
