@@ -59,35 +59,65 @@ const PRE_VS_POST = {
   post_fix_cov_pct: 100,
 } as const;
 
-// Apples-to-apples filter comparison: swisstony fill size_usdc over the last
-// 48h (n=30,216) vs the snapshot frozen in copy-trade-mirror.job.ts on
-// 2026-05-03 (n=1085). The baseline n is itself biased — that snapshot was
-// captured while bug.5032 was silently dropping ~76% of swisstony's fills,
-// so the surviving 1085 skewed toward the largest recent fills.
-const PXX_DRIFT: ReadonlyArray<{
+// bet-sizer-v1 filters on TARGET POSITION COST BASIS (`target_token_cost_usdc`
+// in mirror logs), not on individual fill sizes. The hardcoded baseline
+// snapshot in copy-trade-mirror.job.ts (`TOP_TARGET_SIZE_SNAPSHOTS`) is also
+// over position cost basis. So the apples-to-apples drift comparison is
+// against `poly_trader_current_positions.cost_basis_usdc`, not against
+// `poly_trader_fills.size_usdc`. We surface both — fill size_usdc is
+// descriptive of swisstony's bet shape but does NOT gate placement.
+
+// FILTER-RELEVANT: position cost_basis_usdc, n=966 active swisstony positions
+// captured 2026-05-07. This is what bet-sizer compares each new fill's
+// `target_token_cost_usdc` against.
+const PXX_POSITION_COST: ReadonlyArray<{
   pct: number;
   live: number;
   baseline: number | null;
 }> = [
-  { pct: 0, live: 0, baseline: null },
-  { pct: 10, live: 0.72, baseline: null },
-  { pct: 20, live: 1.43, baseline: null },
-  { pct: 30, live: 2.33, baseline: null },
-  { pct: 40, live: 3.6, baseline: null },
-  { pct: 50, live: 6.14, baseline: 31 },
-  { pct: 60, live: 11.44, baseline: null },
-  { pct: 70, live: 23.29, baseline: null },
-  { pct: 75, live: 34.4, baseline: 146 },
-  { pct: 80, live: 56.15, baseline: null }, // active filter percentile
-  { pct: 90, live: 176, baseline: 665 },
-  { pct: 95, live: 372.42, baseline: 1394 },
-  { pct: 99, live: 1200.02, baseline: 4809 },
-  { pct: 100, live: 36_160.8, baseline: null },
+  { pct: 0, live: 0.03, baseline: null },
+  { pct: 10, live: 2.26, baseline: null },
+  { pct: 20, live: 6.5, baseline: null },
+  { pct: 30, live: 11.88, baseline: null },
+  { pct: 40, live: 22.0, baseline: null },
+  { pct: 50, live: 39.04, baseline: 31 },
+  { pct: 60, live: 72.54, baseline: null },
+  { pct: 70, live: 149.45, baseline: null },
+  { pct: 75, live: 207.31, baseline: 146 },
+  { pct: 80, live: 279.64, baseline: 319 }, // baseline interpolated from p75/p90 (active filter point)
+  { pct: 90, live: 796.75, baseline: 665 },
+  { pct: 95, live: 1890.84, baseline: 1394 },
+  { pct: 99, live: 5548.33, baseline: 4809 },
+  { pct: 100, live: 30_062.84, baseline: null },
+];
+
+// DESCRIPTIVE: individual fill size_usdc, n=30,216 fills last 48h. NOT what
+// bet-sizer filters on; included for shape-of-behavior context.
+const PXX_FILL_SIZE: ReadonlyArray<{
+  pct: number;
+  live: number;
+}> = [
+  { pct: 0, live: 0 },
+  { pct: 10, live: 0.72 },
+  { pct: 20, live: 1.43 },
+  { pct: 30, live: 2.33 },
+  { pct: 40, live: 3.6 },
+  { pct: 50, live: 6.14 },
+  { pct: 60, live: 11.44 },
+  { pct: 70, live: 23.29 },
+  { pct: 75, live: 34.4 },
+  { pct: 80, live: 56.15 },
+  { pct: 90, live: 176 },
+  { pct: 95, live: 372.42 },
+  { pct: 99, live: 1200.02 },
+  { pct: 100, live: 36_160.8 },
 ];
 
 const PXX_META = {
-  live_n: 30_216,
-  live_window: "trailing 48h ending 2026-05-07 ~16:00 UTC",
+  position_n: 966,
+  position_window: "active swisstony positions on 2026-05-07 ~17:00 UTC",
+  fill_n: 30_216,
+  fill_window: "trailing 48h ending 2026-05-07 ~16:00 UTC",
   baseline_n: 1085,
   baseline_captured: "2026-05-03 02:34 UTC",
 } as const;
@@ -639,16 +669,16 @@ export default async function AlphaLeakReportPage() {
 
       <section>
         <h2 className="mb-2 font-medium text-lg">
-          pXX drift on swisstony fill <code>size_usdc</code> (the metric{" "}
-          <code>bet-sizer-v1</code> filters on)
+          pXX drift on swisstony position <code>cost_basis_usdc</code> — the
+          filter-relevant metric
         </h2>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Percentile</TableHead>
               <TableHead className="text-right">
-                Live (n={PXX_META.live_n.toLocaleString()},{" "}
-                {PXX_META.live_window})
+                Live (n={PXX_META.position_n.toLocaleString()},{" "}
+                {PXX_META.position_window})
               </TableHead>
               <TableHead className="text-right">
                 Baseline (n={PXX_META.baseline_n.toLocaleString()},{" "}
@@ -658,12 +688,18 @@ export default async function AlphaLeakReportPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {PXX_DRIFT.map((r) => {
+            {PXX_POSITION_COST.map((r) => {
               const drift =
                 r.baseline !== null && r.baseline > 0
                   ? Math.round(((r.live - r.baseline) / r.baseline) * 100)
                   : null;
               const isFilter = r.pct === 80;
+              const driftCls =
+                drift === null
+                  ? "text-muted-foreground"
+                  : Math.abs(drift) >= 25
+                    ? "text-destructive"
+                    : "text-success";
               return (
                 <TableRow key={r.pct}>
                   <TableCell>
@@ -678,12 +714,8 @@ export default async function AlphaLeakReportPage() {
                       <span className="text-muted-foreground">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-right">
-                    {drift !== null ? (
-                      <span className="text-destructive">{drift}%</span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
+                  <TableCell className={`text-right ${driftCls}`}>
+                    {drift !== null ? `${drift > 0 ? "+" : ""}${drift}%` : "—"}
                   </TableCell>
                 </TableRow>
               );
@@ -691,21 +723,53 @@ export default async function AlphaLeakReportPage() {
           </TableBody>
         </Table>
         <p className="mt-2 text-muted-foreground text-xs">
-          Live distribution is computed against{" "}
-          <code>poly_trader_fills.size_usdc</code> for swisstony over the last
-          48h — the same shape <code>bet-sizer-v1</code> filters against.
+          <code>bet-sizer-v1</code> compares a new fill's{" "}
+          <code>target_token_cost_usdc</code> (target's cumulative cost basis on
+          that token+side) against an interpolated percentile threshold.
           Baseline percentiles are frozen in{" "}
-          <code>
-            nodes/poly/app/src/bootstrap/jobs/copy-trade-mirror.job.ts
-          </code>{" "}
-          (<code>TOP_TARGET_SIZE_SNAPSHOTS</code>, captured 2026-05-03 from a
-          1085-fill sample). Every comparable percentile drifted{" "}
-          <strong>−73% to −80%</strong>. The most likely explanation is that the
-          baseline was itself captured while bug.5032 was silently dropping ~76%
-          of swisstony's fills — the surviving 1085 was biased toward the
-          largest recent fills, so the snapshot percentiles are inflated by the
-          same factor we just fixed. <code>bet-sizer-v1</code> needs a re-snap
-          against the now-complete pipeline.
+          <code>copy-trade-mirror.job.ts</code> (
+          <code>TOP_TARGET_SIZE_SNAPSHOTS</code>). Drift at the active p80
+          filter point is <strong>-12%</strong> (live $279.64 vs baseline interp
+          $319) — well within the 25% recipe threshold. Most other percentiles
+          drift +15% to +42% (live larger than baseline; swisstony accumulates
+          more in 2 days than the baseline window captured). Conclusion:{" "}
+          <strong>the filter is roughly correctly tuned</strong>; earlier "stale
+          baseline" alarm was over-stated. The bigger leak driver is{" "}
+          <code>already_resting</code> blocking layer-up, not percentile filter
+          staleness.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="mb-2 font-medium text-lg">
+          Reference: swisstony fill <code>size_usdc</code> shape (descriptive,
+          not filter-relevant)
+        </h2>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Percentile</TableHead>
+              <TableHead className="text-right">
+                Fill size (n={PXX_META.fill_n.toLocaleString()},{" "}
+                {PXX_META.fill_window})
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {PXX_FILL_SIZE.map((r) => (
+              <TableRow key={r.pct}>
+                <TableCell>p{r.pct}</TableCell>
+                <TableCell className="text-right">{fmtUsd(r.live)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        <p className="mt-2 text-muted-foreground text-xs">
+          Individual fill <code>size_usdc</code> is the primitive — descriptive
+          of swisstony's bet-shape behavior (mostly $0–$30 fills with rare large
+          layered orders). bet-sizer does <strong>not</strong> filter on this;
+          it filters on the cumulative position cost basis above. Both are
+          recorded so the next analysis can pull either without re-querying.
         </p>
       </section>
 
