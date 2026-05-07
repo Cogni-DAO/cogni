@@ -102,7 +102,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.cogni ./.cogni
 # Install globally so pnpm resolves platform-specific optional deps (@openai/codex-linux-x64).
 ENV PNPM_HOME="/usr/local/share/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable pnpm && pnpm add -g @openai/codex@0.116.0 @openai/codex-sdk@0.116.0
+RUN corepack enable && corepack prepare pnpm@9.12.2 --activate && pnpm add -g @openai/codex@0.116.0 @openai/codex-sdk@0.116.0
 
 # The global install has broken symlinks (pnpm v10 CAS). This COPY places the real
 # platform binary where the SDK's createRequire chain finds it. See bug.0224.
