@@ -10,6 +10,7 @@
     "./reui": "./src/reui/index.ts",
     "./reui/badge": "./src/reui/badge.tsx",
     "./reui/data-grid/*": "./src/reui/data-grid/*.tsx",
+    "./tool-card": "./src/tool-card/index.ts",
     "./util/cn": "./src/util/cn.ts",
     "./util/use-is-mobile": "./src/util/use-is-mobile.ts",
     "./header-filter": "./src/header-filter.tsx",

@@ -13,6 +13,7 @@
 "use client";
 
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
+import { ToolCard, type ToolCardTone } from "@cogni/node-ui-kit/tool-card";
 import { cn } from "@cogni/node-ui-kit/util/cn";
 import {
   AlertTriangleIcon,
@@ -20,7 +21,6 @@ import {
   CogIcon,
   Loader2Icon,
 } from "lucide-react";
-import { ToolCard, type ToolCardTone } from "./tool-card";
 
 const NAMESPACE_PREFIX = "core__";
 const MAX_ARG_ENTRIES = 3;

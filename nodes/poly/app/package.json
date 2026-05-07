@@ -35,6 +35,7 @@
     "@cogni/node-core": "workspace:*",
     "@cogni/node-shared": "workspace:*",
     "@cogni/node-streams": "workspace:*",
+    "@cogni/node-ui-kit": "workspace:*",
     "@cogni/poly-ai-tools": "workspace:*",
     "@cogni/poly-db-schema": "workspace:*",
     "@cogni/poly-graphs": "workspace:*",

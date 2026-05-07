@@ -2,18 +2,19 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@components/vendor/assistant-ui/tool-chip`
- * Purpose: Inline pill for tool-call title parameters — small mono-friendly chip, optional external link affordance.
+ * Module: `@cogni/node-ui-kit/tool-card` (ToolChip)
+ * Purpose: Inline pill for tool-call title parameters — small mono-friendly chip, optional external link affordance. Shared across all node apps.
  * Scope: Presentational. Used inside ToolCard `title`.
  * Side-effects: none
+ * Links: docs/guides/assistant-ui-tool-rendering.md
  * @public
  */
 
 "use client";
 
-import { cn } from "@cogni/node-ui-kit/util/cn";
 import { ExternalLinkIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { cn } from "../util/cn";
 
 export interface ToolChipProps {
   readonly children: ReactNode;

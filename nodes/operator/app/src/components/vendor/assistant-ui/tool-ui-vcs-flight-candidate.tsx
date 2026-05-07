@@ -17,13 +17,16 @@ import {
   type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
 import {
+  ToolCard,
+  type ToolCardTone,
+  ToolChip,
+} from "@cogni/node-ui-kit/tool-card";
+import {
   AlertTriangleIcon,
   CircleSlashIcon,
   Loader2Icon,
   RocketIcon,
 } from "lucide-react";
-import { ToolCard, type ToolCardTone } from "./tool-card";
-import { ToolChip } from "./tool-chip";
 
 const TOOL_NAME = "core__vcs_flight_candidate";
 const CANDIDATE_A_VERSION_URL = "https://test.cognidao.org/version";

@@ -33,6 +33,7 @@
     "@cogni/node-contracts": "workspace:*",
     "@cogni/node-shared": "workspace:*",
     "@cogni/node-streams": "workspace:*",
+    "@cogni/node-ui-kit": "workspace:*",
     "@cogni/ingestion-core": "workspace:*",
     "@cogni/langgraph-graphs": "workspace:*",
     "@cogni/repo-spec": "workspace:*",

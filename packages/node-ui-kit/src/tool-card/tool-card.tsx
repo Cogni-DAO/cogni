@@ -2,18 +2,19 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@components/vendor/assistant-ui/tool-card`
- * Purpose: Visual primitive for tool-call rendering in the assistant chat — icon + 1-liner title (chip/link params allowed) + collapsible details body.
- * Scope: Presentational. No assistant-ui runtime coupling so it stays usable from default fallback and per-tool renderers alike.
+ * Module: `@cogni/node-ui-kit/tool-card`
+ * Purpose: Visual primitive for tool-call rendering in the assistant chat — icon + 1-liner title (chip/link params allowed) + collapsible details body. Shared across all node apps.
+ * Scope: Presentational. No assistant-ui runtime coupling so it stays usable from default fallback and per-tool renderers in any node.
  * Side-effects: none
+ * Links: docs/guides/assistant-ui-tool-rendering.md
  * @public
  */
 
 "use client";
 
-import { cn } from "@cogni/node-ui-kit/util/cn";
 import { ChevronDownIcon, type LucideIcon } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
+import { cn } from "../util/cn";
 
 export type ToolCardTone =
   | "default"

@@ -28,6 +28,7 @@ import {
 } from "@/components/vendor/assistant-ui/attachment";
 import { MarkdownText } from "@/components/vendor/assistant-ui/markdown-text";
 import { ToolFallback } from "@/components/vendor/assistant-ui/tool-fallback";
+import { ToolUIRegistry } from "@/components/vendor/assistant-ui/tool-ui-registry";
 import { TooltipIconButton } from "@/components/vendor/assistant-ui/tooltip-icon-button";
 
 // Allow customization of welcome message via children prop
@@ -44,6 +45,7 @@ export const Thread: FC<ThreadProps> = ({ welcomeMessage, errorMessage }) => {
         ["--thread-max-width" as string]: "42rem",
       }}
     >
+      <ToolUIRegistry />
       <ThreadPrimitive.Viewport
         turnAnchor="top"
         className="aui-thread-viewport min-h-0 flex-1 overflow-y-auto scroll-smooth px-4 pt-4"
