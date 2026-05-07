@@ -22,6 +22,7 @@ Next.js application source implementing hexagonal architecture for a fully web3-
 - [Environment modes](../../../docs/spec/environments.md)
 - [DB schema](./shared/db/schema.ts) - Users, billing accounts, ledger, virtual keys
 - [Auth implementation](auth.ts) - NextAuth.js with SIWE provider
+- [Grafana Postgres datasource provisioning](../../../../infra/grafana/AGENTS.md) - operator DB is read by the `cogni-{env}-operator-postgres` Grafana datasource (provisioned in CI, verified non-blocking)
 
 ## Boundaries
 
