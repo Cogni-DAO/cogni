@@ -95,12 +95,16 @@ describe("provisionSession", () => {
     }
   });
 
-  it("symlinks ~/.claude and ~/.codex into the session dir when they exist", async () => {
+  it("symlinks auth dirs (.claude/.codex/.volta) and files (.claude.json) into the session dir when they exist", async () => {
     const realClaude = join(fakeHome, ".claude");
     const realCodex = join(fakeHome, ".codex");
+    const realVolta = join(fakeHome, ".volta");
+    const realClaudeJson = join(fakeHome, ".claude.json");
     await mkdir(realClaude, { recursive: true });
     await mkdir(realCodex, { recursive: true });
+    await mkdir(realVolta, { recursive: true });
     await writeFile(join(realClaude, "config.json"), '{"x":1}');
+    await writeFile(realClaudeJson, '{"loggedIn":true}');
 
     const session = await provisionSession({
       baseDir,
@@ -110,17 +114,25 @@ describe("provisionSession", () => {
     });
 
     try {
-      const linkClaude = join(session.sessionDir, ".claude");
-      const linkCodex = join(session.sessionDir, ".codex");
-      expect(await readlink(linkClaude)).toBe(realClaude);
-      expect(await readlink(linkCodex)).toBe(realCodex);
+      expect(await readlink(join(session.sessionDir, ".claude"))).toBe(
+        realClaude
+      );
+      expect(await readlink(join(session.sessionDir, ".codex"))).toBe(
+        realCodex
+      );
+      expect(await readlink(join(session.sessionDir, ".volta"))).toBe(
+        realVolta
+      );
+      expect(await readlink(join(session.sessionDir, ".claude.json"))).toBe(
+        realClaudeJson
+      );
     } finally {
       await session.teardown();
     }
   });
 
-  it("skips symlinks silently when the auth dirs are absent", async () => {
-    // fakeHome is empty — no .claude, no .codex.
+  it("skips symlinks silently when the auth artifacts are absent", async () => {
+    // fakeHome is empty — no .claude, .claude.json, .codex, or .volta.
     const session = await provisionSession({
       baseDir,
       realHome: fakeHome,
@@ -129,12 +141,11 @@ describe("provisionSession", () => {
     });
 
     try {
-      await expect(
-        readlink(join(session.sessionDir, ".claude"))
-      ).rejects.toThrow();
-      await expect(
-        readlink(join(session.sessionDir, ".codex"))
-      ).rejects.toThrow();
+      for (const name of [".claude", ".claude.json", ".codex", ".volta"]) {
+        await expect(
+          readlink(join(session.sessionDir, name))
+        ).rejects.toThrow();
+      }
     } finally {
       await session.teardown();
     }

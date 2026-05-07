@@ -8,7 +8,7 @@
  * Invariants:
  *   - Spawned agents see `HOME = sessionDir`, never the real user home.
  *   - The env handed to spawned agents contains only keys on `ENV_ALLOWLIST`, plus the overridden `HOME`. No `ANTHROPIC_*`, `OPENAI_*`, `COGNI_*` etc. leaks through.
- *   - `~/.claude` and `~/.codex` from the real home are surfaced into the session dir via symlinks **only** when present, so existing local auth keeps working without exposing the rest of the real home.
+ *   - Selected auth artifacts from the real home (`~/.claude`, `~/.claude.json`, `~/.codex`, `~/.volta`) are surfaced into the session dir via symlinks **only** when present, so existing local auth keeps working without exposing the rest of the real home. `.volta` is surfaced because Claude Code / Codex are commonly Volta-managed shims that can't resolve their target binary without `~/.volta/`.
  *   - Teardown is best-effort: a missing or partially-cleaned session dir does not throw.
  * Side-effects: IO (creates directories + symlinks under `~/.cogni/sessions/`)
  * Links: docs/spec/byo-agent-runtime-bridge.md (Phase 1 — Isolation)
@@ -64,8 +64,17 @@ const ENV_ALLOWLIST: readonly string[] = [
   "NODE_PATH",
 ];
 
-/** Auth dirs we surface into the session dir if they exist on the real home. */
-const AUTH_DIRS: readonly string[] = [".claude", ".codex"];
+/**
+ * Auth artifacts surfaced into the session dir if present on the real home.
+ * Mix of dirs (`.claude`, `.codex`, `.volta`) and files (`.claude.json`).
+ * Symlink type is detected from the source — file or dir.
+ */
+const AUTH_PATHS: readonly string[] = [
+  ".claude",
+  ".claude.json",
+  ".codex",
+  ".volta",
+];
 
 function sanitizeEnv(
   parentEnv: NodeJS.ProcessEnv,
@@ -82,8 +91,9 @@ function sanitizeEnv(
 async function trySymlink(target: string, linkPath: string): Promise<void> {
   try {
     const st = await stat(target);
-    if (!st.isDirectory()) return;
-    await symlink(target, linkPath, "dir");
+    const type = st.isDirectory() ? "dir" : st.isFile() ? "file" : null;
+    if (!type) return;
+    await symlink(target, linkPath, type);
   } catch {
     // Target missing or unreadable — skip silently. Agent will see an empty home.
   }
@@ -101,7 +111,7 @@ export async function provisionSession(
 
   await mkdir(sessionDir, { recursive: true, mode: 0o700 });
 
-  for (const name of AUTH_DIRS) {
+  for (const name of AUTH_PATHS) {
     await trySymlink(join(realHome, name), join(sessionDir, name));
   }
 
