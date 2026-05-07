@@ -112,14 +112,17 @@ else
 fi
 
 # 3. Apply notification policy (root tree is a single resource — PUT only).
+# WARNING: this overwrites the entire root tree, including any sibling routes
+# added via the UI. This script is the source of truth for the root policy;
+# extend root.json (add `routes`) rather than editing in Grafana.
 log "applying notification policy"
 curl_grafana -fsS -X PUT "${grafana_base}/api/v1/provisioning/policies" \
   -H "content-type: application/json" --data @"$policy_file" >/dev/null
 
 # 4. Render and apply alert rule group.
 log "rendering rule group cogni-postgres-datasource-health"
-rules_array_file="${tmpdir}/rules.array.json"
-echo '[]' > "$rules_array_file"
+rules_dir="${tmpdir}/rules"
+mkdir -p "$rules_dir"
 
 IFS=',' read -ra envs_arr <<< "$envs"
 IFS=',' read -ra dbs_arr <<< "$dbs"
@@ -133,17 +136,16 @@ for env_name in "${envs_arr[@]}"; do
     # Grafana caps alert-rule UIDs at 40 chars; pg-health-* keeps the longest
     # combo (candidate-a / operator → 30) under the limit.
     rule_uid="pg-health-${env_name}-${node}"
-    rendered="${tmpdir}/rule-${env_name}-${node}.json"
+    rendered="${rules_dir}/rule-${env_name}-${node}.json"
 
     env="$env_name" node="$node" ALERTS_FOLDER_UID="$folder_uid" \
       envsubst '${env} ${node} ${ALERTS_FOLDER_UID}' < "$rule_template_file" \
       | jq --arg uid "$rule_uid" '. + {uid: $uid}' > "$rendered"
-
-    jq --slurpfile next "$rendered" '. + $next' "$rules_array_file" \
-      > "${rules_array_file}.next" \
-      && mv "${rules_array_file}.next" "$rules_array_file"
   done
 done
+
+rules_array_file="${tmpdir}/rules.array.json"
+jq -s '.' "$rules_dir"/rule-*.json > "$rules_array_file"
 
 group_payload="${tmpdir}/rule-group.json"
 jq -n \
