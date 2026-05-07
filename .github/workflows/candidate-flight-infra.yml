@@ -192,6 +192,11 @@ jobs:
         if: env.VM_HOST != ''
         run: bash scripts/ci/provision-grafana-postgres-datasources.sh
 
+      - name: Verify Grafana Postgres datasources
+        if: env.VM_HOST != ''
+        continue-on-error: true
+        run: bash scripts/ci/verify-grafana-postgres-datasources.sh
+
       - name: Dump alloy-k8s-events state (post-deploy diagnostics)
         if: env.VM_HOST != ''
         run: |

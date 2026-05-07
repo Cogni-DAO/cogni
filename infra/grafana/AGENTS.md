@@ -57,3 +57,17 @@ Grafana Cloud observability resources managed from git. This directory owns dash
 
 - Scaffolding only at present — `dashboards/{operator,nodes}/` are placeholder dirs. The first real dashboards land in a follow-up.
 - Grafana Git Sync does not yet support alerting resources; `alerts/README.md` documents the manual provisioning path until upstream support exists.
+
+## Datasource provisioning vs. verification (do not re-couple)
+
+`scripts/ci/provision-grafana-postgres-datasources.sh` only declares datasource state via the Grafana API. It MUST NOT issue runtime queries to assert connectivity. A fresh `POST /api/datasources` for a Postgres datasource has been observed to leave Grafana's per-UID query path with a stuck/bad decrypted password until a follow-up `PUT` forces re-decrypt; provisioning therefore always finishes with a `PUT` (cache-bust) regardless of whether the resource was just created or already existed. Connectivity is asserted separately by `scripts/ci/verify-grafana-postgres-datasources.sh` (bounded retry, non-blocking via `continue-on-error: true`). Persistent datasource health belongs in Grafana-native alert rules, not in the deploy pipeline.
+
+The contract:
+
+| Layer                                               | Script / surface                            | Blocking?                                                                  |
+| --------------------------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------- |
+| Provision (declarative state)                       | `provision-grafana-postgres-datasources.sh` | Yes — fails the deploy if the API write fails                              |
+| Verify (post-deploy connectivity smoke, with retry) | `verify-grafana-postgres-datasources.sh`    | No — `continue-on-error: true`; failures emit `::warning::` + step summary |
+| Liveness (steady-state runtime health)              | Grafana alert rules under `alerts/` (TODO)  | Pages on sustained failure                                                 |
+
+If you ever want to add "validate" back into the provision script, don't. Extend the verify layer instead.
