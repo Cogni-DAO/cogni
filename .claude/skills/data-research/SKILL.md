@@ -180,6 +180,16 @@ Before opening a research-view PR, the author confirms:
 - Anyone proposing a `LIMIT N` cap as a "fix" for an OOMing read path
 - Designing a new comparison / scorecard / chart view, regardless of how the user phrases the request
 
+## Recipes (reusable agent loops)
+
+Recurring research investigations live as recipe files in `.claude/skills/data-research/recipes/`. Each recipe is a single self-contained markdown file with: a stack-ranked taxonomy of the failure modes it diagnoses, a small set of bounded SQL queries (≤200 rows out, no V8 hydration), and a playbook prescribing the order to run them. Load the recipe, run the queries via `scripts/grafana-postgres-query.sh`, emit a scorecard.
+
+| Recipe                        | When to load                                                                                                                  |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `recipes/alpha-leak-debug.md` | An "alpha leak" market is visible on the dashboard's Markets tab and someone asks "why is target ahead of us on this market?" |
+
+Add a new recipe when a debugging path has been walked twice. The bar is reuse, not novelty — one-off investigations stay in the conversation. Recipes that don't change the underlying data model belong here, not as new endpoints.
+
 ## Reference incidents and patterns
 
 - **bug.5012** — poly prod OOM crashloop. Reading `wallet-analysis-service.ts:readDbFillsAsOrderFlowTrades` against RN1's 825k-fill backfill (spike.5024) blew the heap. Fix: SQL aggregation per `computeWalletMetrics` field, no raw fills in V8.
