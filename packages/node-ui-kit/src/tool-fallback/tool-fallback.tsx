@@ -2,25 +2,25 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@components/vendor/assistant-ui/tool-fallback`
- * Purpose: Default tool-call renderer used by assistant-ui when no per-tool UI is registered. Wraps ToolCard with a humanized name + arg summary in the 1-liner and pretty-printed args/result in the collapsible body.
- * Scope: Presentational only. Listens to MessagePartStatus to choose icon/tone (running/cancelled/error/complete).
+ * Module: `@cogni/node-ui-kit/tool-fallback`
+ * Purpose: Default tool-call renderer for assistant-ui chat — used when no per-tool UI is registered. Wraps the shared ToolCard with a humanized name + arg summary in the 1-liner and pretty-printed args/result in the collapsible body. Status-driven icon/tone covers running / cancelled / error / complete.
+ * Scope: Couples to `@assistant-ui/react` types (peer dep). Pure presentation otherwise.
  * Side-effects: none
- * Links: tool-card.tsx, tool-chip.tsx, packages/ai-tools/src/tools/*
+ * Links: docs/guides/assistant-ui-tool-rendering.md
  * @public
  */
 
 "use client";
 
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
-import { ToolCard, type ToolCardTone } from "@cogni/node-ui-kit/tool-card";
-import { cn } from "@cogni/node-ui-kit/util/cn";
 import {
   AlertTriangleIcon,
   CircleSlashIcon,
   CogIcon,
   Loader2Icon,
 } from "lucide-react";
+import { ToolCard, type ToolCardTone } from "../tool-card";
+import { cn } from "../util/cn";
 
 const NAMESPACE_PREFIX = "core__";
 const MAX_ARG_ENTRIES = 3;

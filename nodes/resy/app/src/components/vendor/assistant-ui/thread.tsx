@@ -6,6 +6,7 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
 } from "@assistant-ui/react";
+import { ToolFallback } from "@cogni/node-ui-kit/tool-fallback";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -25,7 +26,6 @@ import {
   UserMessageAttachments,
 } from "@/components/vendor/assistant-ui/attachment";
 import { MarkdownText } from "@/components/vendor/assistant-ui/markdown-text";
-import { ToolFallback } from "@/components/vendor/assistant-ui/tool-fallback";
 import { ToolUIRegistry } from "@/components/vendor/assistant-ui/tool-ui-registry";
 import { TooltipIconButton } from "@/components/vendor/assistant-ui/tooltip-icon-button";
 import { Button } from "@/components/vendor/shadcn/button";

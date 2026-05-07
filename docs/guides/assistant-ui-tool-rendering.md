@@ -182,10 +182,10 @@ If you find yourself wanting a `displayHint` arg on every tool, stop — you're 
 
 ## Where the primitives live
 
-- `@cogni/node-ui-kit/tool-card` exports `ToolCard`, `ToolChip`, and the `ToolCardTone` / `ToolCardProps` / `ToolChipProps` types.
-- Per-node `tool-ui-*.tsx` files live under each node's `components/vendor/assistant-ui/`.
+- `@cogni/node-ui-kit/tool-card` — pure-presentation primitives: `ToolCard`, `ToolChip`, plus the `ToolCardTone` / `ToolCardProps` / `ToolChipProps` types. Zero coupling to `@assistant-ui/react`.
+- `@cogni/node-ui-kit/tool-fallback` — the default `ToolFallback` renderer (assistant-ui-coupled). Each node's `Thread` imports it directly. To override per-node, write a local `ToolFallback` and pass it to `MessagePrimitive.Parts` in that node's `thread.tsx`.
 - Per-node `tool-ui-registry.tsx` mounts every per-tool UI for that node.
-- Default `tool-fallback.tsx` is per-node but identical across nodes — uses the kit primitives.
+- Per-node `tool-ui-*.tsx` files live under each node's `components/vendor/assistant-ui/`.
 - The flight-candidate UI is operator-only because the tool itself is operator-scoped (`core__vcs_*`).
 
 ## Related

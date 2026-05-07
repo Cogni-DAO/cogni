@@ -2235,6 +2235,9 @@ importers:
 
   packages/node-ui-kit:
     dependencies:
+      '@assistant-ui/react':
+        specifier: '>=0.12'
+        version: 0.12.10(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(immer@11.0.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(use-sync-external-store@1.6.0(react@19.0.0))
       '@dnd-kit/core':
         specifier: '>=6'
         version: 6.3.1(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
