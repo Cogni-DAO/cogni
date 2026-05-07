@@ -54,6 +54,18 @@ export interface FakeOrderLedgerConfig {
  * Mirror-vocabulary overlay (`MirrorPositionView`) is the consumer's job —
  * see `@/features/copy-trade/types::aggregatePositionRows`.
  */
+function extractLimitPrice(
+  attributes: Record<string, unknown> | null
+): number | null {
+  const raw = attributes?.limit_price;
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+  if (typeof raw === "string") {
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
 function computeIntentAggregatesForTarget(
   rows: LedgerRow[]
 ): PositionIntentAggregate[] {
@@ -482,6 +494,7 @@ export class FakeOrderLedger implements OrderLedger {
         target_id: r.target_id,
         market_id: args.market_id,
         created_at: r.created_at,
+        limit_price: extractLimitPrice(r.attributes),
       }));
   }
 
@@ -504,6 +517,7 @@ export class FakeOrderLedger implements OrderLedger {
           target_id: r.target_id,
           market_id,
           created_at: r.created_at,
+          limit_price: extractLimitPrice(r.attributes),
         };
       });
   }

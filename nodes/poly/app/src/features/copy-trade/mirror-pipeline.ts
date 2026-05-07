@@ -13,8 +13,9 @@
  *   - DECISIONS_TOTAL_HAS_SOURCE — `poly_mirror_decisions_total{outcome, reason, source, placement}` always carries `source` (v0 = `"data-api"`) AND `placement` (`"limit"` | `"market_fok"`).
  *   - TENANT_INHERITED_FROM_TARGET — every `insertPending` and `recordDecision` writes `(billing_account_id, created_by_user_id)` taken from `deps.target` (`MirrorTargetConfig`). The pipeline never reads tenant from anywhere else.
  *   - CAPS_LIVE_IN_GRANT — daily / hourly caps are enforced by `authorizeIntent` inside the per-tenant `placeIntent` executor, not here.
- *   - ALREADY_RESTING_BEFORE_INSERT — BUY path runs `ledger.hasOpenForMarket` BEFORE `insertPending`. The DB partial unique index is the correctness backstop: a 23505 throws `AlreadyRestingError` which converts to the same `skip/already_resting` outcome. task.5001.
+ *   - ALREADY_RESTING_BEFORE_INSERT — BUY path runs `ledger.findOpenForMarket` BEFORE `insertPending`. When at least one row exists, the staleness check (`isRestingPriceStale`) decides between (a) skip as `already_resting` (current state) or (b) cancel-then-place (bug.5035: stale resting price chokes off layer-up signals). The DB partial unique index is the correctness backstop: a 23505 throws `AlreadyRestingError` which converts to the same `skip/already_resting` outcome. task.5001 / bug.5035.
  *   - MIRROR_BUY_CANCELED_ON_TARGET_SELL — every SELL fill cancels open mirror orders on `(target, market)` BEFORE the position-close path. `cancelOrder` is optional in tests; production wiring always sets it. Pending rows (no `order_id`) are silently skipped — race with in-flight placement is acceptable for v0. task.5001.
+ *   - STALE_RESTING_CANCEL_REPLACE — BUY path: when an open row's `attributes.limit_price` differs from the new intent's `limit_price` by ≥3pp in the disadvantageous direction, the cancel pre-step runs (same machinery as MIRROR_BUY_CANCELED_ON_TARGET_SELL) and placement proceeds. Pending rows (no `order_id`) are treated as not-stale to avoid racing in-flight placements. bug.5035.
  * Side-effects: delegated — DB I/O via `OrderLedger`, HTTP via `WalletActivitySource`, Polymarket CLOB via `placeIntent`/`cancelOrder`. Pipeline itself is pure sequencing + logger/metrics calls.
  * Links: work/items/task.0318 (Phase B3), work/items/task.5001, docs/spec/poly-copy-trade-phase1.md, docs/spec/poly-multi-tenant-auth.md
  * @public
@@ -31,6 +32,7 @@ import {
 
 import {
   AlreadyRestingError,
+  type OpenOrderRow,
   type OrderLedger,
   PositionCapReachedError,
 } from "@/features/trading";
@@ -331,45 +333,74 @@ async function processFill(
   }
 
   // Fast-path dedupe; the DB partial unique index is the backstop. task.5001.
-  const alreadyResting = await deps.ledger.hasOpenForMarket({
+  // bug.5035: a stale resting order at an out-of-band price chokes off every
+  // subsequent mirror signal during a target price surge. Inspect the open
+  // rows; cancel-then-place when the new intent's limit_price is materially
+  // ahead of the resting price, else skip as before.
+  const open = await deps.ledger.findOpenForMarket({
     billing_account_id: deps.target.billing_account_id,
     target_id: deps.target.target_id,
     market_id: fill.market_id,
   });
-  if (alreadyResting) {
-    emitDecisionMetric(
-      deps.metrics,
-      "skipped",
-      "already_resting",
-      source,
-      placement
-    );
-    await deps.ledger.recordDecision({
-      ...decisionBase,
-      outcome: "skipped",
-      reason: "already_resting",
-      intent: buildDecisionIntentBlob(
-        fill,
-        deps.target,
-        client_order_id,
-        decisionLogFields
-      ),
-      receipt: null,
-    });
+  if (open.length > 0) {
+    const stale = isRestingPriceStale(open, plan.intent);
+    if (!stale) {
+      emitDecisionMetric(
+        deps.metrics,
+        "skipped",
+        "already_resting",
+        source,
+        placement
+      );
+      await deps.ledger.recordDecision({
+        ...decisionBase,
+        outcome: "skipped",
+        reason: "already_resting",
+        intent: buildDecisionIntentBlob(
+          fill,
+          deps.target,
+          client_order_id,
+          decisionLogFields
+        ),
+        receipt: null,
+      });
+      log.info(
+        {
+          event: EVENT_NAMES.POLY_MIRROR_DECISION,
+          outcome: "skipped",
+          reason: "already_resting",
+          source,
+          fill_id: fill.fill_id,
+          client_order_id,
+          market_id: fill.market_id,
+          ...decisionLogFields,
+        },
+        "mirror pipeline: skip (already resting on market)"
+      );
+      return;
+    }
+
+    // Stale resting at an out-of-band price. Cancel before placing so the
+    // partial unique index has room for the new pending row.
     log.info(
       {
         event: EVENT_NAMES.POLY_MIRROR_DECISION,
-        outcome: "skipped",
-        reason: "already_resting",
+        phase: "cancel_replace_stale_resting",
         source,
         fill_id: fill.fill_id,
         client_order_id,
         market_id: fill.market_id,
-        ...decisionLogFields,
+        new_intent_price: plan.intent.limit_price,
+        resting_prices: open.map((r) => r.limit_price),
       },
-      "mirror pipeline: skip (already resting on market)"
+      "mirror pipeline: cancel-then-place (resting price stale vs new intent)"
     );
-    return;
+    await cancelOpenMirrorOrdersForMarket({
+      deps,
+      fill,
+      log,
+      reason: "stale_resting_layer_up",
+    });
   }
 
   await executeMirrorOrder(
@@ -385,6 +416,26 @@ async function processFill(
     undefined,
     decisionLogFields
   );
+}
+
+/** bug.5035: true if any resting order's limit_price is ≥STALE_RESTING_PRICE_DELTA disadvantageously out of band vs the new intent. Pending rows (no order_id) and rows missing limit_price are not stale — fail-closed to the existing skip-as-already_resting path. */
+const STALE_RESTING_PRICE_DELTA = 0.03;
+function isRestingPriceStale(
+  open: OpenOrderRow[],
+  newIntent: OrderIntent
+): boolean {
+  for (const row of open) {
+    if (row.order_id === null) return false;
+    if (row.limit_price === null) continue;
+    if (newIntent.side === "BUY") {
+      if (newIntent.limit_price - row.limit_price >= STALE_RESTING_PRICE_DELTA)
+        return true;
+    } else if (newIntent.side === "SELL") {
+      if (row.limit_price - newIntent.limit_price >= STALE_RESTING_PRICE_DELTA)
+        return true;
+    }
+  }
+  return false;
 }
 
 async function fetchTargetConditionPosition(args: {
@@ -700,16 +751,19 @@ async function processSellFill(args: {
 }
 
 /**
- * Cancel any open mirror orders for this (target, market). SELL-fill
- * pre-step. Idempotent: pending rows (no `order_id` yet) are skipped; the
- * adapter swallows CLOB 404 so concurrent cancels from the TTL sweeper are
- * harmless. `cancelOrder` is optional; tests omit it and the loop no-ops.
+ * Cancel any open mirror orders for this (target, market). Used by the SELL-
+ * fill pre-step (target exited the market) AND the BUY-side stale-resting
+ * cancel-and-replace path (bug.5035: target layered up at higher prices and
+ * our resting bid is too low to fill). Idempotent: pending rows (no
+ * `order_id` yet) are skipped; the adapter swallows CLOB 404 so concurrent
+ * cancels from the TTL sweeper are harmless. `cancelOrder` is optional;
+ * tests omit it and the loop no-ops.
  */
 async function cancelOpenMirrorOrdersForMarket(args: {
   deps: MirrorPipelineDeps;
   fill: import("@cogni/poly-market-provider").Fill;
   log: LoggerPort;
-  reason: "target_exited_market";
+  reason: "target_exited_market" | "stale_resting_layer_up";
 }): Promise<void> {
   const { deps, fill, log, reason } = args;
   const cancelOrder = deps.cancelOrder;
@@ -730,12 +784,18 @@ async function cancelOpenMirrorOrdersForMarket(args: {
       log.info(
         {
           event: EVENT_NAMES.POLY_MIRROR_DECISION,
-          phase: "buy_canceled_on_target_sell",
+          phase:
+            reason === "stale_resting_layer_up"
+              ? "buy_canceled_on_stale_resting"
+              : "buy_canceled_on_target_sell",
           client_order_id: row.client_order_id,
           order_id: row.order_id,
           market_id: row.market_id,
+          reason,
         },
-        "mirror pipeline: canceled resting BUY on target SELL"
+        reason === "stale_resting_layer_up"
+          ? "mirror pipeline: canceled stale resting BUY for layer-up replace"
+          : "mirror pipeline: canceled resting BUY on target SELL"
       );
     } catch (err: unknown) {
       log.error(

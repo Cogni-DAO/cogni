@@ -111,7 +111,10 @@ export interface StateSnapshot {
 }
 
 /** Bounded enum of cancel reasons. Stored on `attributes.reason`. */
-export type LedgerCancelReason = "target_exited_market" | "ttl_expired";
+export type LedgerCancelReason =
+  | "target_exited_market"
+  | "ttl_expired"
+  | "stale_resting_layer_up";
 
 /**
  * Thrown by `insertPending` when the partial unique index
@@ -166,6 +169,12 @@ export interface OpenOrderRow {
   target_id: string;
   market_id: string;
   created_at: Date;
+  /**
+   * Resting order's limit price extracted from `attributes.limit_price`. Null
+   * when the row predates the field or the value is malformed. Used by the
+   * BUY-side staleness check (bug.5035) to decide cancel-then-place vs skip.
+   */
+  limit_price: number | null;
 }
 
 /** Tenant attribution required by every write into `poly_copy_trade_*`. */
