@@ -28,11 +28,9 @@
 
 import type { WalletExecutionMarketGroup } from "@cogni/poly-node-contracts";
 import {
-  type ColumnFiltersState,
   type ExpandedState,
   getCoreRowModel,
   getExpandedRowModel,
-  getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
   type PaginationState,
@@ -115,7 +113,6 @@ export function MarketsTable({
 
   const [columnVisibility, setColumnVisibility] =
     useState<VisibilityState>(DEFAULT_VISIBILITY);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: PAGE_SIZE,
@@ -145,13 +142,11 @@ export function MarketsTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
-    state: { columnVisibility, columnFilters, pagination, expanded },
+    state: { columnVisibility, pagination, expanded },
     onColumnVisibilityChange: setColumnVisibility,
-    onColumnFiltersChange: setColumnFilters,
     onPaginationChange: setPagination,
     onExpandedChange: setExpanded,
   });
@@ -188,7 +183,9 @@ export function MarketsTable({
           variant="outline"
           pressed={alphaLeakOnly}
           onPressedChange={setAlphaLeakOnly}
-          disabled={isLoading || data.length === 0}
+          // Stay enabled while pressed even when leaks=0 in the new status,
+          // otherwise switching status with leaks-only on traps the toggle.
+          disabled={isLoading || (!alphaLeakOnly && alphaLeakCount === 0)}
           aria-label="Show only markets where we lost and the copy target won"
           title="Markets where we are red and the copy target is green"
           className="gap-1.5"
