@@ -156,8 +156,13 @@ describe("createPolymarketWsActivitySource", () => {
   });
 
   it("first fetchSince after construction drains the Data-API (cold-start prime)", async () => {
+    // Anchor system time so the cold-start clamp's `now - 60s` floor lands
+    // before the trade timestamp; otherwise the new clamp filters the
+    // synthetic trade out of the cursor advance. bug.5032.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2_000_000_000_000));
     const ws = makeFakeWs();
-    const trade = makeTrade({ timestamp: 1_700_000_000 });
+    const trade = makeTrade({ timestamp: 1_999_999_990 });
     const source = createPolymarketWsActivitySource({
       client: makeStubClient({
         positions: [makePosition(ASSET_ID)],
@@ -168,7 +173,8 @@ describe("createPolymarketWsActivitySource", () => {
       logger: noopLogger,
       metrics: createRecordingMetrics(),
     });
-    await flushMicrotasks();
+    await Promise.resolve();
+    await Promise.resolve();
 
     const { fills, newSince } = await source.fetchSince();
     expect(fills).toHaveLength(1);
@@ -509,6 +515,252 @@ describe("createPolymarketWsActivitySource", () => {
     });
 
     source.stop();
+  });
+
+  describe("paginated drain (bug.5032)", () => {
+    it("walks pages until a short page is returned", async () => {
+      const ws = makeFakeWs();
+      const calls: Array<{ offset: number; limit: number; sinceTs?: number }> =
+        [];
+      const pages: PolymarketUserTrade[][] = [
+        Array.from({ length: 5 }, (_, i) =>
+          makeTrade({ timestamp: 1_700_000_500 - i })
+        ),
+        Array.from({ length: 5 }, (_, i) =>
+          makeTrade({ timestamp: 1_700_000_400 - i })
+        ),
+        Array.from({ length: 2 }, (_, i) =>
+          makeTrade({ timestamp: 1_700_000_300 - i })
+        ),
+      ];
+      const client = {
+        async listUserPositions() {
+          return [makePosition(ASSET_ID)];
+        },
+        async listUserActivity(
+          _w: string,
+          params: {
+            offset: number;
+            limit: number;
+            sinceTs?: number;
+          }
+        ) {
+          calls.push(params);
+          const page = Math.floor(params.offset / params.limit);
+          return pages[page] ?? [];
+        },
+      } as unknown as PolymarketDataApiClient;
+
+      const source = createPolymarketWsActivitySource({
+        client,
+        ws,
+        wallet: TARGET_WALLET,
+        logger: noopLogger,
+        metrics: createRecordingMetrics(),
+        pageLimit: 5,
+        maxPages: 10,
+      });
+      await flushMicrotasks();
+
+      const { fills, newSince } = await source.fetchSince(1_700_000_000);
+      expect(calls.map((c) => c.offset)).toEqual([0, 5, 10]);
+      expect(calls.every((c) => c.limit === 5)).toBe(true);
+      expect(calls.every((c) => c.sinceTs === 1_700_000_000)).toBe(true);
+      expect(fills).toHaveLength(12);
+      expect(newSince).toBe(1_700_000_500);
+      source.stop();
+    });
+
+    it("stops when a page contains a row at-or-before the cursor", async () => {
+      const ws = makeFakeWs();
+      const calls: Array<{ offset: number }> = [];
+      const pages: PolymarketUserTrade[][] = [
+        Array.from({ length: 5 }, (_, i) =>
+          makeTrade({ timestamp: 1_700_000_500 - i })
+        ),
+        // Page 2 is full but contains a trade at-or-before the cursor — stop.
+        [
+          makeTrade({ timestamp: 1_700_000_495 }),
+          makeTrade({ timestamp: 1_700_000_400 }),
+          makeTrade({ timestamp: 1_700_000_399 }),
+          makeTrade({ timestamp: 1_700_000_001 }),
+          makeTrade({ timestamp: 1_700_000_000 }),
+        ],
+        // Page 3 should NEVER be fetched.
+        Array.from({ length: 5 }, (_, i) =>
+          makeTrade({ timestamp: 1_699_999_900 - i })
+        ),
+      ];
+      const client = {
+        async listUserPositions() {
+          return [makePosition(ASSET_ID)];
+        },
+        async listUserActivity(
+          _w: string,
+          params: {
+            offset: number;
+            limit: number;
+          }
+        ) {
+          calls.push({ offset: params.offset });
+          const page = Math.floor(params.offset / params.limit);
+          return pages[page] ?? [];
+        },
+      } as unknown as PolymarketDataApiClient;
+
+      const source = createPolymarketWsActivitySource({
+        client,
+        ws,
+        wallet: TARGET_WALLET,
+        logger: noopLogger,
+        metrics: createRecordingMetrics(),
+        pageLimit: 5,
+        maxPages: 10,
+      });
+      await flushMicrotasks();
+
+      await source.fetchSince(1_700_000_000);
+      expect(calls.map((c) => c.offset)).toEqual([0, 5]);
+      source.stop();
+    });
+
+    it("respects maxPages as a hard ceiling on a misbehaving server", async () => {
+      const ws = makeFakeWs();
+      const calls: Array<number> = [];
+      const client = {
+        async listUserPositions() {
+          return [makePosition(ASSET_ID)];
+        },
+        async listUserActivity(
+          _w: string,
+          params: {
+            offset: number;
+            limit: number;
+          }
+        ) {
+          calls.push(params.offset);
+          // Always return a full page — simulates a server that never stops.
+          return Array.from({ length: params.limit }, (_, i) =>
+            makeTrade({ timestamp: 2_000_000_000 - params.offset - i })
+          );
+        },
+      } as unknown as PolymarketDataApiClient;
+
+      const source = createPolymarketWsActivitySource({
+        client,
+        ws,
+        wallet: TARGET_WALLET,
+        logger: noopLogger,
+        metrics: createRecordingMetrics(),
+        pageLimit: 5,
+        maxPages: 3,
+      });
+      await flushMicrotasks();
+
+      await source.fetchSince(1_700_000_000);
+      expect(calls).toEqual([0, 5, 10]); // exactly maxPages calls
+      source.stop();
+    });
+
+    it("clamps cold-start (since=undefined) to now - coldStartLookbackMs", async () => {
+      vi.useFakeTimers();
+      const fixedNow = 2_000_000_000_000; // ms epoch
+      vi.setSystemTime(new Date(fixedNow));
+      const ws = makeFakeWs();
+      const captured: Array<{ sinceTs?: number }> = [];
+      const client = {
+        async listUserPositions() {
+          return [makePosition(ASSET_ID)];
+        },
+        async listUserActivity(_w: string, params: { sinceTs?: number }) {
+          captured.push({ sinceTs: params.sinceTs });
+          return [];
+        },
+      } as unknown as PolymarketDataApiClient;
+
+      const source = createPolymarketWsActivitySource({
+        client,
+        ws,
+        wallet: TARGET_WALLET,
+        logger: noopLogger,
+        metrics: createRecordingMetrics(),
+        coldStartLookbackMs: 60_000,
+      });
+      // Use Promise.resolve(), not setImmediate-based flush — fake timers stub
+      // setImmediate so flushMicrotasks would never resolve.
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const { fills, newSince } = await source.fetchSince(undefined);
+      expect(captured).toHaveLength(1);
+      const expectedSinceSec = Math.floor((fixedNow - 60_000) / 1000);
+      expect(captured[0]?.sinceTs).toBe(expectedSinceSec);
+      // Cursor advances to the clamped lookback so subsequent calls don't
+      // re-trigger the same backfill window.
+      expect(newSince).toBe(expectedSinceSec);
+      expect(fills).toHaveLength(0);
+      source.stop();
+    });
+
+    it("cold-start with a recent trade advances cursor to the trade timestamp", async () => {
+      vi.useFakeTimers();
+      const fixedNow = 2_000_000_000_000;
+      vi.setSystemTime(new Date(fixedNow));
+      const ws = makeFakeWs();
+      const recentTrade = makeTrade({ timestamp: 1_999_999_990 }); // 10s ago
+      const client = {
+        async listUserPositions() {
+          return [makePosition(ASSET_ID)];
+        },
+        async listUserActivity() {
+          return [recentTrade];
+        },
+      } as unknown as PolymarketDataApiClient;
+
+      const source = createPolymarketWsActivitySource({
+        client,
+        ws,
+        wallet: TARGET_WALLET,
+        logger: noopLogger,
+        metrics: createRecordingMetrics(),
+        coldStartLookbackMs: 60_000,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const { fills, newSince } = await source.fetchSince();
+      expect(fills).toHaveLength(1);
+      expect(newSince).toBe(recentTrade.timestamp);
+      source.stop();
+    });
+
+    it("does NOT clamp when caller passes an explicit since=0", async () => {
+      const ws = makeFakeWs();
+      const captured: Array<{ sinceTs?: number }> = [];
+      const client = {
+        async listUserPositions() {
+          return [makePosition(ASSET_ID)];
+        },
+        async listUserActivity(_w: string, params: { sinceTs?: number }) {
+          captured.push({ sinceTs: params.sinceTs });
+          return [];
+        },
+      } as unknown as PolymarketDataApiClient;
+
+      const source = createPolymarketWsActivitySource({
+        client,
+        ws,
+        wallet: TARGET_WALLET,
+        logger: noopLogger,
+        metrics: createRecordingMetrics(),
+      });
+      await flushMicrotasks();
+
+      await source.fetchSince(0);
+      expect(captured).toHaveLength(1);
+      expect(captured[0]?.sinceTs).toBe(0);
+      source.stop();
+    });
   });
 
   it("stop() unsubscribes assets and removes the trade listener", async () => {

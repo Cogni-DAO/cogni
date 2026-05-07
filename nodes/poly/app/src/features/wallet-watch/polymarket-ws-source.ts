@@ -10,6 +10,8 @@
  *   - CURSOR_IS_MAX_TIMESTAMP — `newSince` semantics identical to polling source.
  *   - SHARED_SOCKET — one WS connection per pod, multiplexed across watched wallets via the asset-subscription set inside the client handle.
  *   - SAFETY_NET_DRAIN — `fetchSince` drains whenever `now - lastDrainAt >= safetyNetDrainIntervalMs`, even with no WS wake. Required because the WS Market channel only fires for assets we have already subscribed to, and `ownedAssets` is rebuilt from `listUserPositions` only on the asset-refresh interval. Without the safety net, a target's first BUY into a market they don't already hold would not be detected until the next asset-refresh tick (regression vs polling source). With the safety net set to the coordinator tick interval, worst-case detection latency matches the polling source for both new- and known-market trades.
+ *   - PAGINATED_DRAIN — every drain walks up to `maxPages` pages of `pageLimit` trades each, mirroring the polling source. Polymarket `/trades` is reverse-chrono and the data-api client stale-page-caches at `limit > 20`, so per-page size is small and burst capacity comes from page count. Pagination stops on a short page or a row at-or-before `effectiveSince`. Without this, bursts beyond `pageLimit` per drain silently drop the older surplus when the cursor advances to `max(timestamp)`. bug.5032.
+ *   - COLD_START_LOOKBACK_CLAMP — `fetchSince(undefined)` is treated as `fetchSince(now - coldStartLookbackMs)`. Forward-looking only: a fresh pod or re-enabled target cannot drain arbitrary historical fills, even though `client_order_id` dedupe and the per-tenant authorize caps would absorb the surge. bug.5032.
  * Side-effects: subscribes to assets on the shared WS handle (constructor + refresh); HTTPS GETs to data-api.polymarket.com on each drain (wake-driven OR safety-net); logger + metrics; periodic heartbeat info log.
  * Links: docs https://docs.polymarket.com/developers/CLOB/websocket/wss-overview ; task.0322
  * @public
@@ -49,6 +51,20 @@ export const WALLET_WATCH_WS_METRICS = {
 const DEFAULT_SAFETY_NET_DRAIN_INTERVAL_MS = 30_000;
 /** Default heartbeat info-log cadence (ms). Loki absence-alert key. */
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
+/** Default per-page row count. Matches the data-api client default; the comment
+ * on `polymarket.data-api.client:listUserTrades` warns that limits >20 hit a
+ * stale `/trades` cache, so 20 is the safe per-page ceiling. We compensate by
+ * paginating instead of asking for a single fat page. bug.5032. */
+const DEFAULT_PAGE_LIMIT = 20;
+/** Default pagination cap. With `pageLimit=20` this is 200 rows per drain — well
+ * above swisstony's observed peak of 85 fills/min and 42 fills/30s drain. */
+const DEFAULT_MAX_PAGES = 10;
+/** Default cold-start lookback (ms). When `fetchSince(undefined)` is called
+ * (cold pod, target re-enabled, etc.) the source clamps `sinceTs` to
+ * `now - coldStartLookbackMs` so that pagination cannot replay arbitrary
+ * historical fills into the mirror. ~2 drain cycles at the safety-net
+ * default. bug.5032. */
+const DEFAULT_COLD_START_LOOKBACK_MS = 60_000;
 
 export interface PolymarketWsActivitySourceDeps {
   /** Per-wallet Data-API client — used for the post-wake drain. */
@@ -66,8 +82,32 @@ export interface PolymarketWsActivitySourceDeps {
    * via Data-API and reconcile WS subscriptions. Default 60_000.
    */
   refreshAssetsIntervalMs?: number;
-  /** Page size forwarded to the Data-API on each drain. Default: client default. */
-  limit?: number;
+  /**
+   * Per-page row count forwarded to the Data-API on each drain. Default:
+   * {@link DEFAULT_PAGE_LIMIT} (20). The data-api client's `/trades` cache is
+   * stale at limits >20, so per-page size is capped low and burst capacity
+   * comes from {@link maxPages} instead. bug.5032.
+   */
+  pageLimit?: number;
+  /**
+   * Maximum number of pages to walk on a single drain. With `pageLimit=20`
+   * the per-drain ceiling is `pageLimit * maxPages` rows. Pagination stops
+   * early when a page returns fewer than `pageLimit` rows OR a row at or
+   * before the active `since` cursor is encountered. Default
+   * {@link DEFAULT_MAX_PAGES} (10). bug.5032.
+   */
+  maxPages?: number;
+  /**
+   * Cold-start lookback (ms). Applied when `fetchSince` is called with
+   * `since === undefined` (fresh pod, target re-enable, in-memory cursor
+   * loss). Clamps the effective `sinceTs` to `now - coldStartLookbackMs` so
+   * the new pagination loop cannot drain arbitrary historical fills into the
+   * mirror — `client_order_id` dedupe and the per-tenant authorize caps would
+   * absorb the surge, but the v0 contract is forward-looking and we do not
+   * want to even attempt stale placements. Default
+   * {@link DEFAULT_COLD_START_LOOKBACK_MS} (60_000). bug.5032.
+   */
+  coldStartLookbackMs?: number;
   /**
    * Maximum staleness (ms) before `fetchSince` drains regardless of WS wake.
    * Bounds worst-case detection latency for trades in markets the target
@@ -101,6 +141,10 @@ export function createPolymarketWsActivitySource(
     deps.safetyNetDrainIntervalMs ?? DEFAULT_SAFETY_NET_DRAIN_INTERVAL_MS;
   const heartbeatIntervalMs =
     deps.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
+  const pageLimit = deps.pageLimit ?? DEFAULT_PAGE_LIMIT;
+  const maxPages = Math.max(1, deps.maxPages ?? DEFAULT_MAX_PAGES);
+  const coldStartLookbackMs =
+    deps.coldStartLookbackMs ?? DEFAULT_COLD_START_LOOKBACK_MS;
 
   const ownedAssets = new Set<string>();
   const wakeListeners = new Set<() => void>();
@@ -279,10 +323,42 @@ export function createPolymarketWsActivitySource(
       pendingWakeup = false;
       lastDrainAt = start;
 
-      const params: { sinceTs?: number; limit?: number } = {};
-      if (since !== undefined) params.sinceTs = since;
-      if (deps.limit !== undefined) params.limit = deps.limit;
-      const trades = await deps.client.listUserActivity(deps.wallet, params);
+      // Cold-start clamp: a caller-supplied `since=undefined` means we have no
+      // memory of where the cursor was (cold pod, target re-enable). Pagination
+      // would otherwise try to walk back through whatever the Data-API serves.
+      // Forward-looking-only: pin `effectiveSince` to `now - coldStartLookbackMs`
+      // so cumulative drain is bounded by the lookback window. bug.5032.
+      const effectiveSince =
+        since === undefined
+          ? Math.floor((start - coldStartLookbackMs) / 1000)
+          : since;
+
+      // Paginated drain. Mirrors the polling source
+      // (`packages/market-provider/.../polymarket.activity-source.ts`) which
+      // was the original paginated impl this WS source was forked from.
+      // Pagination stops when (a) a page returns fewer than `pageLimit` rows or
+      // (b) a row at-or-before `effectiveSince` is encountered (the data-api
+      // client filters `t.timestamp > since` post-fetch, so this manifests as
+      // case (a) once the cursor is reached). bug.5032.
+      const trades: Awaited<ReturnType<typeof deps.client.listUserActivity>> =
+        [];
+      let reachedSince = false;
+      for (let page = 0; page < maxPages; page += 1) {
+        const params: { sinceTs?: number; limit: number; offset: number } = {
+          sinceTs: effectiveSince,
+          limit: pageLimit,
+          offset: page * pageLimit,
+        };
+        const pageTrades = await deps.client.listUserActivity(
+          deps.wallet,
+          params
+        );
+        trades.push(...pageTrades);
+        reachedSince = pageTrades.some(
+          (trade) => trade.timestamp <= effectiveSince
+        );
+        if (pageTrades.length < pageLimit || reachedSince) break;
+      }
       const duration_ms = Date.now() - start;
       deps.metrics.observeDurationMs(
         WALLET_WATCH_METRICS.fetchDurationMs,
@@ -290,7 +366,11 @@ export function createPolymarketWsActivitySource(
         {}
       );
 
-      let newSince = since ?? 0;
+      // newSince starts at effectiveSince (the floor we drained from) and
+      // advances to the max trade timestamp seen. On cold-start with no
+      // trades, the cursor still advances past the clamped lookback so the
+      // next call doesn't re-trigger the same backfill window.
+      let newSince = effectiveSince;
       const fills: Fill[] = [];
       let skipped = 0;
       const skipsByReason: Partial<
@@ -340,6 +420,11 @@ export function createPolymarketWsActivitySource(
           new_since: newSince,
           ws_idle: false,
           drain_trigger: drainTrigger,
+          page_limit: pageLimit,
+          max_pages: maxPages,
+          reached_since: reachedSince,
+          cold_start_clamp: since === undefined,
+          effective_since: effectiveSince,
         },
         "wallet-watch ws fetch: ok"
       );
