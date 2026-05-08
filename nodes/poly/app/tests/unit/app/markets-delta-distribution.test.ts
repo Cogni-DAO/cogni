@@ -20,7 +20,7 @@ import { describe, expect, it } from "vitest";
 import {
   BIN_LABELS,
   binIndex,
-} from "@/app/(app)/_components/markets-table/MarketsDeltaDistribution";
+} from "@/app/(app)/_components/markets-table/DeltaDistribution";
 
 const labelOf = (v: number): string => BIN_LABELS[binIndex(v)] ?? "";
 

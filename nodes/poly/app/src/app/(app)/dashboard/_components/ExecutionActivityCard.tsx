@@ -25,6 +25,7 @@ import { type ReactElement, useCallback, useMemo, useState } from "react";
 import {
   MarketsDeltaDistribution,
   MarketsTable,
+  PositionsDeltaDistribution,
 } from "@/app/(app)/_components/markets-table";
 import { PositionsTable } from "@/app/(app)/_components/positions-table";
 import {
@@ -165,7 +166,7 @@ export function ExecutionActivityCard(): ReactElement {
       <CardHeader className="px-5 py-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <CardTitle className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+            <CardTitle className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
               Execution
             </CardTitle>
           </div>
@@ -195,6 +196,7 @@ export function ExecutionActivityCard(): ReactElement {
         {view === "open" ? (
           <OpenPositionsPanel
             positions={openPositions}
+            groups={executionData?.market_groups ?? []}
             warnings={executionData?.warnings ?? []}
             isLoading={isExecutionLoading}
             isError={isExecutionError}
@@ -212,6 +214,7 @@ export function ExecutionActivityCard(): ReactElement {
         ) : (
           <ClosedPositionsPanel
             positions={closedPositions}
+            groups={executionData?.market_groups ?? []}
             isLoading={isExecutionLoading}
             isError={isExecutionError}
           />
@@ -234,7 +237,7 @@ function MarketGroupsPanel({
 }): ReactElement {
   if (isError) {
     return (
-      <p className="px-5 py-6 text-center text-muted-foreground text-sm">
+      <p className="text-muted-foreground px-5 py-6 text-center text-sm">
         Failed to load market exposure. Try again shortly.
       </p>
     );
@@ -243,7 +246,7 @@ function MarketGroupsPanel({
   return (
     <div className="space-y-3 px-5 pb-4">
       <div className="space-y-2">
-        <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+        <h3 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
           Markets
         </h3>
         {warnings.some(
@@ -262,6 +265,7 @@ function MarketGroupsPanel({
 
 function OpenPositionsPanel({
   positions,
+  groups,
   warnings,
   isLoading,
   isError,
@@ -270,6 +274,7 @@ function OpenPositionsPanel({
   positionActionError,
 }: {
   positions: readonly WalletPosition[];
+  groups: readonly WalletExecutionMarketGroup[];
   warnings: readonly { code: string; message: string }[];
   isLoading: boolean;
   isError: boolean;
@@ -282,7 +287,7 @@ function OpenPositionsPanel({
 }): ReactElement {
   if (isError) {
     return (
-      <p className="px-5 py-6 text-center text-muted-foreground text-sm">
+      <p className="text-muted-foreground px-5 py-6 text-center text-sm">
         Failed to load execution data. Try again shortly.
       </p>
     );
@@ -291,7 +296,7 @@ function OpenPositionsPanel({
   return (
     <div className="space-y-3 px-5 pb-4">
       <div className="space-y-2">
-        <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+        <h3 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
           Open Positions
         </h3>
         {warnings.length > 0 ? (
@@ -301,10 +306,16 @@ function OpenPositionsPanel({
           </p>
         ) : null}
         {positionActionError ? (
-          <p className="rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-destructive text-xs">
+          <p className="border-destructive/40 bg-destructive/10 text-destructive rounded border px-3 py-2 text-xs">
             {positionActionError}
           </p>
         ) : null}
+        <PositionsDeltaDistribution
+          positions={positions}
+          groups={groups}
+          statusFilter="live"
+          subtitleNoun="open positions"
+        />
         <PositionsTable
           positions={positions}
           isLoading={isLoading}
@@ -319,16 +330,18 @@ function OpenPositionsPanel({
 
 function ClosedPositionsPanel({
   positions,
+  groups,
   isLoading,
   isError,
 }: {
   positions: readonly WalletPosition[];
+  groups: readonly WalletExecutionMarketGroup[];
   isLoading: boolean;
   isError: boolean;
 }): ReactElement {
   if (isError) {
     return (
-      <p className="px-5 py-6 text-center text-muted-foreground text-sm">
+      <p className="text-muted-foreground px-5 py-6 text-center text-sm">
         Failed to load position history. Try again shortly.
       </p>
     );
@@ -337,9 +350,15 @@ function ClosedPositionsPanel({
   return (
     <div className="space-y-3 px-5 pb-4">
       <div className="space-y-2">
-        <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+        <h3 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
           Position History
         </h3>
+        <PositionsDeltaDistribution
+          positions={positions}
+          groups={groups}
+          statusFilter="closed"
+          subtitleNoun="closed positions"
+        />
         <PositionsTable
           positions={positions}
           isLoading={isLoading}
