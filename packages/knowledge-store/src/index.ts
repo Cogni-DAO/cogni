@@ -62,6 +62,7 @@ export {
 } from "./service/contribution-service.js";
 // Auth helpers
 export {
+  type PrincipalAuthSource,
   type SessionUserLike,
   sessionUserToPrincipal,
 } from "./util/session-to-principal.js";

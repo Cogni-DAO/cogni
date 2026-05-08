@@ -1,0 +1,167 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
+/**
+ * Module: `@app/(app)/knowledge/_components/contribution-columns`
+ * Purpose: TanStack column definitions for the contributions Inbox DataGrid.
+ * Scope: Pure column descriptors. Action handlers receive callbacks via meta.
+ * Invariants: HEADER_OWNS_SORT_AND_FILTER; merge action lives in a per-row button.
+ * @internal
+ */
+
+"use client";
+
+import type { ContributionRecord } from "@cogni/node-contracts";
+import { HeaderFilter } from "@cogni/node-ui-kit/header-filter";
+import { DataGridColumnHeader } from "@cogni/node-ui-kit/reui/data-grid/data-grid-column-header";
+import { createColumnHelper } from "@tanstack/react-table";
+import { GitMerge } from "lucide-react";
+import type { ReactElement } from "react";
+import { Button } from "@/components";
+
+const col = createColumnHelper<ContributionRecord>();
+
+export interface ContributionColumnsDeps {
+  onMerge: (row: ContributionRecord) => void;
+  busyId: string | null;
+}
+
+export function buildContributionColumns(
+  deps: ContributionColumnsDeps,
+): Array<ReturnType<typeof col.accessor> | ReturnType<typeof col.display>> {
+  return [
+    col.accessor("state", {
+      header: ({ column }) => (
+        <DataGridColumnHeader
+          column={column}
+          title="State"
+          filter={<HeaderFilter column={column} />}
+        />
+      ),
+      size: 100,
+      cell: (info) => {
+        const v = info.getValue();
+        const tone =
+          v === "open"
+            ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+            : v === "merged"
+              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+              : "bg-muted text-muted-foreground";
+        return (
+          <span
+            className={`inline-flex items-center rounded-md px-1.5 py-0.5 font-medium text-xs ${tone}`}
+          >
+            {v}
+          </span>
+        );
+      },
+      filterFn: "arrIncludesSome",
+      meta: { headerTitle: "State" },
+    }),
+
+    col.display({
+      id: "contribution",
+      header: ({ column }) => (
+        <DataGridColumnHeader column={column} title="Contribution" />
+      ),
+      minSize: 280,
+      cell: ({ row }) => {
+        const { contributionId, message, branch } = row.original;
+        return (
+          <div className="flex flex-col gap-0.5 py-0.5">
+            <span className="line-clamp-1 text-sm">{message}</span>
+            <div className="flex items-center gap-2 text-muted-foreground text-xs">
+              <span className="font-mono">{contributionId}</span>
+              <span aria-hidden="true">·</span>
+              <span className="font-mono opacity-70">{branch}</span>
+            </div>
+          </div>
+        );
+      },
+      meta: { headerTitle: "Contribution" },
+    }),
+
+    col.accessor("principalKind", {
+      header: ({ column }) => (
+        <DataGridColumnHeader
+          column={column}
+          title="Principal"
+          filter={<HeaderFilter column={column} />}
+        />
+      ),
+      size: 110,
+      cell: (info) => {
+        const kind = info.getValue();
+        const id = info.row.original.principalId;
+        return (
+          <div className="flex flex-col gap-0.5 leading-tight">
+            <span className="text-xs uppercase tracking-wider">{kind}</span>
+            <span className="line-clamp-1 font-mono text-muted-foreground text-xs">
+              {id}
+            </span>
+          </div>
+        );
+      },
+      filterFn: "arrIncludesSome",
+      meta: { headerTitle: "Principal" },
+    }),
+
+    col.accessor("entryCount", {
+      header: ({ column }) => (
+        <DataGridColumnHeader column={column} title="Rows" />
+      ),
+      size: 60,
+      cell: (info) => (
+        <span className="inline-flex w-7 justify-center rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs">
+          {info.getValue()}
+        </span>
+      ),
+      meta: { headerTitle: "Rows" },
+    }),
+
+    col.accessor("createdAt", {
+      header: ({ column }) => (
+        <DataGridColumnHeader column={column} title="Filed" />
+      ),
+      size: 110,
+      cell: (info) => {
+        const v = info.getValue();
+        if (!v) return <span className="text-muted-foreground">&mdash;</span>;
+        return (
+          <span className="text-muted-foreground text-xs">{v.slice(0, 10)}</span>
+        );
+      },
+      sortingFn: (a, b) => a.original.createdAt.localeCompare(b.original.createdAt),
+      meta: { headerTitle: "Filed" },
+    }),
+
+    col.display({
+      id: "action",
+      header: () => null,
+      size: 120,
+      cell: ({ row }): ReactElement => {
+        const r = row.original;
+        const disabled = r.state !== "open" || deps.busyId === r.contributionId;
+        return (
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5 text-xs"
+              disabled={disabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                deps.onMerge(r);
+              }}
+            >
+              <GitMerge className="size-3" />
+              {deps.busyId === r.contributionId ? "Merging…" : "Merge"}
+            </Button>
+          </div>
+        );
+      },
+      meta: { headerTitle: "Action" },
+    }),
+  ];
+}

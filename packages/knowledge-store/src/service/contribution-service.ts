@@ -133,6 +133,14 @@ export function createContributionService(
   };
 }
 
+/**
+ * v0 merge gate: any session-cookie user can merge.
+ *
+ * Per `KNOWLEDGE_LOOP_CLOSED_VIA_SIGNED_IN_USER` invariant: routes only mint a
+ * `kind: 'user'` Principal when the request arrived on the cookie-session path.
+ * Bearer-token agents resolve to `kind: 'agent'` and are rejected here. When
+ * per-user RBAC lands, this becomes a real role check.
+ */
 export function defaultCanMergeKnowledge(p: Principal): boolean {
-  return p.kind === "user" && p.role === "admin";
+  return p.kind === "user";
 }

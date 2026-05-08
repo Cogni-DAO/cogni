@@ -553,6 +553,25 @@ The librarian's retrieval contract (same `KnowledgeSearchHit` shape) is the x402
 | SYNC_DIRECTION_DOLT_TO_POSTGRES | Search index sync is one-way: Dolt → Postgres. Never write to Postgres search index directly.           |
 | TABLES_NEED_JUSTIFICATION       | New Dolt tables require a fundamentally different data shape, not just different content.               |
 | NODE_KNOWLEDGE_SOVEREIGN        | Inherited: node knowledge is private by default. Sharing is explicit.                                   |
+| KNOWLEDGE_LOOP_CLOSED_VIA_SIGNED_IN_USER | v0 merge gate: any wallet/cookie-session user can merge a contribution. Bearer-token agents cannot. The session cookie is the trust signal until per-user RBAC lands.    |
+| KNOWLEDGE_BROWSE_VIA_HTTP_REQUIRES_SESSION | The `GET /api/v1/knowledge` browse endpoint is cookie-session only. Bearer / x402 access remains future work (see [x402-e2e](./x402-e2e.md)). |
+
+---
+
+## Critical Path After v0
+
+Ordered post-#1307. Each tier = one work item; tier N+1 is filed only when N is in flight or done. **No fan-out.** Every roadmap item that touches contracts/Zod must reference these tiers in its scoping section.
+
+| Tier | Outcome | Status |
+| --- | --- | --- |
+| **P0** — operator-side merging | A signed-in user can list + merge open contributions through `/knowledge` (Inbox mode). Without this, the contribution flow is theatre. | **In flight (task.5037).** |
+| **P1** — EDO-aligned `entry_type` + `citations[]` + `evaluate_at` | Hypothesis rows can be written + retrieved + cited; outcomes can validate them via `validates` / `invalidates` citation edges. Closes the "confidence drifts over time" mechanic at the column level. | Designed. Filed when P0 merges. |
+| **P1.5** — Poly-side route bindings | Poly mirrors operator's contribution + browse surface (currently 404 on poly). | Trivial follow-up; combine with P1 if natural. |
+| **P2** — DAG traversal in search | `core__knowledge_search` returns 1-hop neighbors + `cited_by_count` per hit. Read-side optimization on existing `citations` data. | Filed after P1 produces real edges. |
+| **P3** — Confidence-recompute walker | The syntropy formula in §"Confidence Is Computed, Not Assigned" actually runs over the citation DAG; supports/contradicts adjust scores. | Needs P1+P2 first. |
+| **P3** — `evaluate_at` cron auto-files outcomes | Hypotheses become outcomes on schedule; closes EDO end-to-end. Temporal/monitoring-engine wiring. | Last piece; depends on P3 walker. |
+
+**Anti-sprawl rule**: If a future agent considers expanding scope beyond their tier, file the next-tier work item and stop. Don't bundle.
 
 ---
 
