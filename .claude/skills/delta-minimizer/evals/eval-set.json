@@ -1,11 +1,32 @@
 [
-  { "query": "minimize our delta against copy targets", "should_trigger": true },
-  { "query": "why is our mean delta so high right now", "should_trigger": true },
-  { "query": "rank the failure modes causing our copy-trade tracking error", "should_trigger": true },
+  {
+    "query": "minimize our delta against copy targets",
+    "should_trigger": true
+  },
+  {
+    "query": "why is our mean delta so high right now",
+    "should_trigger": true
+  },
+  {
+    "query": "rank the failure modes causing our copy-trade tracking error",
+    "should_trigger": true
+  },
   { "query": "loop the delta study every 6 hours", "should_trigger": true },
-  { "query": "are we close to swisstony's compounding rate yet", "should_trigger": true },
+  {
+    "query": "are we close to swisstony's compounding rate yet",
+    "should_trigger": true
+  },
   { "query": "promote the latest sha to production", "should_trigger": false },
-  { "query": "create a new payments dashboard component", "should_trigger": false },
-  { "query": "run the database migration for the new poly table", "should_trigger": false },
-  { "query": "review this pull request for the auth flow", "should_trigger": false }
+  {
+    "query": "create a new payments dashboard component",
+    "should_trigger": false
+  },
+  {
+    "query": "run the database migration for the new poly table",
+    "should_trigger": false
+  },
+  {
+    "query": "review this pull request for the auth flow",
+    "should_trigger": false
+  }
 ]

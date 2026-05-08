@@ -5,7 +5,7 @@ description: "Drive |Δ| (variance from copy-target positions) on the Polymarket
 
 # Δ-Minimizer
 
-Variance from a tracked copy-target's positions is alpha leaking. Per-position |Δ| = |our_share% − target_share%| of total market position. Average |Δ| = 0 ⇒ we ride their compounding rate (modulo absolute capital). Today we don't — and the dashboard surfaces per-market Δ but not a _systemic_ read on dispersion or its causes.
+Variance from a tracked copy-target's positions is alpha leaking. Per-position |Δ| = |our*share% − target_share%| of total market position. Average |Δ| = 0 ⇒ we ride their compounding rate (modulo absolute capital). Today we don't — and the dashboard surfaces per-market Δ but not a \_systemic* read on dispersion or its causes.
 
 This skill is the loop that closes that gap.
 
