@@ -4,7 +4,7 @@
 /**
  * Module: `@cogni/knowledge-store/domain/contribution-schemas`
  * Purpose: Zod schemas for the external-agent knowledge contribution flow.
- * Scope: Pure validation schemas. Used by port, adapter, service, and HTTP contracts.
+ * Scope: Pure validation schemas used by port, adapter, service, and HTTP contracts. Does not contain I/O, business logic, or framework dependencies.
  * Invariants: EXTERNAL_CONTRIB_VIA_BRANCH (per knowledge-data-plane spec).
  * Side-effects: none
  * Links: docs/design/knowledge-contribution-api.md

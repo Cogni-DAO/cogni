@@ -4,7 +4,7 @@
 /**
  * Module: `@cogni/knowledge-store/adapters/doltgres/contribution-adapter`
  * Purpose: Doltgres-backed implementation of KnowledgeContributionPort using Dolt branches.
- * Scope: Adapter only. Each contribution is one contrib/<agent>-<id> branch + one commit.
+ * Scope: Adapter only. Each contribution is one contrib/<agent>-<id> branch + one commit. Does not contain HTTP, validation, or business-logic policy.
  * Invariants:
  *   - All branch ops run inside sql.reserve() so dolt_checkout pins to one connection.
  *   - try/finally restores dolt_checkout('main') and releases the connection on error.

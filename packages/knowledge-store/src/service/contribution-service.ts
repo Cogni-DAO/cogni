@@ -4,10 +4,9 @@
 /**
  * Module: `@cogni/knowledge-store/service/contribution-service`
  * Purpose: Framework-agnostic typed handlers for the knowledge contribution flow.
- * Scope: Pure business logic — quotas, idempotency lookup, role gating, confidence cap.
- *   No HTTP, no env, no lifecycle. Per-node `route.ts` files adapt these to Next.
+ * Scope: Pure business logic — quotas, idempotency lookup, role gating, confidence cap. Does not contain HTTP, env, or lifecycle code; per-node `route.ts` files adapt these to Next.
  * Invariants: KNOWLEDGE_MERGE_REQUIRES_ADMIN_SESSION; agent confidence capped at 30.
- * Side-effects: delegates to KnowledgeContributionPort
+ * Side-effects: none (delegates I/O to KnowledgeContributionPort)
  * Links: docs/design/knowledge-contribution-api.md
  * @public
  */

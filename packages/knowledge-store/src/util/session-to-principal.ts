@@ -3,12 +3,8 @@
 
 /**
  * Module: `@cogni/knowledge-store/util/session-to-principal`
- * Purpose: Map a SessionUser-shaped object to the `Principal` accepted by the
- *   contribution service. Bearer-authenticated agents have no walletAddress
- *   and become `kind: 'agent'`. Wallet-authenticated session users become
- *   `kind: 'user', role: 'admin'` — v0 admin gate is "any session-cookie user."
- * Scope: Pure transformation. Structural input type so this package stays
- *   independent of `@cogni/node-shared`.
+ * Purpose: Maps a SessionUser-shaped object to the Principal accepted by the contribution service.
+ * Scope: Pure transformation; structural input type keeps this package independent of `@cogni/node-shared`. Does not call I/O or read env vars.
  * Invariants: KNOWLEDGE_MERGE_REQUIRES_ADMIN_SESSION (v0).
  * Side-effects: none
  * Links: docs/design/knowledge-contribution-api.md

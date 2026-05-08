@@ -4,7 +4,7 @@
 /**
  * Module: `@cogni/knowledge-store/port/contribution.port`
  * Purpose: Port interface for external-agent knowledge contributions backed by Dolt branches.
- * Scope: Interface + typed error classes. No implementation.
+ * Scope: Interface + typed error classes. Does not contain implementation, I/O, or framework dependencies.
  * Invariants: EXTERNAL_CONTRIB_VIA_BRANCH, KNOWLEDGE_MERGE_REQUIRES_ADMIN_SESSION.
  * Side-effects: none
  * Links: docs/design/knowledge-contribution-api.md
