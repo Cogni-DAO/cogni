@@ -60,3 +60,8 @@ export {
   createContributionService,
   defaultCanMergeKnowledge,
 } from "./service/contribution-service.js";
+// Auth helpers
+export {
+  type SessionUserLike,
+  sessionUserToPrincipal,
+} from "./util/session-to-principal.js";
