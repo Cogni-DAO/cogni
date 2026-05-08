@@ -210,6 +210,16 @@ export const WalletExecutionMarketLineSchema = z.object({
   status: WalletExecutionMarketLineStatusSchema,
   ourValueUsdc: z.number().nonnegative(),
   targetValueUsdc: z.number().nonnegative(),
+  /**
+   * Σ BUY notional from `poly_trader_fills` for our wallet × condition. The
+   * dollars actually put on the line — preserved after exit, where
+   * `ourValueUsdc` collapses to 0. Dashboard uses this on closed rows so
+   * "Our value" reflects entry size, not the trivially-zero current mark.
+   */
+  ourEntryValueUsdc: z.number().nonnegative(),
+  /** Σ BUY notional across all targets × condition. Same role as
+   * `ourEntryValueUsdc`, target side. */
+  targetEntryValueUsdc: z.number().nonnegative(),
   ourVwap: z.number().min(0).nullable(),
   targetVwap: z.number().min(0).nullable(),
   hedgeCount: z.number().int().nonnegative(),
@@ -241,6 +251,10 @@ export const WalletExecutionMarketGroupSchema = z.object({
   status: WalletExecutionMarketLineStatusSchema,
   ourValueUsdc: z.number().nonnegative(),
   targetValueUsdc: z.number().nonnegative(),
+  /** Group-level Σ of per-line `ourEntryValueUsdc`. */
+  ourEntryValueUsdc: z.number().nonnegative(),
+  /** Group-level Σ of per-line `targetEntryValueUsdc`. */
+  targetEntryValueUsdc: z.number().nonnegative(),
   pnlUsd: z.number(),
   /**
    * Group-level `edgeGapPct × groupOurTotalBuyNotional`, where the

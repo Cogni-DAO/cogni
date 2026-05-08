@@ -176,4 +176,61 @@ describe("buildMarketExposureGroups", () => {
     expect(line?.edgeGapPct).not.toBeNull();
     expect(line?.edgeGapUsdc).not.toBeNull();
   });
+
+  it("preserves entry notional for closed lines so 'Our value' is non-zero after exit", async () => {
+    // Regression for bug.5037: closed-line `ourValueUsdc` collapses to 0
+    // because currentValue is 0 after we exit. The dashboard displays
+    // `ourEntryValueUsdc` (Σ BUY fills) instead, which must survive the
+    // exit unchanged. Same invariant target-side.
+    const closedPosition = ourPosition({
+      positionId: "p-closed",
+      status: "closed",
+      currentValue: 0,
+      pnlUsd: -47.94,
+      size: 0,
+    });
+    const db = fakeDb([
+      // No target snapshots — keep the assertion focused on entry-value math.
+      [],
+      // Both wallets have BUY fills on this condition.
+      [
+        {
+          wallet_address: OUR_WALLET.toLowerCase(),
+          condition_id: "0xCOND1",
+          total_buy_notional: "42.00",
+          realized_cash: "0",
+        },
+        {
+          wallet_address: TARGET_WALLET.toLowerCase(),
+          condition_id: "0xCOND1",
+          total_buy_notional: "1234.50",
+          realized_cash: "0",
+        },
+      ],
+    ]);
+
+    const groups = await buildMarketExposureGroups({
+      db,
+      billingAccountId: "ba-1",
+      walletAddress: OUR_WALLET,
+      livePositions: [],
+      closedPositions: [closedPosition],
+    });
+
+    expect(groups).toHaveLength(1);
+    const group = groups[0];
+    const line = group?.lines[0];
+    expect(line?.status).toBe("closed");
+    // Current mark-to-market is correctly $0 (we exited).
+    expect(line?.ourValueUsdc).toBe(0);
+    // Entry value preserves what we put on the line.
+    expect(line?.ourEntryValueUsdc).toBe(42);
+    // Targets had no snapshot rows here, so target entry value is 0 (target
+    // never surfaced as a leg). The wallet's fill rollup alone does not
+    // promote it into a leg — that's TARGET_LEGS_FROM_SNAPSHOTS.
+    expect(line?.targetEntryValueUsdc).toBe(0);
+    // Group rolls up to the same numbers (single line).
+    expect(group?.ourValueUsdc).toBe(0);
+    expect(group?.ourEntryValueUsdc).toBe(42);
+  });
 });

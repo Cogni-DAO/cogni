@@ -240,40 +240,77 @@ export function makeColumns(): AnyCol[] {
         skeleton: <Skeleton className="h-3.5 w-40" />,
       },
     }),
-    col.accessor((row) => row.ourValueUsdc, {
-      id: "ourValue",
-      header: ({ column }) =>
-        rightHeader(
-          <DataGridColumnHeader column={column} title="Our value" visibility />
-        ),
-      size: 120,
-      cell: (info) => (
-        <div className="text-right text-sm tabular-nums">
-          {formatUsd(info.getValue())}
-        </div>
-      ),
-      meta: {
-        headerTitle: "Our value",
-        skeleton: <Skeleton className="ms-auto h-3.5 w-16" />,
-      },
-    }),
-    col.accessor((row) => row.targetValueUsdc, {
-      id: "targets",
-      header: ({ column }) =>
-        rightHeader(
-          <DataGridColumnHeader column={column} title="Targets" visibility />
-        ),
-      size: 120,
-      cell: (info) => (
-        <div className="text-right text-muted-foreground text-sm tabular-nums">
-          {formatUsd(info.getValue())}
-        </div>
-      ),
-      meta: {
-        headerTitle: "Targets",
-        skeleton: <Skeleton className="ms-auto h-3.5 w-16" />,
-      },
-    }),
+    col.accessor(
+      // Closed rows: current mark is trivially $0 (we exited). Show entry
+      // notional (Σ BUY fills) so the column carries a meaningful comparison
+      // against P/L and the targets column.
+      (row) =>
+        row.status === "closed" ? row.ourEntryValueUsdc : row.ourValueUsdc,
+      {
+        id: "ourValue",
+        header: ({ column }) =>
+          rightHeader(
+            <DataGridColumnHeader
+              column={column}
+              title="Our value"
+              visibility
+            />
+          ),
+        size: 120,
+        cell: (info) => {
+          const isClosed = info.row.original.status === "closed";
+          return (
+            <div
+              className="text-right text-sm tabular-nums"
+              title={
+                isClosed
+                  ? "Entry notional (Σ BUY fills)"
+                  : "Current mark-to-market"
+              }
+            >
+              {formatUsd(info.getValue())}
+            </div>
+          );
+        },
+        meta: {
+          headerTitle: "Our value",
+          skeleton: <Skeleton className="ms-auto h-3.5 w-16" />,
+        },
+      }
+    ),
+    col.accessor(
+      (row) =>
+        row.status === "closed"
+          ? row.targetEntryValueUsdc
+          : row.targetValueUsdc,
+      {
+        id: "targets",
+        header: ({ column }) =>
+          rightHeader(
+            <DataGridColumnHeader column={column} title="Targets" visibility />
+          ),
+        size: 120,
+        cell: (info) => {
+          const isClosed = info.row.original.status === "closed";
+          return (
+            <div
+              className="text-right text-muted-foreground text-sm tabular-nums"
+              title={
+                isClosed
+                  ? "Target entry notional (Σ BUY fills across all targets)"
+                  : "Current target mark-to-market"
+              }
+            >
+              {formatUsd(info.getValue())}
+            </div>
+          );
+        },
+        meta: {
+          headerTitle: "Targets",
+          skeleton: <Skeleton className="ms-auto h-3.5 w-16" />,
+        },
+      }
+    ),
     col.accessor((row) => row.status, {
       id: "status",
       header: ({ column }) => (
@@ -427,8 +464,18 @@ function MarketLineBlock({
           </p>
         </div>
         <div className="text-muted-foreground text-xs tabular-nums">
-          our {formatUsd(line.ourValueUsdc)} · target line{" "}
-          {formatUsd(line.targetValueUsdc)}
+          our{" "}
+          {formatUsd(
+            line.status === "closed"
+              ? line.ourEntryValueUsdc
+              : line.ourValueUsdc
+          )}{" "}
+          · target line{" "}
+          {formatUsd(
+            line.status === "closed"
+              ? line.targetEntryValueUsdc
+              : line.targetValueUsdc
+          )}
         </div>
       </div>
       <ParticipantsTable line={line} />
