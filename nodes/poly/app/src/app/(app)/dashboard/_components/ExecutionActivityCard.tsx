@@ -22,7 +22,10 @@
 import type { WalletExecutionMarketGroup } from "@cogni/poly-node-contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
-import { MarketsTable } from "@/app/(app)/_components/markets-table";
+import {
+  MarketsDeltaDistribution,
+  MarketsTable,
+} from "@/app/(app)/_components/markets-table";
 import { PositionsTable } from "@/app/(app)/_components/positions-table";
 import {
   Card,
@@ -250,6 +253,7 @@ function MarketGroupsPanel({
             Copy-target overlays are temporarily unavailable.
           </p>
         ) : null}
+        <MarketsDeltaDistribution groups={groups} />
         <MarketsTable groups={groups} isLoading={isLoading} />
       </div>
     </div>
