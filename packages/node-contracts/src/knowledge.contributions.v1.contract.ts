@@ -39,10 +39,7 @@ export type ContributionsCreateRequest = z.infer<
 >;
 
 export const ContributionsListQuerySchema = z.object({
-  state: z
-    .enum(["open", "merged", "closed", "all"])
-    .optional()
-    .default("open"),
+  state: z.enum(["open", "merged", "closed", "all"]).optional().default("open"),
   principalId: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional().default(20),
 });
@@ -88,9 +85,7 @@ export const ContributionDiffEntrySchema = z.object({
   before: z.record(z.string(), z.unknown()).nullable(),
   after: z.record(z.string(), z.unknown()).nullable(),
 });
-export type ContributionDiffEntry = z.infer<
-  typeof ContributionDiffEntrySchema
->;
+export type ContributionDiffEntry = z.infer<typeof ContributionDiffEntrySchema>;
 
 export const ContributionsListResponseSchema = z.object({
   contributions: z.array(ContributionRecordSchema),

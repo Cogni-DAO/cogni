@@ -21,8 +21,8 @@ import type {
 } from "../domain/contribution-schemas.js";
 import {
   ContributionForbiddenError,
-  type KnowledgeContributionPort,
   ContributionQuotaError,
+  type KnowledgeContributionPort,
 } from "../port/contribution.port.js";
 
 export interface CreateBody {
@@ -67,7 +67,7 @@ export interface ContributionService {
 }
 
 export function createContributionService(
-  deps: ContributionServiceDeps,
+  deps: ContributionServiceDeps
 ): ContributionService {
   return {
     async create({ principal, body }) {
@@ -90,7 +90,7 @@ export function createContributionService(
       });
       if (open.length >= deps.rateLimit.maxOpenPerPrincipal) {
         throw new ContributionQuotaError(
-          `max open contributions per principal = ${deps.rateLimit.maxOpenPerPrincipal}`,
+          `max open contributions per principal = ${deps.rateLimit.maxOpenPerPrincipal}`
         );
       }
 

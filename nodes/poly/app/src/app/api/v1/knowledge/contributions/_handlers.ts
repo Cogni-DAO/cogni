@@ -14,12 +14,6 @@
  */
 
 import {
-  ContributionCloseRequestSchema,
-  ContributionMergeRequestSchema,
-  ContributionsCreateRequestSchema,
-  ContributionsListQuerySchema,
-} from "@cogni/node-contracts";
-import {
   ContributionConflictError,
   ContributionForbiddenError,
   ContributionNotFoundError,
@@ -27,6 +21,12 @@ import {
   ContributionStateError,
   sessionUserToPrincipal,
 } from "@cogni/knowledge-store";
+import {
+  ContributionCloseRequestSchema,
+  ContributionMergeRequestSchema,
+  ContributionsCreateRequestSchema,
+  ContributionsListQuerySchema,
+} from "@cogni/node-contracts";
 import type { SessionUser } from "@cogni/node-shared";
 import { NextResponse } from "next/server";
 

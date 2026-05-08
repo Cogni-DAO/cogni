@@ -13,19 +13,6 @@
 
 // Capability factory (shared across all nodes)
 export { createKnowledgeCapability } from "./capability.js";
-// Domain types & schemas
-export {
-  type DoltCommit,
-  DoltCommitSchema,
-  type DoltDiffEntry,
-  DoltDiffEntrySchema,
-  type Knowledge,
-  KnowledgeSchema,
-  type NewKnowledge,
-  NewKnowledgeSchema,
-  type SourceType,
-  SourceTypeSchema,
-} from "./domain/schemas.js";
 // Contribution domain
 export {
   type ContributionDiffEntry,
@@ -41,8 +28,19 @@ export {
   PrincipalKindSchema,
   PrincipalSchema,
 } from "./domain/contribution-schemas.js";
-// Port interfaces
-export type { KnowledgeStorePort } from "./port/knowledge-store.port.js";
+// Domain types & schemas
+export {
+  type DoltCommit,
+  DoltCommitSchema,
+  type DoltDiffEntry,
+  DoltDiffEntrySchema,
+  type Knowledge,
+  KnowledgeSchema,
+  type NewKnowledge,
+  NewKnowledgeSchema,
+  type SourceType,
+  SourceTypeSchema,
+} from "./domain/schemas.js";
 export {
   ContributionConflictError,
   ContributionForbiddenError,
@@ -51,14 +49,16 @@ export {
   ContributionStateError,
   type KnowledgeContributionPort,
 } from "./port/contribution.port.js";
+// Port interfaces
+export type { KnowledgeStorePort } from "./port/knowledge-store.port.js";
 // Contribution service (framework-agnostic, cross-node shared)
 export {
   type ContributionService,
   type ContributionServiceDeps,
   type CreateBody,
-  type ListQuery,
   createContributionService,
   defaultCanMergeKnowledge,
+  type ListQuery,
 } from "./service/contribution-service.js";
 // Auth helpers
 export {
