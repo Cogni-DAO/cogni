@@ -81,7 +81,7 @@ export async function handleCreate(
     );
 
   const principal = sessionUserToPrincipal(sessionUser);
-  const body_ = {
+  const createBody = {
     message: parsed.data.message,
     entries: parsed.data.entries,
     ...(parsed.data.idempotencyKey
@@ -89,7 +89,7 @@ export async function handleCreate(
       : {}),
   };
   try {
-    const record = await svc.create({ principal, body: body_ });
+    const record = await svc.create({ principal, body: createBody });
     return NextResponse.json(record, { status: 201 });
   } catch (e) {
     return mapError(e);
