@@ -166,7 +166,7 @@ export function ExecutionActivityCard(): ReactElement {
       <CardHeader className="px-5 py-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <CardTitle className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+            <CardTitle className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
               Execution
             </CardTitle>
           </div>
@@ -237,7 +237,7 @@ function MarketGroupsPanel({
 }): ReactElement {
   if (isError) {
     return (
-      <p className="text-muted-foreground px-5 py-6 text-center text-sm">
+      <p className="px-5 py-6 text-center text-muted-foreground text-sm">
         Failed to load market exposure. Try again shortly.
       </p>
     );
@@ -246,7 +246,7 @@ function MarketGroupsPanel({
   return (
     <div className="space-y-3 px-5 pb-4">
       <div className="space-y-2">
-        <h3 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+        <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
           Markets
         </h3>
         {warnings.some(
@@ -287,7 +287,7 @@ function OpenPositionsPanel({
 }): ReactElement {
   if (isError) {
     return (
-      <p className="text-muted-foreground px-5 py-6 text-center text-sm">
+      <p className="px-5 py-6 text-center text-muted-foreground text-sm">
         Failed to load execution data. Try again shortly.
       </p>
     );
@@ -296,7 +296,7 @@ function OpenPositionsPanel({
   return (
     <div className="space-y-3 px-5 pb-4">
       <div className="space-y-2">
-        <h3 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+        <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
           Open Positions
         </h3>
         {warnings.length > 0 ? (
@@ -306,7 +306,7 @@ function OpenPositionsPanel({
           </p>
         ) : null}
         {positionActionError ? (
-          <p className="border-destructive/40 bg-destructive/10 text-destructive rounded border px-3 py-2 text-xs">
+          <p className="rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-destructive text-xs">
             {positionActionError}
           </p>
         ) : null}
@@ -341,7 +341,7 @@ function ClosedPositionsPanel({
 }): ReactElement {
   if (isError) {
     return (
-      <p className="text-muted-foreground px-5 py-6 text-center text-sm">
+      <p className="px-5 py-6 text-center text-muted-foreground text-sm">
         Failed to load position history. Try again shortly.
       </p>
     );
@@ -350,7 +350,7 @@ function ClosedPositionsPanel({
   return (
     <div className="space-y-3 px-5 pb-4">
       <div className="space-y-2">
-        <h3 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+        <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
           Position History
         </h3>
         <PositionsDeltaDistribution
