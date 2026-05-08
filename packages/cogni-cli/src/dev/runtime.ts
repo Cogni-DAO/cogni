@@ -16,8 +16,6 @@
 
 import { spawn } from "node:child_process";
 
-import type { SpawnEnv } from "./session.js";
-
 export type RuntimeKind = "claude" | "codex";
 
 export interface Runtime {
@@ -83,8 +81,8 @@ export async function detectRuntimes(
 export interface RunInvocation {
   kind: RuntimeKind;
   prompt: string;
-  /** Sanitized cwd + env handed to the spawned agent (see `session.provisionSession`). */
-  spawnEnv: SpawnEnv;
+  /** Working directory the agent runs in. Env is inherited from the parent process. */
+  workdir: string;
   signal: AbortSignal;
 }
 
@@ -104,11 +102,15 @@ export interface RunResult {
 export async function* runOnce(
   invocation: RunInvocation
 ): AsyncIterable<RunChunk> {
-  const { kind, prompt, spawnEnv, signal } = invocation;
-  const args = kind === "claude" ? ["--print", prompt] : ["exec", prompt];
+  const { kind, prompt, workdir, signal } = invocation;
+  // codex defaults to refusing untrusted (non-git) dirs; the session workspace
+  // is intentionally a scratch dir, so bypass that check.
+  const args =
+    kind === "claude"
+      ? ["--print", prompt]
+      : ["exec", "--skip-git-repo-check", prompt];
   const child = spawn(kind, args, {
-    cwd: spawnEnv.cwd,
-    env: spawnEnv.env,
+    cwd: workdir,
     stdio: ["ignore", "pipe", "pipe"],
     signal,
   });

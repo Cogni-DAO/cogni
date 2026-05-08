@@ -53,17 +53,14 @@ The CLI never holds Anthropic / OpenAI credentials; it just shells out to whatev
 
 ## Responsibilities
 
-- This directory **does**: detect installed local agent runtimes; provision a per-session workspace dir under `~/.cogni/sessions/<id>/`; expose a 127.0.0.1 HTTP server; spawn agents with `HOME` overridden to the session dir and a pruned env; spawn cloudflared; print the studio URL; open a browser.
-- This directory **does not**: hold Anthropic / OpenAI credentials, persist any state across runs (the session dir is torn down on shutdown), talk to the operator's database, or implement any operator API endpoint.
+- This directory **does**: detect installed local agent runtimes; provision a per-process workspace dir under `~/.cogni/sessions/<id>/` as `cwd`; expose a 127.0.0.1 HTTP server; spawn cloudflared; print the studio URL; open a browser.
+- This directory **does not**: hold Anthropic / OpenAI credentials, persist any state across runs (the session dir is torn down on shutdown), talk to the operator's database, implement any operator API endpoint, sandbox the spawned agent, or modify its env / `HOME`.
 
-## Isolation contract (Phase 1)
+## Session contract (Phase 1)
 
-`provisionSession()` (`src/dev/session.ts`) is the single seam for soft isolation:
+`provisionSession()` (`src/dev/session.ts`) creates `~/.cogni/sessions/<id>/` (mode 0700) and returns a `teardown()` that removes it. That's all. The agent inherits the user's full env, `HOME`, PATH, keychain — auth and toolchain managers (Volta, nvm, pnpm) Just Work because nothing has been stripped.
 
-- Spawned agents see `cwd = HOME = ~/.cogni/sessions/<id>/`.
-- The env passed to spawn contains only the `ENV_ALLOWLIST` keys (`PATH`, `USER`, `LOGNAME`, `SHELL`, `TERM`, `LANG`, `LC_*`, `TMPDIR`, `NODE_PATH`) plus the overridden `HOME`. Secrets like `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `COGNI_API_KEY_*`, `AWS_*`, `GITHUB_TOKEN` never reach the agent.
-- `~/.claude` and `~/.codex` are surfaced into the session dir via symlinks so the user's existing local CLI auth keeps working — but nothing else from the real home is reachable through `~`.
-- This is **soft** isolation: an agent that runs `cat /Users/<u>/.ssh/id_rsa` (absolute path) still succeeds. Hard sandbox containment (Docker, user namespaces) is a Phase 4 follow-up tracked in the spec.
+This is **not isolation.** A malicious prompt of `cat /Users/<u>/.ssh/id_rsa` reads the SSH key. Real isolation requires a container or kernel sandbox and is tracked as Phase 4 in the spec. Earlier draft attempted "soft isolation" via `HOME` override + env allowlist; reverted because it broke correctness (auth, Volta-shimmed binaries) without providing meaningful protection.
 
 ## Usage
 

@@ -22,12 +22,11 @@ import {
 import type { AddressInfo } from "node:net";
 
 import { type Runtime, type RuntimeKind, runOnce } from "./runtime.js";
-import type { SpawnEnv } from "./session.js";
 
 export interface ServerOptions {
   port: number;
-  /** Sanitized cwd + env that every spawned agent inherits. Provisioned by `session.provisionSession`. */
-  spawnEnv: SpawnEnv;
+  /** Working directory the spawned agent runs in. Env is inherited from the parent. */
+  workdir: string;
   runtimes: Runtime[];
   allowedOrigins: string[];
 }
@@ -122,13 +121,13 @@ export async function startServer(opts: ServerOptions): Promise<ServerHandle> {
           installed: r.installed,
           version: r.version ?? null,
         })),
-        workdir: opts.spawnEnv.cwd,
+        workdir: opts.workdir,
       });
       return;
     }
 
     if (req.method === "POST" && req.url === "/run") {
-      void handleRun(req, res, opts.spawnEnv, installedKinds);
+      void handleRun(req, res, opts.workdir, installedKinds);
       return;
     }
 
@@ -153,7 +152,7 @@ export async function startServer(opts: ServerOptions): Promise<ServerHandle> {
 async function handleRun(
   req: IncomingMessage,
   res: ServerResponse,
-  spawnEnv: SpawnEnv,
+  workdir: string,
   installed: Set<RuntimeKind>
 ): Promise<void> {
   const body = parseRunBody(await readBody(req));
@@ -182,7 +181,7 @@ async function handleRun(
     for await (const chunk of runOnce({
       kind: body.runtime,
       prompt: body.prompt,
-      spawnEnv,
+      workdir,
       signal: controller.signal,
     })) {
       sseEvent(res, { type: chunk.stream, data: chunk.data });

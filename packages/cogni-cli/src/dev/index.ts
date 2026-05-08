@@ -106,7 +106,7 @@ export async function runDev(argv: string[]): Promise<number> {
 
   const server = await startServer({
     port: opts.port,
-    spawnEnv: session.spawnEnv,
+    workdir: session.sessionDir,
     runtimes,
     allowedOrigins: buildAllowedOrigins(opts.host),
   });

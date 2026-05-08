@@ -30,14 +30,14 @@ tags:
 
 Plug a locally-running Claude Code or Codex CLI into the operator's existing assistant-ui `/chat` surface as just another model in the picker, with the bridge implemented behind the same `GraphExecutorPort` every other graph runs through. Spec covers the next two phases on the same branch:
 
-- **Phase 1 — Isolation.** `cogni dev` provisions a per-session workspace and spawns the agent with overridden `cwd` + `HOME`. CLI-only change; no operator surface.
+- **Phase 1 — Session workspace.** `cogni dev` provisions a per-process workspace dir under `~/.cogni/sessions/<id>/` and spawns the agent there as `cwd`. Env and `HOME` are inherited unchanged from the parent. CLI-only change; no operator surface.
 - **Phase 2 — Chat-integrated bridge.** A `BridgeRuntimeProvider` (server-side, in the operator) implements `GraphExecutorPort`, registered under namespace `bridge`. Paired devices appear as entries in the existing `/chat` model picker. The browser never sees the tunnel URL. The bespoke page is deleted in the same PR once chat parity is proven.
 
 ## Non-Goals
 
 - Tool-call routing into the bridge agent (`tool_call_start` / `tool_call_result`). The CLI is a text producer; assistant-ui's ToolCard primitive simply doesn't fire.
 - Multi-turn `stateKey` continuity inside the agent (no `claude --resume` / `codex resume`). Each `/run` is stateless. Future work.
-- Container/namespace isolation. Phase 1 is **soft isolation** (`HOME` + `cwd` overrides) — a malicious prompt can still `cat /Users/<u>/.ssh/id_rsa` if the agent has shell access. That's a Phase 4 hardening item; Phase 1 raises the floor, not the ceiling.
+- **Process / filesystem / network isolation of the spawned agent.** Phase 1 explicitly does **not** sandbox the agent. The agent runs as the user's UID with the user's full env, full `HOME`, full PATH. Real isolation requires a container (Docker, containerd) or kernel-level boundary (Linux user namespaces, macOS sandbox-exec). That's tracked as Phase 4. An earlier draft of Phase 1 attempted "soft isolation" via `HOME` override + env-allowlist; that approach was reverted because it broke correctness (auth, toolchain managers) without providing meaningful protection — absolute paths bypass it trivially.
 - Per-token billing. Bridge runs are funded by the user's own Claude / Codex subscription on their device; the operator emits `usage = undefined` in `GraphFinal` and does not charge platform credits.
 
 ## Invariants
@@ -45,8 +45,8 @@ Plug a locally-running Claude Code or Codex CLI into the operator's existing ass
 - **INV-NO-PARALLEL-CHAT-SURFACE.** No new chat UI ships on the operator. Bridge usage is a pure model-picker entry on the existing `/chat` page; the bespoke `/runtimes/dev` page is deleted in the same PR that ships Phase 2b.
 - **INV-NO-TUNNEL-IN-BROWSER.** The browser never sees the device tunnel URL. All dispatch happens server-side, with the operator fetching the tunnel from a server-only AEAD-decrypted connection row.
 - **INV-HMAC-AUTH.** Every `/run` dispatch from operator → CLI carries `Authorization: Bearer HMAC(hmacSecret, runId + ts)`. CLI rejects un-signed or stale calls. The shared secret is established once at pair-time and never re-transmitted.
-- **INV-SOFT-ISOLATION-ONLY.** Phase 1 isolation is `HOME` + `cwd` env overrides plus an env allowlist. It is **not** a sandbox; absolute-path filesystem access remains. Hard isolation is explicitly Phase 4.
-- **INV-AUTH-VIA-SYMLINK.** The user's existing `~/.claude` and `~/.codex` are surfaced into the session dir via symlinks only — the rest of the real `$HOME` is never reachable through `~`.
+- **INV-SESSION-DIR.** Phase 1 provides a per-process workspace dir at `~/.cogni/sessions/<id>/`, used as the agent's `cwd`. The dir is created on `cogni dev` startup and torn down on graceful shutdown. No env or `HOME` manipulation beyond that.
+- **INV-NO-ISOLATION-THEATER.** The CLI does not promise isolation it cannot enforce. If a future phase adds real isolation, it will be at the container / kernel boundary, not at the env-pruning layer.
 
 ## Design
 
@@ -54,7 +54,7 @@ Plug a locally-running Claude Code or Codex CLI into the operator's existing ass
  ┌─ user laptop ─────────────────────────────┐         ┌─ operator (cognidao.org) ────────────────┐
  │                                           │         │                                          │
  │  cogni dev                                │         │  /chat  (assistant-ui Thread)            │
- │   ├─ ~/.cogni/sessions/<id>/  (cwd+HOME)  │         │   └─ ChatRuntimeProvider                 │
+ │   ├─ ~/.cogni/sessions/<id>/  (cwd only)  │         │   └─ ChatRuntimeProvider                 │
  │   ├─ http://127.0.0.1:<port>              │         │       └─ POST /api/v1/ai/chat            │
  │   └─ cloudflared ─→ https://x.tryc...     │         │           └─ chatCompletionStream()      │
  │                          ▲                │         │               └─ NamespaceGraphRouter    │
@@ -106,16 +106,15 @@ Single one-time pairing, then per-session re-announce:
 
 Why HMAC, not OAuth: the operator and the CLI share a secret created at pair-time. There's no third-party authority. HMAC is the right tool — same shape as the existing `cogni_ag_sk_v1_*` agent tokens.
 
-### Isolation (Phase 1)
+### Session workspace (Phase 1)
 
-A spawned `claude` / `codex` runs as the user's UID with full filesystem access. Phase 1 reduces blast radius via env-var hygiene; it is **not** a sandbox.
+The agent runs as the user, with the user's full env, full `HOME`, full PATH. The only thing Phase 1 changes vs. an unwrapped `claude --print` invocation is `cwd`.
 
-- `~/.cogni/sessions/<sessionId>/` is created on `cogni dev` startup (`sessionId = randomUUID()`), removed on graceful shutdown.
-- Spawn env: `cwd = sessionDir`, `HOME = sessionDir`, `PATH` preserved (so the binary resolves), `USER` preserved. Everything else pruned to an explicit allowlist (`SHELL`, `TERM`, `LANG`, `LC_*`, `TMPDIR`).
-- Anthropic / OpenAI auth flows surface a mix of dirs and dotfiles, plus the toolchain manager that hosts the binary. `cogni dev` symlinks each of the following into the session dir if it exists on the real home, before spawning: `~/.claude/` (dir), `~/.claude.json` (file — Claude Code's logged-in state), `~/.codex/` (dir), `~/.volta/` (dir — Volta-shimmed `claude` / `codex` need this to resolve the actual binary). Symlinks bridge the auth without exposing the rest of `$HOME`. The list is intentionally narrow; new entries should require explicit justification (a working agent runtime) before being added.
-- `--workdir <path>` flag stays available as an opt-out for advanced users who want the agent to operate on a real repo. Default is the sandboxed session dir.
+- `~/.cogni/sessions/<sessionId>/` is created on `cogni dev` startup (`sessionId = randomUUID()`, `mode 0700`). Removed on graceful shutdown.
+- Spawn: `cwd = sessionDir`. Env inherited from parent — no overrides, no allowlist, no symlinks. Auth, toolchain managers (Volta, nvm, pnpm), keychain access, shell config: all Just Work.
+- Why a session dir at all: gives the agent a clean place to write scratch files without polluting whatever directory the user launched from. Useful for diagnostics and per-session cleanup. That's all.
 
-Escape test (proves the floor): a prompt of `cat ~/.ssh/id_rsa` is unable to read the user's real SSH key when run with default isolation, because `~` resolves to the empty session dir. The test asserts the agent's stdout contains neither key material nor a "Permission denied on path containing /Users/<u>". Note this test does NOT assert hard sandbox containment — `cat /Users/<u>/.ssh/id_rsa` (absolute path) still works, and that's an acknowledged Phase 4 follow-up.
+Why this is not isolation: a malicious prompt that says `cat /Users/<u>/.ssh/id_rsa` reads the SSH key. So would a prompt that says `~/.ssh/id_rsa` — `~` resolves to the user's real home, because `HOME` is unchanged. The CLI does not pretend otherwise. **Use this only on hardware you trust to be running a non-malicious agent.** Real isolation is Phase 4 (container or kernel sandbox).
 
 ### Model catalog integration
 
@@ -140,7 +139,7 @@ If the device's most-recent `lastTunnelUrl` is stale (>10 min since `announce`),
 
 PRs all stack on `derekg1729/byo-agent-research` (PR #1280 stays open).
 
-1. **Phase 1 — isolation in `@cogni/cli`.** Single-package change. Test: spawn an `echo HOME=$HOME` agent shim, assert the value is the session dir. No operator change.
+1. **Phase 1 — session workspace in `@cogni/cli`.** Single-package change. Test: provisionSession creates the dir; teardown removes it; idempotent. No operator change.
 2. **Phase 2a — `BridgeRuntimeProvider` registration.** Adapter file in `nodes/operator/app/src/adapters/server/ai/bridge/`. Translates SSE → AiEvent. Registered in `bootstrap/graph-executor.factory.ts:114` under namespace `bridge`. Stand-alone unit test against a fake CLI server.
 3. **Phase 2b — pairing + announce + model catalog wiring.** New `connections` provider (`"cogni-bridge-device"`), `/api/v1/runtimes/{pair,announce}` routes, `cogni dev pair` subcommand, model catalog extension, chat completions facade override (`graphName = "bridge:default"` when `providerKey === "bridge"`).
 4. **Cleanup.** Delete `nodes/operator/app/src/app/(app)/runtimes/`. The git history preserves the demo for reproducibility.
@@ -151,7 +150,7 @@ Until step 4, `/runtimes/dev` stays as the working demo so we can A/B against th
 
 ### New files
 
-- `packages/cogni-cli/src/dev/session.ts` — Phase 1: provision/teardown session dir, build env allowlist
+- `packages/cogni-cli/src/dev/session.ts` — Phase 1: provision/teardown session dir
 - `packages/cogni-cli/src/dev/pair.ts` — Phase 2b: `cogni dev pair <code>`, persist to `~/.cogni/devices.json`
 - `packages/cogni-cli/src/dev/announce.ts` — Phase 2b: post `/announce` on startup
 - `nodes/operator/app/src/adapters/server/ai/bridge/bridge-runtime.provider.ts` — Phase 2a
