@@ -60,6 +60,24 @@ const CHART_CONFIG: ChartConfig = {
   },
 };
 
+// Class strings extracted to consts so prettier-plugin-tailwindcss leaves
+// them alone and biome's useSortedClasses can settle on a single ordering.
+// Without the indirection the two formatters disagree on the sort order
+// of `border` shorthand vs `border-<color>` and `text-<color>` vs typography
+// modifiers, producing a fix-then-rerun loop.
+const CONTAINER_CLASS =
+  "space-y-2 rounded-md border border-border/60 bg-card/40 p-3";
+const HEADER_ROW_CLASS =
+  "flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1";
+const HEADER_LEFT_CLASS = "flex items-baseline gap-2";
+const TITLE_CLASS =
+  "font-semibold text-foreground text-xs uppercase tracking-wider";
+const HEADER_META_CLASS = "text-muted-foreground text-xs";
+const STATS_ROW_CLASS =
+  "flex flex-wrap gap-x-3 font-mono text-muted-foreground text-xs tabular-nums";
+const STAT_VALUE_CLASS = "text-foreground";
+const CHART_WRAPPER_CLASS = "aspect-auto h-24 w-full";
+
 export function binIndex(absDeltaPct: number): number {
   for (let i = 0; i < BINS.length; i += 1) {
     const b = BINS[i];
@@ -119,34 +137,32 @@ export function MarketsDeltaDistribution({
   const pctUnder10 = Math.round((stats.under10 / stats.total) * 100);
 
   return (
-    <div className="border-border/60 bg-card/40 space-y-2 rounded-md border p-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <div className="flex items-baseline gap-2">
-          <h4 className="text-foreground text-xs font-semibold tracking-wider uppercase">
-            |Δ| distribution
-          </h4>
-          <span className="text-muted-foreground text-xs">
-            live · n={stats.total}
-          </span>
+    <div className={CONTAINER_CLASS}>
+      <div className={HEADER_ROW_CLASS}>
+        <div className={HEADER_LEFT_CLASS}>
+          <h4 className={TITLE_CLASS}>|Δ| distribution</h4>
+          <span className={HEADER_META_CLASS}>live · n={stats.total}</span>
         </div>
-        <div className="text-muted-foreground flex flex-wrap gap-x-3 font-mono text-xs tabular-nums">
+        <div className={STATS_ROW_CLASS}>
           <span>
             mean{" "}
-            <span className="text-foreground">{stats.meanAbs.toFixed(1)}%</span>
+            <span className={STAT_VALUE_CLASS}>
+              {stats.meanAbs.toFixed(1)}%
+            </span>
           </span>
           <span>
             median{" "}
-            <span className="text-foreground">{stats.medAbs.toFixed(1)}%</span>
+            <span className={STAT_VALUE_CLASS}>{stats.medAbs.toFixed(1)}%</span>
           </span>
           <span>
-            &lt;1% <span className="text-foreground">{pctUnder1}%</span>
+            &lt;1% <span className={STAT_VALUE_CLASS}>{pctUnder1}%</span>
           </span>
           <span>
-            &lt;10% <span className="text-foreground">{pctUnder10}%</span>
+            &lt;10% <span className={STAT_VALUE_CLASS}>{pctUnder10}%</span>
           </span>
         </div>
       </div>
-      <ChartContainer config={CHART_CONFIG} className="aspect-auto h-24 w-full">
+      <ChartContainer config={CHART_CONFIG} className={CHART_WRAPPER_CLASS}>
         <BarChart
           data={bars}
           margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
