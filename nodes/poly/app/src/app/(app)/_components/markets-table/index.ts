@@ -9,5 +9,7 @@
  * @public
  */
 
+export type { MarketsDeltaDistributionProps } from "./MarketsDeltaDistribution";
+export { MarketsDeltaDistribution } from "./MarketsDeltaDistribution";
 export type { MarketsTableProps } from "./MarketsTable";
 export { MarketsTable } from "./MarketsTable";
