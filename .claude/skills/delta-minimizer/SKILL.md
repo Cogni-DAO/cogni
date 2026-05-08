@@ -19,6 +19,10 @@ This skill is the loop that closes that gap.
 
 The goal is not to eliminate variance entirely — capital constraint guarantees we miss bets the target makes. The goal is **every non-zero |Δ| has a named cause we are working on**.
 
+### VWAP-floor invariant (load-bearing)
+
+|Δ| minimization is the headline metric, but it has one explicit exception: **never close |Δ| by paying worse VWAP than the target's average fill price.** A cancel-and-replace (or a fresh layer) that would worsen our VWAP vs the target's avg fill on this (token, side) by more than 0.5pp is classified `vwap_floor_held`, not recommended for action, and counted toward the goal-contract denominator as legitimate residual variance. Capital scarcity (`capital_constrained`) and one-sided books (`orderbook_one_side`) stay dominant explanations _before_ execution-quality regression. We do not chase. The headline goal is "|Δ| → 0 _given_ same-or-better VWAP than target." If the only path to |Δ|=0 is to lift offers past the target's entry, the headline goal has been met to the floor; further closure would be alpha leakage of a different shape.
+
 ## When to load
 
 - User runs `/delta-minimizer` (with or without a window)
@@ -41,6 +45,7 @@ Every high-|Δ| market is bucketed into exactly one of these. The taxonomy is th
 | `latency_skipped`         | decision recorded, but target's market price moved ≥3pp between target fill and our place                   | spike — measure latency distribution                               |
 | `liquidity_capped`        | order placed but `filled_size_usdc < size_usdc` and the orderbook on our side was thin                      | spike — escalation candidate                                       |
 | `orderbook_one_side`      | our side of the binary has ~zero depth at target's price (neg-risk markets)                                 | research — known structural issue                                  |
+| `vwap_floor_held`         | closing the gap requires paying ≥0.5pp worse VWAP than target's avg fill on this (token, side)              | by-design (VWAP-floor invariant)                                   |
 | `unattributed`            | doesn't match any of the above                                                                              | **always file a `spike.NNNN`** so the bucket gets a name next loop |
 
 `unattributed` is the safety valve. Anything that lands here means the taxonomy is incomplete and a human needs to look. The skill files the spike automatically and includes the market id + reason patterns observed.
@@ -144,9 +149,29 @@ curl -sf -X POST "https://cognidao.org/api/v1/work/items" \
 
 For active buckets that are climbing, PATCH a heartbeat note onto the existing tracking item rather than filing a new one (anti-sprawl per the `/contribute-to-cogni` contract).
 
-### Step 6 — Persist (vNext)
+### Step 6 — Persist (markdown today; knowledge `entry_type='scorecard'` very soon)
 
-When the snapshot endpoint exists (`POST /api/v1/poly/research/delta-minimizer/snapshot`), POST the matrix + outlier list as a JSONB row into a dolt-backed `poly_delta_minimizer_runs` table. v0 does not persist; the scorecard in chat / on a PR is the durable artifact. Filing the persistence work as `task.NNNN` is the right move on the first run that produces a useful scorecard.
+The persistence target has been picked: per-node Doltgres `knowledge` table, `domain='poly_delta_minimizer'`, `entry_type='scorecard'`. The internal HTTP wrapper (`/api/v1/poly/knowledge/...` against `core__knowledge_write`) lands with PR #1133 / #1143 (knowledge-contribution-API) + PR #1175 (corpus-as-knowledge: `work_item_artifacts` join from scorecards → work items).
+
+**Until that ships, persistence is markdown on disk** — write each tick's scorecard to `docs/research/<ISO-date>-delta-minimizer.md`. Format already matches the future row shape so the bulk importer (PR #1144) can lift the corpus mechanically; see `data-research` skill §"Persisting research as knowledge" for the field mapping.
+
+```bash
+# v0 — write to disk
+SCORECARD_PATH="docs/research/$(date -u +%Y-%m-%dT%H%MZ)-delta-minimizer.md"
+echo "$SCORECARD_MD" > "$SCORECARD_PATH"
+git add "$SCORECARD_PATH" && git commit -m "research(delta-minimizer): scorecard $(date -u +%Y-%m-%dT%H%MZ)" || true
+
+# v1 (post PR #1133) — write to knowledge plane
+# curl -sS -X POST "https://poly.cognidao.org/api/v1/poly/knowledge/write" \
+#   -H "Authorization: Bearer $COGNI_API_KEY_PROD" \
+#   -d '{"domain":"poly_delta_minimizer","entryType":"scorecard","title":"...","content":"...","tags":["scorecard","ts:..."],"workItemRefs":["bug.5032","bug.5035"]}'
+```
+
+The Δ-vs-prev-run column comes from the prior scorecard. v0 reads it via `ls -t docs/research/*-delta-minimizer.md | head -2 | tail -1`. v1 reads via `core__knowledge_search` ordered by `created_at desc`.
+
+**Strategy promotion (rules):** when a bucket's count is flat-or-shrinking across the last 3 scorecards AND the bucket is owned by an active work item, write a new `entry_type='rule'` markdown alongside the scorecard at `docs/research/rules/<bucket>.md`, citing the 3 supporting scorecards and the resolved work item. v1: same as `entry_type='rule'` knowledge row at `confidence_pct` 60+. Each promotion is a separate file (or row) with a `supersedes` link to the prior version — never overwrite, never delete.
+
+**Findings (root-cause memos):** when an `unattributed` spike resolves into a fix, write `docs/research/findings/<spike_id>.md` citing the spike + the merged PR + the first scorecard where the bucket dropped to zero. v1 = `entry_type='finding'` knowledge row.
 
 ## Cost discipline
 
