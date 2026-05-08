@@ -81,8 +81,15 @@ export async function handleCreate(
     );
 
   const principal = sessionUserToPrincipal(sessionUser);
+  const body_ = {
+    message: parsed.data.message,
+    entries: parsed.data.entries,
+    ...(parsed.data.idempotencyKey
+      ? { idempotencyKey: parsed.data.idempotencyKey }
+      : {}),
+  };
   try {
-    const record = await svc.create({ principal, body: parsed.data });
+    const record = await svc.create({ principal, body: body_ });
     return NextResponse.json(record, { status: 201 });
   } catch (e) {
     return mapError(e);
@@ -119,7 +126,14 @@ export async function handleList(
     );
 
   const principal = sessionUserToPrincipal(sessionUser);
-  const records = await svc.list({ principal, query: parsed.data });
+  const query = {
+    state: parsed.data.state,
+    limit: parsed.data.limit,
+    ...(parsed.data.principalId
+      ? { principalId: parsed.data.principalId }
+      : {}),
+  };
+  const records = await svc.list({ principal, query });
   return NextResponse.json({ contributions: records });
 }
 
@@ -205,7 +219,9 @@ export async function handleMerge(
     const result = await svc.merge({
       principal,
       contributionId,
-      confidencePct: parsed.data.confidencePct,
+      ...(parsed.data.confidencePct != null
+        ? { confidencePct: parsed.data.confidencePct }
+        : {}),
     });
     return NextResponse.json({ contributionId, ...result });
   } catch (e) {
