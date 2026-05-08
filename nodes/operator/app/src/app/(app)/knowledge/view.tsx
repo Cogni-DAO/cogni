@@ -131,7 +131,7 @@ export function KnowledgeDashboardView() {
             onClick={() => setModeUrl("inbox")}
             label="Inbox"
             icon={<GitMerge className="size-3.5" />}
-            badge={openCount > 0 ? openCount : undefined}
+            {...(openCount > 0 ? { badge: openCount } : {})}
           />
         </div>
       </div>
