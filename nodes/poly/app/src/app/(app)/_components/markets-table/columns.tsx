@@ -50,6 +50,17 @@ type AnyCol = ColumnDef<WalletExecutionMarketGroup, any>;
 
 const col = createColumnHelper<WalletExecutionMarketGroup>();
 
+// Inner-table sub-header cells. Extracted to module-level consts so biome's
+// `useSortedClasses` lint doesn't reorder them — biome only sorts inside
+// `className=` attribute literals and `cn`/`clsx`/`cva` calls. Two variants
+// (with and without the leading `border-l`) keep the leg-group boundary
+// crisp through both header rows + body rows.
+const SUB_HEAD_BASE =
+  "h-7 px-2 text-right font-normal text-[11px] text-muted-foreground";
+const SUB_HEAD_GROUP_LEAD = `border-l ${SUB_HEAD_BASE}`;
+const GROUP_HEAD_BASE =
+  "h-8 border-l px-2 text-center font-medium text-foreground";
+
 const rightHeader = (node: ReactNode) => (
   <div className="flex w-full justify-end">{node}</div>
 );
@@ -240,77 +251,94 @@ export function makeColumns(): AnyCol[] {
         skeleton: <Skeleton className="h-3.5 w-40" />,
       },
     }),
-    col.accessor(
-      // Closed rows: current mark is trivially $0 (we exited). Show entry
-      // notional (Σ BUY fills) so the column carries a meaningful comparison
-      // against P/L and the targets column.
-      (row) =>
-        row.status === "closed" ? row.ourEntryValueUsdc : row.ourValueUsdc,
-      {
-        id: "ourValue",
-        header: ({ column }) =>
-          rightHeader(
-            <DataGridColumnHeader
-              column={column}
-              title="Our value"
-              visibility
-            />
-          ),
-        size: 120,
-        cell: (info) => {
-          const isClosed = info.row.original.status === "closed";
-          return (
-            <div
-              className="text-right text-sm tabular-nums"
-              title={
-                isClosed
-                  ? "Entry notional (Σ BUY fills)"
-                  : "Current mark-to-market"
-              }
-            >
-              {formatUsd(info.getValue())}
-            </div>
-          );
-        },
-        meta: {
-          headerTitle: "Our value",
-          skeleton: <Skeleton className="ms-auto h-3.5 w-16" />,
-        },
-      }
-    ),
-    col.accessor(
-      (row) =>
-        row.status === "closed"
-          ? row.targetEntryValueUsdc
-          : row.targetValueUsdc,
-      {
-        id: "targets",
-        header: ({ column }) =>
-          rightHeader(
-            <DataGridColumnHeader column={column} title="Targets" visibility />
-          ),
-        size: 120,
-        cell: (info) => {
-          const isClosed = info.row.original.status === "closed";
-          return (
-            <div
-              className="text-right text-muted-foreground text-sm tabular-nums"
-              title={
-                isClosed
-                  ? "Target entry notional (Σ BUY fills across all targets)"
-                  : "Current target mark-to-market"
-              }
-            >
-              {formatUsd(info.getValue())}
-            </div>
-          );
-        },
-        meta: {
-          headerTitle: "Targets",
-          skeleton: <Skeleton className="ms-auto h-3.5 w-16" />,
-        },
-      }
-    ),
+    col.accessor((row) => row.ourEntryValueUsdc, {
+      id: "ourEntry",
+      header: ({ column }) =>
+        rightHeader(
+          <DataGridColumnHeader column={column} title="Our entry" visibility />
+        ),
+      size: 100,
+      cell: (info) => (
+        <div
+          className="text-right text-sm tabular-nums"
+          title="Σ BUY notional from fills (preserved after exit)"
+        >
+          {formatUsd(info.getValue())}
+        </div>
+      ),
+      meta: {
+        headerTitle: "Our entry",
+        skeleton: <Skeleton className="ms-auto h-3.5 w-14" />,
+      },
+    }),
+    col.accessor((row) => row.ourValueUsdc, {
+      id: "ourValue",
+      header: ({ column }) =>
+        rightHeader(
+          <DataGridColumnHeader column={column} title="Our value" visibility />
+        ),
+      size: 100,
+      cell: (info) => (
+        <div
+          className="text-right text-sm tabular-nums"
+          title="Current mark-to-market ($0 once exited)"
+        >
+          {formatUsd(info.getValue())}
+        </div>
+      ),
+      meta: {
+        headerTitle: "Our value",
+        skeleton: <Skeleton className="ms-auto h-3.5 w-14" />,
+      },
+    }),
+    col.accessor((row) => row.targetEntryValueUsdc, {
+      id: "targetEntry",
+      header: ({ column }) =>
+        rightHeader(
+          <DataGridColumnHeader
+            column={column}
+            title="Target entry"
+            visibility
+          />
+        ),
+      size: 110,
+      cell: (info) => (
+        <div
+          className="text-right text-muted-foreground text-sm tabular-nums"
+          title="Σ BUY notional across all targets"
+        >
+          {formatUsd(info.getValue())}
+        </div>
+      ),
+      meta: {
+        headerTitle: "Target entry",
+        skeleton: <Skeleton className="ms-auto h-3.5 w-14" />,
+      },
+    }),
+    col.accessor((row) => row.targetValueUsdc, {
+      id: "targetValue",
+      header: ({ column }) =>
+        rightHeader(
+          <DataGridColumnHeader
+            column={column}
+            title="Target value"
+            visibility
+          />
+        ),
+      size: 110,
+      cell: (info) => (
+        <div
+          className="text-right text-muted-foreground text-sm tabular-nums"
+          title="Current target mark-to-market"
+        >
+          {formatUsd(info.getValue())}
+        </div>
+      ),
+      meta: {
+        headerTitle: "Target value",
+        skeleton: <Skeleton className="ms-auto h-3.5 w-14" />,
+      },
+    }),
     col.accessor((row) => row.status, {
       id: "status",
       header: ({ column }) => (
@@ -438,45 +466,28 @@ function MarketLineBlock({
   eventSlug: string | null;
 }): ReactElement {
   const href = polymarketMarketUrl(eventSlug, line.marketSlug);
+  const traderCount = line.participants.length;
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="min-w-0">
-          {href ? (
-            <a
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="block truncate font-medium text-sm underline-offset-4 hover:underline"
-            >
-              {line.marketTitle}
-            </a>
-          ) : (
-            <p className="truncate font-medium text-sm">{line.marketTitle}</p>
-          )}
-          <p className="text-muted-foreground text-xs">
-            {line.participants.length} trader
-            {line.participants.length === 1 ? "" : "s"}
-            {" · "}
-            our VWAP {formatPrice(line.ourVwap)} · targets{" "}
-            {formatPrice(line.targetVwap)}
+      <div className="flex items-baseline gap-2">
+        {href ? (
+          <a
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="min-w-0 truncate font-medium text-sm underline-offset-4 hover:underline"
+          >
+            {line.marketTitle}
+          </a>
+        ) : (
+          <p className="min-w-0 truncate font-medium text-sm">
+            {line.marketTitle}
           </p>
-        </div>
-        <div className="text-muted-foreground text-xs tabular-nums">
-          our{" "}
-          {formatUsd(
-            line.status === "closed"
-              ? line.ourEntryValueUsdc
-              : line.ourValueUsdc
-          )}{" "}
-          · target line{" "}
-          {formatUsd(
-            line.status === "closed"
-              ? line.targetEntryValueUsdc
-              : line.targetValueUsdc
-          )}
-        </div>
+        )}
+        <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
+          {traderCount} trader{traderCount === 1 ? "" : "s"}
+        </span>
       </div>
       <ParticipantsTable line={line} />
     </div>
@@ -488,48 +499,49 @@ function ParticipantsTable({
 }: {
   line: WalletExecutionMarketLine;
 }): ReactElement {
+  // Two-row thead: row 1 carries leg-group spans (Primary/Hedge/Net), row 2
+  // carries the real per-column labels (Value/VWAP/P/L). `border-l`/`border-r`
+  // on group cells visually delimit the leg sections; row 2 inherits them via
+  // adjacent `border-l` to keep group boundaries crisp through both rows.
   return (
     <div className="overflow-hidden rounded-md border bg-background">
       <Table className="text-xs">
         <TableHeader>
           <TableRow className="bg-muted/40">
-            <TableHead className="h-8 px-2">Trader</TableHead>
+            <TableHead className="h-8 px-2 align-middle" rowSpan={2}>
+              Trader
+            </TableHead>
             <TableHead
-              className="h-8 px-2 text-right"
+              className={GROUP_HEAD_BASE}
               colSpan={3}
               aria-label="Primary leg"
             >
-              <div className="flex flex-col items-end">
-                <span className="font-medium text-foreground">Primary</span>
-                <span className="font-normal text-[10px] text-muted-foreground">
-                  Value · VWAP · P/L
-                </span>
-              </div>
+              Primary
             </TableHead>
             <TableHead
-              className="h-8 px-2 text-right"
+              className={GROUP_HEAD_BASE}
               colSpan={3}
               aria-label="Hedge leg"
             >
-              <div className="flex flex-col items-end">
-                <span className="font-medium text-foreground">Hedge</span>
-                <span className="font-normal text-[10px] text-muted-foreground">
-                  Value · VWAP · P/L
-                </span>
-              </div>
+              Hedge
             </TableHead>
             <TableHead
-              className="h-8 px-2 text-right"
+              className={GROUP_HEAD_BASE}
               colSpan={2}
               aria-label="Net across legs"
             >
-              <div className="flex flex-col items-end">
-                <span className="font-medium text-foreground">Net</span>
-                <span className="font-normal text-[10px] text-muted-foreground">
-                  Value · P/L
-                </span>
-              </div>
+              Net
             </TableHead>
+          </TableRow>
+          <TableRow className="bg-muted/40">
+            <TableHead className={SUB_HEAD_GROUP_LEAD}>Value</TableHead>
+            <TableHead className={SUB_HEAD_BASE}>VWAP</TableHead>
+            <TableHead className={SUB_HEAD_BASE}>P/L</TableHead>
+            <TableHead className={SUB_HEAD_GROUP_LEAD}>Value</TableHead>
+            <TableHead className={SUB_HEAD_BASE}>VWAP</TableHead>
+            <TableHead className={SUB_HEAD_BASE}>P/L</TableHead>
+            <TableHead className={SUB_HEAD_GROUP_LEAD}>Value</TableHead>
+            <TableHead className={SUB_HEAD_BASE}>P/L</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -583,7 +595,7 @@ function LegTriple({
   if (leg === null) {
     return (
       <>
-        <TableCell className="py-1.5 text-right text-muted-foreground tabular-nums">
+        <TableCell className="border-l py-1.5 text-right text-muted-foreground tabular-nums">
           —
         </TableCell>
         <TableCell className="py-1.5 text-right text-muted-foreground tabular-nums">
@@ -597,7 +609,7 @@ function LegTriple({
   }
   return (
     <>
-      <TableCell className="py-1.5 text-right tabular-nums">
+      <TableCell className="border-l py-1.5 text-right tabular-nums">
         {formatUsd(leg.currentValueUsdc)}
       </TableCell>
       <TableCell className="py-1.5 text-right text-muted-foreground tabular-nums">
@@ -619,7 +631,7 @@ function NetPair({
 }): ReactElement {
   return (
     <>
-      <TableCell className="py-1.5 text-right font-medium tabular-nums">
+      <TableCell className="border-l py-1.5 text-right font-medium tabular-nums">
         {formatUsd(net.currentValueUsdc)}
       </TableCell>
       <TableCell
