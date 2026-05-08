@@ -80,8 +80,10 @@ export type MarketsTableProps = {
 const DEFAULT_VISIBILITY: VisibilityState = {
   expand: true,
   market: true,
+  ourEntry: true,
   ourValue: true,
-  targets: true,
+  targetEntry: true,
+  targetValue: true,
   // Status owned by the toolbar segmented control; redundant in every row.
   // Still toggleable via column-visibility menu.
   status: false,
