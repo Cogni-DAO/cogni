@@ -35,38 +35,23 @@ import {
   ChartTooltipContent,
 } from "@/components/vendor/shadcn/chart";
 
-export const BIN_BOUNDARIES = [
-  0,
-  1,
-  5,
-  10,
-  25,
-  50,
-  100,
-  Number.POSITIVE_INFINITY,
-];
-export const BIN_LABELS = [
-  "<1%",
-  "1–5%",
-  "5–10%",
-  "10–25%",
-  "25–50%",
-  "50–100%",
-  "100%+",
-];
-
 // Green → amber → red gradient. Bin 0 is the "ideal" goal contract; bin 6 is
 // pathology. Hard-coded hex (not theme tokens) so the gradient survives
 // dark/light mode without duplicating the curve in CSS.
-const BIN_COLORS = [
-  "#22c55e", // <1%   ideal
-  "#84cc16", // 1–5%
-  "#eab308", // 5–10%
-  "#f97316", // 10–25%
-  "#ef4444", // 25–50%
-  "#dc2626", // 50–100%
-  "#991b1b", // 100%+
-];
+//
+// `lo` is inclusive, `hi` is exclusive. The terminal bin's `hi` is +Infinity
+// so the search loop matches everything not already binned.
+const BINS = [
+  { label: "<1%", lo: 0, hi: 1, color: "#22c55e" },
+  { label: "1–5%", lo: 1, hi: 5, color: "#84cc16" },
+  { label: "5–10%", lo: 5, hi: 10, color: "#eab308" },
+  { label: "10–25%", lo: 10, hi: 25, color: "#f97316" },
+  { label: "25–50%", lo: 25, hi: 50, color: "#ef4444" },
+  { label: "50–100%", lo: 50, hi: 100, color: "#dc2626" },
+  { label: "100%+", lo: 100, hi: Number.POSITIVE_INFINITY, color: "#991b1b" },
+] as const;
+
+export const BIN_LABELS = BINS.map((b) => b.label);
 
 const CHART_CONFIG: ChartConfig = {
   count: {
@@ -76,24 +61,21 @@ const CHART_CONFIG: ChartConfig = {
 };
 
 export function binIndex(absDeltaPct: number): number {
-  for (let i = 0; i < BIN_BOUNDARIES.length - 1; i += 1) {
-    if (
-      absDeltaPct >= BIN_BOUNDARIES[i] &&
-      absDeltaPct < BIN_BOUNDARIES[i + 1]
-    ) {
-      return i;
-    }
+  for (let i = 0; i < BINS.length; i += 1) {
+    const b = BINS[i];
+    if (b && absDeltaPct >= b.lo && absDeltaPct < b.hi) return i;
   }
-  return BIN_LABELS.length - 1;
+  return BINS.length - 1;
 }
 
 function median(values: number[]): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[mid - 1] + sorted[mid]) / 2
-    : sorted[mid];
+  if (sorted.length % 2 === 0) {
+    return ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
+  }
+  return sorted[mid] ?? 0;
 }
 
 export type MarketsDeltaDistributionProps = {
@@ -110,18 +92,21 @@ export function MarketsDeltaDistribution({
         g.edgeGapPct !== null
     );
     const abs = withGap.map((g) => Math.abs(g.edgeGapPct * 100));
-    const counts = new Array(BIN_LABELS.length).fill(0) as number[];
-    for (const v of abs) counts[binIndex(v)] += 1;
+    const counts = new Array(BINS.length).fill(0) as number[];
+    for (const v of abs) {
+      const idx = binIndex(v);
+      counts[idx] = (counts[idx] ?? 0) + 1;
+    }
     const meanAbs =
       abs.length > 0 ? abs.reduce((s, v) => s + v, 0) / abs.length : 0;
     const medAbs = median(abs);
     const under1 = abs.filter((v) => v < 1).length;
     const under10 = abs.filter((v) => v < 10).length;
     return {
-      bars: BIN_LABELS.map((label, i) => ({
-        bin: label,
-        count: counts[i],
-        fill: BIN_COLORS[i],
+      bars: BINS.map((b, i) => ({
+        bin: b.label,
+        count: counts[i] ?? 0,
+        fill: b.color,
       })),
       stats: { meanAbs, medAbs, under1, under10, total: abs.length },
       comparable: abs.length,
@@ -134,17 +119,17 @@ export function MarketsDeltaDistribution({
   const pctUnder10 = Math.round((stats.under10 / stats.total) * 100);
 
   return (
-    <div className="space-y-2 rounded-md border border-border/60 bg-card/40 p-3">
+    <div className="border-border/60 bg-card/40 space-y-2 rounded-md border p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <div className="flex items-baseline gap-2">
-          <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider">
+          <h4 className="text-foreground text-xs font-semibold tracking-wider uppercase">
             |Δ| distribution
           </h4>
           <span className="text-muted-foreground text-xs">
             live · n={stats.total}
           </span>
         </div>
-        <div className="flex flex-wrap gap-x-3 font-mono text-muted-foreground text-xs tabular-nums">
+        <div className="text-muted-foreground flex flex-wrap gap-x-3 font-mono text-xs tabular-nums">
           <span>
             mean{" "}
             <span className="text-foreground">{stats.meanAbs.toFixed(1)}%</span>
