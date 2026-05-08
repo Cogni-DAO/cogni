@@ -427,6 +427,8 @@ function groupParticipants(
       status: lineStatus,
       ourValueUsdc,
       targetValueUsdc,
+      ourEntryValueUsdc: roundMoney(ourAgg.totalBuyNotional),
+      targetEntryValueUsdc: roundMoney(targetTotalBuyNotional),
       ourVwap: weightedVwap(ourLegs),
       targetVwap: weightedVwap(targetLegs),
       edgeGapUsdc: sizeScaledGapUsdc,
@@ -501,6 +503,12 @@ function groupParticipants(
         ),
         targetValueUsdc: roundMoney(
           lines.reduce((sum, line) => sum + line.targetValueUsdc, 0)
+        ),
+        ourEntryValueUsdc: roundMoney(
+          lines.reduce((sum, line) => sum + line.ourEntryValueUsdc, 0)
+        ),
+        targetEntryValueUsdc: roundMoney(
+          lines.reduce((sum, line) => sum + line.targetEntryValueUsdc, 0)
         ),
         pnlUsd: roundMoney(
           lines.reduce(
