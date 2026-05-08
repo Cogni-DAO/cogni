@@ -17,7 +17,7 @@ import type {
   ContributionRecord,
 } from "@cogni/node-contracts";
 import { GitMerge } from "lucide-react";
-import { useEffect, useState, type ReactElement } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 
 import {
   Button,
@@ -72,7 +72,7 @@ export function ContributionDetail({
     let cancelled = false;
     fetch(
       `/api/v1/knowledge/contributions/${encodeURIComponent(item.contributionId)}/diff`,
-      { credentials: "same-origin", cache: "no-store" },
+      { credentials: "same-origin", cache: "no-store" }
     )
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -147,9 +147,10 @@ export function ContributionDetail({
                 {diff && diff.length > 0 && (
                   <div className="flex flex-col gap-2">
                     {diff.map((d) => {
-                      const row = (d.after ?? d.before) as
-                        | { id?: string; title?: string }
-                        | null;
+                      const row = (d.after ?? d.before) as {
+                        id?: string;
+                        title?: string;
+                      } | null;
                       return (
                         <div
                           key={d.rowId}

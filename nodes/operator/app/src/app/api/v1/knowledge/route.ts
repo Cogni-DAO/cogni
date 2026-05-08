@@ -12,14 +12,13 @@
  */
 
 import {
-  type KnowledgeRow,
   KnowledgeListQuerySchema,
   KnowledgeListResponseSchema,
+  type KnowledgeRow,
 } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
-
-import { getContainer } from "@/bootstrap/container";
 import { getSessionUser } from "@/app/_lib/auth/session";
+import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +39,7 @@ export const GET = wrapRouteHandlerWithLogging(
     if (authz.toLowerCase().startsWith("bearer ")) {
       return NextResponse.json(
         { error: "knowledge browse requires a session cookie (v0)" },
-        { status: 403 },
+        { status: 403 }
       );
     }
 
@@ -48,7 +47,7 @@ export const GET = wrapRouteHandlerWithLogging(
     if (!port) {
       return NextResponse.json(
         { error: "knowledge store not configured" },
-        { status: 503 },
+        { status: 503 }
       );
     }
 
@@ -63,7 +62,7 @@ export const GET = wrapRouteHandlerWithLogging(
     if (!parsed.success) {
       return NextResponse.json(
         { error: "invalid query", issues: parsed.error.issues },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
@@ -74,7 +73,9 @@ export const GET = wrapRouteHandlerWithLogging(
 
     const items: KnowledgeRow[] = [];
     for (const domain of targetDomains) {
-      const rows = await port.listKnowledge(domain, { limit: parsed.data.limit });
+      const rows = await port.listKnowledge(domain, {
+        limit: parsed.data.limit,
+      });
       for (const r of rows) {
         if (parsed.data.sourceType && r.sourceType !== parsed.data.sourceType) {
           continue;
@@ -98,11 +99,11 @@ export const GET = wrapRouteHandlerWithLogging(
 
     ctx.log.info(
       { count: items.length, domains: allDomains.length },
-      "knowledge.list_success",
+      "knowledge.list_success"
     );
 
     return NextResponse.json(
-      KnowledgeListResponseSchema.parse({ items, domains: allDomains }),
+      KnowledgeListResponseSchema.parse({ items, domains: allDomains })
     );
-  },
+  }
 );

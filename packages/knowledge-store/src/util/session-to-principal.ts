@@ -30,7 +30,7 @@ export type PrincipalAuthSource = "bearer" | "session";
 
 export function sessionUserToPrincipal(
   u: SessionUserLike,
-  source: PrincipalAuthSource,
+  source: PrincipalAuthSource
 ): Principal {
   if (source === "session") {
     return {

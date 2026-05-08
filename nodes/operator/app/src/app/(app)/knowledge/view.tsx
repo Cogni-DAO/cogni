@@ -19,10 +19,7 @@
 
 "use client";
 
-import type {
-  ContributionRecord,
-  KnowledgeRow,
-} from "@cogni/node-contracts";
+import type { ContributionRecord, KnowledgeRow } from "@cogni/node-contracts";
 import {
   DataGrid,
   DataGridContainer,
@@ -52,8 +49,8 @@ import { Button, Input } from "@/components";
 import { fetchContributions } from "./_api/fetchContributions";
 import { fetchKnowledge } from "./_api/fetchKnowledge";
 import { mergeContribution } from "./_api/mergeContribution";
-import { knowledgeColumns } from "./_components/columns";
 import { ContributionDetail } from "./_components/ContributionDetail";
+import { knowledgeColumns } from "./_components/columns";
 import { buildContributionColumns } from "./_components/contribution-columns";
 import { KnowledgeDetail } from "./_components/KnowledgeDetail";
 
@@ -82,7 +79,7 @@ export function KnowledgeDashboardView() {
       const qs = params.toString();
       router.replace(qs ? `/knowledge?${qs}` : "/knowledge", { scroll: false });
     },
-    [router, searchParams],
+    [router, searchParams]
   );
 
   const knowledgeQuery = useQuery({
@@ -114,8 +111,9 @@ export function KnowledgeDashboardView() {
             Knowledge
           </h1>
           <span className="text-muted-foreground text-xs">
-            What this node has learned · {knowledgeQuery.data?.items.length ?? 0}{" "}
-            entries on <code className="font-mono">main</code>
+            What this node has learned ·{" "}
+            {knowledgeQuery.data?.items.length ?? 0} entries on{" "}
+            <code className="font-mono">main</code>
           </span>
         </div>
 
@@ -148,7 +146,7 @@ export function KnowledgeDashboardView() {
           isLoading={contributionsQuery.isLoading}
           error={contributionsQuery.error}
           busyId={
-            mergeMutation.isPending ? mergeMutation.variables ?? null : null
+            mergeMutation.isPending ? (mergeMutation.variables ?? null) : null
           }
           onMerge={(r) => mergeMutation.mutate(r.contributionId)}
         />
@@ -307,7 +305,7 @@ function InboxPanel({
 
   const columns = useMemo(
     () => buildContributionColumns({ onMerge, busyId }),
-    [onMerge, busyId],
+    [onMerge, busyId]
   );
 
   const table = useReactTable({
@@ -442,7 +440,9 @@ function BrowseEmptyState() {
   return (
     <div className="flex flex-col items-center gap-2 rounded-lg border border-border/60 border-dashed bg-muted/20 px-6 py-16 text-center">
       <Library className="size-8 text-muted-foreground/60" />
-      <p className="font-medium text-sm">No knowledge yet on <code className="font-mono">main</code>.</p>
+      <p className="font-medium text-sm">
+        No knowledge yet on <code className="font-mono">main</code>.
+      </p>
       <p className="max-w-md text-muted-foreground text-xs leading-relaxed">
         Knowledge accumulates two ways: agents writing through{" "}
         <code className="font-mono">core__knowledge_write</code> during runs,

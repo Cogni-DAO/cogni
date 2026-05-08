@@ -27,7 +27,7 @@ export interface ContributionColumnsDeps {
 }
 
 export function buildContributionColumns(
-  deps: ContributionColumnsDeps,
+  deps: ContributionColumnsDeps
 ): Array<ReturnType<typeof col.accessor> | ReturnType<typeof col.display>> {
   return [
     col.accessor("state", {
@@ -128,10 +128,13 @@ export function buildContributionColumns(
         const v = info.getValue();
         if (!v) return <span className="text-muted-foreground">&mdash;</span>;
         return (
-          <span className="text-muted-foreground text-xs">{v.slice(0, 10)}</span>
+          <span className="text-muted-foreground text-xs">
+            {v.slice(0, 10)}
+          </span>
         );
       },
-      sortingFn: (a, b) => a.original.createdAt.localeCompare(b.original.createdAt),
+      sortingFn: (a, b) =>
+        a.original.createdAt.localeCompare(b.original.createdAt),
       meta: { headerTitle: "Filed" },
     }),
 

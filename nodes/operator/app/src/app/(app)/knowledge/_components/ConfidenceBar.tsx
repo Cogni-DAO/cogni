@@ -90,7 +90,7 @@ export function ConfidenceBar({
           style={{ width: `${clamped}%` }}
         />
       </span>
-      <span className="w-7 font-mono tabular-nums text-muted-foreground">
+      <span className="w-7 font-mono text-muted-foreground tabular-nums">
         {clamped}
       </span>
     </span>

@@ -17,7 +17,7 @@ export interface ContributionsListResponse {
 }
 
 export async function fetchContributions(
-  state: "open" | "merged" | "closed" | "all" = "open",
+  state: "open" | "merged" | "closed" | "all" = "open"
 ): Promise<ContributionsListResponse> {
   const response = await fetch(
     `/api/v1/knowledge/contributions?state=${state}&limit=100`,
@@ -26,7 +26,7 @@ export async function fetchContributions(
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
       cache: "no-store",
-    },
+    }
   );
   if (!response.ok) {
     const error = await response.json().catch(() => ({
