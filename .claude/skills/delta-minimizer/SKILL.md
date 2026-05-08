@@ -149,29 +149,29 @@ curl -sf -X POST "https://cognidao.org/api/v1/work/items" \
 
 For active buckets that are climbing, PATCH a heartbeat note onto the existing tracking item rather than filing a new one (anti-sprawl per the `/contribute-to-cogni` contract).
 
-### Step 6 — Persist (markdown today; knowledge `entry_type='scorecard'` very soon)
+### Step 6 — Persist (markdown today; knowledge `entry_type='scorecard'` once PR #1133 lands)
 
-The persistence target has been picked: per-node Doltgres `knowledge` table, `domain='poly_delta_minimizer'`, `entry_type='scorecard'`. The internal HTTP wrapper (`/api/v1/poly/knowledge/...` against `core__knowledge_write`) lands with PR #1133 / #1143 (knowledge-contribution-API) + PR #1175 (corpus-as-knowledge: `work_item_artifacts` join from scorecards → work items).
+Persistence target: per-node Doltgres `knowledge` table, `domain='poly_delta_minimizer'`, three entry types: `scorecard`, `rule`, `finding`. The HTTP wrapper for internal writes is **in design — PR #1133** (knowledge contribution API), with PR #1143 (operator first knowledge migration) as the dependency. Once both land, `core__knowledge_write` is reachable from a shell `curl` for $0 LLM cost.
 
-**Until that ships, persistence is markdown on disk** — write each tick's scorecard to `docs/research/<ISO-date>-delta-minimizer.md`. Format already matches the future row shape so the bulk importer (PR #1144) can lift the corpus mechanically; see `data-research` skill §"Persisting research as knowledge" for the field mapping.
+Until then, write to disk. The markdown is the durable artifact and the migration contract — when the API ships, a one-shot `git ls-files` walk lifts every file into a `knowledge` row without re-authoring (see `data-research` skill §"Persisting research as knowledge" for the field mapping).
 
 ```bash
-# v0 — write to disk
+# v0 — write to disk + commit
 SCORECARD_PATH="docs/research/$(date -u +%Y-%m-%dT%H%MZ)-delta-minimizer.md"
 echo "$SCORECARD_MD" > "$SCORECARD_PATH"
-git add "$SCORECARD_PATH" && git commit -m "research(delta-minimizer): scorecard $(date -u +%Y-%m-%dT%H%MZ)" || true
+git add "$SCORECARD_PATH" && git commit -m "research(delta-minimizer): scorecard $(date -u +%Y-%m-%dT%H%MZ)"
 
-# v1 (post PR #1133) — write to knowledge plane
-# curl -sS -X POST "https://poly.cognidao.org/api/v1/poly/knowledge/write" \
+# v1 — once PR #1133 lands, swap the disk write for an API call
+# curl -sS -X POST "https://poly.cognidao.org/api/v1/poly/knowledge/contributions" \
 #   -H "Authorization: Bearer $COGNI_API_KEY_PROD" \
-#   -d '{"domain":"poly_delta_minimizer","entryType":"scorecard","title":"...","content":"...","tags":["scorecard","ts:..."],"workItemRefs":["bug.5032","bug.5035"]}'
+#   -d '{"domain":"poly_delta_minimizer","entryType":"scorecard","title":"...","content":"...","tags":["scorecard"],"workItemRefs":["bug.5032","bug.5035"]}'
 ```
 
-The Δ-vs-prev-run column comes from the prior scorecard. v0 reads it via `ls -t docs/research/*-delta-minimizer.md | head -2 | tail -1`. v1 reads via `core__knowledge_search` ordered by `created_at desc`.
+Δ-vs-prev-run reads the prior scorecard. v0: `ls -t docs/research/*-delta-minimizer.md | sed -n 2p`. v1: `core__knowledge_search` `domain='poly_delta_minimizer' entry_type='scorecard'` ordered by `created_at desc`.
 
-**Strategy promotion (rules):** when a bucket's count is flat-or-shrinking across the last 3 scorecards AND the bucket is owned by an active work item, write a new `entry_type='rule'` markdown alongside the scorecard at `docs/research/rules/<bucket>.md`, citing the 3 supporting scorecards and the resolved work item. v1: same as `entry_type='rule'` knowledge row at `confidence_pct` 60+. Each promotion is a separate file (or row) with a `supersedes` link to the prior version — never overwrite, never delete.
+**Rule promotion.** When a bucket's count is flat-or-shrinking across the last 3 scorecards AND the bucket is owned by an active work item, write a new `entry_type='rule'` markdown at `docs/research/rules/<bucket>.md`, citing the 3 supporting scorecards + the tracking work item. Each promotion is a fresh file with a `[supersedes](path)` link to the prior version — never overwrite, never delete. v1 = `entry_type='rule'` knowledge row at `confidence_pct` 60+.
 
-**Findings (root-cause memos):** when an `unattributed` spike resolves into a fix, write `docs/research/findings/<spike_id>.md` citing the spike + the merged PR + the first scorecard where the bucket dropped to zero. v1 = `entry_type='finding'` knowledge row.
+**Findings.** When an `unattributed` spike resolves into a fix, write `docs/research/findings/<spike_id>.md` citing the spike, the merged PR, and the first scorecard where the bucket dropped to zero. v1 = `entry_type='finding'` knowledge row.
 
 ## Cost discipline
 

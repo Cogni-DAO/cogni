@@ -77,49 +77,49 @@ When a new research view ships, its purpose is usually to answer one of the ques
 
 If a metric a research view depends on isn't in this table, write down which question it answers in the page's module docstring, and consider whether it deserves promotion here. If two views depend on the same metric, define the SQL once and reuse — don't reinvent the aggregation per page.
 
-## Persisting research as knowledge — interim markdown, near-term Doltgres `knowledge` table
+## Persisting research as knowledge
 
-A research view's table on a dashboard answers "what is the state right now?" The harder question — "is the state better than yesterday, and which experiments moved it?" — needs a durable record of past runs. That record's eventual home is the per-node `knowledge` table on Doltgres (entry types `scorecard` / `rule` / `finding`, citation DAG, `confidence_pct`, status promotion `draft → candidate → established`). The HTTP wrapper for internal writes is in flight (PR #1133 design + #1143 operator migration; corpus-as-knowledge spec in PR #1175 ties scorecards to work items via a new `work_item_artifacts` join table).
+A research view's dashboard answers "what is the state now?" The harder question — "is it better than yesterday, and which fix moved it?" — needs a durable record of past runs. That record's home is the per-node `knowledge` table on Doltgres: `entry_type ∈ {scorecard, rule, finding}`, `confidence_pct`, citation DAG, `draft → candidate → established → canonical` status promotion. The HTTP wrapper for internal writes is **in design** (PR #1133) — once landed, agents call `core__knowledge_write` (direct to `main` for internal callers) or `POST /api/v1/knowledge/contributions/*` (branch-per-PR with diff/merge for reviewed entries). Corpus-as-knowledge (PR #1175) adds the `work_item_artifacts` join from scorecard rows → bugs/tasks/spikes.
 
-**Until that lands, persistence is markdown on disk.** Loops that produce scorecards write to `docs/research/<date>-<skill>.md` (or, for dated leak reports, `nodes/poly/app/src/app/(app)/research/<date>/page.tsx`). Each markdown should already match the future knowledge-row shape so the migration is mechanical:
+**Until that lands, persistence is markdown on disk** — `docs/research/<date>-<skill>.md` for scorecards, `nodes/<node>/app/src/app/(app)/research/<date>/page.tsx` for dated dashboard reports. Shape each markdown to match the future row so the migration is mechanical:
 
-| Future knowledge field | Markdown convention                                                               |
-| ---------------------- | --------------------------------------------------------------------------------- |
-| `domain`               | first-line metadata or path segment (`poly_delta_minimizer`, `alpha_leak`, …)     |
-| `entry_type`           | `scorecard` / `rule` / `finding` — name in title or frontmatter                   |
-| `confidence_pct`       | implicit (40, draft) until promoted; surface in title when relevant               |
-| `tags`                 | hashtag list at end of doc                                                        |
-| `citations` (syntropy) | inline `[supersedes](path)` / `[cites](path)` markdown links                      |
-| `work_item_artifacts`  | inline `bug.NNNN` / `task.NNNN` / `spike.NNNN` references (operator API resolves) |
+| Knowledge row field   | Markdown convention                                                                   |
+| --------------------- | ------------------------------------------------------------------------------------- |
+| `domain`              | path segment or frontmatter (`poly_delta_minimizer`, `alpha_leak`, …)                 |
+| `entry_type`          | `scorecard` / `rule` / `finding` in title or frontmatter                              |
+| `confidence_pct`      | implicit 40 (draft) until promoted; surface in title when raised                      |
+| `tags`                | hashtag list at end of doc                                                            |
+| `citations`           | inline `[supersedes](path)` / `[cites](path)` markdown links (knowledge ↔ knowledge) |
+| `work_item_artifacts` | inline `bug.NNNN` / `task.NNNN` / `spike.NNNN` references (knowledge → work item)     |
 
-Two flows route differently once the API lands:
+Once the API lands, two flows route differently:
 
-- **Scorecards** (high-frequency, append-only) — `entry_type='scorecard'`. Future: internal `core__knowledge_write` direct to `main`. No review needed; immutable history.
-- **Rules + findings** (lower-frequency, decision-shaping) — `entry_type='rule'` / `'finding'`. Future: external-contribution flow per PR #1133 (`/api/v1/knowledge/contributions/*`, Dolt-branch-per-PR with diff/merge). Reviewed before they shape future loop behavior.
+- **`scorecard`** (high-frequency, append-only): internal `core__knowledge_write` direct to `main`. No review.
+- **`rule` + `finding`** (decision-shaping): external-contribution flow with diff/merge gates.
 
-Do **not** wait for the API to land before producing the artifacts — write the markdown today, structured to match. When the HTTP wrapper ships, a bulk importer (per PR #1144) lifts the corpus into `knowledge` rows without re-authoring.
+Do not wait — write markdown today. The future migration is a `git ls-files docs/research/*.md | …` walk; the structured-frontmatter convention is the contract.
 
-### What lands as a `rule` vs a `finding` vs a `scorecard`
+### What each entry type captures
 
-- `scorecard` — one per loop tick (e.g., `/delta-minimizer` run, `/validate-candidate` matrix). Captures the matrix + raw inputs + verdict. Drift-of-the-dispersion is computed by `search`-ing prior scorecards in the same domain.
-- `rule` — a strategy or invariant (e.g., "if `mirror.dropped` count rises ≥3 across consecutive tick scorecards, escalate to bug"). Promotes draft (40) → candidate (60) → established (80) → canonical (95) as scorecards confirm. Superseded entries get a `supersedes`-typed citation, never deleted.
-- `finding` — a root-cause memo written when an `unattributed` bucket gets resolved. Cites the spike that classified it, the work item that fixed it, and the first scorecard where the bucket dropped to zero. Confidence climbs as scorecards re-confirm.
+- **`scorecard`** — one per loop tick (`/delta-minimizer` run, `/validate-candidate` matrix). Matrix + raw inputs + verdict. Δ-vs-prev computed by reading the previous scorecard in the same domain.
+- **`rule`** — a strategy or invariant ("if `mirror.dropped` count rises across 3 consecutive tick scorecards, escalate to bug"). Promotes 40 → 60 → 80 → 95 as scorecards confirm. Superseded versions stay (with a `supersedes` citation) — never overwrite, never delete.
+- **`finding`** — a root-cause memo written when an `unattributed` spike resolves. Cites the spike, the merged PR, and the first scorecard where the bucket dropped to zero.
 
-### Loop persistence pattern (deterministic, no LLM at write time)
+### Loop persistence pattern (deterministic, zero LLM cost)
 
 ```
-on each loop tick:
+on each tick:
   1. read live state (DB queries per Core principles 1+2)
   2. classify outliers via taxonomy → matrix
-  3. read prior scorecard markdown (file glob today; knowledge_search post-#1133)
+  3. read prior scorecard (file glob today; knowledge_search post-API)
   4. compute Δ-vs-prev columns
-  5. write scorecard markdown today (knowledge_write internal post-#1133)
-  6. for each unattributed → file spike via operator API (Doltgres work_items)
-  7. for active buckets trending up → PATCH heartbeat on tracking work item
+  5. write scorecard markdown (file today; knowledge_write post-API)
+  6. for each unattributed → file spike via operator work-items API
+  7. for active buckets trending up → PATCH heartbeat on tracking item
   8. if a rule's last 3 scorecards confirm bucket flat/shrinking → write a superseding rule at +20 confidence
 ```
 
-LLM cost in steady state: zero. The taxonomy is deterministic; the markdown is `cat <<EOF | tee`. LLM cycles re-enter only when an `unattributed` spike gets `/triage`d into a real fix.
+The taxonomy is deterministic; the markdown is a heredoc. LLM cycles enter only when `/triage` picks up an unattributed spike.
 
 ## The pattern
 
