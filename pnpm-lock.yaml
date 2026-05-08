@@ -982,6 +982,9 @@ importers:
 
   nodes/operator/packages/doltgres-schema:
     dependencies:
+      '@cogni/node-template-knowledge':
+        specifier: workspace:*
+        version: link:../../../node-template/packages/knowledge
       drizzle-orm:
         specifier: ^0.44.7
         version: 0.44.7(@opentelemetry/api@1.9.0)(@types/pg@8.16.0)(pg@8.17.1)(postgres@3.4.7)
