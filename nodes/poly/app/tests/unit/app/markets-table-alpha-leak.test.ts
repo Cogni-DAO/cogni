@@ -31,6 +31,8 @@ function group(
     status: "live",
     ourValueUsdc: 0,
     targetValueUsdc: 0,
+    ourEntryValueUsdc: 0,
+    targetEntryValueUsdc: 0,
     pnlUsd: 0,
     edgeGapUsdc: 0,
     edgeGapPct: 0,
