@@ -50,6 +50,17 @@ type AnyCol = ColumnDef<WalletExecutionMarketGroup, any>;
 
 const col = createColumnHelper<WalletExecutionMarketGroup>();
 
+// Inner-table sub-header cells. Extracted to module-level consts so biome's
+// `useSortedClasses` lint doesn't reorder them — biome only sorts inside
+// `className=` attribute literals and `cn`/`clsx`/`cva` calls. Two variants
+// (with and without the leading `border-l`) keep the leg-group boundary
+// crisp through both header rows + body rows.
+const SUB_HEAD_BASE =
+  "h-7 px-2 text-right font-normal text-[11px] text-muted-foreground";
+const SUB_HEAD_GROUP_LEAD = `border-l ${SUB_HEAD_BASE}`;
+const GROUP_HEAD_BASE =
+  "h-8 border-l px-2 text-center font-medium text-foreground";
+
 const rightHeader = (node: ReactNode) => (
   <div className="flex w-full justify-end">{node}</div>
 );
@@ -240,101 +251,93 @@ export function makeColumns(): AnyCol[] {
         skeleton: <Skeleton className="h-3.5 w-40" />,
       },
     }),
-    col.group({
-      id: "ours",
-      header: () => (
-        <span className="block text-center font-medium">Our</span>
+    col.accessor((row) => row.ourEntryValueUsdc, {
+      id: "ourEntry",
+      header: ({ column }) =>
+        rightHeader(
+          <DataGridColumnHeader column={column} title="Our entry" visibility />
+        ),
+      size: 100,
+      cell: (info) => (
+        <div
+          className="text-right text-sm tabular-nums"
+          title="Σ BUY notional from fills (preserved after exit)"
+        >
+          {formatUsd(info.getValue())}
+        </div>
       ),
-      columns: [
-        col.accessor((row) => row.ourEntryValueUsdc, {
-          id: "ourEntry",
-          header: ({ column }) =>
-            rightHeader(
-              <DataGridColumnHeader column={column} title="Entry" visibility />
-            ),
-          size: 100,
-          cell: (info) => (
-            <div
-              className="text-right text-sm tabular-nums"
-              title="Σ BUY notional from fills"
-            >
-              {formatUsd(info.getValue())}
-            </div>
-          ),
-          meta: {
-            headerTitle: "Our entry",
-            skeleton: <Skeleton className="ms-auto h-3.5 w-14" />,
-          },
-        }),
-        col.accessor((row) => row.ourValueUsdc, {
-          id: "ourValue",
-          header: ({ column }) =>
-            rightHeader(
-              <DataGridColumnHeader column={column} title="Value" visibility />
-            ),
-          size: 100,
-          cell: (info) => (
-            <div
-              className="text-right text-sm tabular-nums"
-              title="Current mark-to-market ($0 once exited)"
-            >
-              {formatUsd(info.getValue())}
-            </div>
-          ),
-          meta: {
-            headerTitle: "Our value",
-            skeleton: <Skeleton className="ms-auto h-3.5 w-14" />,
-          },
-        }),
-      ],
+      meta: {
+        headerTitle: "Our entry",
+        skeleton: <Skeleton className="ms-auto h-3.5 w-14" />,
+      },
     }),
-    col.group({
-      id: "targets",
-      header: () => (
-        <span className="block text-center font-medium">Targets</span>
+    col.accessor((row) => row.ourValueUsdc, {
+      id: "ourValue",
+      header: ({ column }) =>
+        rightHeader(
+          <DataGridColumnHeader column={column} title="Our value" visibility />
+        ),
+      size: 100,
+      cell: (info) => (
+        <div
+          className="text-right text-sm tabular-nums"
+          title="Current mark-to-market ($0 once exited)"
+        >
+          {formatUsd(info.getValue())}
+        </div>
       ),
-      columns: [
-        col.accessor((row) => row.targetEntryValueUsdc, {
-          id: "targetEntry",
-          header: ({ column }) =>
-            rightHeader(
-              <DataGridColumnHeader column={column} title="Entry" visibility />
-            ),
-          size: 100,
-          cell: (info) => (
-            <div
-              className="text-right text-muted-foreground text-sm tabular-nums"
-              title="Σ BUY notional across all targets"
-            >
-              {formatUsd(info.getValue())}
-            </div>
-          ),
-          meta: {
-            headerTitle: "Targets entry",
-            skeleton: <Skeleton className="ms-auto h-3.5 w-14" />,
-          },
-        }),
-        col.accessor((row) => row.targetValueUsdc, {
-          id: "targetValue",
-          header: ({ column }) =>
-            rightHeader(
-              <DataGridColumnHeader column={column} title="Value" visibility />
-            ),
-          size: 100,
-          cell: (info) => (
-            <div
-              className="text-right text-muted-foreground text-sm tabular-nums"
-              title="Current target mark-to-market"
-            >
-              {formatUsd(info.getValue())}
-            </div>
-          ),
-          meta: {
-            headerTitle: "Targets value",
-            skeleton: <Skeleton className="ms-auto h-3.5 w-14" />,
-          },
-        }),
-      ],
+      meta: {
+        headerTitle: "Our value",
+        skeleton: <Skeleton className="ms-auto h-3.5 w-14" />,
+      },
+    }),
+    col.accessor((row) => row.targetEntryValueUsdc, {
+      id: "targetEntry",
+      header: ({ column }) =>
+        rightHeader(
+          <DataGridColumnHeader
+            column={column}
+            title="Target entry"
+            visibility
+          />
+        ),
+      size: 110,
+      cell: (info) => (
+        <div
+          className="text-right text-muted-foreground text-sm tabular-nums"
+          title="Σ BUY notional across all targets"
+        >
+          {formatUsd(info.getValue())}
+        </div>
+      ),
+      meta: {
+        headerTitle: "Target entry",
+        skeleton: <Skeleton className="ms-auto h-3.5 w-14" />,
+      },
+    }),
+    col.accessor((row) => row.targetValueUsdc, {
+      id: "targetValue",
+      header: ({ column }) =>
+        rightHeader(
+          <DataGridColumnHeader
+            column={column}
+            title="Target value"
+            visibility
+          />
+        ),
+      size: 110,
+      cell: (info) => (
+        <div
+          className="text-right text-muted-foreground text-sm tabular-nums"
+          title="Current target mark-to-market"
+        >
+          {formatUsd(info.getValue())}
+        </div>
+      ),
+      meta: {
+        headerTitle: "Target value",
+        skeleton: <Skeleton className="ms-auto h-3.5 w-14" />,
+      },
     }),
     col.accessor((row) => row.status, {
       id: "status",
@@ -509,21 +512,21 @@ function ParticipantsTable({
               Trader
             </TableHead>
             <TableHead
-              className="h-8 border-l px-2 text-center font-medium text-foreground"
+              className={GROUP_HEAD_BASE}
               colSpan={3}
               aria-label="Primary leg"
             >
               Primary
             </TableHead>
             <TableHead
-              className="h-8 border-l px-2 text-center font-medium text-foreground"
+              className={GROUP_HEAD_BASE}
               colSpan={3}
               aria-label="Hedge leg"
             >
               Hedge
             </TableHead>
             <TableHead
-              className="h-8 border-l px-2 text-center font-medium text-foreground"
+              className={GROUP_HEAD_BASE}
               colSpan={2}
               aria-label="Net across legs"
             >
@@ -531,30 +534,14 @@ function ParticipantsTable({
             </TableHead>
           </TableRow>
           <TableRow className="bg-muted/40">
-            <TableHead className="h-7 border-l px-2 text-right font-normal text-muted-foreground text-[11px]">
-              Value
-            </TableHead>
-            <TableHead className="h-7 px-2 text-right font-normal text-muted-foreground text-[11px]">
-              VWAP
-            </TableHead>
-            <TableHead className="h-7 px-2 text-right font-normal text-muted-foreground text-[11px]">
-              P/L
-            </TableHead>
-            <TableHead className="h-7 border-l px-2 text-right font-normal text-muted-foreground text-[11px]">
-              Value
-            </TableHead>
-            <TableHead className="h-7 px-2 text-right font-normal text-muted-foreground text-[11px]">
-              VWAP
-            </TableHead>
-            <TableHead className="h-7 px-2 text-right font-normal text-muted-foreground text-[11px]">
-              P/L
-            </TableHead>
-            <TableHead className="h-7 border-l px-2 text-right font-normal text-muted-foreground text-[11px]">
-              Value
-            </TableHead>
-            <TableHead className="h-7 px-2 text-right font-normal text-muted-foreground text-[11px]">
-              P/L
-            </TableHead>
+            <TableHead className={SUB_HEAD_GROUP_LEAD}>Value</TableHead>
+            <TableHead className={SUB_HEAD_BASE}>VWAP</TableHead>
+            <TableHead className={SUB_HEAD_BASE}>P/L</TableHead>
+            <TableHead className={SUB_HEAD_GROUP_LEAD}>Value</TableHead>
+            <TableHead className={SUB_HEAD_BASE}>VWAP</TableHead>
+            <TableHead className={SUB_HEAD_BASE}>P/L</TableHead>
+            <TableHead className={SUB_HEAD_GROUP_LEAD}>Value</TableHead>
+            <TableHead className={SUB_HEAD_BASE}>P/L</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
