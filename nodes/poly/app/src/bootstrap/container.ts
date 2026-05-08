@@ -26,15 +26,9 @@ import type { FinancialLedgerPort } from "@cogni/financial-ledger";
 import { createTigerBeetleAdapter } from "@cogni/financial-ledger/adapters";
 import type { UserId } from "@cogni/ids";
 import { toUserId, userActor } from "@cogni/ids";
-import {
-  type ContributionService,
-  createContributionService,
-  createKnowledgeCapability,
-  defaultCanMergeKnowledge,
-} from "@cogni/knowledge-store";
+import { createKnowledgeCapability } from "@cogni/knowledge-store";
 import {
   buildDoltgresClient,
-  DoltgresKnowledgeContributionAdapter,
   DoltgresKnowledgeStoreAdapter,
 } from "@cogni/knowledge-store/adapters/doltgres";
 import { parseMcpConfigFromEnv } from "@cogni/langgraph-graphs";
@@ -242,8 +236,6 @@ export interface Container {
   repoCapability: RepoCapability;
   /** Tool source with real implementations for AI tool execution */
   toolSource: ToolSourcePort;
-  /** External-agent knowledge contribution service — undefined when DOLTGRES_URL_POLY is unset */
-  knowledgeContributionService: ContributionService | undefined;
   /** Thread persistence scoped to a user (RLS enforced) */
   threadPersistenceForUser(userId: UserId): ThreadPersistencePort;
   /** Governance status queries (system tenant scope) */
@@ -1235,7 +1227,6 @@ function createContainer(): Container {
   // When configured, wraps KnowledgeStorePort with auto-commit on writes.
   // When not configured, tools throw "not configured" at invocation time.
   let knowledgeCapability: KnowledgeCapability;
-  let knowledgeContributionService: ContributionService | undefined;
   if (env.DOLTGRES_URL_POLY) {
     const doltClient = buildDoltgresClient({
       connectionString: env.DOLTGRES_URL_POLY,
@@ -1245,14 +1236,6 @@ function createContainer(): Container {
       sql: doltClient,
     });
     knowledgeCapability = createKnowledgeCapability(knowledgePort);
-    const contributionPort = new DoltgresKnowledgeContributionAdapter({
-      sql: doltClient,
-    });
-    knowledgeContributionService = createContributionService({
-      port: contributionPort,
-      canMergeKnowledge: defaultCanMergeKnowledge,
-      rateLimit: { maxOpenPerPrincipal: 10 },
-    });
     log.info("Knowledge store configured (Doltgres)");
   } else {
     const notConfigured = () => {
@@ -1266,7 +1249,6 @@ function createContainer(): Container {
       get: notConfigured,
       write: notConfigured,
     };
-    knowledgeContributionService = undefined;
     log.warn("Knowledge store not configured (DOLTGRES_URL_POLY not set)");
   }
 
@@ -1452,7 +1434,6 @@ function createContainer(): Container {
     webSearchCapability,
     repoCapability,
     toolSource,
-    knowledgeContributionService,
     threadPersistenceForUser: (userId: UserId) =>
       new DrizzleThreadPersistenceAdapter(db, userActor(userId)),
     governanceStatus: new DrizzleGovernanceStatusAdapter(
