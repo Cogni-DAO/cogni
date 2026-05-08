@@ -9,7 +9,11 @@
  * @public
  */
 
+export type { DeltaDistributionProps } from "./DeltaDistribution";
+export { DeltaDistribution } from "./DeltaDistribution";
 export type { MarketsDeltaDistributionProps } from "./MarketsDeltaDistribution";
 export { MarketsDeltaDistribution } from "./MarketsDeltaDistribution";
 export type { MarketsTableProps } from "./MarketsTable";
 export { MarketsTable } from "./MarketsTable";
+export type { PositionsDeltaDistributionProps } from "./PositionsDeltaDistribution";
+export { PositionsDeltaDistribution } from "./PositionsDeltaDistribution";

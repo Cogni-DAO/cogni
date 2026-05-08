@@ -25,6 +25,7 @@ import { type ReactElement, useCallback, useMemo, useState } from "react";
 import {
   MarketsDeltaDistribution,
   MarketsTable,
+  PositionsDeltaDistribution,
 } from "@/app/(app)/_components/markets-table";
 import { PositionsTable } from "@/app/(app)/_components/positions-table";
 import {
@@ -195,6 +196,7 @@ export function ExecutionActivityCard(): ReactElement {
         {view === "open" ? (
           <OpenPositionsPanel
             positions={openPositions}
+            groups={executionData?.market_groups ?? []}
             warnings={executionData?.warnings ?? []}
             isLoading={isExecutionLoading}
             isError={isExecutionError}
@@ -212,6 +214,7 @@ export function ExecutionActivityCard(): ReactElement {
         ) : (
           <ClosedPositionsPanel
             positions={closedPositions}
+            groups={executionData?.market_groups ?? []}
             isLoading={isExecutionLoading}
             isError={isExecutionError}
           />
@@ -262,6 +265,7 @@ function MarketGroupsPanel({
 
 function OpenPositionsPanel({
   positions,
+  groups,
   warnings,
   isLoading,
   isError,
@@ -270,6 +274,7 @@ function OpenPositionsPanel({
   positionActionError,
 }: {
   positions: readonly WalletPosition[];
+  groups: readonly WalletExecutionMarketGroup[];
   warnings: readonly { code: string; message: string }[];
   isLoading: boolean;
   isError: boolean;
@@ -305,6 +310,12 @@ function OpenPositionsPanel({
             {positionActionError}
           </p>
         ) : null}
+        <PositionsDeltaDistribution
+          positions={positions}
+          groups={groups}
+          statusFilter="live"
+          subtitleNoun="open positions"
+        />
         <PositionsTable
           positions={positions}
           isLoading={isLoading}
@@ -319,10 +330,12 @@ function OpenPositionsPanel({
 
 function ClosedPositionsPanel({
   positions,
+  groups,
   isLoading,
   isError,
 }: {
   positions: readonly WalletPosition[];
+  groups: readonly WalletExecutionMarketGroup[];
   isLoading: boolean;
   isError: boolean;
 }): ReactElement {
@@ -340,6 +353,12 @@ function ClosedPositionsPanel({
         <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
           Position History
         </h3>
+        <PositionsDeltaDistribution
+          positions={positions}
+          groups={groups}
+          statusFilter="closed"
+          subtitleNoun="closed positions"
+        />
         <PositionsTable
           positions={positions}
           isLoading={isLoading}
