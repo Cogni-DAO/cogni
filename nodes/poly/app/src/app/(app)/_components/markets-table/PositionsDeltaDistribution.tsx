@@ -39,16 +39,14 @@ import { DeltaDistribution } from "./DeltaDistribution";
 export type PositionsDeltaDistributionProps = {
   positions?: readonly WalletPosition[] | undefined;
   groups?: readonly WalletExecutionMarketGroup[] | undefined;
-  /** "live" for Open tab, "closed" for History. */
+  /** Drives both the line-status filter and the displayed subtitle. */
   statusFilter: WalletExecutionMarketLineStatus;
-  subtitleNoun: string;
 };
 
 export function PositionsDeltaDistribution({
   positions,
   groups,
   statusFilter,
-  subtitleNoun,
 }: PositionsDeltaDistributionProps): ReactElement | null {
   const absDeltaPcts = useMemo(() => {
     const lineByCondition = new Map<
@@ -75,9 +73,6 @@ export function PositionsDeltaDistribution({
   }, [positions, groups, statusFilter]);
 
   return (
-    <DeltaDistribution
-      absDeltaPcts={absDeltaPcts}
-      subtitle={`${subtitleNoun} · n=${absDeltaPcts.length}`}
-    />
+    <DeltaDistribution absDeltaPcts={absDeltaPcts} subtitle={statusFilter} />
   );
 }

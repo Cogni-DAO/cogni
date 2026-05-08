@@ -3,15 +3,21 @@
 
 /**
  * Module: `@app/(app)/dashboard/_components/ExecutionActivityCard`
- * Purpose: Unified Polymarket execution surface for the dashboard — open
- * positions as the primary view, closed position history one tab away.
- * Scope: Client component. Read-only. Open positions sourced from
- * live_positions; closed history from closed_positions.
+ * Purpose: Unified Polymarket execution surface for the dashboard — two
+ * sibling tabs (`Positions`, `Markets`), each with an internal Live/Closed
+ * filter. Mirrors the structural symmetry between per-position and
+ * per-market-group views.
+ * Scope: Client component. Read-only. Live rows sourced from
+ * live_positions; closed rows from closed_positions.
  * Invariants:
- *   - LIVE_POSITIONS_ONLY_IN_OPEN_TAB: the Open tab renders only live_positions rows.
- *   - CLOSE_BUTTON_ONLY_ON_OPEN_TAB: History tab is read-only (variant="history").
- *   - NO_STALE_OPEN_ROW_AFTER_CLOSE: recentlyClosedIds suppresses closed rows
- *     until the next live_positions refetch confirms they are gone.
+ *   - LIVE_POSITIONS_ONLY_IN_LIVE_FILTER: the Positions tab renders only
+ *     live_positions rows when statusFilter==="live".
+ *   - CLOSE_BUTTON_ONLY_ON_LIVE_FILTER: closed filter is read-only
+ *     (PositionsTable variant="history").
+ *   - NO_STALE_OPEN_ROW_AFTER_CLOSE: recentlyClosedIds suppresses closed
+ *     rows until the next live_positions refetch confirms they are gone.
+ *     Applies only when statusFilter==="live"; closed rows are sourced
+ *     from closed_positions which is unaffected by close-action latency.
  * Side-effects: IO (React Query), clipboard (user-triggered).
  * Links: [fetchExecution](../_api/fetchExecution.ts)
  * @public
@@ -26,6 +32,7 @@ import {
   MarketsDeltaDistribution,
   MarketsTable,
   PositionsDeltaDistribution,
+  type StatusFilter,
 } from "@/app/(app)/_components/markets-table";
 import { PositionsTable } from "@/app/(app)/_components/positions-table";
 import {
@@ -44,11 +51,11 @@ import {
 } from "../_api/fetchPositionActions";
 import { useDashboardExecution } from "../_hooks/useDashboardExecution";
 
-type ExecutionView = "open" | "markets" | "history";
+type ExecutionView = "positions" | "markets";
 
 export function ExecutionActivityCard(): ReactElement {
   const queryClient = useQueryClient();
-  const [view, setView] = useState<ExecutionView>("open");
+  const [view, setView] = useState<ExecutionView>("positions");
   const [positionActionError, setPositionActionError] = useState<string | null>(
     null
   );
@@ -179,23 +186,21 @@ export function ExecutionActivityCard(): ReactElement {
             }}
             className="rounded-lg border"
           >
-            <ToggleGroupItem value="open" className="px-3 text-xs">
-              Open
+            <ToggleGroupItem value="positions" className="px-3 text-xs">
+              Positions
             </ToggleGroupItem>
             <ToggleGroupItem value="markets" className="px-3 text-xs">
               Markets
-            </ToggleGroupItem>
-            <ToggleGroupItem value="history" className="px-3 text-xs">
-              History
             </ToggleGroupItem>
           </ToggleGroup>
         </div>
       </CardHeader>
 
       <CardContent className="p-0">
-        {view === "open" ? (
-          <OpenPositionsPanel
-            positions={openPositions}
+        {view === "positions" ? (
+          <PositionsPanel
+            openPositions={openPositions}
+            closedPositions={closedPositions}
             groups={executionData?.market_groups ?? []}
             warnings={executionData?.warnings ?? []}
             isLoading={isExecutionLoading}
@@ -204,17 +209,10 @@ export function ExecutionActivityCard(): ReactElement {
             pendingActionPositionId={pendingActionPositionId}
             positionActionError={positionActionError}
           />
-        ) : view === "markets" ? (
+        ) : (
           <MarketGroupsPanel
             groups={executionData?.market_groups ?? []}
             warnings={executionData?.warnings ?? []}
-            isLoading={isExecutionLoading}
-            isError={isExecutionError}
-          />
-        ) : (
-          <ClosedPositionsPanel
-            positions={closedPositions}
-            groups={executionData?.market_groups ?? []}
             isLoading={isExecutionLoading}
             isError={isExecutionError}
           />
@@ -235,6 +233,8 @@ function MarketGroupsPanel({
   isLoading: boolean;
   isError: boolean;
 }): ReactElement {
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("live");
+
   if (isError) {
     return (
       <p className="px-5 py-6 text-center text-muted-foreground text-sm">
@@ -256,15 +256,24 @@ function MarketGroupsPanel({
             Copy-target overlays are temporarily unavailable.
           </p>
         ) : null}
-        <MarketsDeltaDistribution groups={groups} />
-        <MarketsTable groups={groups} isLoading={isLoading} />
+        <MarketsDeltaDistribution
+          groups={groups}
+          statusFilter={statusFilter}
+        />
+        <MarketsTable
+          groups={groups}
+          isLoading={isLoading}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+        />
       </div>
     </div>
   );
 }
 
-function OpenPositionsPanel({
-  positions,
+function PositionsPanel({
+  openPositions,
+  closedPositions,
   groups,
   warnings,
   isLoading,
@@ -273,7 +282,8 @@ function OpenPositionsPanel({
   pendingActionPositionId,
   positionActionError,
 }: {
-  positions: readonly WalletPosition[];
+  openPositions: readonly WalletPosition[];
+  closedPositions: readonly WalletPosition[];
   groups: readonly WalletExecutionMarketGroup[];
   warnings: readonly { code: string; message: string }[];
   isLoading: boolean;
@@ -285,6 +295,8 @@ function OpenPositionsPanel({
   pendingActionPositionId: string | null;
   positionActionError: string | null;
 }): ReactElement {
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("live");
+
   if (isError) {
     return (
       <p className="px-5 py-6 text-center text-muted-foreground text-sm">
@@ -293,19 +305,22 @@ function OpenPositionsPanel({
     );
   }
 
+  const isLive = statusFilter === "live";
+  const positions = isLive ? openPositions : closedPositions;
+
   return (
     <div className="space-y-3 px-5 pb-4">
       <div className="space-y-2">
         <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
-          Open Positions
+          Positions
         </h3>
-        {warnings.length > 0 ? (
+        {isLive && warnings.length > 0 ? (
           <p className="text-muted-foreground text-xs">
             Some upstream data is temporarily unavailable, so a few rows may
             render with a shorter trace.
           </p>
         ) : null}
-        {positionActionError ? (
+        {isLive && positionActionError ? (
           <p className="rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-destructive text-xs">
             {positionActionError}
           </p>
@@ -313,58 +328,50 @@ function OpenPositionsPanel({
         <PositionsDeltaDistribution
           positions={positions}
           groups={groups}
-          statusFilter="live"
-          subtitleNoun="open positions"
+          statusFilter={statusFilter}
         />
-        <PositionsTable
-          positions={positions}
-          isLoading={isLoading}
-          emptyMessage="No open positions."
-          onPositionAction={onPositionAction}
-          pendingActionPositionId={pendingActionPositionId}
-        />
-      </div>
-    </div>
-  );
-}
-
-function ClosedPositionsPanel({
-  positions,
-  groups,
-  isLoading,
-  isError,
-}: {
-  positions: readonly WalletPosition[];
-  groups: readonly WalletExecutionMarketGroup[];
-  isLoading: boolean;
-  isError: boolean;
-}): ReactElement {
-  if (isError) {
-    return (
-      <p className="px-5 py-6 text-center text-muted-foreground text-sm">
-        Failed to load position history. Try again shortly.
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-3 px-5 pb-4">
-      <div className="space-y-2">
-        <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
-          Position History
-        </h3>
-        <PositionsDeltaDistribution
-          positions={positions}
-          groups={groups}
-          statusFilter="closed"
-          subtitleNoun="closed positions"
-        />
-        <PositionsTable
-          positions={positions}
-          isLoading={isLoading}
-          variant="history"
-          emptyMessage="No closed positions yet."
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <ToggleGroup
+            type="single"
+            size="sm"
+            variant="outline"
+            value={statusFilter}
+            onValueChange={(value) => {
+              if (value === "live" || value === "closed") setStatusFilter(value);
+            }}
+            disabled={isLoading}
+            aria-label="Filter positions by status"
+          >
+            <ToggleGroupItem value="live" className="gap-1.5">
+              <span className="text-xs">Live</span>
+              <span className="font-mono text-muted-foreground text-xs tabular-nums">
+                ({openPositions.length})
+              </span>
+            </ToggleGroupItem>
+            <ToggleGroupItem value="closed" className="gap-1.5">
+              <span className="text-xs">Closed</span>
+              <span className="font-mono text-muted-foreground text-xs tabular-nums">
+                ({closedPositions.length})
+              </span>
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+        {isLive ? (
+          <PositionsTable
+            positions={positions}
+            isLoading={isLoading}
+            emptyMessage="No open positions."
+            onPositionAction={onPositionAction}
+            pendingActionPositionId={pendingActionPositionId}
+          />
+        ) : (
+          <PositionsTable
+            positions={positions}
+            isLoading={isLoading}
+            variant="history"
+            emptyMessage="No closed positions yet."
+          />
+        )}
       </div>
     </div>
   );

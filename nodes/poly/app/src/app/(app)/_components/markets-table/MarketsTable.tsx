@@ -55,7 +55,7 @@ import {
 
 import { makeColumns } from "./columns";
 
-type StatusFilter = "live" | "closed";
+export type StatusFilter = "live" | "closed";
 
 /**
  * Group is an "alpha leak": we lost money AND the targets' blended return
@@ -72,6 +72,9 @@ export function isAlphaLeak(group: WalletExecutionMarketGroup): boolean {
 export type MarketsTableProps = {
   groups?: readonly WalletExecutionMarketGroup[] | undefined;
   isLoading?: boolean | undefined;
+  /** Controlled by the parent panel so the histogram and table share state. */
+  statusFilter: StatusFilter;
+  onStatusFilterChange: (next: StatusFilter) => void;
 };
 
 const DEFAULT_VISIBILITY: VisibilityState = {
@@ -92,9 +95,10 @@ const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 export function MarketsTable({
   groups,
   isLoading = false,
+  statusFilter,
+  onStatusFilterChange,
 }: MarketsTableProps): ReactElement {
   const allGroups = useMemo(() => (groups ? Array.from(groups) : []), [groups]);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("live");
   const [alphaLeakOnly, setAlphaLeakOnly] = useState(false);
   const { data, alphaLeakCount, liveCount, closedCount } = useMemo(() => {
     const live = allGroups.filter((g) => g.status === "live");
@@ -160,7 +164,8 @@ export function MarketsTable({
           variant="outline"
           value={statusFilter}
           onValueChange={(value) => {
-            if (value === "live" || value === "closed") setStatusFilter(value);
+            if (value === "live" || value === "closed")
+              onStatusFilterChange(value);
           }}
           disabled={isLoading || allGroups.length === 0}
           aria-label="Filter markets by status"
