@@ -256,10 +256,7 @@ function MarketGroupsPanel({
             Copy-target overlays are temporarily unavailable.
           </p>
         ) : null}
-        <MarketsDeltaDistribution
-          groups={groups}
-          statusFilter={statusFilter}
-        />
+        <MarketsDeltaDistribution groups={groups} statusFilter={statusFilter} />
         <MarketsTable
           groups={groups}
           isLoading={isLoading}
@@ -337,7 +334,8 @@ function PositionsPanel({
             variant="outline"
             value={statusFilter}
             onValueChange={(value) => {
-              if (value === "live" || value === "closed") setStatusFilter(value);
+              if (value === "live" || value === "closed")
+                setStatusFilter(value);
             }}
             disabled={isLoading}
             aria-label="Filter positions by status"
