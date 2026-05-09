@@ -539,20 +539,40 @@ The librarian's retrieval contract (same `KnowledgeSearchHit` shape) is the x402
 
 ## Invariants
 
-| Rule                            | Constraint                                                                                              |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| DOLT_IS_SOURCE_OF_TRUTH         | All knowledge data lives in Doltgres. Postgres search index is derived and rebuildable.                 |
-| ENTRY_HAS_PROVENANCE            | Every knowledge entry must have `source_type` and `source_ref`. No knowledge without traceable origin.  |
-| ENTRY_HAS_DOMAIN                | Every entry belongs to exactly one registered domain (FK to `domains` table).                           |
-| CITATIONS_ON_DERIVED            | Entries with `source_type: 'derived'` must have at least one citation edge to their source entries.     |
-| CONFIDENCE_APPLICATION_LEVEL    | Confidence is computed in the adapter, not via database triggers. Doltgres has no PL/pgSQL.             |
-| DEPRECATE_NOT_DELETE            | Knowledge is never deleted. Superseded entries get `status: 'deprecated'` + `supersedes` citation edge. |
-| COMMIT_PER_LOGICAL_WRITE        | Each logical write gets one Dolt commit with descriptive message.                                       |
-| SEARCH_BEFORE_INTERNET          | Agents search node knowledge before falling back to web search.                                         |
-| CITATIONS_IN_RESPONSE           | Agent responses referencing knowledge must include citation tokens. Citation guard validates.           |
-| SYNC_DIRECTION_DOLT_TO_POSTGRES | Search index sync is one-way: Dolt → Postgres. Never write to Postgres search index directly.           |
-| TABLES_NEED_JUSTIFICATION       | New Dolt tables require a fundamentally different data shape, not just different content.               |
-| NODE_KNOWLEDGE_SOVEREIGN        | Inherited: node knowledge is private by default. Sharing is explicit.                                   |
+| Rule                                       | Constraint                                                                                                                                                            |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DOLT_IS_SOURCE_OF_TRUTH                    | All knowledge data lives in Doltgres. Postgres search index is derived and rebuildable.                                                                               |
+| ENTRY_HAS_PROVENANCE                       | Every knowledge entry must have `source_type` and `source_ref`. No knowledge without traceable origin.                                                                |
+| ENTRY_HAS_DOMAIN                           | Every entry belongs to exactly one registered domain (FK to `domains` table).                                                                                         |
+| CITATIONS_ON_DERIVED                       | Entries with `source_type: 'derived'` must have at least one citation edge to their source entries.                                                                   |
+| CONFIDENCE_APPLICATION_LEVEL               | Confidence is computed in the adapter, not via database triggers. Doltgres has no PL/pgSQL.                                                                           |
+| DEPRECATE_NOT_DELETE                       | Knowledge is never deleted. Superseded entries get `status: 'deprecated'` + `supersedes` citation edge.                                                               |
+| COMMIT_PER_LOGICAL_WRITE                   | Each logical write gets one Dolt commit with descriptive message.                                                                                                     |
+| SEARCH_BEFORE_INTERNET                     | Agents search node knowledge before falling back to web search.                                                                                                       |
+| CITATIONS_IN_RESPONSE                      | Agent responses referencing knowledge must include citation tokens. Citation guard validates.                                                                         |
+| SYNC_DIRECTION_DOLT_TO_POSTGRES            | Search index sync is one-way: Dolt → Postgres. Never write to Postgres search index directly.                                                                         |
+| TABLES_NEED_JUSTIFICATION                  | New Dolt tables require a fundamentally different data shape, not just different content.                                                                             |
+| NODE_KNOWLEDGE_SOVEREIGN                   | Inherited: node knowledge is private by default. Sharing is explicit.                                                                                                 |
+| KNOWLEDGE_LOOP_CLOSED_VIA_SIGNED_IN_USER   | v0 merge gate: any wallet/cookie-session user can merge a contribution. Bearer-token agents cannot. The session cookie is the trust signal until per-user RBAC lands. |
+| KNOWLEDGE_BROWSE_VIA_HTTP_REQUIRES_SESSION | The `GET /api/v1/knowledge` browse endpoint is cookie-session only. Bearer / x402 access remains future work (see [x402-e2e](./x402-e2e.md)).                         |
+
+---
+
+## Critical Path After v0
+
+Ordered post-#1307. Each tier = one work item; tier N+1 is filed only when N is in flight or done. **No fan-out.** Every roadmap item that touches contracts/Zod must reference these tiers in its scoping section.
+
+| Tier                                                                                 | Outcome                                                                                                                                                                                                                                                                                                                                     | Status                                                                                                  |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **P0** — operator-side merging                                                       | A signed-in user can list + merge open contributions through `/knowledge` (Inbox mode). Without this, the contribution flow is theatre.                                                                                                                                                                                                     | **In flight (task.5037).**                                                                              |
+| **P1** — EDO-aligned `entry_type` + `citations[]` + `evaluate_at`                    | Hypothesis rows can be written + retrieved + cited; outcomes can validate them via `validates` / `invalidates` citation edges. Closes the "confidence drifts over time" mechanic at the column level.                                                                                                                                       | Designed. Filed when P0 merges.                                                                         |
+| **P1.5** — Poly-side route bindings                                                  | Poly mirrors operator's contribution + browse surface (currently 404 on poly).                                                                                                                                                                                                                                                              | Trivial follow-up; combine with P1 if natural.                                                          |
+| **P2** — DAG traversal in search                                                     | `core__knowledge_search` returns 1-hop neighbors + `cited_by_count` per hit. Read-side optimization on existing `citations` data.                                                                                                                                                                                                           | Filed after P1 produces real edges.                                                                     |
+| **P3** — Confidence-recompute walker                                                 | The syntropy formula in §"Confidence Is Computed, Not Assigned" actually runs over the citation DAG; supports/contradicts adjust scores.                                                                                                                                                                                                    | Needs P1+P2 first.                                                                                      |
+| **P3** — `evaluate_at` cron auto-files outcomes                                      | Hypotheses become outcomes on schedule; closes EDO end-to-end. Temporal/monitoring-engine wiring.                                                                                                                                                                                                                                           | Last piece; depends on P3 walker.                                                                       |
+| **Rd-PORTABLE** — extract `/knowledge` page into `@cogni/node-template-knowledge-ui` | Operator-side `/knowledge` (task.5037) is the reference implementation; every knowledge-capable node will need its own knowledge hub. Move the page + `_api/*` + `_components/*` into a shared package, mounted from each node's `(app)/knowledge/page.tsx` as a thin re-export. Same pattern as `@cogni/node-template-knowledge` (schema). | Filed when a second node (poly) needs `/knowledge` — the carve-out cost is amortized across nodes 2..N. |
+
+**Anti-sprawl rule**: If a future agent considers expanding scope beyond their tier, file the next-tier work item and stop. Don't bundle.
 
 ---
 

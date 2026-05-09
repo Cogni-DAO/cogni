@@ -60,8 +60,9 @@ export * from "./graphs.run.internal.v1.contract";
 // ── HTTP (ts-rest router + OpenAPI) ─────────────────────────────────────────
 export * from "./http/openapi.v1";
 export * from "./http/router.v1";
-// ── Work items ──────────────────────────────────────────────────────────────
+// ── Knowledge ───────────────────────────────────────────────────────────────
 export * from "./knowledge.contributions.v1.contract";
+export * from "./knowledge.list.v1.contract";
 // ── Meta ────────────────────────────────────────────────────────────────────
 export * from "./meta.livez.read.v1.contract";
 export * from "./meta.readyz.read.v1.contract";

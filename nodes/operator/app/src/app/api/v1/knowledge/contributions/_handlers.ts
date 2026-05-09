@@ -19,6 +19,7 @@ import {
   ContributionNotFoundError,
   ContributionQuotaError,
   ContributionStateError,
+  type PrincipalAuthSource,
   sessionUserToPrincipal,
 } from "@cogni/knowledge-store";
 import {
@@ -38,6 +39,17 @@ function service() {
     return null;
   }
   return svc;
+}
+
+/**
+ * Detect whether the request resolved via Bearer agent token vs NextAuth cookie.
+ * `wrapRouteHandlerWithLogging` resolves both paths to a `SessionUser`; this
+ * inspection is the only place we re-derive the auth source for the
+ * KNOWLEDGE_LOOP_CLOSED_VIA_SIGNED_IN_USER gate.
+ */
+function authSource(request: Request): PrincipalAuthSource {
+  const authz = request.headers.get("authorization") ?? "";
+  return authz.toLowerCase().startsWith("bearer ") ? "bearer" : "session";
 }
 
 function mapError(e: unknown): NextResponse {
@@ -80,7 +92,7 @@ export async function handleCreate(
       { status: 400 }
     );
 
-  const principal = sessionUserToPrincipal(sessionUser);
+  const principal = sessionUserToPrincipal(sessionUser, authSource(request));
   const createBody = {
     message: parsed.data.message,
     entries: parsed.data.entries,
@@ -125,7 +137,7 @@ export async function handleList(
       { status: 400 }
     );
 
-  const principal = sessionUserToPrincipal(sessionUser);
+  const principal = sessionUserToPrincipal(sessionUser, authSource(request));
   const query = {
     state: parsed.data.state,
     limit: parsed.data.limit,
@@ -214,7 +226,7 @@ export async function handleMerge(
       { status: 400 }
     );
 
-  const principal = sessionUserToPrincipal(sessionUser);
+  const principal = sessionUserToPrincipal(sessionUser, authSource(request));
   try {
     const result = await svc.merge({
       principal,
@@ -256,7 +268,7 @@ export async function handleClose(
       { status: 400 }
     );
 
-  const principal = sessionUserToPrincipal(sessionUser);
+  const principal = sessionUserToPrincipal(sessionUser, authSource(request));
   try {
     await svc.close({
       principal,

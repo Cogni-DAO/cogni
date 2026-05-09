@@ -32,6 +32,7 @@ import {
   createContributionService,
   createKnowledgeCapability,
   defaultCanMergeKnowledge,
+  type KnowledgeStorePort,
 } from "@cogni/knowledge-store";
 import {
   buildDoltgresClient,
@@ -222,6 +223,8 @@ export interface Container {
   toolSource: ToolSourcePort;
   /** External-agent knowledge contribution service — undefined when DOLTGRES_URL is unset */
   knowledgeContributionService: ContributionService | undefined;
+  /** Direct knowledge store port — exposed for the cookie-only browse endpoint. Undefined when DOLTGRES_URL is unset. */
+  knowledgeStorePort: KnowledgeStorePort | undefined;
   /** Thread persistence scoped to a user (RLS enforced) */
   threadPersistenceForUser(userId: UserId): ThreadPersistencePort;
   /** Governance status queries (system tenant scope) */
@@ -596,6 +599,7 @@ function createContainer(): Container {
   // KnowledgeCapability for AI tools (optional — requires DOLTGRES_URL)
   let knowledgeCapability: KnowledgeCapability;
   let knowledgeContributionService: ContributionService | undefined;
+  let knowledgeStorePort: KnowledgeStorePort | undefined;
   if (env.DOLTGRES_URL) {
     const doltClient = buildDoltgresClient({
       connectionString: env.DOLTGRES_URL,
@@ -604,6 +608,7 @@ function createContainer(): Container {
     const knowledgePort = new DoltgresKnowledgeStoreAdapter({
       sql: doltClient,
     });
+    knowledgeStorePort = knowledgePort;
     knowledgeCapability = createKnowledgeCapability(knowledgePort);
     const contributionPort = new DoltgresKnowledgeContributionAdapter({
       sql: doltClient,
@@ -625,6 +630,7 @@ function createContainer(): Container {
       write: notConfigured,
     };
     knowledgeContributionService = undefined;
+    knowledgeStorePort = undefined;
     log.warn("Knowledge store not configured (DOLTGRES_URL not set)");
   }
 
@@ -818,6 +824,7 @@ function createContainer(): Container {
     vcsCapability,
     toolSource,
     knowledgeContributionService,
+    knowledgeStorePort,
     threadPersistenceForUser: (userId: UserId) =>
       new DrizzleThreadPersistenceAdapter(db, userActor(userId)),
     governanceStatus: new DrizzleGovernanceStatusAdapter(
