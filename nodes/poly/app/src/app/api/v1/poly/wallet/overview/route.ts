@@ -36,7 +36,7 @@ import { EVENT_NAMES, logEvent } from "@/shared/observability";
 import {
   DASHBOARD_LEDGER_POSITION_LIMIT,
   DASHBOARD_LEDGER_POSITION_STATUSES,
-  summarizeLedgerPositions,
+  summarizeLedgerOrders,
 } from "../_lib/ledger-positions";
 
 export const dynamic = "force-dynamic";
@@ -157,7 +157,7 @@ export const GET = wrapRouteHandlerWithLogging(
     ];
 
     const capturedAtDate = new Date(capturedAt);
-    let positionSummary = summarizeLedgerPositions([], capturedAtDate);
+    let positionSummary = summarizeLedgerOrders([], capturedAtDate);
     let currentPositionSummary: {
       positionsMtm: number;
       syncedAt: string | null;
@@ -170,7 +170,7 @@ export const GET = wrapRouteHandlerWithLogging(
         statuses: [...DASHBOARD_LEDGER_POSITION_STATUSES],
         limit: DASHBOARD_LEDGER_POSITION_LIMIT,
       });
-      positionSummary = summarizeLedgerPositions(rows, capturedAtDate);
+      positionSummary = summarizeLedgerOrders(rows, capturedAtDate);
     } catch (err) {
       warnings.push({
         code: "positions_read_model_unavailable",

@@ -12,19 +12,21 @@
  *   page, not a row.
  * Scope: Pure function. No I/O.
  * Invariants:
- *   - TRANSIENT_SKIP_REASONS_NOT_PERSISTED — `market_not_resolved` and
- *     `read_failed` are transient: a future `ConditionResolution` event will
+ *   - TRANSIENT_SKIP_REASONS_NOT_PERSISTED — `market_not_resolved`,
+ *     `read_failed`, and `zero_balance` are transient: a future
+ *     `ConditionResolution` event or a re-acquisition of shares will
  *     re-evaluate `decideRedeem` and produce a `redeem` decision. The
  *     `(funder, conditionId)` unique key + `enqueue`'s `onConflictDoNothing`
  *     means any row written for a transient reason would block the future
  *     `pending/winner` enqueue, leaving the worker permanently unable to
  *     pick up the redeem (claimNextPending filters `status='pending'`, not
- *     `'skipped'`). Persisting only terminal reasons makes that collision
- *     structurally impossible. Edge case (re-acquire shares post-resolution
- *     against a `zero_balance/redeemed` row) is acknowledged and handled by
- *     manual operator row-purge in v0.2 — single-user scope.
+ *     `'skipped'`). `zero_balance` was previously persisted as terminal
+ *     `lifecycle="redeemed"`; that locked the dashboard `currentValue` to
+ *     0 for any condition the wallet later re-acquired shares in. (bug.5040)
+ *     Only `losing_outcome` is genuinely terminal — chain payoutNumerator=0
+ *     never flips back.
  * Side-effects: none
- * Links: docs/design/poly-positions.md § Dust-state UI semantics, work/items/task.0388 § Static review Blocker #2
+ * Links: docs/design/poly-positions.md § Dust-state UI semantics, work/items/task.0388 § Static review Blocker #2, work/items/bug.5040
  * @public
  */
 
@@ -58,14 +60,8 @@ export function decisionToEnqueueInput(
 
   if (c.decision.kind === "skip") {
     // TRANSIENT_SKIP_REASONS_NOT_PERSISTED: see module docstring.
-    if (
-      c.decision.reason === "market_not_resolved" ||
-      c.decision.reason === "read_failed"
-    ) {
-      return null;
-    }
-    const lifecycleState: RedeemLifecycleState =
-      c.decision.reason === "losing_outcome" ? "loser" : "redeemed";
+    if (c.decision.reason !== "losing_outcome") return null;
+    const lifecycleState: RedeemLifecycleState = "loser";
     return {
       ...base,
       flavor: c.negativeRisk ? "neg-risk-parent" : "binary",

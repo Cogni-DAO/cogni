@@ -46,19 +46,28 @@ export const DASHBOARD_LEDGER_POSITION_STATUSES = [
 ] as const;
 export const DASHBOARD_LEDGER_POSITION_LIMIT = 2_000;
 
-export interface LedgerPositionSummary {
+/**
+ * Order-flow summary the dashboard reads from the copy-trade ledger:
+ * resting-order count + USDC locked in resting BUYs, plus row freshness.
+ *
+ * Position MTM is NOT computed here — it lives in
+ * `readCurrentWalletPositionModel` against `poly_trader_current_positions`,
+ * which mirrors Polymarket Data-API truth (winners pre-redemption,
+ * adjusted for resolved markets, etc). The ledger only knows what we've
+ * traded, not what we currently hold on chain. (bug.5040)
+ */
+export interface LedgerOrderSummary {
   openOrders: number;
   lockedUsdc: number;
-  positionsMtm: number;
   syncedAt: string | null;
   syncAgeMs: number | null;
   stale: boolean;
 }
 
-export function summarizeLedgerPositions(
+export function summarizeLedgerOrders(
   rows: readonly LedgerRow[],
   capturedAt: Date
-): LedgerPositionSummary {
+): LedgerOrderSummary {
   const capturedMs = capturedAt.getTime();
   const syncedTimes = rows
     .map((row) => row.synced_at?.getTime() ?? null)
@@ -76,9 +85,6 @@ export function summarizeLedgerPositions(
         if (readLedgerString(row, "side") !== "BUY") return sum;
         return sum + ledgerRemainingUsdc(row);
       }, 0)
-    ),
-    positionsMtm: roundToCents(
-      rows.reduce((sum, row) => sum + ledgerCurrentValue(row), 0)
     ),
     syncedAt:
       latestSyncedMs !== null ? new Date(latestSyncedMs).toISOString() : null,
