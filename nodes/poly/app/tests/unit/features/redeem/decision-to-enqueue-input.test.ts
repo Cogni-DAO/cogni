@@ -70,10 +70,10 @@ describe("decisionToEnqueueInput: redeem decisions", () => {
   });
 });
 
-describe("decisionToEnqueueInput: TRANSIENT skip reasons (Blocker #2 regression)", () => {
-  // The whole point of the fix: these reasons MUST NOT produce a row, because
-  // the unique-key UPSERT would block the future `redeem` enqueue when the
-  // market resolves.
+describe("decisionToEnqueueInput: TRANSIENT skip reasons (no row persisted)", () => {
+  // These reasons MUST NOT produce a row, because the unique-key UPSERT would
+  // block the future `redeem` enqueue when the market resolves OR when the
+  // wallet re-acquires shares (bug.5040).
 
   it("market_not_resolved → null (no row written)", () => {
     const out = decisionToEnqueueInput(
@@ -90,13 +90,18 @@ describe("decisionToEnqueueInput: TRANSIENT skip reasons (Blocker #2 regression)
     );
     expect(out).toBeNull();
   });
+
+  it("zero_balance → null (bug.5040: must not lock dashboard to currentValue=0)", () => {
+    const out = decisionToEnqueueInput(
+      FUNDER,
+      candidate({ kind: "skip", reason: "zero_balance" })
+    );
+    expect(out).toBeNull();
+  });
 });
 
-describe("decisionToEnqueueInput: TERMINAL skip reasons (dust-loser UX win)", () => {
-  // Terminal reasons CAN persist because they cannot transition back to a
-  // redeem decision: payoutNumerator is 0 forever (loser), and zero_balance
-  // means the funder is already paid out (re-acquire post-resolution is the
-  // documented manual-purge edge case).
+describe("decisionToEnqueueInput: TERMINAL skip reasons", () => {
+  // Only `losing_outcome` is terminal: payoutNumerator=0 never flips back.
 
   it("losing_outcome → skipped/loser row, binary flavor by default", () => {
     const out = decisionToEnqueueInput(
@@ -122,17 +127,6 @@ describe("decisionToEnqueueInput: TERMINAL skip reasons (dust-loser UX win)", ()
       )
     );
     expect(out?.flavor).toBe("neg-risk-parent");
-  });
-
-  it("zero_balance → skipped/redeemed row", () => {
-    const out = decisionToEnqueueInput(
-      FUNDER,
-      candidate({ kind: "skip", reason: "zero_balance" })
-    );
-    expect(out).not.toBeNull();
-    if (out === null) throw new Error("unreachable");
-    expect(out.status).toBe("skipped");
-    expect(out.lifecycleState).toBe("redeemed");
   });
 });
 
