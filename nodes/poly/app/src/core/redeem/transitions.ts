@@ -33,8 +33,24 @@
 
 import type { RedeemFailureClass, RedeemJob, RedeemJobStatus } from "./types";
 
-/** Maximum number of transient retries before escalating to abandoned. */
-export const REDEEM_MAX_TRANSIENT_ATTEMPTS = 3;
+/**
+ * Maximum number of transient retries before escalating to abandoned.
+ *
+ * Bumped from 3 → 50 in bug.5040 follow-up. Reasoning: the prior value
+ * collapsed two error classes — genuine transient (RPC flake, gas spike,
+ * nonce conflict) and deterministic on-chain revert — into the same
+ * 3-strike abandon. Deterministic reverts will now retry-with-no-progress
+ * many times instead of hiding ~$500 of real winnings behind `abandoned`,
+ * giving the reaper + simulation logging time to surface the actual
+ * revert reason without losing position visibility on the dashboard
+ * (which now reads chain authority first regardless — see
+ * `WALLET_EXECUTION_TERMINAL_LIFECYCLE_STATES`).
+ *
+ * 50 is "many" without being "infinite": for a truly malformed condition
+ * the worker still gives up eventually. Reaper cadence (~30s by default)
+ * means 50 attempts ≈ 25 min of retries before circuit-breaking.
+ */
+export const REDEEM_MAX_TRANSIENT_ATTEMPTS = 50;
 
 /**
  * Discriminated event union the state machine accepts.

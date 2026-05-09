@@ -315,6 +315,61 @@ export class RedeemWorker {
       return false;
     }
 
+    // Pre-flight simulate (bug.5040 follow-up / bug.5041): viem's writeContract
+    // simulates internally but its error is just "redeemPositions reverted"
+    // with no decoded revert data when the contract uses a low-level revert.
+    // Run an explicit simulate first so we can capture the revert reason +
+    // raw data into structured logs — that's the diagnostic signal that
+    // tells us why ~39 conditions across funders are stuck in abandoned.
+    try {
+      if (args.kind === "ctf") {
+        await this.deps.publicClient.simulateContract({
+          address: POLYGON_CONDITIONAL_TOKENS,
+          abi: polymarketCtfRedeemAbi,
+          functionName: "redeemPositions",
+          args: [
+            job.collateralToken,
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            job.conditionId,
+            args.indexSets,
+          ],
+          account: this.deps.funderAddress,
+        });
+      } else {
+        await this.deps.publicClient.simulateContract({
+          address: POLYGON_NEG_RISK_ADAPTER,
+          abi: polymarketNegRiskAdapterAbi,
+          functionName: "redeemPositions",
+          args: [job.conditionId, [args.amounts[0], args.amounts[1]]],
+          account: this.deps.funderAddress,
+        });
+      }
+    } catch (err) {
+      // Decode the actual revert. viem's ContractFunctionRevertedError carries
+      // `cause.reason` (decoded string) and `cause.data` (raw bytes).
+      const revertReason = decodeRevertReason(err);
+      this.deps.logger.warn(
+        {
+          event: "poly.ctf.redeem.simulate_reverted",
+          job_id: job.id,
+          condition_id: job.conditionId,
+          position_id: job.positionId,
+          funder: job.funderAddress,
+          flavor: job.flavor,
+          collateral_token: job.collateralToken,
+          revert_reason: revertReason.reason,
+          revert_data: revertReason.data,
+          err_short: revertReason.shortMessage,
+        },
+        "redeem-worker: pre-flight simulate reverted"
+      );
+      // Fall through into the writeContract path below — it will fail the
+      // same way and exercise the existing transient/abandon transition.
+      // Leaving the actual write unchanged keeps the current backpressure
+      // behavior (failed_transient → abandoned at exhausted attempts);
+      // the new simulate logging is the diagnostic seam we needed.
+    }
+
     let txHash: `0x${string}`;
     try {
       if (args.kind === "ctf") {
@@ -671,4 +726,34 @@ export class RedeemWorker {
     }
     return map;
   }
+}
+
+/**
+ * Pull the actual revert reason out of a viem error. viem's
+ * ContractFunctionRevertedError exposes `data` (raw bytes) and `reason`
+ * (decoded string when the contract emitted `Error(string)` or a known
+ * custom error). For low-level reverts (`revert()` with no message), data
+ * is `0x` and reason is `undefined` — that's still useful signal vs.
+ * "function reverted" generic.
+ */
+function decodeRevertReason(err: unknown): {
+  reason: string | null;
+  data: string | null;
+  shortMessage: string;
+} {
+  if (!(err instanceof Error)) {
+    return { reason: null, data: null, shortMessage: String(err) };
+  }
+  // biome-ignore lint/suspicious/noExplicitAny: viem error shape varies across versions
+  const e = err as any;
+  const cause = e.cause ?? e;
+  const reason: string | null = cause?.reason ?? cause?.data?.errorName ?? null;
+  const data: string | null = cause?.data ?? cause?.raw ?? null;
+  const shortMessage: string =
+    e.shortMessage ?? cause?.shortMessage ?? err.message.slice(0, 200);
+  return {
+    reason,
+    data: typeof data === "string" ? data : null,
+    shortMessage,
+  };
 }
