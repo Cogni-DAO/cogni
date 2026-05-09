@@ -570,6 +570,7 @@ Ordered post-#1307. Each tier = one work item; tier N+1 is filed only when N is 
 | **P2** — DAG traversal in search | `core__knowledge_search` returns 1-hop neighbors + `cited_by_count` per hit. Read-side optimization on existing `citations` data. | Filed after P1 produces real edges. |
 | **P3** — Confidence-recompute walker | The syntropy formula in §"Confidence Is Computed, Not Assigned" actually runs over the citation DAG; supports/contradicts adjust scores. | Needs P1+P2 first. |
 | **P3** — `evaluate_at` cron auto-files outcomes | Hypotheses become outcomes on schedule; closes EDO end-to-end. Temporal/monitoring-engine wiring. | Last piece; depends on P3 walker. |
+| **Rd-PORTABLE** — extract `/knowledge` page into `@cogni/node-template-knowledge-ui` | Operator-side `/knowledge` (task.5037) is the reference implementation; every knowledge-capable node will need its own knowledge hub. Move the page + `_api/*` + `_components/*` into a shared package, mounted from each node's `(app)/knowledge/page.tsx` as a thin re-export. Same pattern as `@cogni/node-template-knowledge` (schema). | Filed when a second node (poly) needs `/knowledge` — the carve-out cost is amortized across nodes 2..N. |
 
 **Anti-sprawl rule**: If a future agent considers expanding scope beyond their tier, file the next-tier work item and stop. Don't bundle.
 

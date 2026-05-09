@@ -158,12 +158,12 @@ export function ContributionDetail({
                         >
                           <div className="flex items-center gap-2 text-xs">
                             <span
-                              className={`inline-flex rounded-md px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+                              className={`inline-flex rounded-md px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider ${
                                 d.changeType === "added"
-                                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                                  ? "bg-success/15 text-success"
                                   : d.changeType === "removed"
-                                    ? "bg-rose-500/15 text-rose-700 dark:text-rose-300"
-                                    : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                                    ? "bg-destructive/15 text-destructive"
+                                    : "bg-warning/15 text-warning"
                               }`}
                             >
                               {d.changeType}

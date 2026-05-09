@@ -43,9 +43,9 @@ export function buildContributionColumns(
         const v = info.getValue();
         const tone =
           v === "open"
-            ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+            ? "bg-warning/15 text-warning"
             : v === "merged"
-              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+              ? "bg-success/15 text-success"
               : "bg-muted text-muted-foreground";
         return (
           <span

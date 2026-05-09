@@ -181,7 +181,7 @@ function ModeButton({
       {icon}
       {label}
       {badge != null && (
-        <span className="ml-0.5 inline-flex min-w-[1.25rem] justify-center rounded-md bg-amber-500/20 px-1 font-mono text-[10px] text-amber-700 dark:text-amber-300">
+        <span className="ml-0.5 inline-flex min-w-5 justify-center rounded-md bg-warning/20 px-1 font-mono text-warning text-xs">
           {badge}
         </span>
       )}
@@ -438,7 +438,7 @@ function Toolbar({
 
 function BrowseEmptyState() {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-lg border border-border/60 border-dashed bg-muted/20 px-6 py-16 text-center">
+    <div className="flex flex-col items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-6 py-16 text-center">
       <Library className="size-8 text-muted-foreground/60" />
       <p className="font-medium text-sm">
         No knowledge yet on <code className="font-mono">main</code>.
@@ -455,7 +455,7 @@ function BrowseEmptyState() {
 
 function InboxEmptyState() {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-lg border border-border/60 border-dashed bg-muted/20 px-6 py-16 text-center">
+    <div className="flex flex-col items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-6 py-16 text-center">
       <GitMerge className="size-8 text-muted-foreground/60" />
       <p className="font-medium text-sm">Inbox empty.</p>
       <p className="max-w-md text-muted-foreground text-xs leading-relaxed">

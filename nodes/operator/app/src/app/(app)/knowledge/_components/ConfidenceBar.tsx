@@ -23,9 +23,9 @@ interface ConfidenceBarProps {
 
 /**
  * Anchors mirror docs/spec/knowledge-syntropy.md:
- *   < 30 muted (draft) · 30–60 amber (candidate) · 60–80 cyan (established) ·
- *   80–95 emerald (canonical) · 95+ violet (hardened/factual).
- * Tones come from the existing CSS-var palette; we don't introduce new colors.
+ *   < 30 muted (draft) · 30–60 warning (candidate) · 60–80 info (established) ·
+ *   80–95 success (canonical) · 95+ primary (hardened/factual).
+ * All tones use the operator's semantic CSS-var palette (no raw Tailwind colors).
  */
 function toneFor(v: number): { fill: string; track: string; label: string } {
   if (v < 30)
@@ -36,25 +36,25 @@ function toneFor(v: number): { fill: string; track: string; label: string } {
     };
   if (v < 60)
     return {
-      fill: "bg-amber-500/80 dark:bg-amber-400/70",
-      track: "bg-amber-500/10",
+      fill: "bg-warning/80",
+      track: "bg-warning/10",
       label: "candidate",
     };
   if (v < 80)
     return {
-      fill: "bg-cyan-500/80 dark:bg-cyan-400/70",
-      track: "bg-cyan-500/10",
+      fill: "bg-info/80",
+      track: "bg-info/10",
       label: "established",
     };
   if (v < 95)
     return {
-      fill: "bg-emerald-500/85 dark:bg-emerald-400/75",
-      track: "bg-emerald-500/10",
+      fill: "bg-success/80",
+      track: "bg-success/10",
       label: "canonical",
     };
   return {
-    fill: "bg-violet-500/85 dark:bg-violet-400/75",
-    track: "bg-violet-500/10",
+    fill: "bg-primary/85",
+    track: "bg-primary/10",
     label: "hardened",
   };
 }
