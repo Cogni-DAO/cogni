@@ -290,6 +290,13 @@ export function getLedgerRowConditionId(row: LedgerRow): string {
   return marketId.startsWith(prefix) ? marketId.slice(prefix.length) : marketId;
 }
 
+/**
+ * Ledger row → dashboard `status`. The contract's terminal-lifecycle set
+ * (`{closed, redeemed, loser, dust}`) is position-terminal only — `abandoned`
+ * is intentionally absent because it's a job-pipeline give-up, not a
+ * position close. Abandoned rows fall through to `"open"` so the dashboard
+ * keeps surfacing the still-on-chain shares.
+ */
 function deriveExecutionStatus(
   _row: LedgerRow,
   lifecycleState: WalletExecutionLifecycleState | null

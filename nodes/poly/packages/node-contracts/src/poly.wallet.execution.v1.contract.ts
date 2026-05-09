@@ -50,13 +50,27 @@ export const WalletExecutionLifecycleStateSchema = z.enum([
 export type WalletExecutionLifecycleState = z.infer<
   typeof WalletExecutionLifecycleStateSchema
 >;
+/**
+ * Lifecycle states that mean the underlying *position* is gone — tokens
+ * burned (`redeemed`), worthless (`loser`), too small to matter (`dust`),
+ * or explicitly closed by the operator (`closed`). Dashboard zeros
+ * `currentValue` only for these.
+ *
+ * Notably absent: `abandoned`. That means the redeem-job pipeline gave up
+ * on a specific tx flow (e.g. 3 transient submission failures) — the
+ * SHARES ARE STILL ON CHAIN. Treating abandoned as terminal hid real
+ * winnings on the dashboard whenever `redeemPositions` reverted in a way
+ * the worker couldn't auto-recover from. (bug.5040 follow-up)
+ *
+ * Position state derives from chain truth — `marketOutcome` from
+ * `poly_market_outcomes.payoutNumerator` — not from job pipeline state.
+ */
 export const WALLET_EXECUTION_TERMINAL_LIFECYCLE_STATES: ReadonlySet<WalletExecutionLifecycleState> =
   new Set<WalletExecutionLifecycleState>([
     "closed",
     "redeemed",
     "loser",
     "dust",
-    "abandoned",
   ]);
 
 export const WalletExecutionTimelinePointSchema = z.object({
