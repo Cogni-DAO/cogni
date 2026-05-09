@@ -315,61 +315,6 @@ export class RedeemWorker {
       return false;
     }
 
-    // Pre-flight simulate (bug.5040 follow-up / bug.5041): viem's writeContract
-    // simulates internally but its error is just "redeemPositions reverted"
-    // with no decoded revert data when the contract uses a low-level revert.
-    // Run an explicit simulate first so we can capture the revert reason +
-    // raw data into structured logs — that's the diagnostic signal that
-    // tells us why ~39 conditions across funders are stuck in abandoned.
-    try {
-      if (args.kind === "ctf") {
-        await this.deps.publicClient.simulateContract({
-          address: POLYGON_CONDITIONAL_TOKENS,
-          abi: polymarketCtfRedeemAbi,
-          functionName: "redeemPositions",
-          args: [
-            job.collateralToken,
-            "0x0000000000000000000000000000000000000000000000000000000000000000",
-            job.conditionId,
-            args.indexSets,
-          ],
-          account: this.deps.funderAddress,
-        });
-      } else {
-        await this.deps.publicClient.simulateContract({
-          address: POLYGON_NEG_RISK_ADAPTER,
-          abi: polymarketNegRiskAdapterAbi,
-          functionName: "redeemPositions",
-          args: [job.conditionId, [args.amounts[0], args.amounts[1]]],
-          account: this.deps.funderAddress,
-        });
-      }
-    } catch (err) {
-      // Decode the actual revert. viem's ContractFunctionRevertedError carries
-      // `cause.reason` (decoded string) and `cause.data` (raw bytes).
-      const revertReason = decodeRevertReason(err);
-      this.deps.logger.warn(
-        {
-          event: "poly.ctf.redeem.simulate_reverted",
-          job_id: job.id,
-          condition_id: job.conditionId,
-          position_id: job.positionId,
-          funder: job.funderAddress,
-          flavor: job.flavor,
-          collateral_token: job.collateralToken,
-          revert_reason: revertReason.reason,
-          revert_data: revertReason.data,
-          err_short: revertReason.shortMessage,
-        },
-        "redeem-worker: pre-flight simulate reverted"
-      );
-      // Fall through into the writeContract path below — it will fail the
-      // same way and exercise the existing transient/abandon transition.
-      // Leaving the actual write unchanged keeps the current backpressure
-      // behavior (failed_transient → abandoned at exhausted attempts);
-      // the new simulate logging is the diagnostic seam we needed.
-    }
-
     let txHash: `0x${string}`;
     try {
       if (args.kind === "ctf") {
@@ -418,14 +363,26 @@ export class RedeemWorker {
           error: msg,
         });
       }
+      // Decode the actual revert reason out of viem's wrapped error so Loki
+      // captures `revert_reason` + `revert_data` instead of just the
+      // generic "redeemPositions reverted" string. This is the diagnostic
+      // seam for bug.5041 — the underlying tx revert that's keeping ~39
+      // conditions stuck in abandoned across funders. (bug.5040 follow-up)
+      const revert = decodeRevertReason(err);
       this.deps.logger.warn(
         {
           event: "poly.ctf.redeem.tx_failed_transient",
           job_id: job.id,
           condition_id: job.conditionId,
+          position_id: job.positionId,
+          funder: job.funderAddress,
+          flavor: job.flavor,
+          collateral_token: job.collateralToken,
           attempt: job.attemptCount + 1,
           max_attempts: REDEEM_MAX_TRANSIENT_ATTEMPTS,
-          err: msg,
+          revert_reason: revert.reason,
+          revert_data: revert.data,
+          err_short: revert.shortMessage,
         },
         "redeem-worker: tx submission failed"
       );
