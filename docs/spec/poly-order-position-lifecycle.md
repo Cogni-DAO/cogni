@@ -10,7 +10,7 @@ read_when: Reviewing task.5006, changing poly_copy_trade_fills.status or positio
 implements: task.5006
 owner: derekg1729
 created: 2026-05-02
-verified: 2026-05-02
+verified: 2026-05-09
 tags: [poly, polymarket, copy-trading, lifecycle, state-machine, redeem]
 ---
 
@@ -43,6 +43,12 @@ state from route behavior.
 - Terminal position lifecycles are never reopened by stale CLOB refresh.
 - Redeem writes must use `positionId`/`token_id`, not `conditionId`, because
   one condition has multiple outcome assets.
+- **Position state is chain-derived; redeem-job state is pipeline-derived.**
+  A redeem JOB may abandon (worker exhausted retries on a specific submission
+  flow); the underlying POSITION cannot abandon while shares are still on
+  chain. Dashboard classification reads chain authority
+  (`poly_market_outcomes.payoutNumerator`) first; job lifecycle is consulted
+  only when no chain outcome row exists. (bug.5040)
 
 ## Design
 
@@ -135,13 +141,13 @@ flowchart LR
   Q -->|dust policy| D[dust]
   W -->|worker submits tx| RP[redeem_pending]
   RP -->|payout observed<br/>or reaper balance=0| R[redeemed]
-  RP -->|no payout and balance>0<br/>or retries exhausted| AB[abandoned]
+  RP -->|retries exhausted<br/>balance still > 0| AB[abandoned<br/>job-stuck, position still on chain]
+  AB -->|manual operator unblock<br/>or chain outcome write| W
   C --> T[terminal history]
   R --> T
   L --> T
   R0 --> T
   D --> T
-  AB --> T
 ```
 
 ### 3. Redeem Job
@@ -167,13 +173,20 @@ stateDiagram-v2
 
 ### 4. Dashboard Classification
 
+Chain authority first; redeem-job lifecycle second. `abandoned` falls through —
+the worker giving up does NOT close the position.
+
 ```mermaid
 flowchart TD
-  A[Ledger row] --> B{terminal lifecycle?<br/>closed/redeemed/loser/dust/abandoned}
-  B -->|yes| C[closed_positions<br/>currentValue=0]
-  B -->|no| E{lifecycle=winner?}
-  E -->|yes| F[status=redeemable]
-  E -->|no| G[status=open]
+  A[Position row] --> CO{poly_market_outcomes<br/>marketOutcome?}
+  CO -->|loser| C[closed_positions<br/>currentValue=0]
+  CO -->|winner + lifecycle=redeemed| C
+  CO -->|winner + lifecycle≠redeemed| F[status=redeemable]
+  CO -->|null/unknown| LS{lifecycle?}
+  LS -->|winner| F
+  LS -->|redeemed/loser/dust/closed<br/>position-terminal| C
+  LS -->|abandoned<br/>job-stuck, not position-terminal| G
+  LS -->|else| G[status=open]
   F --> V{currentValue > 0?}
   G --> V
   V -->|yes| H[live_positions]
@@ -207,27 +220,33 @@ Order writers:
 
 Canonical type: `LedgerPositionLifecycle` in `nodes/poly/app/src/features/trading/order-ledger.types.ts`.
 
-| Lifecycle        | Class              | Meaning                                                            | Active resting slot?                                      |
-| ---------------- | ------------------ | ------------------------------------------------------------------ | --------------------------------------------------------- |
-| `NULL`           | no proven position | No typed exposure yet.                                             | Yes when order status is `pending`, `open`, or `partial`. |
-| `unresolved`     | active             | Position exists; market resolution not known.                      | Yes                                                       |
-| `open`           | active             | Position exists and is not closing/resolving/redeemed.             | Yes                                                       |
-| `closing`        | active             | Close is in progress.                                              | Yes                                                       |
-| `closed`         | terminal           | Wallet no longer holds this asset after sell/refresh.              | No                                                        |
-| `resolving`      | action             | Market resolution is being evaluated.                              | No                                                        |
-| `winner`         | action             | Asset is a winning/redeemable outcome.                             | No                                                        |
-| `redeem_pending` | action             | Redeem transaction has been submitted or reorg-reset to submitted. | No                                                        |
-| `redeemed`       | terminal           | Redeem completed or chain evidence proves no remaining balance.    | No                                                        |
-| `loser`          | terminal           | Losing outcome.                                                    | No                                                        |
-| `dust`           | terminal           | Reserved terminal dust state. Current policy does not emit it.     | No                                                        |
-| `abandoned`      | terminal           | Redeem path failed permanently or malformed flow detected.         | No                                                        |
+| Lifecycle        | Class              | Meaning                                                                                                                                                   | Active resting slot?                                      |
+| ---------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `NULL`           | no proven position | No typed exposure yet.                                                                                                                                    | Yes when order status is `pending`, `open`, or `partial`. |
+| `unresolved`     | active             | Position exists; market resolution not known.                                                                                                             | Yes                                                       |
+| `open`           | active             | Position exists and is not closing/resolving/redeemed.                                                                                                    | Yes                                                       |
+| `closing`        | active             | Close is in progress.                                                                                                                                     | Yes                                                       |
+| `closed`         | terminal           | Wallet no longer holds this asset after sell/refresh.                                                                                                     | No                                                        |
+| `resolving`      | action             | Market resolution is being evaluated.                                                                                                                     | No                                                        |
+| `winner`         | action             | Asset is a winning/redeemable outcome.                                                                                                                    | No                                                        |
+| `redeem_pending` | action             | Redeem transaction has been submitted or reorg-reset to submitted.                                                                                        | No                                                        |
+| `redeemed`       | terminal           | Redeem completed or chain evidence proves no remaining balance.                                                                                           | No                                                        |
+| `loser`          | terminal           | Losing outcome.                                                                                                                                           | No                                                        |
+| `dust`           | terminal           | Reserved terminal dust state. Current policy does not emit it.                                                                                            | No                                                        |
+| `abandoned`      | stuck (job-only)   | Redeem WORKER exhausted retries; shares may still be on chain. NOT a position-terminal state — dashboard classification falls through to chain authority. | No                                                        |
 
 Position lifecycle predicates live in `nodes/poly/app/src/features/trading/ledger-lifecycle.ts`.
 
-Terminal lifecycles are `closed`, `redeemed`, `loser`, `dust`, and
-`abandoned`. Terminal rows are history and must not be reopened by order
-refresh. The SQL adapter enforces this with `preserveTerminalLifecycle(...)` in
+Terminal lifecycles are `closed`, `redeemed`, `loser`, and `dust`. Terminal
+rows are position history and must not be reopened by order refresh. The SQL
+adapter enforces this with `preserveTerminalLifecycle(...)` in
 `nodes/poly/app/src/features/trading/order-ledger.ts`.
+
+`abandoned` is INTENTIONALLY EXCLUDED from the position-terminal set — it
+indicates the redeem WORKER stopped retrying, not that the position is gone.
+Shares may still be on chain. Dashboard rendering treats abandoned rows as
+"stuck pending recovery"; chain authority (`poly_market_outcomes`) is the
+only signal that closes the position.
 
 Terminal labels are not globally immutable. A later terminal lifecycle write may
 refine one terminal label into another for the same asset. The hard invariant is
@@ -296,17 +315,17 @@ stateDiagram-v2
 
 Redeem lifecycle mirroring:
 
-| Redeem event                       | Job status effect                  | Ledger position lifecycle | Writer                                                  |
-| ---------------------------------- | ---------------------------------- | ------------------------- | ------------------------------------------------------- |
-| Policy says redeemable             | enqueue `pending` job              | `winner`                  | `decision-to-enqueue-input.ts`, redeem route/subscriber |
-| Worker submits tx                  | `claimed` -> `submitted`           | `redeem_pending`          | `redeem-worker.ts`                                      |
-| Payout observed                    | `submitted` -> `confirmed`         | `redeemed`                | `redeem-subscriber.ts`, `redeem-catchup.ts`             |
-| Reaper proves redeemed             | `submitted` -> `confirmed`         | `redeemed`                | `redeem-worker.ts`                                      |
-| Reorg removes payout               | `confirmed` -> `submitted`         | `redeem_pending`          | `redeem-subscriber.ts`                                  |
-| Malformed/bleed/exhausted retry    | `claimed/submitted` -> `abandoned` | `abandoned`               | `redeem-worker.ts`, manual route poll                   |
-| Policy says losing outcome         | enqueue `skipped` job              | `loser`                   | `decision-to-enqueue-input.ts`                          |
-| Policy says zero balance           | enqueue `skipped` job              | `redeemed`                | `decision-to-enqueue-input.ts`                          |
-| Policy says unresolved/read failed | no job row                         | no ledger mirror          | `decision-to-enqueue-input.ts`                          |
+| Redeem event                       | Job status effect                  | Ledger position lifecycle                                                                                            | Writer                                                  |
+| ---------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Policy says redeemable             | enqueue `pending` job              | `winner`                                                                                                             | `decision-to-enqueue-input.ts`, redeem route/subscriber |
+| Worker submits tx                  | `claimed` -> `submitted`           | `redeem_pending`                                                                                                     | `redeem-worker.ts`                                      |
+| Payout observed                    | `submitted` -> `confirmed`         | `redeemed`                                                                                                           | `redeem-subscriber.ts`, `redeem-catchup.ts`             |
+| Reaper proves redeemed             | `submitted` -> `confirmed`         | `redeemed`                                                                                                           | `redeem-worker.ts`                                      |
+| Reorg removes payout               | `confirmed` -> `submitted`         | `redeem_pending`                                                                                                     | `redeem-subscriber.ts`                                  |
+| Malformed/bleed/exhausted retry    | `claimed/submitted` -> `abandoned` | `abandoned` (job-stuck, NOT position-terminal — shares may still be on chain; dashboard renders via chain authority) | `redeem-worker.ts`, manual route poll                   |
+| Policy says losing outcome         | enqueue `skipped` job              | `loser`                                                                                                              | `decision-to-enqueue-input.ts`                          |
+| Policy says zero balance           | enqueue `skipped` job              | `redeemed`                                                                                                           | `decision-to-enqueue-input.ts`                          |
+| Policy says unresolved/read failed | no job row                         | no ledger mirror                                                                                                     | `decision-to-enqueue-input.ts`                          |
 
 Important scope rule: redeem lifecycle writes are asset-scoped. The CTF `positionId` is persisted as `poly_redeem_jobs.position_id` and mirrored into `poly_copy_trade_fills.attributes.token_id`. Redeem mirror code must call `markPositionLifecycleByAsset(...)`, not condition-wide mutation, because one condition has multiple outcome assets.
 
@@ -337,7 +356,7 @@ The partial unique index `poly_copy_trade_fills_one_open_per_market` enforces on
 - `position_lifecycle IS NULL OR IN ('unresolved','open','closing')`
 - `attributes->>'closed_at' IS NULL`
 
-Terminal/action states such as `winner`, `redeem_pending`, `redeemed`, `loser`, `dust`, and `abandoned` do not occupy the active resting slot.
+Position-terminal states (`closed`, `redeemed`, `loser`, `dust`), action states (`winner`, `redeem_pending`), and the job-stuck state (`abandoned`) all fall outside the index's included set, so none of them occupy the active resting slot.
 
 ## Review Checklist
 

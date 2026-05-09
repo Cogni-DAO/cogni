@@ -47,12 +47,11 @@ describe("deriveCurrentPositionStatus (bug.5008)", () => {
     ).toBe("redeemable");
   });
 
-  it("returns 'closed' for terminal lifecycles regardless of marketOutcome=null", () => {
+  it("returns 'closed' for position-terminal lifecycles regardless of marketOutcome=null", () => {
     for (const lifecycleState of [
       "redeemed",
       "loser",
       "dust",
-      "abandoned",
       "closed",
     ] as const) {
       expect(
@@ -63,6 +62,55 @@ describe("deriveCurrentPositionStatus (bug.5008)", () => {
         })
       ).toBe("closed");
     }
+  });
+
+  it("treats lifecycleState='abandoned' as job-state, NOT position-terminal (bug.5040)", () => {
+    // The redeem-job pipeline gave up on a tx flow (e.g. 3 transient submission
+    // failures), but the SHARES ARE STILL ON CHAIN. Dashboard must not zero
+    // currentValue on this signal alone — chain authority decides.
+    //
+    // No chain outcome yet: still-held shares fall through to "open".
+    expect(
+      deriveCurrentPositionStatus({
+        currentValue: 74.27,
+        marketOutcome: null,
+        lifecycleState: "abandoned",
+      })
+    ).toBe("open");
+
+    // Chain says winner + job abandoned: REDEEMABLE — user owns the cash,
+    // worker just couldn't submit the tx. This is the case that hid \$500
+    // of real winnings on dashboard before the fix.
+    expect(
+      deriveCurrentPositionStatus({
+        currentValue: 74.27,
+        marketOutcome: "winner",
+        lifecycleState: "abandoned",
+      })
+    ).toBe("redeemable");
+
+    // Chain says loser + job abandoned: shares are worthless, dashboard
+    // correctly closes them. Chain authority dominates.
+    expect(
+      deriveCurrentPositionStatus({
+        currentValue: 0,
+        marketOutcome: "loser",
+        lifecycleState: "abandoned",
+      })
+    ).toBe("closed");
+  });
+
+  it("chain winner + lifecycleState='redeemed' = closed (PayoutRedemption observed)", () => {
+    // Once the on-chain `PayoutRedemption` event fires for our funder, the
+    // subscriber sets lifecycleState='redeemed'. The cash is now in the
+    // wallet's pUSD/USDC.e balance — position is genuinely gone.
+    expect(
+      deriveCurrentPositionStatus({
+        currentValue: 0,
+        marketOutcome: "winner",
+        lifecycleState: "redeemed",
+      })
+    ).toBe("closed");
   });
 
   it("returns 'open' when nothing has resolved and lifecycle is null", () => {

@@ -363,14 +363,26 @@ export class RedeemWorker {
           error: msg,
         });
       }
+      // Decode the actual revert reason out of viem's wrapped error so Loki
+      // captures `revert_reason` + `revert_data` instead of just the
+      // generic "redeemPositions reverted" string. This is the diagnostic
+      // seam for bug.5041 — the underlying tx revert that's keeping ~39
+      // conditions stuck in abandoned across funders. (bug.5040 follow-up)
+      const revert = decodeRevertReason(err);
       this.deps.logger.warn(
         {
           event: "poly.ctf.redeem.tx_failed_transient",
           job_id: job.id,
           condition_id: job.conditionId,
+          position_id: job.positionId,
+          funder: job.funderAddress,
+          flavor: job.flavor,
+          collateral_token: job.collateralToken,
           attempt: job.attemptCount + 1,
           max_attempts: REDEEM_MAX_TRANSIENT_ATTEMPTS,
-          err: msg,
+          revert_reason: revert.reason,
+          revert_data: revert.data,
+          err_short: revert.shortMessage,
         },
         "redeem-worker: tx submission failed"
       );
@@ -671,4 +683,34 @@ export class RedeemWorker {
     }
     return map;
   }
+}
+
+/**
+ * Pull the actual revert reason out of a viem error. viem's
+ * ContractFunctionRevertedError exposes `data` (raw bytes) and `reason`
+ * (decoded string when the contract emitted `Error(string)` or a known
+ * custom error). For low-level reverts (`revert()` with no message), data
+ * is `0x` and reason is `undefined` — that's still useful signal vs.
+ * "function reverted" generic.
+ */
+function decodeRevertReason(err: unknown): {
+  reason: string | null;
+  data: string | null;
+  shortMessage: string;
+} {
+  if (!(err instanceof Error)) {
+    return { reason: null, data: null, shortMessage: String(err) };
+  }
+  // biome-ignore lint/suspicious/noExplicitAny: viem error shape varies across versions
+  const e = err as any;
+  const cause = e.cause ?? e;
+  const reason: string | null = cause?.reason ?? cause?.data?.errorName ?? null;
+  const data: string | null = cause?.data ?? cause?.raw ?? null;
+  const shortMessage: string =
+    e.shortMessage ?? cause?.shortMessage ?? err.message.slice(0, 200);
+  return {
+    reason,
+    data: typeof data === "string" ? data : null,
+    shortMessage,
+  };
 }

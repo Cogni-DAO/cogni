@@ -288,23 +288,31 @@ function rowToExecutionPosition(
 }
 
 /**
- * Classify a current-position row into a single dashboard `status`. (bug.5008)
+ * Classify a current-position row into a single dashboard `status`.
  *
- * Authority precedence:
- *   1. `marketOutcome === 'loser'` from `poly_market_outcomes` — chain proved
- *      `payoutNumerator === 0` for this asset → `closed`, regardless of stale
- *      Data-API mid-pricing on the row.
- *   2. terminal lifecycle (`redeemed/loser/dust/abandoned/closed`) → `closed`.
- *   3. `marketOutcome === 'winner'` OR `lifecycleState === 'winner'` →
- *      `redeemable`. Either chain outcome (preferred) or ledger lifecycle
- *      (fallback for rare race where redeem job lifecycle was written before
- *      the outcomes UPSERT) qualifies.
- *   4. `currentValue <= 0` → `closed`.
- *   5. else → `open`.
+ * Authority precedence — chain truth first, job pipeline state second:
+ *   1. `marketOutcome === 'loser'` (chain `payoutNumerator === 0`) →
+ *      `closed`. Tokens are worthless, regardless of any other signal.
+ *   2. `marketOutcome === 'winner'` (chain `payoutNumerator > 0`):
+ *      - `lifecycleState === 'redeemed'` → `closed` (chain `PayoutRedemption`
+ *        log confirmed the burn; cash is now in the wallet).
+ *      - else → `redeemable`. Shares still on chain, awaiting redemption.
+ *        This deliberately overrides any other job pipeline state so an
+ *        `abandoned` redeem job can't hide a real winning position from
+ *        the dashboard. (bug.5040: redeemPositions tx revert → 3 retries
+ *        → markAbandoned → dashboard hid ~\$500 of real winnings.)
+ *   3. `lifecycleState === 'winner'` (no chain outcome row yet, but the
+ *      subscriber already classified) → `redeemable`. Race-window fallback.
+ *   4. `lifecycleState ∈ {redeemed, loser, dust, closed}` (genuinely
+ *      position-terminal job states) → `closed`. NOTE: `abandoned` is
+ *      excluded — the JOB gave up on a tx flow, but the POSITION is
+ *      still ours until chain says otherwise.
+ *   5. `currentValue <= 0` → `closed` (no value to render).
+ *   6. else → `open`.
  *
  * Polymarket Data-API `raw.redeemable` is **never** consulted — Polymarket
  * flags both winner AND loser sides as `redeemable=true` once a market
- * resolves, which is what produced the original split-brain.
+ * resolves, which is what produced the original split-brain (bug.5008).
  */
 export function deriveCurrentPositionStatus(input: {
   currentValue: number;
@@ -312,17 +320,17 @@ export function deriveCurrentPositionStatus(input: {
   lifecycleState: WalletExecutionLifecycleState | null;
 }): WalletExecutionPositionStatus {
   if (input.marketOutcome === "loser") return "closed";
+  if (input.marketOutcome === "winner") {
+    return input.lifecycleState === "redeemed" ? "closed" : "redeemable";
+  }
+  if (input.lifecycleState === "winner") return "redeemable";
   if (
     input.lifecycleState === "redeemed" ||
     input.lifecycleState === "loser" ||
     input.lifecycleState === "dust" ||
-    input.lifecycleState === "abandoned" ||
     input.lifecycleState === "closed"
   ) {
     return "closed";
-  }
-  if (input.marketOutcome === "winner" || input.lifecycleState === "winner") {
-    return "redeemable";
   }
   if (input.currentValue <= 0) return "closed";
   return "open";

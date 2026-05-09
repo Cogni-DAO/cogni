@@ -323,6 +323,13 @@
       "when": 1778100000000,
       "tag": "0045_purge_stuck_zero_balance_redeem_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1778100100000,
+      "tag": "0046_reset_transient_exhausted_redeem_jobs",
+      "breakpoints": true
     }
   ]
 }
