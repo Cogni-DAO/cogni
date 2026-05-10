@@ -53,20 +53,20 @@ last_commit: 03b1e2160
 
 ## Pointers
 
-| File / Resource                                                                      | Why it matters                                                       |
-| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------- | ----------------------------- | ---------------------- |
-| [bug.0430](../items/bug.0430.poly-mirror-cap-leaks-on-error-rows-that-fill.md)       | Critical-path bug doc with file paths, fix options, validation block |
-| [bug.0431](../items/bug.0431.poly-redeem-policy-misclassifies-winners-as-losers.md)  | Misclassification bug doc with file paths and unit test plan         |
-| [bug.0428](../items/bug.0428.poly-redeem-worker-hardcodes-usdce.md)                  | V2 redeem collateralToken bug doc                                    |
-| [task.0429](../items/task.0429.poly-auto-wrap-usdce-to-pusd.md)                      | Auto-wrap design + scope + first-three-commits                       |
-| [proj.poly-copy-trading.md](../projects/proj.poly-copy-trading.md)                   | P5 roadmap, all 4 items linked, severity context                     |
+| File / Resource                                                                          | Why it matters                                                       |
+| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------- | ---------------------- |
+| [bug.0430](../items/bug.0430.poly-mirror-cap-leaks-on-error-rows-that-fill.md)           | Critical-path bug doc with file paths, fix options, validation block |
+| [bug.0431](../items/bug.0431.poly-redeem-policy-misclassifies-winners-as-losers.md)      | Misclassification bug doc with file paths and unit test plan         |
+| [bug.0428](../items/bug.0428.poly-redeem-worker-hardcodes-usdce.md)                      | V2 redeem collateralToken bug doc                                    |
+| [task.0429](../items/task.0429.poly-auto-wrap-usdce-to-pusd.md)                          | Auto-wrap design + scope + first-three-commits                       |
+| [proj.poly-copy-trading.md](../projects/proj.poly-copy-trading.md)                       | P5 roadmap, all 4 items linked, severity context                     |
 | [docs/spec/poly-tenant-and-collateral.md](../../docs/spec/poly-tenant-and-collateral.md) | V2 collateral lifecycle (USDC.e / pUSD / Onramp)                     |
-| `nodes/poly/app/src/features/trading/order-ledger.ts:137-175`                        | `cumulativeIntentForMarket` — bug.0430 lives here                    |
-| `nodes/poly/app/src/features/redeem/redeem-worker.ts:255-275`                        | Vanilla CTF dispatch + USDC.e hardcode (bug.0428)                    |
-| `nodes/poly/app/src/features/redeem/resolve-redeem-decision.ts`                      | Redeem policy decision (bug.0431)                                    |
-| PR #1131                                                                             | Most recent merged PR; the trio surfaced during its prod validation  |
-| Loki recipe (canary): `{env="production",service="app",pod=~"poly-node-app-.\*"}     | json                                                                 | event="poly.mirror.decision"` | Watch the cap behavior |
-| `scripts/loki-query.sh` (needs `.env.canary` in worktree root)                       | LogQL helper used throughout the diagnosis                           |
+| `nodes/poly/app/src/features/trading/order-ledger.ts:137-175`                            | `cumulativeIntentForMarket` — bug.0430 lives here                    |
+| `nodes/poly/app/src/features/redeem/redeem-worker.ts:255-275`                            | Vanilla CTF dispatch + USDC.e hardcode (bug.0428)                    |
+| `nodes/poly/app/src/features/redeem/resolve-redeem-decision.ts`                          | Redeem policy decision (bug.0431)                                    |
+| PR #1131                                                                                 | Most recent merged PR; the trio surfaced during its prod validation  |
+| Loki recipe (canary): `{env="production",service="app",pod=~"poly-node-app-.\*"}         | json                                                                 | event="poly.mirror.decision"` | Watch the cap behavior |
+| `scripts/loki-query.sh` (needs `.env.canary` in worktree root)                           | LogQL helper used throughout the diagnosis                           |
 
 ## PR / Links
 
