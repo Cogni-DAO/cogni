@@ -3,20 +3,24 @@
 
 /**
  * Module: `@app/api/v1/vcs/flight`
- * Purpose: CI-gated candidate-a flight request for external AI agents.
- *   Verifies CI is green for the PR head SHA, then dispatches candidate-flight.yml.
- *   The candidate slot controller (GitHub Actions workflow) owns the actual slot lease
- *   on the deploy branch — this endpoint does not replicate that logic.
- * Scope: Auth → CI gate → dispatch. No lease table. No polling hacks.
+ * Purpose: Session-gated, CI-gated candidate-a flight request for external AI agents.
+ *   Resolves an active work-item session bound to (repoFullName, prNumber); verifies
+ *   CI is green for the PR head SHA; dispatches candidate-flight.yml. The candidate
+ *   slot controller (GitHub Actions workflow) owns the actual slot lease — this
+ *   endpoint does not replicate that logic.
+ * Scope: Auth → session chokepoint → CI gate → dispatch. No lease table.
  * Invariants:
  *   - AUTH_REQUIRED: Bearer token (machine agents) or SIWE session. No open access.
+ *   - OPERATOR_MEDIATED_FLIGHT: 412 if no active work_item_sessions row is bound to
+ *     (repoFullName, prNumber). Every dispatch is auditable to a session.
  *   - CI_GATE: Rejects 422 if CI is not fully green for the PR head SHA.
  *   - CAPABILITY_BOUNDARY: Calls VcsCapability only — no direct Octokit in this file.
  *   - CONTRACTS_ARE_TRUTH: Input/output parsed through flightOperation contract.
  *   - NO_LEASE_SPLIT_BRAIN: Slot lease lives on the deploy branch (candidate-slot-controller);
  *     this route does not write a competing lease.
- * Side-effects: IO (GitHub REST API via VcsCapability)
- * Links: task.0361, packages/node-contracts/src/vcs.flight.v1.contract.ts,
+ * Side-effects: IO (GitHub REST API via VcsCapability, Postgres via session port)
+ * Links: design.operator-dev-lifecycle-coordinator, task.0361,
+ *   packages/node-contracts/src/vcs.flight.v1.contract.ts,
  *   docs/spec/development-lifecycle.md
  * @public
  */
@@ -61,8 +65,32 @@ export const POST = wrapRouteHandlerWithLogging(
     const { prNumber } = parsed.data;
 
     const { owner, repo } = getGithubRepo();
+    const repoFullName = `${owner}/${repo}`;
     const container = getContainer();
     const vcs = container.vcsCapability;
+
+    // OPERATOR_MEDIATED_FLIGHT: every dispatch must originate from an active
+    // work-item session bound to (repoFullName, prNumber). Naked dispatches
+    // (no claim, no PR-link) are rejected here so flights are auditable.
+    const session = await container.workItemSessions.lookupActiveByPr({
+      repoFullName,
+      prNumber,
+    });
+    if (!session) {
+      logRequestWarn(
+        ctx.log,
+        { repoFullName, prNumber, reason: "no_active_session" },
+        "vcs_flight.precondition_failed"
+      );
+      return NextResponse.json(
+        {
+          error: `No active work-item session is bound to PR #${prNumber} in ${repoFullName}. Claim a work item and link the PR (POST /api/v1/work/items/:id/pr with repoFullName) before requesting flight.`,
+          repoFullName,
+          prNumber,
+        },
+        { status: 412 }
+      );
+    }
 
     // CI gate: verify all checks are green for the exact PR head SHA
     const ciStatus = await vcs.getCiStatus({ owner, repo, prNumber });
@@ -91,6 +119,18 @@ export const POST = wrapRouteHandlerWithLogging(
         prNumber,
         headSha: ciStatus.headSha,
       });
+
+      ctx.log.info(
+        {
+          repoFullName,
+          prNumber,
+          headSha: dispatch.headSha,
+          coordinationId: session.id,
+          workItemId: session.workItemId,
+          claimedByUserId: session.claimedByUserId,
+        },
+        "vcs_flight.dispatched"
+      );
 
       return NextResponse.json(
         flightOperation.output.parse({

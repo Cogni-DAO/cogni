@@ -3,15 +3,17 @@
 
 /**
  * Module: `@tests/contract/app/vcs.flight`
- * Purpose: Contract tests for POST /api/v1/vcs/flight — CI gate and dispatch logic.
- * Scope: Verifies 422 CI gate rejection, 202 success shape, and 401 auth enforcement.
- *   Uses mocked VcsCapability and repoSpec — no real GitHub API calls.
+ * Purpose: Contract tests for POST /api/v1/vcs/flight — session chokepoint, CI gate, dispatch.
+ * Scope: Verifies 412 session chokepoint, 422 CI gate, 202 success shape, 401 auth.
+ *   Uses mocked VcsCapability, workItemSessions port, and repoSpec — no real GitHub or DB.
  * Invariants:
+ *   - OPERATOR_MEDIATED_FLIGHT: 412 when no active session bound to (repoFullName, prNumber)
  *   - CI_GATE: 422 when allGreen=false or pending=true
  *   - AUTH_REQUIRED: 401 when no authenticated session
  *   - CONTRACTS_ARE_TRUTH: 202 response matches flightOperation.output schema
  * Side-effects: none
- * Links: task.0361, nodes/operator/app/src/app/api/v1/vcs/flight/route.ts,
+ * Links: design.operator-dev-lifecycle-coordinator, task.0361,
+ *   nodes/operator/app/src/app/api/v1/vcs/flight/route.ts,
  *   packages/node-contracts/src/vcs.flight.v1.contract.ts
  * @internal
  */
@@ -34,6 +36,23 @@ import * as appHandler from "@/app/api/v1/vcs/flight/route";
 const mockGetCiStatus = vi.fn<() => Promise<CiStatusResult>>();
 const mockDispatchCandidateFlight =
   vi.fn<() => Promise<DispatchCandidateFlightResult>>();
+const mockLookupActiveByPr = vi.fn();
+
+const ACTIVE_SESSION = {
+  id: "00000000-0000-4000-8000-000000005007",
+  workItemId: "task.5007",
+  claimedByUserId: "user-1",
+  claimedByDisplayName: "agent-one",
+  status: "active" as const,
+  claimedAt: new Date("2026-05-02T11:55:00.000Z"),
+  lastHeartbeatAt: null,
+  deadlineAt: new Date("2026-05-02T12:30:00.000Z"),
+  closedAt: null,
+  lastCommand: "/implement",
+  branch: "feat/x",
+  prNumber: 42,
+  repoFullName: "test-owner/test-repo",
+};
 
 vi.mock("@/bootstrap/container", () => ({
   getContainer: vi.fn(() => ({
@@ -57,6 +76,13 @@ vi.mock("@/bootstrap/container", () => ({
       listPrs: vi.fn(),
       mergePr: vi.fn(),
       createBranch: vi.fn(),
+    },
+    workItemSessions: {
+      lookupActiveByPr: mockLookupActiveByPr,
+      claim: vi.fn(),
+      heartbeat: vi.fn(),
+      linkPr: vi.fn(),
+      getCurrent: vi.fn(),
     },
   })),
 }));
@@ -110,6 +136,8 @@ describe("POST /api/v1/vcs/flight", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(session.getSessionUser).mockResolvedValue(TEST_SESSION_USER_1);
+    // Default: an active session exists for the requested PR.
+    mockLookupActiveByPr.mockResolvedValue(ACTIVE_SESSION);
   });
 
   it("returns 401 when unauthenticated", async () => {
@@ -124,6 +152,48 @@ describe("POST /api/v1/vcs/flight", () => {
           body: JSON.stringify({ prNumber: 42 }),
         });
         expect(res.status).toBe(401);
+      },
+    });
+  });
+
+  it("returns 412 when no active session is bound to the PR", async () => {
+    mockLookupActiveByPr.mockResolvedValue(null);
+
+    await testApiHandler({
+      appHandler,
+      async test({ fetch }) {
+        const res = await fetch({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prNumber: 42 }),
+        });
+        expect(res.status).toBe(412);
+        const body = await res.json();
+        expect(body.error).toMatch(/No active work-item session/);
+        expect(body.repoFullName).toBe("test-owner/test-repo");
+        expect(body.prNumber).toBe(42);
+        expect(mockGetCiStatus).not.toHaveBeenCalled();
+        expect(mockDispatchCandidateFlight).not.toHaveBeenCalled();
+      },
+    });
+  });
+
+  it("looks up session by (repoFullName, prNumber) derived from getGithubRepo", async () => {
+    mockGetCiStatus.mockResolvedValue(makeGreenCiStatus());
+    mockDispatchCandidateFlight.mockResolvedValue(DISPATCH_RESULT);
+
+    await testApiHandler({
+      appHandler,
+      async test({ fetch }) {
+        await fetch({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prNumber: 42 }),
+        });
+        expect(mockLookupActiveByPr).toHaveBeenCalledWith({
+          repoFullName: "test-owner/test-repo",
+          prNumber: 42,
+        });
       },
     });
   });
@@ -166,7 +236,7 @@ describe("POST /api/v1/vcs/flight", () => {
     });
   });
 
-  it("returns 202 with correct output shape when CI is green", async () => {
+  it("returns 202 with correct output shape when session + CI both green", async () => {
     mockGetCiStatus.mockResolvedValue(makeGreenCiStatus());
     mockDispatchCandidateFlight.mockResolvedValue(DISPATCH_RESULT);
 
@@ -180,7 +250,6 @@ describe("POST /api/v1/vcs/flight", () => {
         });
         expect(res.status).toBe(202);
         const body = await res.json();
-        // Validates against the Zod output contract
         const parsed = flightOperation.output.safeParse(body);
         expect(parsed.success).toBe(true);
         expect(body.slot).toBe("candidate-a");
