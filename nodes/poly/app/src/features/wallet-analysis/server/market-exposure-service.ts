@@ -364,10 +364,7 @@ function groupParticipants(
     const ourValueUsdc = roundMoney(sumValue(ourLegs));
     const targetValueUsdc = roundMoney(sumValue(targetLegs));
 
-    // Our side: aggregate fill rollups across all our legs in this condition.
-    // RETURN_FROM_FILLS — fall back to position-derived cost basis when no
-    // fills row exists yet (fresh wallet not yet observed).
-    const ourAgg = aggregateWalletReturn(ourLegs, rollups, true);
+    const ourAgg = aggregateWalletReturn(ourLegs, rollups);
     const ourReturnPct = positionReturnPct({
       totalBuyNotional: ourAgg.totalBuyNotional,
       realizedCash: ourAgg.realizedCash,
@@ -386,7 +383,7 @@ function groupParticipants(
       returnPct: number | null;
     }[] = [];
     for (const tlegs of byTargetWallet.values()) {
-      const agg = aggregateWalletReturn(tlegs, rollups, false);
+      const agg = aggregateWalletReturn(tlegs, rollups);
       targetEntries.push({
         totalBuyNotional: agg.totalBuyNotional,
         returnPct: positionReturnPct({
@@ -543,15 +540,17 @@ function groupParticipants(
 
 /**
  * Sum (totalBuyNotional, realizedCash, currentMarkValue) across a wallet's
- * legs in one condition. `useFallback=true` (our wallet) substitutes the
- * leg's `costBasisUsdc` for `totalBuyNotional` when the rollup row is missing
- * — covers the "wallet not observed yet" early state. Targets always rely
- * on observed fills; missing rollups → zero notional → null returnPct.
+ * legs in one condition. `totalBuyNotional` is the larger of the observed
+ * fill-rollup BUY sum and the snapshot-derived cost basis: the fill rollup
+ * is authoritative when complete (preserves original BUY notional through
+ * partial-closes), but for target wallets whose fill history predates our
+ * backfill horizon the rollup undercounts and the snapshot (Polymarket
+ * vendor-published) is the truth. Picking the max recovers both shapes
+ * without a wallet-class-specific branch.
  */
 function aggregateWalletReturn(
   legs: readonly RawLeg[],
-  rollups: ReadonlyMap<string, FillRollup>,
-  useFallback: boolean
+  rollups: ReadonlyMap<string, FillRollup>
 ): {
   totalBuyNotional: number;
   realizedCash: number;
@@ -560,7 +559,6 @@ function aggregateWalletReturn(
   if (legs.length === 0) {
     return { totalBuyNotional: 0, realizedCash: 0, currentMarkValue: 0 };
   }
-  // Per (wallet, condition) — every leg in this set shares both keys.
   const first = legs[0];
   if (first === undefined) {
     return { totalBuyNotional: 0, realizedCash: 0, currentMarkValue: 0 };
@@ -571,27 +569,14 @@ function aggregateWalletReturn(
     (sum, leg) => sum + leg.currentValueUsdc,
     0
   );
-  if (rollup !== undefined) {
-    return {
-      totalBuyNotional: rollup.totalBuyNotional,
-      realizedCash: rollup.realizedCash,
-      currentMarkValue,
-    };
-  }
-  if (!useFallback) {
-    return {
-      totalBuyNotional: 0,
-      realizedCash: 0,
-      currentMarkValue,
-    };
-  }
-  // Fallback: derive from the snapshot/position-side cost basis we already
-  // built into RawLeg. Sum of legs.costBasisUsdc approximates totalBuyNotional
-  // for positions that haven't been partial-closed; partial-close cases will
-  // converge once fills are observed.
+  const snapshotCostBasis = legs.reduce(
+    (sum, leg) => sum + leg.costBasisUsdc,
+    0
+  );
+  const rollupNotional = rollup?.totalBuyNotional ?? 0;
   return {
-    totalBuyNotional: legs.reduce((sum, leg) => sum + leg.costBasisUsdc, 0),
-    realizedCash: 0,
+    totalBuyNotional: Math.max(rollupNotional, snapshotCostBasis),
+    realizedCash: rollup?.realizedCash ?? 0,
     currentMarkValue,
   };
 }
