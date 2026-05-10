@@ -3,10 +3,7 @@
 
 /**
  * Module: tests/unit/core/redeem/error-classification
- * Purpose: Coverage for the bug.5041 RPC-vs-chain-revert classifier. Each
- *   row of the prod failure-mode table from the 2026-05-09/10 incidents
- *   has at least one fixture here so a regression in classification
- *   would mass-abandon redeem jobs again.
+ * Purpose: Unit coverage for the redeem-tx error classifier.
  * Scope: Pure logic. No DB, no chain, no time.
  * Links: src/core/redeem/error-classification.ts, work/items/bug.5041
  */
@@ -112,9 +109,6 @@ describe("classifyRedeemError: rpc_transient (does NOT consume retry budget)", (
 
 describe("classifyRedeemError: chain_revert wins over rpc-shaped messages", () => {
   it("classifies a tx with both decoded reason AND rpc-style shortMessage as chain_revert", () => {
-    // Alchemy sometimes wraps a real chain revert into a "Missing or invalid
-    // parameters" envelope. The decoded reason/data is the load-bearing
-    // signal, so the classifier must trust those over the message string.
     expect(
       classifyRedeemError({
         reason: "execution reverted",

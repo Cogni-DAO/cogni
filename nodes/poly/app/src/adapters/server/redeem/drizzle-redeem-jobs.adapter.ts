@@ -312,8 +312,6 @@ export class DrizzleRedeemJobsAdapter implements RedeemJobsPort {
       .set({
         status: "failed_transient",
         lastError: input.error,
-        // attempt_count intentionally NOT bumped — RPC flukes don't
-        // consume the 3-strike circuit-breaker budget. (bug.5041)
         updatedAt: new Date(),
       })
       .where(eq(polyRedeemJobs.id, input.jobId));

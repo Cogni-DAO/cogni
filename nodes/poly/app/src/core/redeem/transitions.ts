@@ -24,10 +24,8 @@
  *     "redeemed off-pipeline" and confirmed defensively.
  *   - REDEEM_HAS_CIRCUIT_BREAKER — three transient failures escalate to
  *     `abandoned/transient_exhausted`. Only `transient_failure` events
- *     consume retry budget; `rpc_transient_failure` (Alchemy/transport
- *     flukes pre-broadcast) returns the row to `failed_transient` without
- *     bumping `attempt_count` so a 30-min Polygon RPC outage cannot
- *     mass-abandon the queue (bug.5041).
+ *     consume retry budget; `rpc_transient_failure` defers without
+ *     bumping `attempt_count`.
  *   - REDEEM_RETRY_IS_TRANSIENT_ONLY — malformed-class events skip the retry loop.
  * Side-effects: none
  * Links: docs/design/poly-positions.md § Lifecycle, work/items/task.0388,
@@ -50,15 +48,11 @@ export const REDEEM_MAX_TRANSIENT_ATTEMPTS = 3;
  *   event from funder at N=5 finality.
  * - `payout_redemption_reorged` — subscriber observed a removed log: a
  *   `PayoutRedemption` we'd already counted just got rolled back.
- * - `transient_failure` — worker hit a chain-revert or unclassified error
- *   during submit. Consumes the 3-strike retry budget.
- * - `rpc_transient_failure` — worker hit an RPC-infrastructure error
- *   pre-broadcast (Alchemy "Missing or invalid parameters", network
- *   timeouts, JSON-RPC transport flakiness). Returns the row to
- *   `failed_transient` for re-claim on the next tick WITHOUT bumping
- *   `attempt_count`. The 3-strike circuit breaker exists to stop a
- *   permanently-broken redemption from looping forever; an RPC fluke is
- *   not that. (bug.5041)
+ * - `transient_failure` — chain-revert or unclassified error. Consumes
+ *   the 3-strike retry budget.
+ * - `rpc_transient_failure` — RPC-infrastructure error pre-broadcast.
+ *   Defers the row for re-claim on the next tick WITHOUT bumping
+ *   `attempt_count`.
  * - `reaper_chain_evidence` — N=5 blocks elapsed; reaper queried chain truth.
  *   `payoutObserved` ⇒ confirmed; `!payoutObserved && balance>0` ⇒ bleed →
  *   abandoned/malformed; `!payoutObserved && balance==0` ⇒ confirmed
@@ -258,10 +252,6 @@ export function transition(
           reason: `rpc_transient from status=${job.status}`,
         };
       }
-      // RPC flake — defer the row to the next tick by returning it to
-      // failed_transient. attempt_count is intentionally NOT incremented:
-      // an Alchemy or transport hiccup must not consume the chain-revert
-      // retry budget. (bug.5041)
       return {
         ok: true,
         transition: {

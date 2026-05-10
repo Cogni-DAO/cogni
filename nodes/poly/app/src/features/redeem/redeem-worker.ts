@@ -346,16 +346,7 @@ export class RedeemWorker {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      // Decode the actual revert reason out of viem's wrapped error so Loki
-      // captures `revert_reason` + `revert_data` instead of just the
-      // generic "redeemPositions reverted" string. (bug.5040 follow-up)
       const revert = decodeRevertReason(err);
-      // Classify into RPC-infrastructure vs chain-revert. RPC flukes
-      // (Alchemy "Missing or invalid parameters" pre-broadcast, network
-      // timeouts) defer the row without consuming the 3-strike budget;
-      // chain reverts and unknown errors keep the existing circuit-breaker
-      // semantics. The bug.5041 incident burst was 92% rpc_transient
-      // failures eating into the 3-strike budget. (bug.5041)
       const errorClass: RedeemErrorClass = classifyRedeemError({
         reason: revert.reason,
         data: revert.data,

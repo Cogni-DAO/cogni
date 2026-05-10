@@ -189,7 +189,7 @@ describe("transition: transient_failure (REDEEM_HAS_CIRCUIT_BREAKER)", () => {
   });
 });
 
-describe("transition: rpc_transient_failure (bug.5041)", () => {
+describe("transition: rpc_transient_failure", () => {
   it("flips claimed → failed_transient WITHOUT incrementing attempt_count", () => {
     const result = transition(baseJob, {
       kind: "rpc_transient_failure",
@@ -216,9 +216,6 @@ describe("transition: rpc_transient_failure (bug.5041)", () => {
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    // Critical bug.5041 invariant: an RPC fluke at strike 2 must NOT
-    // tip the row to abandoned. A 30-min Polygon outage hitting 3 ticks
-    // would otherwise mass-abandon the queue.
     expect(result.transition.nextStatus).toBe("failed_transient");
     expect(result.transition.incrementAttemptCount).toBe(false);
   });
