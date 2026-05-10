@@ -11,7 +11,8 @@ implements: proj.poly-copy-trading
 owner: derekg1729
 created: 2026-05-10
 verified: 2026-05-10
-tags: [poly, polymarket, copy-trading, lifecycle, state-machine, redeem, position]
+tags:
+  [poly, polymarket, copy-trading, lifecycle, state-machine, redeem, position]
 replaces:
   - docs/spec/poly-copy-trade-phase1.md
   - docs/spec/poly-order-position-lifecycle.md
@@ -73,11 +74,11 @@ Three sibling slices under `nodes/poly/app/src/features/`. Each owns its vocabul
 
 ### Layer responsibilities
 
-| Layer | Vocabulary | Inputs | Outputs |
-|---|---|---|---|
-| `features/trading/` | order, intent, receipt, ledger | `OrderIntent`, CLOB receipts | `LedgerRow` transitions, snapshots |
-| `features/wallet-watch/` | trade, fill, cursor | tracked-wallet address, since-cursor | `Fill[]` |
-| `features/copy-trade/` | target, mirror, fill, position-branch | `Fill`, `MirrorTargetConfig`, `RuntimeState` | `MirrorPlan` (place \| skip), decisions ledger row |
+| Layer                    | Vocabulary                            | Inputs                                       | Outputs                                            |
+| ------------------------ | ------------------------------------- | -------------------------------------------- | -------------------------------------------------- |
+| `features/trading/`      | order, intent, receipt, ledger        | `OrderIntent`, CLOB receipts                 | `LedgerRow` transitions, snapshots                 |
+| `features/wallet-watch/` | trade, fill, cursor                   | tracked-wallet address, since-cursor         | `Fill[]`                                           |
+| `features/copy-trade/`   | target, mirror, fill, position-branch | `Fill`, `MirrorTargetConfig`, `RuntimeState` | `MirrorPlan` (place \| skip), decisions ledger row |
 
 ### Two runtime consumers
 
@@ -92,21 +93,21 @@ A position has **one identity, four authorities, seven lifecycle states**. The p
 
 ### Four identities — the same position
 
-| Identity | Where it lives | Stability |
-|---|---|---|
-| `(wallet, conditionId, outcomeIndex)` | Domain key — what the user thinks of | Forever |
-| `tokenId` (ERC-1155 id, decimal) | Polymarket Data API `position.asset` | Forever |
-| `positionId` (ERC-1155 id, BigInt) | CTF contract balance lookup | Forever (same number, base 10) |
-| `(funderAddress, positionId)` slot | Polygon CTF `balanceOf(addr, id)` | The actual on-chain truth |
+| Identity                              | Where it lives                       | Stability                      |
+| ------------------------------------- | ------------------------------------ | ------------------------------ |
+| `(wallet, conditionId, outcomeIndex)` | Domain key — what the user thinks of | Forever                        |
+| `tokenId` (ERC-1155 id, decimal)      | Polymarket Data API `position.asset` | Forever                        |
+| `positionId` (ERC-1155 id, BigInt)    | CTF contract balance lookup          | Forever (same number, base 10) |
+| `(funderAddress, positionId)` slot    | Polygon CTF `balanceOf(addr, id)`    | The actual on-chain truth      |
 
 ### Four authorities — ordered
 
-| # | Authority | Latency | Decides |
-|---|---|---|---|
-| 1 | **Polygon chain** (CTF + ERC-1155 + ERC-20) | seconds (finality) | Balance, payout numerators, redemption, allowance |
-| 2 | **Polymarket CLOB write path** | seconds | Order acceptance, fills |
-| 3 | **Polymarket Data API** (`/positions`, `/balance-allowance`, `/trades`) | 5–60s lag | Discovery, UI hints. **Never** authority for a write decision |
-| 4 | **Local DB** (`poly_*` tables) | as-of-last-write | App-owned write intent + cached read. Never authority for chain truth |
+| #   | Authority                                                               | Latency            | Decides                                                               |
+| --- | ----------------------------------------------------------------------- | ------------------ | --------------------------------------------------------------------- |
+| 1   | **Polygon chain** (CTF + ERC-1155 + ERC-20)                             | seconds (finality) | Balance, payout numerators, redemption, allowance                     |
+| 2   | **Polymarket CLOB write path**                                          | seconds            | Order acceptance, fills                                               |
+| 3   | **Polymarket Data API** (`/positions`, `/balance-allowance`, `/trades`) | 5–60s lag          | Discovery, UI hints. **Never** authority for a write decision         |
+| 4   | **Local DB** (`poly_*` tables)                                          | as-of-last-write   | App-owned write intent + cached read. Never authority for chain truth |
 
 **Hard rule**: every write decision (place, cancel, close, redeem) consults #1 or #2 only. #3 is a discovery hint; #4 is a cache.
 
@@ -144,31 +145,31 @@ stateDiagram-v2
 
 **Authority per state entry**
 
-| State | Means | Authority for *entry* |
-|---|---|---|
-| `intent` | Submitted a CLOB order; no fill yet | #2 CLOB write ack |
-| `open` | Wallet has > 0 ERC-1155 balance | #1 chain `balanceOf` (Data API used for *enumeration only*) |
-| `closing` | A SELL is in flight against an open position | #2 CLOB write ack |
-| `closed` | Open → Closing → balance reaches 0 via SELL | #1 chain `balanceOf == 0` after fill |
-| `rejected` | CLOB refused the order | #2 CLOB error response |
-| `resolving` | Market entered resolution (UMA / admin) | #1 CTF `ConditionResolution` event |
-| `winner` | Resolved AND `payoutNumerator(condId, ourIdx) > 0` | #1 CTF `payoutNumerators` |
-| `loser` | Resolved AND `payoutNumerator(condId, ourIdx) == 0` | #1 CTF `payoutNumerators` |
-| `dust` | Loser with non-zero ERC-1155 balance | #1 chain (terminal — never write against this) |
-| `redeem_pending` | `redeemPositions` tx submitted, awaiting receipt | #2 chain submit ack + local job row |
-| `redeemed` | `PayoutRedemption(redeemer=funder, ...)` observed | #1 chain event |
-| `redeem_failed` | Receipt status=success, no `PayoutRedemption` from our funder, OR receipt status=failure | #1 chain event absence + receipt status |
-| `abandoned` | Three transient retries exhausted, OR malformed decision | Local DB attempt counter — page a human |
+| State            | Means                                                                                    | Authority for _entry_                                       |
+| ---------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `intent`         | Submitted a CLOB order; no fill yet                                                      | #2 CLOB write ack                                           |
+| `open`           | Wallet has > 0 ERC-1155 balance                                                          | #1 chain `balanceOf` (Data API used for _enumeration only_) |
+| `closing`        | A SELL is in flight against an open position                                             | #2 CLOB write ack                                           |
+| `closed`         | Open → Closing → balance reaches 0 via SELL                                              | #1 chain `balanceOf == 0` after fill                        |
+| `rejected`       | CLOB refused the order                                                                   | #2 CLOB error response                                      |
+| `resolving`      | Market entered resolution (UMA / admin)                                                  | #1 CTF `ConditionResolution` event                          |
+| `winner`         | Resolved AND `payoutNumerator(condId, ourIdx) > 0`                                       | #1 CTF `payoutNumerators`                                   |
+| `loser`          | Resolved AND `payoutNumerator(condId, ourIdx) == 0`                                      | #1 CTF `payoutNumerators`                                   |
+| `dust`           | Loser with non-zero ERC-1155 balance                                                     | #1 chain (terminal — never write against this)              |
+| `redeem_pending` | `redeemPositions` tx submitted, awaiting receipt                                         | #2 chain submit ack + local job row                         |
+| `redeemed`       | `PayoutRedemption(redeemer=funder, ...)` observed                                        | #1 chain event                                              |
+| `redeem_failed`  | Receipt status=success, no `PayoutRedemption` from our funder, OR receipt status=failure | #1 chain event absence + receipt status                     |
+| `abandoned`      | Three transient retries exhausted, OR malformed decision                                 | Local DB attempt counter — page a human                     |
 
 ## Three state machines
 
 Three independent state axes; one stored per DB column. Canonical types in `nodes/poly/app/src/features/trading/order-ledger.types.ts`.
 
-| Axis | DB field | Meaning | Authority |
-|---|---|---|---|
-| Order | `poly_copy_trade_fills.status` | CLOB order row state | CLOB receipt + reconciler |
-| Position | `poly_copy_trade_fills.position_lifecycle` | Asset-scoped exposure for one token | Ledger writers, close/refresh, redeem mirror |
-| Redeem job | `poly_redeem_jobs.status` + `lifecycle_state` | Redeem-tx job state | Redeem worker + subscriber + reaper |
+| Axis       | DB field                                      | Meaning                             | Authority                                    |
+| ---------- | --------------------------------------------- | ----------------------------------- | -------------------------------------------- |
+| Order      | `poly_copy_trade_fills.status`                | CLOB order row state                | CLOB receipt + reconciler                    |
+| Position   | `poly_copy_trade_fills.position_lifecycle`    | Asset-scoped exposure for one token | Ledger writers, close/refresh, redeem mirror |
+| Redeem job | `poly_redeem_jobs.status` + `lifecycle_state` | Redeem-tx job state                 | Redeem worker + subscriber + reaper          |
 
 ### 1. Mirror Decision → Limit Order
 
@@ -203,6 +204,7 @@ flowchart TD
 ```
 
 Review boundaries:
+
 - `wallet-watch` only observes and emits normalized fills. It must not decide, write ledger rows, or place orders.
 - `planMirrorFromFill` is pure. It receives target config, runtime snapshot, market constraints, and target-position context as input.
 - `ledger.insertPending` runs **before** `placeIntent`. This is the at-most-once gate.
@@ -294,41 +296,41 @@ flowchart TD
 
 ## Order status (`LedgerStatus`)
 
-| Status | Meaning | Active order? | Position exposure? |
-|---|---|---|---|
-| `pending` | Ledger row inserted before placement returns | Yes | No, unless filled evidence later appears |
-| `open` | CLOB accepted a resting order | Yes | Only if `filled_size_usdc > 0` |
-| `partial` | CLOB order has filled shares and may have remaining size | Yes | Yes |
-| `filled` | CLOB order fully filled | No | Yes |
-| `canceled` | CLOB order canceled or promoted from stale `not_found` | No | Yes only when filled evidence exists |
-| `error` | Placement failed at the boundary | No | No unless explicit filled evidence/lifecycle exists. Market-FOK errors still count intent for caps |
+| Status     | Meaning                                                  | Active order? | Position exposure?                                                                                 |
+| ---------- | -------------------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------- |
+| `pending`  | Ledger row inserted before placement returns             | Yes           | No, unless filled evidence later appears                                                           |
+| `open`     | CLOB accepted a resting order                            | Yes           | Only if `filled_size_usdc > 0`                                                                     |
+| `partial`  | CLOB order has filled shares and may have remaining size | Yes           | Yes                                                                                                |
+| `filled`   | CLOB order fully filled                                  | No            | Yes                                                                                                |
+| `canceled` | CLOB order canceled or promoted from stale `not_found`   | No            | Yes only when filled evidence exists                                                               |
+| `error`    | Placement failed at the boundary                         | No            | No unless explicit filled evidence/lifecycle exists. Market-FOK errors still count intent for caps |
 
 Order writers (in `nodes/poly/app/src/features/trading/order-ledger.ts`):
 
-| Writer | Transition |
-|---|---|
-| `insertPending` | New row starts `status='pending'`, `position_lifecycle=NULL` |
-| `markOrderId` | Maps placement receipt to `open`, `partial`, `filled`, or `canceled`; promotes lifecycle to `open` when receipt has fill evidence |
-| `updateStatus` | Reconciler updates status + `filled_size_usdc`; promotes lifecycle to `open` when fill evidence appears |
-| `markCanceled` | User/system cancel; does not clear position exposure |
-| `markError` | Placement-boundary error; does not claim exposure |
+| Writer          | Transition                                                                                                                        |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `insertPending` | New row starts `status='pending'`, `position_lifecycle=NULL`                                                                      |
+| `markOrderId`   | Maps placement receipt to `open`, `partial`, `filled`, or `canceled`; promotes lifecycle to `open` when receipt has fill evidence |
+| `updateStatus`  | Reconciler updates status + `filled_size_usdc`; promotes lifecycle to `open` when fill evidence appears                           |
+| `markCanceled`  | User/system cancel; does not clear position exposure                                                                              |
+| `markError`     | Placement-boundary error; does not claim exposure                                                                                 |
 
 ## Position lifecycle (`LedgerPositionLifecycle`)
 
-| Lifecycle | Class | Meaning | Active resting slot? |
-|---|---|---|---|
-| `NULL` | no proven position | No typed exposure yet | Yes when order status is `pending`, `open`, or `partial` |
-| `unresolved` | active | Position exists; market resolution not known | Yes |
-| `open` | active | Position exists and is not closing/resolving/redeemed | Yes |
-| `closing` | active | Close is in progress | Yes |
-| `closed` | terminal | Wallet no longer holds this asset after sell/refresh | No |
-| `resolving` | action | Market resolution being evaluated | No |
-| `winner` | action | Asset is a winning/redeemable outcome | No |
-| `redeem_pending` | action | Redeem transaction submitted or reorg-reset to submitted | No |
-| `redeemed` | terminal | Redeem completed or chain proves no remaining balance | No |
-| `loser` | terminal | Losing outcome | No |
-| `dust` | terminal | Loser with non-zero balance (reserved; current policy does not emit) | No |
-| `abandoned` | stuck (job-only) | Redeem WORKER exhausted retries; shares may still be on chain. **NOT a position-terminal state** — dashboard reads chain authority | No |
+| Lifecycle        | Class              | Meaning                                                                                                                            | Active resting slot?                                     |
+| ---------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `NULL`           | no proven position | No typed exposure yet                                                                                                              | Yes when order status is `pending`, `open`, or `partial` |
+| `unresolved`     | active             | Position exists; market resolution not known                                                                                       | Yes                                                      |
+| `open`           | active             | Position exists and is not closing/resolving/redeemed                                                                              | Yes                                                      |
+| `closing`        | active             | Close is in progress                                                                                                               | Yes                                                      |
+| `closed`         | terminal           | Wallet no longer holds this asset after sell/refresh                                                                               | No                                                       |
+| `resolving`      | action             | Market resolution being evaluated                                                                                                  | No                                                       |
+| `winner`         | action             | Asset is a winning/redeemable outcome                                                                                              | No                                                       |
+| `redeem_pending` | action             | Redeem transaction submitted or reorg-reset to submitted                                                                           | No                                                       |
+| `redeemed`       | terminal           | Redeem completed or chain proves no remaining balance                                                                              | No                                                       |
+| `loser`          | terminal           | Losing outcome                                                                                                                     | No                                                       |
+| `dust`           | terminal           | Loser with non-zero balance (reserved; current policy does not emit)                                                               | No                                                       |
+| `abandoned`      | stuck (job-only)   | Redeem WORKER exhausted retries; shares may still be on chain. **NOT a position-terminal state** — dashboard reads chain authority | No                                                       |
 
 Predicates live in `nodes/poly/app/src/features/trading/ledger-lifecycle.ts`.
 
@@ -338,20 +340,20 @@ Terminal lifecycles are `closed`, `redeemed`, `loser`, `dust`. Terminal rows are
 
 Fast review matrix for order + position state. Reviewers should check every change against this table.
 
-| Order status | `position_lifecycle` | Meaning | Dashboard / action behavior |
-|---|---|---|---|
-| `pending` | `NULL` | Insert-before-place row, no receipt yet | Active order/resting; no position value |
-| `open` | `NULL` | Resting order with no fill evidence | Active order/resting; no position value |
-| `open` | `open` | Resting order with partial fill evidence | Live position + remaining order |
-| `partial` | `open` | Partial fill | Live position; may still rest |
-| `filled` | `open` | Fully filled position | Live position |
-| `canceled` | `NULL` | No-fill canceled order | Inert history; no position |
-| `canceled` | `open` or action/terminal | Filled before cancel or later lifecycle evidence | Preserve and display according to lifecycle |
-| `error` | `NULL` | Failed placement with no exposure proof | Inert; market-FOK may still count cap intent |
-| `error` | `open` or action/terminal | Failed boundary but exposure later proven | Preserve and display according to lifecycle |
-| any | terminal lifecycle | Historical asset row | Not active/resting; current value = 0 |
-| any | `winner` | Redeemable asset | Actionable redeem row |
-| any | `redeem_pending` | Redeem in flight | Action disabled or pending |
+| Order status | `position_lifecycle`      | Meaning                                          | Dashboard / action behavior                  |
+| ------------ | ------------------------- | ------------------------------------------------ | -------------------------------------------- |
+| `pending`    | `NULL`                    | Insert-before-place row, no receipt yet          | Active order/resting; no position value      |
+| `open`       | `NULL`                    | Resting order with no fill evidence              | Active order/resting; no position value      |
+| `open`       | `open`                    | Resting order with partial fill evidence         | Live position + remaining order              |
+| `partial`    | `open`                    | Partial fill                                     | Live position; may still rest                |
+| `filled`     | `open`                    | Fully filled position                            | Live position                                |
+| `canceled`   | `NULL`                    | No-fill canceled order                           | Inert history; no position                   |
+| `canceled`   | `open` or action/terminal | Filled before cancel or later lifecycle evidence | Preserve and display according to lifecycle  |
+| `error`      | `NULL`                    | Failed placement with no exposure proof          | Inert; market-FOK may still count cap intent |
+| `error`      | `open` or action/terminal | Failed boundary but exposure later proven        | Preserve and display according to lifecycle  |
+| any          | terminal lifecycle        | Historical asset row                             | Not active/resting; current value = 0        |
+| any          | `winner`                  | Redeemable asset                                 | Actionable redeem row                        |
+| any          | `redeem_pending`          | Redeem in flight                                 | Action disabled or pending                   |
 
 ## Mirror position cache view (`MirrorPositionView`)
 
@@ -359,13 +361,13 @@ Synchronous cache derived from `poly_copy_trade_fills` at snapshot time; consume
 
 ### Authority bounds
 
-| Concern | Authority used | Type |
-|---|---|---|
-| Mirror policy hint (already-mirrored? which side?) | #4 Local DB cache | `MirrorPositionView` |
-| Settlement / redeem | #1 Polygon chain via `poly_redeem_jobs` flow | `OperatorPosition` + chain reads |
-| SELL routing pre-check (do we have balance to close?) | #3 Data API via `getOperatorPositions`, then #2 CLOB | `OperatorPosition` |
+| Concern                                               | Authority used                                       | Type                             |
+| ----------------------------------------------------- | ---------------------------------------------------- | -------------------------------- |
+| Mirror policy hint (already-mirrored? which side?)    | #4 Local DB cache                                    | `MirrorPositionView`             |
+| Settlement / redeem                                   | #1 Polygon chain via `poly_redeem_jobs` flow         | `OperatorPosition` + chain reads |
+| SELL routing pre-check (do we have balance to close?) | #3 Data API via `getOperatorPositions`, then #2 CLOB | `OperatorPosition`               |
 
-**Hard rule**: `MirrorPositionView` may inform *what to plan* (skip / hedge / layer / route to closePosition). It must **never** be used to decide *whether the wallet actually holds the shares* — that path stays as today via `getOperatorPositions` (#3 → #1).
+**Hard rule**: `MirrorPositionView` may inform _what to plan_ (skip / hedge / layer / route to closePosition). It must **never** be used to decide _whether the wallet actually holds the shares_ — that path stays as today via `getOperatorPositions` (#3 → #1).
 
 ### Shape
 
@@ -419,12 +421,12 @@ export const RuntimeStateSchema = z.object({
 
 ### How follow-ons reduce to predicates
 
-| Follow-on | Predicate on `state.position` | Action |
-|---|---|---|
-| Hedge-followup | `position?.our_qty_shares > 0 && fill.attributes.token_id === position.opposite_token_id` | Size = `min(market_min, position.our_qty_shares × fill.price, max_usdc_per_trade)` |
-| SELL-mirror (close-on-target-SELL) | `fill.side === 'SELL' && position?.our_token_id === fill.attributes.token_id` | Route to `closePosition` sized `min(target_close_pct × position.our_qty_shares, position.our_qty_shares)`. SELL execution still requires the live `getOperatorPositions` chain check. |
-| Layering-aware filter | `fill.side === 'BUY' && position?.our_token_id === fill.attributes.token_id` | Bypass percentile filter; same-side scale-in |
-| Bankroll-fractional sizer | Reads `position?.our_qty_shares` and `our_vwap_usdc` as inputs | Size = `f(target_$, target_bankroll, our_bankroll, position?.our_qty_shares ?? 0)` |
+| Follow-on                          | Predicate on `state.position`                                                             | Action                                                                                                                                                                                |
+| ---------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hedge-followup                     | `position?.our_qty_shares > 0 && fill.attributes.token_id === position.opposite_token_id` | Size = `min(market_min, position.our_qty_shares × fill.price, max_usdc_per_trade)`                                                                                                    |
+| SELL-mirror (close-on-target-SELL) | `fill.side === 'SELL' && position?.our_token_id === fill.attributes.token_id`             | Route to `closePosition` sized `min(target_close_pct × position.our_qty_shares, position.our_qty_shares)`. SELL execution still requires the live `getOperatorPositions` chain check. |
+| Layering-aware filter              | `fill.side === 'BUY' && position?.our_token_id === fill.attributes.token_id`              | Bypass percentile filter; same-side scale-in                                                                                                                                          |
+| Bankroll-fractional sizer          | Reads `position?.our_qty_shares` and `our_vwap_usdc` as inputs                            | Size = `f(target_$, target_bankroll, our_bankroll, position?.our_qty_shares ?? 0)`                                                                                                    |
 
 ## Redeem pipeline
 
@@ -482,21 +484,21 @@ Idempotent: re-receiving the same chain log produces the same result.
 
 Read path: dashboard execution route LEFT-JOINs `poly_market_outcomes` on `(condition_id, token_id)` and derives the `redeemable`/`closed` classification purely from DB. **Zero Data-API or RPC calls on the dashboard read path.**
 
-`raw.redeemable` from the Polymarket Data API is **dead in this codebase** — `redeemable=true` means "market resolved AND you held shares at snapshot time," *not* "you have a winner." Loser shares are technically `redeemable` for $0 in CTF terms (`payoutNumerator=0`).
+`raw.redeemable` from the Polymarket Data API is **dead in this codebase** — `redeemable=true` means "market resolved AND you held shares at snapshot time," _not_ "you have a winner." Loser shares are technically `redeemable` for $0 in CTF terms (`payoutNumerator=0`).
 
 ### Redeem lifecycle mirroring
 
-| Redeem event | Job status | Ledger position lifecycle | Writer |
-|---|---|---|---|
-| Policy says redeemable | enqueue `pending` job | `winner` | `decision-to-enqueue-input.ts`, redeem route/subscriber |
-| Worker submits tx | `claimed → submitted` | `redeem_pending` | `redeem-worker.ts` |
-| Payout observed | `submitted → confirmed` | `redeemed` | `redeem-subscriber.ts`, `redeem-catchup.ts` |
-| Reaper proves redeemed | `submitted → confirmed` | `redeemed` | `redeem-worker.ts` |
-| Reorg removes payout | `confirmed → submitted` | `redeem_pending` | `redeem-subscriber.ts` |
-| Malformed / retry exhausted | `→ abandoned` | `abandoned` (job-stuck, not position-terminal) | `redeem-worker.ts`, manual route poll |
-| Losing outcome | enqueue `skipped` job | `loser` | `decision-to-enqueue-input.ts` |
-| Zero balance | enqueue `skipped` job | `redeemed` | `decision-to-enqueue-input.ts` |
-| Unresolved / read failed | no job row | no ledger mirror | `decision-to-enqueue-input.ts` |
+| Redeem event                | Job status              | Ledger position lifecycle                      | Writer                                                  |
+| --------------------------- | ----------------------- | ---------------------------------------------- | ------------------------------------------------------- |
+| Policy says redeemable      | enqueue `pending` job   | `winner`                                       | `decision-to-enqueue-input.ts`, redeem route/subscriber |
+| Worker submits tx           | `claimed → submitted`   | `redeem_pending`                               | `redeem-worker.ts`                                      |
+| Payout observed             | `submitted → confirmed` | `redeemed`                                     | `redeem-subscriber.ts`, `redeem-catchup.ts`             |
+| Reaper proves redeemed      | `submitted → confirmed` | `redeemed`                                     | `redeem-worker.ts`                                      |
+| Reorg removes payout        | `confirmed → submitted` | `redeem_pending`                               | `redeem-subscriber.ts`                                  |
+| Malformed / retry exhausted | `→ abandoned`           | `abandoned` (job-stuck, not position-terminal) | `redeem-worker.ts`, manual route poll                   |
+| Losing outcome              | enqueue `skipped` job   | `loser`                                        | `decision-to-enqueue-input.ts`                          |
+| Zero balance                | enqueue `skipped` job   | `redeemed`                                     | `decision-to-enqueue-input.ts`                          |
+| Unresolved / read failed    | no job row              | no ledger mirror                               | `decision-to-enqueue-input.ts`                          |
 
 **Asset-scoped writes.** Redeem mirror code must call `markPositionLifecycleByAsset(...)`, not condition-wide mutation, because one condition has multiple outcome assets. CTF `positionId` is persisted as `poly_redeem_jobs.position_id` and mirrored into `poly_copy_trade_fills.attributes.token_id`. `markPositionLifecycleByConditionId(...)` is reserved for true condition-level resolution replay where the lifecycle applies to every matching row.
 
@@ -537,11 +539,11 @@ User-driven exits do **not** apply grant caps. The contract is: trust the write 
 
 ### Three position-state families
 
-| Family | Question answered | Authority | Consumer |
-|---|---|---|---|
-| `live_positions` | What does the wallet currently hold? | Current positions snapshot from Polymarket reads | Open tab, close/redeem eligibility, wallet totals |
-| `closed_positions` | What positions were opened and later exited? | Trade-derived history | History tab, future analytics |
-| `pending_actions` | What write did our app just submit, and has the lagging read model caught up? | App-owned action state + provider receipt | Button spinners, reconcile-pending UI |
+| Family             | Question answered                                                             | Authority                                        | Consumer                                          |
+| ------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------- |
+| `live_positions`   | What does the wallet currently hold?                                          | Current positions snapshot from Polymarket reads | Open tab, close/redeem eligibility, wallet totals |
+| `closed_positions` | What positions were opened and later exited?                                  | Trade-derived history                            | History tab, future analytics                     |
+| `pending_actions`  | What write did our app just submit, and has the lagging read model caught up? | App-owned action state + provider receipt        | Button spinners, reconcile-pending UI             |
 
 `live_positions` is the only valid source for an "Open" row. A successful close may leave a short-lived `pending_actions` row but must not keep rendering the old holding as open.
 
@@ -564,10 +566,15 @@ User-driven exits do **not** apply grant caps. The contract is: trust the write 
 
 ```ts
 // 200 — confirmed within budget
-interface RedeemReceipt { tx_hash: string; }
+interface RedeemReceipt {
+  tx_hash: string;
+}
 
 // 202 — exceeded the 30s HTTP-hold ceiling; worker still processing
-interface RedeemPending { status: "pending"; job_id: string; }
+interface RedeemPending {
+  status: "pending";
+  job_id: string;
+}
 
 // 502 — abandoned (no funder burn at N=5, or three transient retries exhausted)
 interface RedeemFailed {
@@ -642,7 +649,7 @@ Code review criteria. Every invariant has a named owner file in the Implementati
 ### Cache view
 
 - **`POSITION_DERIVED_AT_SNAPSHOT`** — `MirrorPositionView` is computed inside `OrderLedger.snapshotState` only. No second source of truth, no write-side maintenance, no cache layer.
-- **`POSITION_VIEW_IS_CACHE_NOT_TRUTH`** — the view is *signal*, not authority. SELL execution + redeem flow consult #1 chain / #3 Data API as today.
+- **`POSITION_VIEW_IS_CACHE_NOT_TRUTH`** — the view is _signal_, not authority. SELL execution + redeem flow consult #1 chain / #3 Data API as today.
 - **`WITHIN_TICK_FRESHNESS`** — fill N+1 sees fill N's placement in `state.position`. Today satisfied automatically because `snapshotState` runs per-fill and the SQL filter includes `pending` rows.
 - **`FAIL_CLOSED_ON_SNAPSHOT_READ`** — DB error → `position_aggregates: []`, same warn-log path.
 - **`HEDGE_PREDICATE_NOOPS_ON_UNKNOWN_OPPOSITE`** — when `opposite_token_id` is undefined (unknown / multi-outcome / neg-risk), hedge-followup predicate must NO-OP, not guess.
@@ -713,16 +720,19 @@ Migration 0041. Set once on insert (`DO UPDATE SET ... -- excluding first_observ
 ## Implementation pointers
 
 Trading layer (`features/trading/`):
+
 - `clob-executor.ts` — pure composition; wraps an injected `placeOrder` fn with logs + bounded metrics.
 - `order-ledger.ts` — `insertPending`, `markOrderId`, `markError`, `markCanceled`, `updateStatus`, `snapshotState`, `markPositionLifecycleByAsset`, `markPositionLifecycleByConditionId`, `preserveTerminalLifecycle`, `cumulativeIntentForMarket`.
 - `order-ledger.types.ts` — `LedgerStatus`, `LedgerPositionLifecycle`, `StateSnapshot`, `PositionIntentAggregate`.
 - `ledger-lifecycle.ts` — position-lifecycle predicates.
 
 Wallet-watch (`features/wallet-watch/`):
+
 - `polymarket-source.ts` — Data-API `listUserActivity(wallet, since)` wrapper + cursor management.
 - `activity-poll.ts` — pure `nextFills(source, since) → {fills, newSince}`; no `setInterval`.
 
 Copy-trade (`features/copy-trade/`):
+
 - `plan-mirror.ts` — pure `planMirrorFromFill()` policy.
 - `types.ts` — `MirrorTargetConfig`, `RuntimeState`, `MirrorPlan`, `MirrorReason`, `PositionBranch`, `MirrorPositionView`, `aggregatePositionRows()`, `TargetConditionPositionView`.
 - `mirror-pipeline.ts` — `runMirrorTick(deps)`, `processFill`, `processSellFill`, `cancelOpenMirrorOrdersForMarket`, `executeMirrorOrder`, `applyPlacementToView`.
@@ -730,12 +740,14 @@ Copy-trade (`features/copy-trade/`):
 - `target-id.ts` — `targetIdFor(target_wallet)` deterministic UUID.
 
 Redeem (`features/redeem/` + `core/redeem/`):
+
 - `redeem-worker.ts`, `redeem-subscriber.ts` (`handleConditionResolution`), `redeem-catchup.ts`, `redeem-diff.ts`.
 - `decision-to-enqueue-input.ts`, `resolve-redeem-decision.ts`, `mirror-ledger-lifecycle.ts`, `build-submit-args.ts`, `derive-negrisk-amounts.ts`, `infer-collateral-token.ts`.
 - `core/redeem/types.ts`, `core/redeem/transitions.ts` — pure FSM.
 - `ports/market-outcomes.port.ts` + `adapters/server/redeem/drizzle-market-outcomes.adapter.ts`.
 
 Bootstrap + jobs:
+
 - `bootstrap/jobs/copy-trade-mirror.job.ts` — 30s scheduler driving `runMirrorTick`.
 - `bootstrap/jobs/poly-mirror-resting-sweep.job.ts` — TTL stale-order cancel sweep.
 - `bootstrap/redeem-pipeline.ts` — wires subscriber + catchup + worker + outcomes adapter.
@@ -743,6 +755,7 @@ Bootstrap + jobs:
 - `bootstrap/copy-trade-reconciler.ts` — per-tick listAllActive diff against `Map<(tenant, wallet), MirrorJobStopFn>`.
 
 Read-model + routes:
+
 - `features/wallet-analysis/server/current-position-read-model.ts` — `deriveCurrentPositionStatus`, `readCurrentWalletPositionModel`.
 - `features/wallet-analysis/server/trader-observation-service.ts`.
 - `app/api/v1/poly/wallet/overview/route.ts` + `execution/route.ts` + `positions/close/route.ts` + `positions/redeem/route.ts`.
@@ -750,6 +763,7 @@ Read-model + routes:
 - `app/(app)/dashboard/_components/order-activity-card.tsx`.
 
 Packages:
+
 - `packages/market-provider/src/port/market-provider.port.ts`, `observability.port.ts`.
 - `packages/market-provider/src/domain/order.ts` — `OrderIntent`, `OrderReceipt`, `Fill` Zod.
 - `packages/market-provider/src/domain/client-order-id.ts` — pinned `clientOrderIdFor(target_id, fill_id)`.
@@ -806,21 +820,21 @@ See "User position exit → Redeem flow" above. Three response shapes: `RedeemRe
 
 Pointers; not exhaustive.
 
-| Suite | File | Covers |
-|---|---|---|
-| Unit (pure) | `tests/unit/features/copy-trade/plan-mirror.test.ts` | Skip branches, idempotency, place-on-clear |
-| Unit (pure) | `tests/unit/features/copy-trade/plan-mirror-position-state.test.ts` | Planner branches on `state.position` |
-| Unit (pure) | `tests/unit/features/copy-trade/plan-mirror-position-followups.test.ts` | Hedge / layer / SELL-close predicates |
-| Unit (pure) | `tests/unit/features/trading/clob-executor.test.ts` | ok / rejected / error metric + log shapes |
-| Unit (pure) | `tests/unit/features/trading/order-ledger.test.ts` | insertPending / markOrderId / markError / snapshotState |
-| Unit (pure) | `tests/unit/features/trading/fake-order-ledger-position-snapshot.test.ts` | Position-aggregate fail-closed |
-| Unit (pure) | `tests/unit/features/wallet-watch/activity-poll.test.ts` | Cursor advance, empty-result short-circuit |
-| Unit (pure) | `tests/unit/features/redeem/redeem-subscriber-market-outcomes.test.ts` | UPSERT idempotency on `ConditionResolution` |
-| Unit (pure) | `tests/unit/features/redeem/redeem-subscriber-sibling-lifecycle.test.ts` | Asset-scoped writes preserve sibling outcomes |
-| Unit (pure) | `tests/unit/features/wallet-analysis/derive-current-position-status.test.ts` | Read-model JOIN classification |
-| Contract | `tests/contract/app/poly.wallet.dashboard-db-read.routes.test.ts` | Open / history projection |
-| Contract | `tests/contract/app/poly.wallet.positions.redeem.routes.test.ts` | 409 log line shape |
-| Component | `tests/component/features/redeem/condition-resolution-outcomes-upsert.test.ts` | End-to-end UPSERT path |
+| Suite       | File                                                                           | Covers                                                  |
+| ----------- | ------------------------------------------------------------------------------ | ------------------------------------------------------- |
+| Unit (pure) | `tests/unit/features/copy-trade/plan-mirror.test.ts`                           | Skip branches, idempotency, place-on-clear              |
+| Unit (pure) | `tests/unit/features/copy-trade/plan-mirror-position-state.test.ts`            | Planner branches on `state.position`                    |
+| Unit (pure) | `tests/unit/features/copy-trade/plan-mirror-position-followups.test.ts`        | Hedge / layer / SELL-close predicates                   |
+| Unit (pure) | `tests/unit/features/trading/clob-executor.test.ts`                            | ok / rejected / error metric + log shapes               |
+| Unit (pure) | `tests/unit/features/trading/order-ledger.test.ts`                             | insertPending / markOrderId / markError / snapshotState |
+| Unit (pure) | `tests/unit/features/trading/fake-order-ledger-position-snapshot.test.ts`      | Position-aggregate fail-closed                          |
+| Unit (pure) | `tests/unit/features/wallet-watch/activity-poll.test.ts`                       | Cursor advance, empty-result short-circuit              |
+| Unit (pure) | `tests/unit/features/redeem/redeem-subscriber-market-outcomes.test.ts`         | UPSERT idempotency on `ConditionResolution`             |
+| Unit (pure) | `tests/unit/features/redeem/redeem-subscriber-sibling-lifecycle.test.ts`       | Asset-scoped writes preserve sibling outcomes           |
+| Unit (pure) | `tests/unit/features/wallet-analysis/derive-current-position-status.test.ts`   | Read-model JOIN classification                          |
+| Contract    | `tests/contract/app/poly.wallet.dashboard-db-read.routes.test.ts`              | Open / history projection                               |
+| Contract    | `tests/contract/app/poly.wallet.positions.redeem.routes.test.ts`               | 409 log line shape                                      |
+| Component   | `tests/component/features/redeem/condition-resolution-outcomes-upsert.test.ts` | End-to-end UPSERT path                                  |
 
 ## Review checklist
 

@@ -11,7 +11,19 @@ implements: proj.poly-copy-trading
 owner: derekg1729
 created: 2026-05-10
 verified: 2026-05-10
-tags: [poly, polymarket, copy-trading, auth, rls, multi-tenant, wallets, privy, collateral, pusd]
+tags:
+  [
+    poly,
+    polymarket,
+    copy-trading,
+    auth,
+    rls,
+    multi-tenant,
+    wallets,
+    privy,
+    collateral,
+    pusd,
+  ]
 replaces:
   - docs/spec/poly-multi-tenant-auth.md
   - docs/spec/poly-trader-wallet-port.md
@@ -80,10 +92,10 @@ graph TD
 
 ## Two layers, one tenancy model
 
-| Layer | Question it answers | Source-of-truth table | Port |
-|---|---|---|---|
-| **Tracked wallets** | "Which Polymarket wallets is this user mirroring?" | `poly_copy_trade_targets` | `CopyTradeTargetSource` |
-| **Actor wallets** | "Which on-chain wallet places this user's mirror trades, and what execution caps gate that wallet?" | `poly_wallet_connections` + `poly_wallet_grants` | `PolyTraderWalletPort` |
+| Layer               | Question it answers                                                                                 | Source-of-truth table                            | Port                    |
+| ------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ----------------------- |
+| **Tracked wallets** | "Which Polymarket wallets is this user mirroring?"                                                  | `poly_copy_trade_targets`                        | `CopyTradeTargetSource` |
+| **Actor wallets**   | "Which on-chain wallet places this user's mirror trades, and what execution caps gate that wallet?" | `poly_wallet_connections` + `poly_wallet_grants` | `PolyTraderWalletPort`  |
 
 Both share the same tenant boundary: `billing_account_id` is the **data column** that names the financial owner. RLS policies key on either `created_by_user_id = current_setting('app.current_user_id', true)` (`poly_copy_trade_targets`) or on `EXISTS (SELECT 1 FROM billing_accounts ba WHERE ba.id = ... AND ba.owner_user_id = current_setting('app.current_user_id', true))` (`poly_wallet_*`). The EXISTS form is forward-compatible with multi-user-per-account: swap the EXISTS subquery for a `billing_account_members` join when that lands — no column change.
 
@@ -91,11 +103,11 @@ Both share the same tenant boundary: `billing_account_id` is the **data column**
 
 ## Tenant resolution & bootstrap
 
-| Caller | DB role | RLS context |
-|---|---|---|
-| Authenticated HTTP route (CRUD on targets, connections, grants) | `app_user` (RLS enforced) | `withTenantScope(appDb, sessionUser.id, ...)` |
-| Mirror-pipeline cross-tenant enumerator | `app_service` (BYPASSRLS) | None — returns `(billing_account_id, created_by_user_id, target_wallet)` triples; per-tenant inner loop opens a `withTenantScope` for fills/decisions writes |
-| Bootstrap operator | `app_service` for seed; `app_user` thereafter | `COGNI_SYSTEM_PRINCIPAL_USER_ID` (`00000000-0000-4000-a000-000000000001`) + `COGNI_SYSTEM_BILLING_ACCOUNT_ID` (`00000000-0000-4000-b000-000000000000`) |
+| Caller                                                          | DB role                                       | RLS context                                                                                                                                                  |
+| --------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Authenticated HTTP route (CRUD on targets, connections, grants) | `app_user` (RLS enforced)                     | `withTenantScope(appDb, sessionUser.id, ...)`                                                                                                                |
+| Mirror-pipeline cross-tenant enumerator                         | `app_service` (BYPASSRLS)                     | None — returns `(billing_account_id, created_by_user_id, target_wallet)` triples; per-tenant inner loop opens a `withTenantScope` for fills/decisions writes |
+| Bootstrap operator                                              | `app_service` for seed; `app_user` thereafter | `COGNI_SYSTEM_PRINCIPAL_USER_ID` (`00000000-0000-4000-a000-000000000001`) + `COGNI_SYSTEM_BILLING_ACCOUNT_ID` (`00000000-0000-4000-b000-000000000000`)       |
 
 The system tenant has no special bootstrap path for wallet provisioning — it provisions through the same `POST /api/v1/poly/wallet/connect` code path as any other tenant.
 
@@ -105,34 +117,34 @@ Per [database-rls](./database-rls.md) § `SERVICE_BYPASS_CONTAINED`: the service
 
 A single port `PolyTraderWalletPort` is the only seam any backend speaks to. `PolyTradeExecutor` never names a backend; it is parameterized by the port on construction.
 
-| Backend | OSS | Autonomous | Connect UX | Status |
-|---|---|---|---|---|
-| **Privy per-user** | ❌ closed | ✅ | Email/social login; `PrivyPolyTraderWalletAdapter` provisions + signs inside a **separate** Privy app from the system operator wallet | **Shipped (Phase B)** |
-| Safe + ERC-4337 session keys | ✅ | ✅ within scope | RainbowKit connect → user signs ONE meta-tx granting a session key scoped to CTF + USDC.e approvals + CLOB order signing, bounded by $/day + expiry | Future OSS-hardening task; port-compatible |
-| Turnkey | partial | ✅ | API-driven MPC | Future; port-compatible |
-| RainbowKit / wagmi alone | ✅ | ❌ popup per tx | Connect-wallet UI only | Not a valid `PolyTraderWalletPort` impl on its own — bootstraps the Safe connection, not an autonomous signer |
+| Backend                      | OSS       | Autonomous      | Connect UX                                                                                                                                          | Status                                                                                                        |
+| ---------------------------- | --------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **Privy per-user**           | ❌ closed | ✅              | Email/social login; `PrivyPolyTraderWalletAdapter` provisions + signs inside a **separate** Privy app from the system operator wallet               | **Shipped (Phase B)**                                                                                         |
+| Safe + ERC-4337 session keys | ✅        | ✅ within scope | RainbowKit connect → user signs ONE meta-tx granting a session key scoped to CTF + USDC.e approvals + CLOB order signing, bounded by $/day + expiry | Future OSS-hardening task; port-compatible                                                                    |
+| Turnkey                      | partial   | ✅              | API-driven MPC                                                                                                                                      | Future; port-compatible                                                                                       |
+| RainbowKit / wagmi alone     | ✅        | ❌ popup per tx | Connect-wallet UI only                                                                                                                              | Not a valid `PolyTraderWalletPort` impl on its own — bootstraps the Safe connection, not an autonomous signer |
 
 `KEY_NEVER_IN_APP` holds for every backend: raw signing-key material lives in the HSM / Safe / MPC. The app stores only an opaque `backend_ref`. Polymarket L2 API creds (`apiKey + apiSecret + passphrase`) are stored as a `connections` row with `provider = 'polymarket_clob'` and resolved via the existing `ConnectionBrokerPort` — same AEAD envelope, same `CONNECTIONS_ENCRYPTION_KEY` env, same AAD shape.
 
 ### Why a new port (rejected alternatives)
 
-| Approach | Verdict |
-|---|---|
-| Extend `OperatorWalletPort` with `resolvePolyAccount(billingAccountId)` / `signPolymarketOrder` | **Rejected.** Violates `OperatorWalletPort`'s `NO_GENERIC_SIGNING` invariant — the port is deliberately intent-only. Conflates the system-tenant operator wallet with per-user wallets that have different blast-radius and billing semantics. |
-| Inline per-tenant signer resolution in `bootstrap/capabilities/poly-trade.ts` | **Rejected.** Leaks Privy SDK coupling + env-shape assumptions into `nodes/poly/app`, making a future backend swap a cross-cutting rewrite. |
-| **New `PolyTraderWalletPort` in a shared package, `PrivyPolyTraderWalletAdapter` as Phase B impl** | **Chosen.** Narrow interface, backend-agnostic, testable without real Privy, future adapters plug in without touching callers. |
+| Approach                                                                                           | Verdict                                                                                                                                                                                                                                        |
+| -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Extend `OperatorWalletPort` with `resolvePolyAccount(billingAccountId)` / `signPolymarketOrder`    | **Rejected.** Violates `OperatorWalletPort`'s `NO_GENERIC_SIGNING` invariant — the port is deliberately intent-only. Conflates the system-tenant operator wallet with per-user wallets that have different blast-radius and billing semantics. |
+| Inline per-tenant signer resolution in `bootstrap/capabilities/poly-trade.ts`                      | **Rejected.** Leaks Privy SDK coupling + env-shape assumptions into `nodes/poly/app`, making a future backend swap a cross-cutting rewrite.                                                                                                    |
+| **New `PolyTraderWalletPort` in a shared package, `PrivyPolyTraderWalletAdapter` as Phase B impl** | **Chosen.** Narrow interface, backend-agnostic, testable without real Privy, future adapters plug in without touching callers.                                                                                                                 |
 
 ## Authorization model — `authorizeIntent` is the fail-closed checkpoint
 
 The placement pipeline splits cleanly into **pure planning** and **authorized signing**. Cap + scope checks live **inside the port adapter**, not inside the planner. The planner never names a grant, and `PolymarketClobAdapter.placeOrder` takes a branded `AuthorizedSigningContext` that only `authorizeIntent` can mint.
 
-| Stage | Where | What it does | What it MAY NOT do |
-|---|---|---|---|
-| 1. Enumerate tenants (cross-tenant, service-role) | `mirror-pipeline.ts` → `CopyTradeTargetSource.listAllActive` | Return `(billing_account_id, created_by_user_id, target_wallet)` triples; joined against `poly_wallet_connections` + `poly_wallet_grants` so tenants without an active grant drop out | Read/write any per-tenant fill / decision / config row |
-| 2. Dispatch to per-tenant executor | `PolyTradeExecutorFactory.getFor(billingAccountId)` | Lazily build + cache a `PolyTradeExecutor` bound to the tenant's `PolyTraderWalletPort` + `ConnectionBroker` | Touch grants |
-| 3. Plan the mirror (pure) | `planMirrorFromFill` in `features/copy-trade/` | Map a source fill + mirror config → typed `MirrorPlan`. **No cap checks. No grant reads. No signer calls.** | Reach into grants, env vars, or hardcoded cap constants |
-| 4. **Authorize the intent** | `PolyTraderWalletPort.authorizeIntent(billingAccountId, intent)` | SELECT active connection, check `trading_approvals_ready_at`, resolve active grant, validate scope, enforce caps, mint branded `AuthorizedSigningContext` | Mutate state, place an order, return a bare signer object |
-| 5. Place the order | `PolymarketClobAdapter.placeOrder(ctx)` — `ctx` is the branded context | Sign + POST to CLOB | Re-check caps / scope — already proven structurally by the branded context |
+| Stage                                             | Where                                                                  | What it does                                                                                                                                                                          | What it MAY NOT do                                                         |
+| ------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| 1. Enumerate tenants (cross-tenant, service-role) | `mirror-pipeline.ts` → `CopyTradeTargetSource.listAllActive`           | Return `(billing_account_id, created_by_user_id, target_wallet)` triples; joined against `poly_wallet_connections` + `poly_wallet_grants` so tenants without an active grant drop out | Read/write any per-tenant fill / decision / config row                     |
+| 2. Dispatch to per-tenant executor                | `PolyTradeExecutorFactory.getFor(billingAccountId)`                    | Lazily build + cache a `PolyTradeExecutor` bound to the tenant's `PolyTraderWalletPort` + `ConnectionBroker`                                                                          | Touch grants                                                               |
+| 3. Plan the mirror (pure)                         | `planMirrorFromFill` in `features/copy-trade/`                         | Map a source fill + mirror config → typed `MirrorPlan`. **No cap checks. No grant reads. No signer calls.**                                                                           | Reach into grants, env vars, or hardcoded cap constants                    |
+| 4. **Authorize the intent**                       | `PolyTraderWalletPort.authorizeIntent(billingAccountId, intent)`       | SELECT active connection, check `trading_approvals_ready_at`, resolve active grant, validate scope, enforce caps, mint branded `AuthorizedSigningContext`                             | Mutate state, place an order, return a bare signer object                  |
+| 5. Place the order                                | `PolymarketClobAdapter.placeOrder(ctx)` — `ctx` is the branded context | Sign + POST to CLOB                                                                                                                                                                   | Re-check caps / scope — already proven structurally by the branded context |
 
 Outcomes that fail step 4 are recorded in `poly_copy_trade_decisions` with one of: `no_connection`, `trading_not_ready`, `no_active_grant`, `grant_expired`, `grant_revoked`, `scope_missing`, `cap_exceeded_per_order`, `cap_exceeded_daily`, `cap_exceeded_hourly_fills`, `backend_unreachable`. No row ever reaches step 5 without an `AuthorizedSigningContext`; the brand cannot be constructed from outside the adapter, which is how `AUTHORIZED_SIGNING_ONLY` is enforced structurally at the TypeScript level.
 
@@ -151,16 +163,17 @@ Outcomes that fail step 4 are recorded in `poly_copy_trade_decisions` with one o
 
 ### `poly_copy_trade_targets`
 
-| Column | Type | Constraints | Description |
-|---|---|---|---|
-| `id` | uuid | PK, default `gen_random_uuid()` | |
-| `billing_account_id` | text | NOT NULL, FK → `billing_accounts(id)` ON DELETE CASCADE | Tenant boundary |
-| `target_wallet` | text | NOT NULL, CHECK `~ '^0x[a-fA-F0-9]{40}$'` | Polymarket wallet address being followed |
-| `created_at` | timestamptz | NOT NULL, DEFAULT `now()` | |
-| `created_by_user_id` | text | NOT NULL, FK → `users(id)` | Audit + RLS key |
-| `disabled_at` | timestamptz | NULL | Soft delete |
+| Column               | Type        | Constraints                                             | Description                              |
+| -------------------- | ----------- | ------------------------------------------------------- | ---------------------------------------- |
+| `id`                 | uuid        | PK, default `gen_random_uuid()`                         |                                          |
+| `billing_account_id` | text        | NOT NULL, FK → `billing_accounts(id)` ON DELETE CASCADE | Tenant boundary                          |
+| `target_wallet`      | text        | NOT NULL, CHECK `~ '^0x[a-fA-F0-9]{40}$'`               | Polymarket wallet address being followed |
+| `created_at`         | timestamptz | NOT NULL, DEFAULT `now()`                               |                                          |
+| `created_by_user_id` | text        | NOT NULL, FK → `users(id)`                              | Audit + RLS key                          |
+| `disabled_at`        | timestamptz | NULL                                                    | Soft delete                              |
 
 Constraints:
+
 - `UNIQUE (billing_account_id, target_wallet) WHERE disabled_at IS NULL` — one active row per (tenant, wallet)
 - RLS: `USING (created_by_user_id = current_setting('app.current_user_id', true))` (mirrors `connections` migration 0025)
 
@@ -168,19 +181,19 @@ No per-target `enabled` flag, no per-target caps, no per-tenant kill-switch tabl
 
 ### `poly_copy_trade_fills` + `poly_copy_trade_decisions`
 
-| Column | Type | Constraints | Description |
-|---|---|---|---|
-| `id` | uuid | PK | |
-| `billing_account_id` | text | NOT NULL, FK | Tenant boundary |
-| `created_by_user_id` | text | NOT NULL, FK | Attribution + RLS key |
-| `target_id` | uuid | NOT NULL, FK → `poly_copy_trade_targets(id)` | |
-| `wallet_connection_id` | uuid | NOT NULL, FK → `poly_wallet_connections(id)` | Which actor wallet placed the trade |
-| `client_order_id` | text | NOT NULL | `keccak256(target_id + ':' + fill_id)` |
-| `order_id` | text | NULL | CLOB order id once placed |
-| `status` | text | NOT NULL | `pending / placed / failed / filled / cancelled` (see [`poly-copy-trade-execution.md`](./poly-copy-trade-execution.md) §Order status for the full state machine) |
-| `created_at` | timestamptz | NOT NULL | |
-| `position_lifecycle` | enum | NULL | Asset-scoped position state (see [`poly-copy-trade-execution.md`](./poly-copy-trade-execution.md) §Position lifecycle) |
-| `attributes` | jsonb | NOT NULL | Includes `token_id`, `condition_id`, `size_usdc`, `limit_price`, `placement`, `position_branch`, `closed_at`, etc. |
+| Column                 | Type        | Constraints                                  | Description                                                                                                                                                      |
+| ---------------------- | ----------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                   | uuid        | PK                                           |                                                                                                                                                                  |
+| `billing_account_id`   | text        | NOT NULL, FK                                 | Tenant boundary                                                                                                                                                  |
+| `created_by_user_id`   | text        | NOT NULL, FK                                 | Attribution + RLS key                                                                                                                                            |
+| `target_id`            | uuid        | NOT NULL, FK → `poly_copy_trade_targets(id)` |                                                                                                                                                                  |
+| `wallet_connection_id` | uuid        | NOT NULL, FK → `poly_wallet_connections(id)` | Which actor wallet placed the trade                                                                                                                              |
+| `client_order_id`      | text        | NOT NULL                                     | `keccak256(target_id + ':' + fill_id)`                                                                                                                           |
+| `order_id`             | text        | NULL                                         | CLOB order id once placed                                                                                                                                        |
+| `status`               | text        | NOT NULL                                     | `pending / placed / failed / filled / cancelled` (see [`poly-copy-trade-execution.md`](./poly-copy-trade-execution.md) §Order status for the full state machine) |
+| `created_at`           | timestamptz | NOT NULL                                     |                                                                                                                                                                  |
+| `position_lifecycle`   | enum        | NULL                                         | Asset-scoped position state (see [`poly-copy-trade-execution.md`](./poly-copy-trade-execution.md) §Position lifecycle)                                           |
+| `attributes`           | jsonb       | NOT NULL                                     | Includes `token_id`, `condition_id`, `size_usdc`, `limit_price`, `placement`, `position_branch`, `closed_at`, etc.                                               |
 
 `poly_copy_trade_decisions` has the same RLS shape; every planner outcome (placed, skipped, errored) gets a row per `RECORD_EVERY_DECISION`.
 
@@ -188,28 +201,29 @@ Migration 0029 (`0029_poly_copy_trade_multitenant.sql`) added `billing_account_i
 
 ### `poly_wallet_connections` — actor-wallet metadata
 
-| Column | Type | Constraints | Description |
-|---|---|---|---|
-| `id` | uuid | PK | |
-| `billing_account_id` | text | NOT NULL, FK → `billing_accounts(id)` ON DELETE CASCADE | Tenant data column |
-| `created_by_user_id` | text | NOT NULL, FK → `users(id)` | Audit (not the RLS key — see policy below) |
-| `backend` | text | NOT NULL, CHECK `IN ('safe_4337','privy','turnkey')` | Which `PolyTraderWalletPort` adapter owns this row |
-| `address` | text | NOT NULL | Checksummed wallet address (funder) |
-| `chain_id` | int | NOT NULL | 137 (Polygon mainnet) |
-| `backend_ref` | text | NOT NULL | Opaque backend ID (Privy `walletId` / Safe address / Turnkey `subaccount_id`) |
-| `clob_connection_id` | uuid | NOT NULL, FK → `connections(id)` ON DELETE RESTRICT | CLOB credentials live in `connections` row; provider check enforced app-side |
-| `allowance_state` | jsonb | NULL | Last on-chain allowance snapshot |
-| `trading_approvals_ready_at` | timestamptz | NULL | Stamped by `ensureTradingApprovals` once all on-chain approvals succeed; cleared on `revoke` |
-| `custodial_consent_accepted_at` | timestamptz | NULL | Single source of truth for `CUSTODIAL_CONSENT` (migration 0030) |
-| `auto_wrap_consent_at` | timestamptz | NULL | When the user enabled auto-wrap on the Money page |
-| `auto_wrap_revoked_at` | timestamptz | NULL | When they revoked it; original `consent_at` preserved for forensics |
-| `auto_wrap_floor_usdce_6dp` | BIGINT | NOT NULL DEFAULT `1_000_000` | Dust guard — minimum USDC.e to wrap (1.00 USDC.e default) |
-| `created_at` | timestamptz | NOT NULL | |
-| `last_used_at` | timestamptz | NULL | Stale-wallet detection |
-| `revoked_at` | timestamptz | NULL | Soft delete |
-| `revoked_by_user_id` | text | NULL | Audit |
+| Column                          | Type        | Constraints                                             | Description                                                                                  |
+| ------------------------------- | ----------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `id`                            | uuid        | PK                                                      |                                                                                              |
+| `billing_account_id`            | text        | NOT NULL, FK → `billing_accounts(id)` ON DELETE CASCADE | Tenant data column                                                                           |
+| `created_by_user_id`            | text        | NOT NULL, FK → `users(id)`                              | Audit (not the RLS key — see policy below)                                                   |
+| `backend`                       | text        | NOT NULL, CHECK `IN ('safe_4337','privy','turnkey')`    | Which `PolyTraderWalletPort` adapter owns this row                                           |
+| `address`                       | text        | NOT NULL                                                | Checksummed wallet address (funder)                                                          |
+| `chain_id`                      | int         | NOT NULL                                                | 137 (Polygon mainnet)                                                                        |
+| `backend_ref`                   | text        | NOT NULL                                                | Opaque backend ID (Privy `walletId` / Safe address / Turnkey `subaccount_id`)                |
+| `clob_connection_id`            | uuid        | NOT NULL, FK → `connections(id)` ON DELETE RESTRICT     | CLOB credentials live in `connections` row; provider check enforced app-side                 |
+| `allowance_state`               | jsonb       | NULL                                                    | Last on-chain allowance snapshot                                                             |
+| `trading_approvals_ready_at`    | timestamptz | NULL                                                    | Stamped by `ensureTradingApprovals` once all on-chain approvals succeed; cleared on `revoke` |
+| `custodial_consent_accepted_at` | timestamptz | NULL                                                    | Single source of truth for `CUSTODIAL_CONSENT` (migration 0030)                              |
+| `auto_wrap_consent_at`          | timestamptz | NULL                                                    | When the user enabled auto-wrap on the Money page                                            |
+| `auto_wrap_revoked_at`          | timestamptz | NULL                                                    | When they revoked it; original `consent_at` preserved for forensics                          |
+| `auto_wrap_floor_usdce_6dp`     | BIGINT      | NOT NULL DEFAULT `1_000_000`                            | Dust guard — minimum USDC.e to wrap (1.00 USDC.e default)                                    |
+| `created_at`                    | timestamptz | NOT NULL                                                |                                                                                              |
+| `last_used_at`                  | timestamptz | NULL                                                    | Stale-wallet detection                                                                       |
+| `revoked_at`                    | timestamptz | NULL                                                    | Soft delete                                                                                  |
+| `revoked_by_user_id`            | text        | NULL                                                    | Audit                                                                                        |
 
 Constraints:
+
 - `UNIQUE (billing_account_id) WHERE revoked_at IS NULL` — one active wallet per tenant
 - `(chain_id, address)` MUST appear in at most one un-revoked row globally
 - RLS: `EXISTS (SELECT 1 FROM billing_accounts ba WHERE ba.id = poly_wallet_connections.billing_account_id AND ba.owner_user_id = current_setting('app.current_user_id', true))` — **billing-account-ownership** form. Forward-compatible with agent principals (set `app.current_user_id` to the user the agent acts for) and multi-user-per-account (swap EXISTS for a `billing_account_members` join).
@@ -218,22 +232,23 @@ Migrations: 0030 (`0030_poly_wallet_connections.sql`), 0032 (`0032_poly_wallet_t
 
 ### `poly_wallet_grants` — execution authorization
 
-| Column | Type | Constraints | Description |
-|---|---|---|---|
-| `id` | uuid | PK | |
-| `billing_account_id` | text | NOT NULL, FK | Tenant boundary (denormalized from connection for RLS) |
-| `wallet_connection_id` | uuid | NOT NULL, FK → `poly_wallet_connections(id)` ON DELETE CASCADE | Which actor wallet this grant authorizes |
-| `created_by_user_id` | text | NOT NULL, FK | Who issued the grant |
-| `scopes` | text[] | NOT NULL | e.g. `["poly:trade:buy", "poly:trade:sell"]` |
-| `per_order_usdc_cap` | numeric(10,2) | NOT NULL | |
-| `daily_usdc_cap` | numeric(10,2) | NOT NULL | |
-| `hourly_fills_cap` | int | NOT NULL | |
-| `expires_at` | timestamptz | NULL | NULL = no expiry (recommend non-null in production) |
-| `created_at` | timestamptz | NOT NULL | |
-| `revoked_at` | timestamptz | NULL | Soft delete |
-| `revoked_by_user_id` | text | NULL | Audit |
+| Column                 | Type          | Constraints                                                    | Description                                            |
+| ---------------------- | ------------- | -------------------------------------------------------------- | ------------------------------------------------------ |
+| `id`                   | uuid          | PK                                                             |                                                        |
+| `billing_account_id`   | text          | NOT NULL, FK                                                   | Tenant boundary (denormalized from connection for RLS) |
+| `wallet_connection_id` | uuid          | NOT NULL, FK → `poly_wallet_connections(id)` ON DELETE CASCADE | Which actor wallet this grant authorizes               |
+| `created_by_user_id`   | text          | NOT NULL, FK                                                   | Who issued the grant                                   |
+| `scopes`               | text[]        | NOT NULL                                                       | e.g. `["poly:trade:buy", "poly:trade:sell"]`           |
+| `per_order_usdc_cap`   | numeric(10,2) | NOT NULL                                                       |                                                        |
+| `daily_usdc_cap`       | numeric(10,2) | NOT NULL                                                       |                                                        |
+| `hourly_fills_cap`     | int           | NOT NULL                                                       |                                                        |
+| `expires_at`           | timestamptz   | NULL                                                           | NULL = no expiry (recommend non-null in production)    |
+| `created_at`           | timestamptz   | NOT NULL                                                       |                                                        |
+| `revoked_at`           | timestamptz   | NULL                                                           | Soft delete                                            |
+| `revoked_by_user_id`   | text          | NULL                                                           | Audit                                                  |
 
 Constraints (migration `0031_poly_wallet_grants.sql`):
+
 - `CHECK array_length(scopes, 1) > 0`
 - `CHECK per_order_usdc_cap > 0` + `CHECK daily_usdc_cap > 0` + `CHECK hourly_fills_cap > 0`
 - `CHECK daily_usdc_cap >= per_order_usdc_cap` — a single order can never exceed the day
@@ -328,7 +343,9 @@ export interface PolyTraderWalletPort {
   rotateClobCreds(input: {
     billingAccountId: string;
   }): Promise<PolyTraderSigningContext>;
-  ensureTradingApprovals(billingAccountId: string): Promise<EnsureApprovalsResult>;
+  ensureTradingApprovals(
+    billingAccountId: string
+  ): Promise<EnsureApprovalsResult>;
   getConnectionSummary(billingAccountId: string): Promise<ConnectionSummary>;
   wrapIdleUsdcE(billingAccountId: string): Promise<WrapIdleResult>;
   setAutoWrapConsent(billingAccountId: string): Promise<void>;
@@ -341,6 +358,7 @@ export interface PolyTraderWalletPort {
 Phase B default impl. Uses Privy **server wallets** (`privy.walletApi.create({ chain_type: "ethereum" })`) — one per tenant, fully app-custodial from Privy's perspective, Cogni-controlled from the app's perspective.
 
 **Constructor dependencies** (injected by `bootstrap/poly-trader-wallet.ts`):
+
 - `privyClient`: PrivyClient (distinct from the operator-wallet Privy app — see Env separation below)
 - `privySigningKey`: signing key for the user-wallets app
 - `serviceDb`: BYPASSRLS handle for the cross-tenant reads this adapter performs
@@ -349,6 +367,7 @@ Phase B default impl. Uses Privy **server wallets** (`privy.walletApi.create({ c
 - `logger`: Pino
 
 **`resolve(billingAccountId)`**:
+
 1. `SELECT * FROM poly_wallet_connections WHERE billing_account_id = $1 AND revoked_at IS NULL LIMIT 1` on `serviceDb`.
 2. Defense-in-depth equality check on `row.billing_account_id`.
 3. `createViemAccount(privyClient, { walletId: row.privy_wallet_id, address: row.address, authorizationContext: { authorization_private_keys: [privySigningKey] } })`.
@@ -357,6 +376,7 @@ Phase B default impl. Uses Privy **server wallets** (`privy.walletApi.create({ c
 6. On any failure: log a sanitized warning (no ciphertext, no walletId in the message) and return `null`.
 
 **`provision({ billingAccountId, createdByUserId, custodialConsent })`**:
+
 1. `BEGIN` transaction.
 2. `SELECT pg_advisory_xact_lock(hashtext($1))` — tenant-scoped lock held until COMMIT/ROLLBACK.
 3. SELECT existing un-revoked row for this tenant; if present, COMMIT + return the signing context (idempotent).
@@ -375,6 +395,7 @@ After a successful `revoke`, the revoked row still counts toward the generation 
 **Connect-route abuse bounding**: HTTP layer imposes per-tenant rate limit (default: at most one provision or revoke within a 5-minute window per `billing_account_id`). Enforced in `app/api/v1/poly/wallet/connect/route.ts`, not in the port — the port must remain idempotent under arbitrary retry pressure.
 
 **`revoke({ billingAccountId, revokedByUserId })`**:
+
 1. `UPDATE poly_wallet_connections SET revoked_at = now(), revoked_by_user_id = $2 WHERE billing_account_id = $1 AND revoked_at IS NULL`.
 2. Same transaction cascades `revoked_at` on every `poly_wallet_grants` row with the matching `wallet_connection_id`.
 3. Same transaction clears `trading_approvals_ready_at`.
@@ -382,6 +403,7 @@ After a successful `revoke`, the revoked row still counts toward the generation 
 No Privy-side action. The backend wallet is retained because it may still hold user funds. A subsequent `provision` for the same tenant creates a **new** connection with a **new** address; funds on the old address are the tenant's responsibility to withdraw via `withdrawUsdc` **before** revoking (`WITHDRAW_BEFORE_REVOKE`).
 
 **`ensureTradingApprovals(billingAccountId)`** — the 8-step ceremony (see §Collateral lifecycle below for the wrap step):
+
 1. Requires active connection + `POLYGON_RPC_URL`. Pre-reads USDC.e `allowance` calls + CTF `isApprovedForAll` + native POL balance; skips targets already at `maxUint256` / `true`.
 2. If remaining work > 0 and POL balance is below a fixed minimum (~0.02 POL), returns `{ ready: false, steps[] }` with `skipped` / `insufficient_pol_gas` — **no txs submitted**.
 3. Otherwise submits remaining approvals **sequentially** (nonce-safe). Each write waits for receipt + post-verifies state at `receipt.blockNumber`. The 8 steps are listed in §Collateral lifecycle.
@@ -426,6 +448,7 @@ Candidate-a + preview + production all get the new `PRIVY_USER_WALLETS_*` triple
 ## Mirror enumerator — the only cross-tenant path
 
 The autonomous 30s mirror-pipeline cannot operate inside a single user's RLS scope (it iterates many tenants). Resolution: **one** read uses the `app_service` role to enumerate `(billing_account_id, created_by_user_id, target_wallet)` triples across all tenants with:
+
 - an active `poly_copy_trade_targets` row, AND
 - an active `poly_wallet_connections` row, AND
 - at least one active `poly_wallet_grants` row.
@@ -450,27 +473,27 @@ V2 introduced pUSD to give Polymarket protocol-level control of the trade collat
 
 **On Polymarket: yes, for trading. As an asset on Polygon: no.**
 
-| Question | Answer |
-|---|---|
-| Can V2 exchanges spend USDC.e to fill orders? | **No.** They only spend pUSD. |
+| Question                                                                           | Answer                                                                                              |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Can V2 exchanges spend USDC.e to fill orders?                                      | **No.** They only spend pUSD.                                                                       |
 | Will deposits from outside (Coinbase, bridges, personal wallets) arrive as USDC.e? | **Yes** — USDC.e is the standard Polygon stablecoin; pUSD exists only inside Polymarket's protocol. |
-| Does our flow still need USDC.e approvals? | Only one: `USDC.e.approve(CollateralOnramp, ∞)` so Onramp can pull deposits to mint pUSD. |
-| Wrap rate? | **1:1.** No fee, no slippage, no peg risk. |
-| Can pUSD be unwrapped back to USDC.e? | **Yes**, via the same Onramp. Not exposed in our app yet. |
+| Does our flow still need USDC.e approvals?                                         | Only one: `USDC.e.approve(CollateralOnramp, ∞)` so Onramp can pull deposits to mint pUSD.           |
+| Wrap rate?                                                                         | **1:1.** No fee, no slippage, no peg risk.                                                          |
+| Can pUSD be unwrapped back to USDC.e?                                              | **Yes**, via the same Onramp. Not exposed in our app yet.                                           |
 
 ### Contract addresses (Polygon mainnet, V2)
 
 Sourced from `@polymarket/clob-client-v2`'s `getContractConfig(137)` plus one hardcode (CollateralOnramp is not in SDK config):
 
-| Role | Address | Notes |
-|---|---|---|
-| `USDC.e` | `0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174` | Standard Polygon-native USDC, hardcoded |
-| `pUSD` | `0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB` | SDK config field: `collateral` |
-| `CollateralOnramp` | `0x93070a847efEf7F70739046A929D47a521F5B8ee` | Hardcoded; exposes `wrap(asset, to, amount)` |
-| `ExchangeV2` | `0xE111180000d2663C0091e4f400237545B87B996B` | SDK: `exchangeV2` |
-| `NegRiskExchangeV2` | `0xe2222d279d744050d28e00520010520000310F59` | SDK: `negRiskExchangeV2` |
-| `NegRiskAdapter` | `0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296` | SDK: `negRiskAdapter` — unchanged from V1 |
-| `CTF` | `0x4D97DCd97eC945f40cF65F87097ACe5EA0476045` | SDK: `conditionalTokens` — unchanged from V1 |
+| Role                | Address                                      | Notes                                        |
+| ------------------- | -------------------------------------------- | -------------------------------------------- |
+| `USDC.e`            | `0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174` | Standard Polygon-native USDC, hardcoded      |
+| `pUSD`              | `0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB` | SDK config field: `collateral`               |
+| `CollateralOnramp`  | `0x93070a847efEf7F70739046A929D47a521F5B8ee` | Hardcoded; exposes `wrap(asset, to, amount)` |
+| `ExchangeV2`        | `0xE111180000d2663C0091e4f400237545B87B996B` | SDK: `exchangeV2`                            |
+| `NegRiskExchangeV2` | `0xe2222d279d744050d28e00520010520000310F59` | SDK: `negRiskExchangeV2`                     |
+| `NegRiskAdapter`    | `0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296` | SDK: `negRiskAdapter` — unchanged from V1    |
+| `CTF`               | `0x4D97DCd97eC945f40cF65F87097ACe5EA0476045` | SDK: `conditionalTokens` — unchanged from V1 |
 
 ### Enable Trading ceremony — 8 steps
 
@@ -491,12 +514,12 @@ After the first run, the seven non-wrap approvals are sticky on-chain. Only step
 
 Three of four cash-return channels deliver USDC.e:
 
-| Channel | Token landed |
-|---|---|
-| Money-page deposit | USDC.e |
-| V1 CTF redeem (pre-cutover positions) | USDC.e |
-| V2 CTF redeem (post-cutover) | pUSD |
-| External transfer to funder | USDC.e |
+| Channel                               | Token landed |
+| ------------------------------------- | ------------ |
+| Money-page deposit                    | USDC.e       |
+| V1 CTF redeem (pre-cutover positions) | USDC.e       |
+| V2 CTF redeem (post-cutover)          | pUSD         |
+| External transfer to funder           | USDC.e       |
 
 Without intervention, three of these strand cash until the user clicks Enable Trading again. The auto-wrap loop closes that gap with a single user consent + a background job.
 
@@ -513,6 +536,7 @@ funder ──pUSD──▶ CLOB BUY ──▶ CTF position ──▶ resolves �
 ```
 
 **How it works** — one click, perpetual loop:
+
 - User flips **Auto-wrap USDC.e → pUSD** on the Money page once. Stamps `poly_wallet_connections.auto_wrap_consent_at`.
 - The trader pod runs a 60s `bootstrap/jobs/auto-wrap.job.ts` (modeled on `order-reconciler.job.ts`). Every tick:
   1. Reads consenting + non-revoked rows from `poly_wallet_connections`.
@@ -524,11 +548,11 @@ Read-then-act, not event-driven — every tick re-derives the decision from curr
 
 **Skip outcomes** (returned as `{ outcome: "skipped", reason }` from `wrapIdleUsdcE`):
 
-| Reason | Meaning |
-|---|---|
-| `no_consent` | `auto_wrap_consent_at IS NULL` or revoked since |
-| `no_balance` | USDC.e balance is exactly 0 |
-| `below_floor` | Balance > 0 but < the floor — DUST_GUARD |
+| Reason            | Meaning                                                |
+| ----------------- | ------------------------------------------------------ |
+| `no_consent`      | `auto_wrap_consent_at IS NULL` or revoked since        |
+| `no_balance`      | USDC.e balance is exactly 0                            |
+| `below_floor`     | Balance > 0 but < the floor — DUST_GUARD               |
 | `not_provisioned` | No active `poly_wallet_connections` row for the tenant |
 
 Throws (RPC unreachable, decryption error, Privy backend down) are caught at the job's per-row level and counted as `outcome: "errored"`; they never escape the interval.
@@ -539,13 +563,13 @@ Throws (RPC unreachable, decryption error, Privy backend down) are caught at the
 
 ### What our app does with each token
 
-| Path | Reads / writes |
-|---|---|
-| Display "trading balance" on Money page | Sum **USDC.e + pUSD** on-chain. Both 1:1 USD. (`readPolygonBalances` reads both and sums into the `usdcE` field name kept for now.) |
-| Enable Trading button | Wraps **all** USDC.e → pUSD on click. Steady state: USDC.e ≈ 0, pUSD = wallet balance. |
-| Mirror BUY | Spends **pUSD** via V2 exchange. USDC.e is never touched at trade time. |
-| New deposit lands as USDC.e | If auto-wrap is on, converted within ≤90s. Without auto-wrap, sits until next Enable Trading click. UI shows correct total because we sum both balances. |
-| V1 CTF redeem returns cash | Pre-cutover positions redeem to USDC.e. Same auto-wrap path picks them up. Post-cutover (V2) redeems land pUSD directly. |
+| Path                                    | Reads / writes                                                                                                                                           |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Display "trading balance" on Money page | Sum **USDC.e + pUSD** on-chain. Both 1:1 USD. (`readPolygonBalances` reads both and sums into the `usdcE` field name kept for now.)                      |
+| Enable Trading button                   | Wraps **all** USDC.e → pUSD on click. Steady state: USDC.e ≈ 0, pUSD = wallet balance.                                                                   |
+| Mirror BUY                              | Spends **pUSD** via V2 exchange. USDC.e is never touched at trade time.                                                                                  |
+| New deposit lands as USDC.e             | If auto-wrap is on, converted within ≤90s. Without auto-wrap, sits until next Enable Trading click. UI shows correct total because we sum both balances. |
+| V1 CTF redeem returns cash              | Pre-cutover positions redeem to USDC.e. Same auto-wrap path picks them up. Post-cutover (V2) redeems land pUSD directly.                                 |
 
 ## Onboarding flows
 
@@ -622,17 +646,17 @@ Content-Type: application/json
 
 ## HTTP routes
 
-| Route | Auth | Body | Effect |
-|---|---|---|---|
-| `POST /api/v1/poly/wallet/connect` | Session OR agent-API-key | `custodialConsentAcknowledged: true` + actor kind/id | Atomic `provisionWithGrant`. Rate limit: ≤1 per 5min per tenant |
-| `GET /api/v1/poly/wallet/status` | Session OR agent | — | `{ funded, allowances_set, ready }` |
-| `GET /api/v1/poly/wallet/balances` | Session | — | On-chain USDC.e + pUSD + MATIC at the funder |
-| `POST /api/v1/poly/wallet/enable-trading` | Session | — | Runs `ensureTradingApprovals` |
-| `POST /api/v1/poly/wallet/grants` | Session | scope + cap updates | Tighten defaults |
-| `POST /api/v1/poly/wallet/withdraw` | Session | `destination`, `amount` | `withdrawUsdc` |
-| `POST /api/v1/poly/wallet/auto-wrap` | Session | `consent: bool` | Toggle `auto_wrap_consent_at` / `auto_wrap_revoked_at` |
-| `GET /api/v1/poly/wallet/balance` | (legacy) | — | **Tombstone** returning `{ stale: true, error_reason: "operator_wallet_removed_use_money_page" }` |
-| `GET/POST/DELETE /api/v1/poly/copy-trade/targets[/:id]` | Session | target_wallet | CRUD on `poly_copy_trade_targets` (RLS-clamped) |
+| Route                                                   | Auth                     | Body                                                 | Effect                                                                                            |
+| ------------------------------------------------------- | ------------------------ | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/poly/wallet/connect`                      | Session OR agent-API-key | `custodialConsentAcknowledged: true` + actor kind/id | Atomic `provisionWithGrant`. Rate limit: ≤1 per 5min per tenant                                   |
+| `GET /api/v1/poly/wallet/status`                        | Session OR agent         | —                                                    | `{ funded, allowances_set, ready }`                                                               |
+| `GET /api/v1/poly/wallet/balances`                      | Session                  | —                                                    | On-chain USDC.e + pUSD + MATIC at the funder                                                      |
+| `POST /api/v1/poly/wallet/enable-trading`               | Session                  | —                                                    | Runs `ensureTradingApprovals`                                                                     |
+| `POST /api/v1/poly/wallet/grants`                       | Session                  | scope + cap updates                                  | Tighten defaults                                                                                  |
+| `POST /api/v1/poly/wallet/withdraw`                     | Session                  | `destination`, `amount`                              | `withdrawUsdc`                                                                                    |
+| `POST /api/v1/poly/wallet/auto-wrap`                    | Session                  | `consent: bool`                                      | Toggle `auto_wrap_consent_at` / `auto_wrap_revoked_at`                                            |
+| `GET /api/v1/poly/wallet/balance`                       | (legacy)                 | —                                                    | **Tombstone** returning `{ stale: true, error_reason: "operator_wallet_removed_use_money_page" }` |
+| `GET/POST/DELETE /api/v1/poly/copy-trade/targets[/:id]` | Session                  | target_wallet                                        | CRUD on `poly_copy_trade_targets` (RLS-clamped)                                                   |
 
 ## Invariants
 
@@ -765,54 +789,54 @@ Content-Type: application/json
 
 The single-operator prototype path was deleted in Phase B3:
 
-| Removed | Replaced by |
-|---|---|
-| `nodes/poly/app/src/bootstrap/capabilities/poly-trade.ts` + fake adapter | Per-tenant `PolyTradeExecutorFactory` |
-| `POLY_PROTO_PRIVY_{APP_ID,APP_SECRET,SIGNING_KEY,WALLET_ADDRESS}` env vars | Per-user Privy app credentials (`PRIVY_USER_WALLETS_*`) |
-| `POLY_CLOB_API_{KEY,SECRET,PASSPHRASE}` env vars | Per-tenant `connections` row with `provider = 'polymarket_clob'` |
-| `src/app/_lib/poly/operator-extras.ts` | Deleted; `available/locked` breakdown deferred to Money page |
-| `GET /api/v1/poly/wallet/balance` active body | Tombstone returning `{ stale: true, error_reason: "operator_wallet_removed_use_money_page" }` |
-| `OperatorWalletCard` active render | Dormant "unconfigured" placeholder pointing users to Money page |
+| Removed                                                                    | Replaced by                                                                                   |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `nodes/poly/app/src/bootstrap/capabilities/poly-trade.ts` + fake adapter   | Per-tenant `PolyTradeExecutorFactory`                                                         |
+| `POLY_PROTO_PRIVY_{APP_ID,APP_SECRET,SIGNING_KEY,WALLET_ADDRESS}` env vars | Per-user Privy app credentials (`PRIVY_USER_WALLETS_*`)                                       |
+| `POLY_CLOB_API_{KEY,SECRET,PASSPHRASE}` env vars                           | Per-tenant `connections` row with `provider = 'polymarket_clob'`                              |
+| `src/app/_lib/poly/operator-extras.ts`                                     | Deleted; `available/locked` breakdown deferred to Money page                                  |
+| `GET /api/v1/poly/wallet/balance` active body                              | Tombstone returning `{ stale: true, error_reason: "operator_wallet_removed_use_money_page" }` |
+| `OperatorWalletCard` active render                                         | Dormant "unconfigured" placeholder pointing users to Money page                               |
 
 Verification: `rg "POLY_PROTO_\|POLY_CLOB_API" -g '!docs/**' -g '!work/**'` returns no live references.
 
 ## Acceptance checks
 
-| # | Check | Status |
-|---|---|---|
-| 1 | Two-tenant integration: user-A writes a target, fills/decisions accumulate. User-B SELECTs `poly_copy_trade_targets / fills / decisions` via `appDb` and sees zero rows. (`db-target-source.int.test.ts`) | ✅ |
-| 2 | `psql` smoke as `app_user`: SET `app.current_user_id` to A, INSERT with `created_by_user_id = B` → rejected by `WITH CHECK`. (`poly-rls-smoke.sh`) | ✅ |
-| 3 | App defense-in-depth: `POST /targets` logs a security warning + rejects on `row.billing_account_id` mismatch | ✅ |
-| 4 | Grant-revocation drops only the affected tenant from `listAllActive`; the others unaffected | ✅ |
-| 5 | `authorizeIntent` failure-variant coverage: every `AuthorizationFailure` (no_connection, trading_not_ready, no_active_grant, grant_expired, grant_revoked, scope_missing, cap_exceeded_per_order, cap_exceeded_daily, cap_exceeded_hourly_fills, backend_unreachable) | ✅ |
-| 6 | Cap enforcement: per-order cap rejects > cap; daily cap window uses `poly_copy_trade_fills` sums over 24h | ✅ |
-| 7 | Type-level enforcement: `PolymarketClobAdapter.placeOrder(rawContext)` fails to type-check; only `AuthorizedSigningContext` is accepted | ✅ |
-| 8 | Address uniqueness: attempting a second un-revoked `poly_wallet_connections` row with an existing `(chain_id, address)` is rejected by the partial unique index | ✅ |
-| 9 | Concurrent-provision: two simultaneous `provision(tenantA)` calls (`Promise.all`) return the same `connectionId`; Privy is called exactly once | ✅ |
-| 10 | Idempotent `provision`: sequential `provision(tenantA)` returns the same `connectionId` (DB-hit-only) | ✅ |
-| 11 | Privy-unreachable: mocked Privy throw → `provision` returns the thrown error with no DB row; second call succeeds cleanly (advisory lock released on rollback) | ✅ |
-| 12 | `revoke(tenantA)` → `resolve(tenantA)` returns `null` on the next call; `getAddress` also returns `null` | ✅ |
-| 13 | Custodial consent: `provision` rejects (409) when `custodial_consent_accepted_at` is NULL; accepts when set | ✅ |
-| 14 | Tenant defense-in-depth: direct DB tamper setting `billing_account_id` to the wrong tenant → `resolve` logs + returns `null` | ✅ |
-| 15 | CLOB creds round-trip through the AEAD envelope and decrypt to the original `ApiKeyCreds` | ✅ |
-| 16 | `withdrawUsdc` sends USDC.e from the tenant funder to an external destination and emits the expected Pino log | ✅ |
-| 17 | `rotateClobCreds` callable (interface method shipped; scheduled rotation cadence is a separate ops task) | ✅ |
-| 18 | `SEPARATE_PRIVY_APP` enforcement: adapter is constructor-injected with a user-wallets PrivyClient + signing key; bootstrap loads only `PRIVY_USER_WALLETS_*`; routes import bootstrap, not `@/adapters/**` directly | ✅ |
-| 19 | Phase B3 per-tenant placement end-to-end on candidate-a: freshly-provisioned tenant POSTs `/wallet/connect` → autonomous mirror drives an intent through `authorizeIntent` → `placeOrder` → CLOB fill, observed in Loki at the deployed SHA | ✅ (`deploy_verified: 2026-04-22`) |
-| 20 | Auto-wrap loop: USDC.e deposit ≥ floor is wrapped within ≤90s when consent is on; revoke is honored on the next tick | ✅ (task.0429) |
+| #   | Check                                                                                                                                                                                                                                                                 | Status                             |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| 1   | Two-tenant integration: user-A writes a target, fills/decisions accumulate. User-B SELECTs `poly_copy_trade_targets / fills / decisions` via `appDb` and sees zero rows. (`db-target-source.int.test.ts`)                                                             | ✅                                 |
+| 2   | `psql` smoke as `app_user`: SET `app.current_user_id` to A, INSERT with `created_by_user_id = B` → rejected by `WITH CHECK`. (`poly-rls-smoke.sh`)                                                                                                                    | ✅                                 |
+| 3   | App defense-in-depth: `POST /targets` logs a security warning + rejects on `row.billing_account_id` mismatch                                                                                                                                                          | ✅                                 |
+| 4   | Grant-revocation drops only the affected tenant from `listAllActive`; the others unaffected                                                                                                                                                                           | ✅                                 |
+| 5   | `authorizeIntent` failure-variant coverage: every `AuthorizationFailure` (no_connection, trading_not_ready, no_active_grant, grant_expired, grant_revoked, scope_missing, cap_exceeded_per_order, cap_exceeded_daily, cap_exceeded_hourly_fills, backend_unreachable) | ✅                                 |
+| 6   | Cap enforcement: per-order cap rejects > cap; daily cap window uses `poly_copy_trade_fills` sums over 24h                                                                                                                                                             | ✅                                 |
+| 7   | Type-level enforcement: `PolymarketClobAdapter.placeOrder(rawContext)` fails to type-check; only `AuthorizedSigningContext` is accepted                                                                                                                               | ✅                                 |
+| 8   | Address uniqueness: attempting a second un-revoked `poly_wallet_connections` row with an existing `(chain_id, address)` is rejected by the partial unique index                                                                                                       | ✅                                 |
+| 9   | Concurrent-provision: two simultaneous `provision(tenantA)` calls (`Promise.all`) return the same `connectionId`; Privy is called exactly once                                                                                                                        | ✅                                 |
+| 10  | Idempotent `provision`: sequential `provision(tenantA)` returns the same `connectionId` (DB-hit-only)                                                                                                                                                                 | ✅                                 |
+| 11  | Privy-unreachable: mocked Privy throw → `provision` returns the thrown error with no DB row; second call succeeds cleanly (advisory lock released on rollback)                                                                                                        | ✅                                 |
+| 12  | `revoke(tenantA)` → `resolve(tenantA)` returns `null` on the next call; `getAddress` also returns `null`                                                                                                                                                              | ✅                                 |
+| 13  | Custodial consent: `provision` rejects (409) when `custodial_consent_accepted_at` is NULL; accepts when set                                                                                                                                                           | ✅                                 |
+| 14  | Tenant defense-in-depth: direct DB tamper setting `billing_account_id` to the wrong tenant → `resolve` logs + returns `null`                                                                                                                                          | ✅                                 |
+| 15  | CLOB creds round-trip through the AEAD envelope and decrypt to the original `ApiKeyCreds`                                                                                                                                                                             | ✅                                 |
+| 16  | `withdrawUsdc` sends USDC.e from the tenant funder to an external destination and emits the expected Pino log                                                                                                                                                         | ✅                                 |
+| 17  | `rotateClobCreds` callable (interface method shipped; scheduled rotation cadence is a separate ops task)                                                                                                                                                              | ✅                                 |
+| 18  | `SEPARATE_PRIVY_APP` enforcement: adapter is constructor-injected with a user-wallets PrivyClient + signing key; bootstrap loads only `PRIVY_USER_WALLETS_*`; routes import bootstrap, not `@/adapters/**` directly                                                   | ✅                                 |
+| 19  | Phase B3 per-tenant placement end-to-end on candidate-a: freshly-provisioned tenant POSTs `/wallet/connect` → autonomous mirror drives an intent through `authorizeIntent` → `placeOrder` → CLOB fill, observed in Loki at the deployed SHA                           | ✅ (`deploy_verified: 2026-04-22`) |
+| 20  | Auto-wrap loop: USDC.e deposit ≥ floor is wrapped within ≤90s when consent is on; revoke is honored on the next tick                                                                                                                                                  | ✅ (task.0429)                     |
 
 ## Relation to `OperatorWalletPort`
 
 `OperatorWalletPort` and `PolyTraderWalletPort` are **not** merged.
 
-| Axis | `OperatorWalletPort` | `PolyTraderWalletPort` |
-|---|---|---|
-| Surface | Intent-only (`distributeSplit`, `fundOpenRouterTopUp`) | Credential-broker (`resolve`, `provision`, `revoke`, `authorizeIntent`) |
-| Tenant | Single system tenant | Any `billing_account_id` |
-| Custody | One Privy server-wallet, env-configured | N Privy server-wallets, DB-tracked |
-| Privy app | `PRIVY_APP_ID` (system) | `PRIVY_USER_WALLETS_APP_ID` (users) |
-| Signing | Not exposed on the port (calldata encoded inside) | Returned as viem `LocalAccount` for CLOB adapter composition |
-| Lifecycle | Provisioned once via `scripts/provision-operator-wallet` | Provisioned per-tenant on first Polymarket opt-in |
+| Axis      | `OperatorWalletPort`                                     | `PolyTraderWalletPort`                                                  |
+| --------- | -------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Surface   | Intent-only (`distributeSplit`, `fundOpenRouterTopUp`)   | Credential-broker (`resolve`, `provision`, `revoke`, `authorizeIntent`) |
+| Tenant    | Single system tenant                                     | Any `billing_account_id`                                                |
+| Custody   | One Privy server-wallet, env-configured                  | N Privy server-wallets, DB-tracked                                      |
+| Privy app | `PRIVY_APP_ID` (system)                                  | `PRIVY_USER_WALLETS_APP_ID` (users)                                     |
+| Signing   | Not exposed on the port (calldata encoded inside)        | Returned as viem `LocalAccount` for CLOB adapter composition            |
+| Lifecycle | Provisioned once via `scripts/provision-operator-wallet` | Provisioned per-tenant on first Polymarket opt-in                       |
 
 They do not share a base interface. If a future need surfaces for e.g. per-user treasury payouts, the right move is a third narrow port, not a generalized "WalletPort."
 
