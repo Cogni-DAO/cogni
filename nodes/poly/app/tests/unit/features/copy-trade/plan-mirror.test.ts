@@ -184,7 +184,10 @@ describe("planMirrorFromFill() — market_past_end_date gate (bug.5043)", () => 
     const d = planMirrorFromFill({
       fill: {
         ...FILL,
-        attributes: { ...FILL.attributes, end_date: "2026-05-10T11:59:59.000Z" },
+        attributes: {
+          ...FILL.attributes,
+          end_date: "2026-05-10T11:59:59.000Z",
+        },
       },
       config: CONFIG,
       state: CLEAN_STATE,
@@ -203,7 +206,10 @@ describe("planMirrorFromFill() — market_past_end_date gate (bug.5043)", () => 
     const d = planMirrorFromFill({
       fill: {
         ...FILL,
-        attributes: { ...FILL.attributes, end_date: "2026-06-15T00:00:00.000Z" },
+        attributes: {
+          ...FILL.attributes,
+          end_date: "2026-06-15T00:00:00.000Z",
+        },
       },
       config: CONFIG,
       state: CLEAN_STATE,
@@ -230,7 +236,10 @@ describe("planMirrorFromFill() — market_past_end_date gate (bug.5043)", () => 
     const d = planMirrorFromFill({
       fill: {
         ...FILL,
-        attributes: { ...FILL.attributes, end_date: "not-a-date" },
+        attributes: {
+          ...FILL.attributes,
+          end_date: "not-a-date",
+        },
       },
       config: CONFIG,
       state: CLEAN_STATE,
@@ -245,7 +254,10 @@ describe("planMirrorFromFill() — market_past_end_date gate (bug.5043)", () => 
     const d = planMirrorFromFill({
       fill: {
         ...FILL,
-        attributes: { ...FILL.attributes, end_date: "2026-05-10T11:00:00.000Z" },
+        attributes: {
+          ...FILL.attributes,
+          end_date: "2026-05-10T11:00:00.000Z",
+        },
       },
       config: CONFIG,
       state: { ...CLEAN_STATE, already_placed_ids: [COID] },
