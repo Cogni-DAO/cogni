@@ -3,9 +3,8 @@
 
 /**
  * Module: `@app/api/v1/knowledge/domains/_handlers`
- * Purpose: HTTP handlers for the knowledge domain registry — list + register.
- *   Pulls KnowledgeStorePort from the container, maps typed errors to HTTP.
- * Scope: Operator-side wiring only. Cookie-session only (server rejects Bearer).
+ * Purpose: HTTP handlers for the knowledge domain registry — list and register, mapping typed errors to HTTP statuses.
+ * Scope: Operator-side wiring only. Does not contain business logic, validation, or storage I/O — those live in the port/adapter.
  * Invariants: VALIDATE_IO, AUTH_VIA_GETSESSIONUSER, DOMAIN_HTTP_COOKIE_ONLY,
  *   DOMAIN_REGISTRY_VIA_UI.
  * Side-effects: IO (HTTP response, Doltgres read/write via container port)

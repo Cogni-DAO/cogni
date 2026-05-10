@@ -3,8 +3,8 @@
 
 /**
  * Module: `@app/(app)/knowledge/_api/createDomain`
- * Purpose: Client-side POST to register a new knowledge domain.
- * Scope: Cookie-session only — server-side rejects Bearer headers.
+ * Purpose: Client-side POST wrapper to register a new knowledge domain via the operator API.
+ * Scope: Cookie-session only. Does not contain UI state, optimistic-update logic, or query-cache wiring.
  * Side-effects: IO; INSERT INTO domains + dolt_commit on candidate-a.
  * @internal
  */

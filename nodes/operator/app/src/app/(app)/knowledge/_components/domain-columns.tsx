@@ -4,7 +4,7 @@
 /**
  * Module: `@app/(app)/knowledge/_components/domain-columns`
  * Purpose: TanStack column definitions for the domain registry DataGrid.
- * Scope: Pure column descriptors. No fetch, no routing.
+ * Scope: Pure column descriptors. Does not fetch, route, or own state.
  * Invariants: HEADER_OWNS_SORT_AND_FILTER (mirror /work pattern).
  * @internal
  */

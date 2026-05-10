@@ -3,8 +3,8 @@
 
 /**
  * Module: `@app/(app)/knowledge/_api/fetchDomains`
- * Purpose: Client-side fetch for the registered domains list.
- * Scope: Cookie-session only. Returns typed response or throws.
+ * Purpose: Client-side fetch wrapper for the registered domains list.
+ * Scope: Cookie-session only. Does not contain business logic, caching, or render concerns.
  * Side-effects: IO (GET /api/v1/knowledge/domains)
  * @internal
  */

@@ -3,9 +3,8 @@
 
 /**
  * Module: `@app/(app)/knowledge/_components/AddDomainSheet`
- * Purpose: Slide-over Sheet for registering a new knowledge domain.
- *   3-field form (id, name, description). Submit → POST /api/v1/knowledge/domains.
- * Scope: Local form state + mutation. Cookie-session only.
+ * Purpose: Slide-over Sheet for registering a new knowledge domain via a 3-field form.
+ * Scope: Local form state + mutation. Does not contain query-cache invalidation (delegated to caller via onCreated).
  * Side-effects: IO (POST /api/v1/knowledge/domains via createDomain).
  * @internal
  */

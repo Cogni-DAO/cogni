@@ -3,9 +3,8 @@
 
 /**
  * Module: `@contracts/knowledge.domains.v1.contract`
- * Purpose: HTTP contract for the knowledge domain registry — GET (list with
- *   entry counts) and POST (register, cookie-session only).
- * Scope: Zod schemas for the wire format. No business logic.
+ * Purpose: HTTP contract for the knowledge domain registry — GET list with entry counts and POST register (cookie-session only).
+ * Scope: Zod schemas for the wire format. Does not contain business logic, I/O, or auth policy.
  * Invariants:
  *   - DOMAIN_HTTP_COOKIE_ONLY (route enforces; contract does not).
  *   - DOMAIN_REGISTRATION_IS_STICKY: no DELETE/PUT in v0.
