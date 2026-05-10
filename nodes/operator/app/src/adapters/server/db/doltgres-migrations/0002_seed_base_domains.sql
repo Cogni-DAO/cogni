@@ -8,4 +8,5 @@ INSERT INTO "domains" ("id", "name", "description") VALUES
   ('prediction-market', 'Prediction Markets', 'Polymarket and adjacent prediction-market knowledge — base rates, market structure, calibration.'),
   ('infrastructure', 'Infrastructure', 'Runtime, deploy, observability, and capacity knowledge for Cogni nodes.'),
   ('governance', 'Governance', 'DAO formation, attribution, voting, and operator/node contracts.'),
-  ('reservations', 'Reservations', 'Restaurant / venue reservation knowledge for the resy node domain.');
+  ('reservations', 'Reservations', 'Restaurant / venue reservation knowledge for the resy node domain.'),
+  ('validate_candidate', 'Validate Candidate', 'Reserved for /validate-candidate smoke writes. Test surface, not real knowledge content.');

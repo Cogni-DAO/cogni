@@ -482,7 +482,7 @@ Given same observations + same knowledge commit → same analysis outputs.
 | SCHEMA_VIA_DRIZZLE_PRESYNC      | Knowledge-plane schema is applied by the node's drizzle-kit migrator as a k8s PreSync Job. `provision.sh` creates databases + roles only; it never issues DDL.                            |
 | AUTO_COMMIT_ON_WRITE            | Every `core__knowledge_write` call commits via the capability layer (`SELECT dolt_commit('-Am', ...)`). The schema migrator also commits post-migration via `stamp-commit.mjs`.           |
 | RUNTIME_URL_IS_SUPERUSER        | `DOLTGRES_URL_<NODE>` runtime secret connects as the `postgres` superuser. Doltgres 0.56 RBAC is non-functional (GRANT silently no-ops); revisit when upstream lands working role access. |
-| NODES_BOOT_EMPTY                | New nodes boot with an empty knowledge database; they do not inherit an operator seed. The dev-only `scripts/db/seed-doltgres.mts` populates local dev only, never production.            |
+| NODES_BOOT_EMPTY                | New nodes boot with **empty content** — `knowledge`, `citations`, and `sources` rows are zero. Nodes do not inherit operator-curated knowledge claims. Reference data — the `domains` registry — IS migrator-seeded with the base set per [knowledge-domain-registry](./knowledge-domain-registry.md) § Seeding. The dev-only `scripts/db/seed-doltgres.mts` populates local dev only, never production. |
 
 ---
 

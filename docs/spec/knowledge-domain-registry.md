@@ -186,13 +186,14 @@ No edit, no delete, no row-detail Sheet in v0. The grid is read + register only.
 
 Base domains seeded by the migrator (`nodes/operator/app/src/adapters/server/db/doltgres-migrations/0002_seed_base_domains.sql`):
 
-| id                  | Purpose                                             |
-| ------------------- | --------------------------------------------------- |
-| `meta`              | Knowledge about the knowledge system itself         |
-| `prediction-market` | Polymarket and adjacent prediction-market knowledge |
-| `infrastructure`    | Runtime, deploy, observability                      |
-| `governance`        | DAO formation, attribution, voting                  |
-| `reservations`      | Restaurant / venue knowledge for resy               |
+| id                   | Purpose                                                                |
+| -------------------- | ---------------------------------------------------------------------- |
+| `meta`               | Knowledge about the knowledge system itself                            |
+| `prediction-market`  | Polymarket and adjacent prediction-market knowledge                    |
+| `infrastructure`     | Runtime, deploy, observability                                         |
+| `governance`         | DAO formation, attribution, voting                                     |
+| `reservations`       | Restaurant / venue knowledge for resy                                  |
+| `validate_candidate` | Reserved for `/validate-candidate` smoke writes (test surface, not real content) |
 
 Idempotency: each Doltgres database has its own `__drizzle_migrations` ledger; the seed migration runs exactly once per fresh DB. Re-runs are a no-op.
 
