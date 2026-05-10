@@ -177,6 +177,54 @@ describe("buildMarketExposureGroups", () => {
     expect(line?.edgeGapUsdc).not.toBeNull();
   });
 
+  it("uses target snapshot cost basis when the fill rollup undercounts (backfill horizon)", async () => {
+    // bug.5044: target wallets often have fill history that predates our
+    // backfill horizon, so `poly_trader_fills` rollups undercount target
+    // cost basis. Snapshot cost basis (Polymarket-published) is the truth.
+    // When rollup < snapshot, snapshot wins — otherwise `targetEntryValueUsdc`
+    // becomes a fraction of `targetValueUsdc` and Δ% inflates ~10×.
+    const db = fakeDb([
+      [
+        {
+          wallet_address: TARGET_WALLET,
+          label: "swisstony",
+          condition_id: "0xCOND1",
+          token_id: "tok-no-1",
+          market_title: "Will Qatar win on 2026-06-13?",
+          event_title: null,
+          market_slug: "fifwc-qat-che",
+          event_slug: null,
+          outcome: "No",
+          shares: "1035.08",
+          cost_basis_usdc: "929.43",
+          current_value_usdc: "937.27",
+          avg_price: "0.898",
+          last_observed_at: new Date("2026-05-10T12:30:00.000Z"),
+          lifecycle: "active",
+        },
+      ],
+      [
+        {
+          wallet_address: TARGET_WALLET.toLowerCase(),
+          condition_id: "0xCOND1",
+          total_buy_notional: "85.54",
+          realized_cash: "0",
+        },
+      ],
+    ]);
+
+    const groups = await buildMarketExposureGroups({
+      db,
+      billingAccountId: "ba-1",
+      walletAddress: OUR_WALLET,
+      livePositions: [ourPosition()],
+    });
+
+    expect(groups).toHaveLength(1);
+    const line = groups[0]?.lines[0];
+    expect(line?.targetEntryValueUsdc).toBe(929.43);
+  });
+
   it("preserves entry notional for closed lines so 'Our value' is non-zero after exit", async () => {
     // Regression for bug.5037: closed-line `ourValueUsdc` collapses to 0
     // because currentValue is 0 after we exit. The dashboard displays
@@ -223,14 +271,14 @@ describe("buildMarketExposureGroups", () => {
     expect(line?.status).toBe("closed");
     // Current mark-to-market is correctly $0 (we exited).
     expect(line?.ourValueUsdc).toBe(0);
-    // Entry value preserves what we put on the line.
-    expect(line?.ourEntryValueUsdc).toBe(42);
-    // Targets had no snapshot rows here, so target entry value is 0 (target
-    // never surfaced as a leg). The wallet's fill rollup alone does not
-    // promote it into a leg — that's TARGET_LEGS_FROM_SNAPSHOTS.
+    // Entry value: max(fill rollup $42, pnl-derived snapshot cost $47.94).
+    // Snapshot wins here — same backfill-horizon resilience as bug.5044
+    // on target wallets, applied to closed-position fixtures whose fills
+    // and pnl-derived cost can drift due to fee rounding or partial-fill
+    // observation gaps.
+    expect(line?.ourEntryValueUsdc).toBe(47.94);
     expect(line?.targetEntryValueUsdc).toBe(0);
-    // Group rolls up to the same numbers (single line).
     expect(group?.ourValueUsdc).toBe(0);
-    expect(group?.ourEntryValueUsdc).toBe(42);
+    expect(group?.ourEntryValueUsdc).toBe(47.94);
   });
 });
