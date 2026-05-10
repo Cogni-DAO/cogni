@@ -46,4 +46,10 @@ export const BASE_DOMAIN_SEEDS: NewDomain[] = [
     description:
       "Restaurant / venue reservation knowledge for the resy node domain.",
   },
+  {
+    id: "validate_candidate",
+    name: "Validate Candidate",
+    description:
+      "Reserved for /validate-candidate smoke writes. Production registration is via UI per DOMAIN_REGISTRY_VIA_UI.",
+  },
 ];

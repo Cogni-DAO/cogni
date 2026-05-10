@@ -49,8 +49,14 @@ export {
   ContributionStateError,
   type KnowledgeContributionPort,
 } from "./port/contribution.port.js";
-// Port interfaces
-export type { KnowledgeStorePort } from "./port/knowledge-store.port.js";
+// Port interfaces + domain-registry types/errors
+export {
+  type Domain,
+  DomainAlreadyRegisteredError,
+  DomainNotRegisteredError,
+  type KnowledgeStorePort,
+  type NewDomain,
+} from "./port/knowledge-store.port.js";
 // Contribution service (framework-agnostic, cross-node shared)
 export {
   type ContributionService,
