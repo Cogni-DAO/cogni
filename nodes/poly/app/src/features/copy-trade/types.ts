@@ -392,6 +392,14 @@ export const MirrorReasonSchema = z.enum([
    * bug.5160.
    */
   "price_outside_clob_bounds",
+  /**
+   * Market's scheduled close (`fill.attributes.end_date` from Gamma) is at or
+   * before plan-time `now_ms`. We were observed mirroring BUYs onto markets
+   * already past their resolution window — the target's fill landed seconds
+   * before close, our 30s Data-API poll observed it after, and the market
+   * resolved (loser) before our order could matter. bug.5043.
+   */
+  "market_past_end_date",
 ]);
 export type MirrorReason = z.infer<typeof MirrorReasonSchema>;
 
@@ -435,6 +443,16 @@ export interface PlanMirrorInput {
    * limit_price to the nearest representable tick or skips if too far out.
    */
   tick_size?: number | undefined;
+  /**
+   * Plan-time clock injected by the caller (mirror-pipeline passes
+   * `Date.now()`). Compared against `fill.attributes.end_date` to skip BUYs
+   * onto markets already past their scheduled Gamma resolution time. When
+   * absent, the gate is skipped — matches the codebase convention for
+   * optional pure-function inputs (cf. `min_usdc_notional`, `tick_size`).
+   * Preserves DECISION_IS_PURE_INPUT — the planner does not read the system
+   * clock itself. bug.5043.
+   */
+  now_ms?: number | undefined;
 }
 
 /**

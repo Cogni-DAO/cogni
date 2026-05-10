@@ -167,10 +167,13 @@ function applyMarketFloors(
  * Translate an observed target fill into a concrete mirror plan.
  *
  * Order of checks (short-circuits on the first skip reason):
- *   1. already placed (PK+cid)  → skip/already_placed
- *   2. sizing below market min  → skip/below_market_min
- *   3. mode === 'paper'         → place (paper adapter)
- *   4. otherwise                → place (live)
+ *   1. already placed (PK+cid)        → skip/already_placed
+ *   2. market past Gamma `end_date`   → skip/market_past_end_date  (bug.5043)
+ *   3. price outside CLOB tick grid   → skip/price_outside_clob_bounds
+ *   4. position-followup policy       → skip/place (layer | hedge)
+ *   5. sizing below market min        → skip/below_market_min
+ *   6. mode === 'paper'               → place (paper adapter)
+ *   7. otherwise                      → place (live)
  *
  * Daily / hourly caps are NOT checked here — those live on the tenant's
  * `poly_wallet_grants` row and are enforced by `authorizeIntent` at the
@@ -185,12 +188,21 @@ export function planMirrorFromFill(input: PlanMirrorInput): MirrorPlan {
     min_shares,
     min_usdc_notional,
     tick_size,
+    now_ms,
   } = input;
 
   if (state.already_placed_ids.includes(client_order_id)) {
     return {
       kind: "skip",
       reason: "already_placed",
+      position_branch: "new_entry",
+    };
+  }
+
+  if (now_ms !== undefined && isFillPastMarketEndDate(fill, now_ms)) {
+    return {
+      kind: "skip",
+      reason: "market_past_end_date",
       position_branch: "new_entry",
     };
   }
@@ -434,6 +446,25 @@ function targetFollowupThreshold(policy: SizingPolicy): number {
     case "min_bet":
       return 0;
   }
+}
+
+/**
+ * Gamma's market `endDate` (carried verbatim on `fill.attributes.end_date` per
+ * the Data-API normalizer) is the scheduled close time. Markets observed
+ * within seconds of close routinely resolve loser shortly after; mirroring a
+ * BUY past that point spends real USDC on a near-dead market. Defensive: an
+ * absent or unparseable `end_date` short-circuits to `false` so we never drop
+ * a fill due to a missing field. bug.5043.
+ */
+function isFillPastMarketEndDate(
+  fill: PlanMirrorInput["fill"],
+  nowMs: number
+): boolean {
+  const raw = fill.attributes?.end_date;
+  if (typeof raw !== "string" || raw.length === 0) return false;
+  const endMs = Date.parse(raw);
+  if (!Number.isFinite(endMs)) return false;
+  return nowMs >= endMs;
 }
 
 function targetTokenCostUsdc(

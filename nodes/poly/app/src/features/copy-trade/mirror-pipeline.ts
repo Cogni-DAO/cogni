@@ -293,6 +293,7 @@ async function processFill(
     min_shares,
     min_usdc_notional,
     tick_size,
+    now_ms: Date.now(),
   });
 
   const decisionLogFields = buildDecisionLogFields({
