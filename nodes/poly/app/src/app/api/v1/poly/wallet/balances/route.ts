@@ -15,7 +15,7 @@
  *   - PARTIAL_FAILURE_NEVER_THROWS: upstream RPC failures surface as `errors[]`
  *     with the corresponding field `null`; the response stays 200.
  * Side-effects: IO (DB read, Polygon RPC).
- * Links: docs/spec/poly-trader-wallet-port.md,
+ * Links: docs/spec/poly-tenant-and-collateral.md,
  *        nodes/poly/packages/node-contracts/src/poly.wallet.balances.v1.contract.ts
  * @public
  */

@@ -254,7 +254,7 @@ export const serverSchema = z.object({
   // User-wallets Privy app (task.0318 Phase B).
   // SEPARATE_PRIVY_APP invariant: per-tenant Polymarket trading wallets live
   // in a DEDICATED Privy app distinct from the operator wallet (PRIVY_*
-  // above). See docs/spec/poly-trader-wallet-port.md § Env.
+  // above). See docs/spec/poly-tenant-and-collateral.md § Env.
   PRIVY_USER_WALLETS_APP_ID: optionalString,
   PRIVY_USER_WALLETS_APP_SECRET: optionalString,
   PRIVY_USER_WALLETS_SIGNING_KEY: optionalString,

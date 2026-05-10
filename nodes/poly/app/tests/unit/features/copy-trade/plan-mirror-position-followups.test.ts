@@ -9,7 +9,7 @@
  * Scope: Pure planner tests. No DB, no Data API, no CLOB.
  * Invariants: PLAN_IS_PURE, HEDGE_PREDICATE_NOOPS_ON_UNKNOWN_OPPOSITE,
  * DECISION_LOG_NAMES_VIEW.
- * Links: story.5000, docs/design/poly-mirror-position-projection.md,
+ * Links: story.5000, docs/spec/poly-copy-trade-execution.md,
  * docs/research/poly/layering-policy-spike-2026-05-02.md
  */
 

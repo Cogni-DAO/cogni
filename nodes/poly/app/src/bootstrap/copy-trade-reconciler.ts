@@ -26,7 +26,7 @@
  *     under `poly.mirror.targets.reconcile.tick_error`, and do not tear down
  *     the interval. The next tick reattempts enumeration from scratch.
  * Side-effects: `setInterval` + per-target `MirrorJobStopFn` handles.
- * Links: docs/spec/poly-multi-tenant-auth.md § POLL_RECONCILES_PER_TICK,
+ * Links: docs/spec/poly-tenant-and-collateral.md § POLL_RECONCILES_PER_TICK,
  *        work/items/bug.0338.poly-phase-a-drops-system-tenant-target-wallets.md,
  *        nodes/poly/app/src/bootstrap/jobs/copy-trade-mirror.job.ts (MirrorJobStopFn),
  *        work/items/task.0332.poly-mirror-shared-poller.md (scale successor)

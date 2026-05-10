@@ -13,7 +13,7 @@
  *     (task.0328 rev1 — follow-up slice may add internal token if threat model changes).
  * Side-effects: IO (one DB SELECT via service-role client + in-process clock read).
  * Notes: reconciler_last_tick_at is null when the reconciler is not running (Polymarket creds absent) or has not completed a tick yet.
- * Links: work/items/task.0328.md, docs/spec/poly-copy-trade-phase1.md
+ * Links: work/items/task.0328.md, docs/spec/poly-copy-trade-execution.md
  * @public
  */
 

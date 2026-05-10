@@ -17,7 +17,7 @@
  *     user-wallets Privy app creds (`PRIVY_USER_WALLETS_*`), never the
  *     operator-wallet app creds (`PRIVY_APP_*`).
  * Side-effects: none (interface definition only)
- * Links: docs/spec/poly-trader-wallet-port.md, docs/spec/poly-multi-tenant-auth.md,
+ * Links: docs/spec/poly-tenant-and-collateral.md, docs/spec/poly-tenant-and-collateral.md,
  *        work/items/task.0318.poly-wallet-multi-tenant-auth.md
  * @public
  */
@@ -212,7 +212,7 @@ export interface CustodialConsent {
 
 /**
  * Per-tenant signing context for Polymarket CLOB trading.
- * See `docs/spec/poly-trader-wallet-port.md` for the full contract.
+ * See `docs/spec/poly-tenant-and-collateral.md` for the full contract.
  */
 export interface PolyTraderWalletPort {
   /**

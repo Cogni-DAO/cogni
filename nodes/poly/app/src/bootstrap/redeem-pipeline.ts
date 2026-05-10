@@ -40,7 +40,7 @@
  *     `backfillLifecycleStates` that scaled O(positions × multicall) and
  *     would OOM at 5k+ positions per funder (bug.5028).
  * Side-effects: IO (DB query at boot, Polygon RPC long-poll while running).
- * Links: docs/design/poly-positions.md, work/items/task.0388,
+ * Links: docs/spec/poly-copy-trade-execution.md, work/items/task.0388,
  *   work/items/task.0412, work/items/task.0318
  * @public
  */

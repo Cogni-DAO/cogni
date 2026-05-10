@@ -1,7 +1,7 @@
 -- ============================================================================
 -- bug.0428 — Per-redeem-job collateralToken vintage capture.
 --
--- Spec: docs/spec/poly-collateral-currency.md
+-- Spec: docs/spec/poly-tenant-and-collateral.md
 --       work/items/bug.0428.poly-redeem-worker-hardcodes-usdce.md
 --
 -- Adds `collateral_token` to `poly_redeem_jobs` so the worker dispatches

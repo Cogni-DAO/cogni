@@ -8,7 +8,7 @@
  * Scope: Two tenants seeded; assertions on `listForActor(userId)` + `listAllActive()` + the
  *        config-disabled filter on the enumerator. Does not test routes (separate file)
  *        and does not test on-chain/USDC isolation (Phase B; spec § Phase A scope).
- * Invariants tested (per docs/spec/poly-multi-tenant-auth.md):
+ * Invariants tested (per docs/spec/poly-tenant-and-collateral.md):
  *   - TARGET_SOURCE_TENANT_SCOPED — listForActor returns only the actor's rows under appDb RLS.
  *   - cross-tenant enumerator surfaces both tenants attribution-correctly.
  *   - GLOBAL_KILL_SWITCH_PER_TENANT — disabling one tenant's config drops their rows from

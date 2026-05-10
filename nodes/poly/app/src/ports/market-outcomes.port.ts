@@ -15,7 +15,7 @@
  *   - UPSERT_IS_IDEMPOTENT — re-receiving the same chain log produces the same
  *     row state.
  * Side-effects: none (interface).
- * Links: docs/design/poly-redeem-chain-authority.md, bug.5008
+ * Links: docs/spec/poly-copy-trade-execution.md, bug.5008
  * @public
  */
 

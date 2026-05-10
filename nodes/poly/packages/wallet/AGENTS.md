@@ -13,8 +13,8 @@ Standalone workspace package (`@cogni/poly-wallet`) providing a per-tenant Polym
 
 ## Pointers
 
-- [Poly Trader Wallet Port Spec](../../../../docs/spec/poly-trader-wallet-port.md) — port + adapter contract
-- [Poly Multi-Tenant Auth Spec](../../../../docs/spec/poly-multi-tenant-auth.md) — schema (`poly_wallet_connections`, `poly_wallet_grants`) + tenant isolation
+- [Poly Trader Wallet Port Spec](../../../../docs/spec/poly-tenant-and-collateral.md) — port + adapter contract
+- [Poly Multi-Tenant Auth Spec](../../../../docs/spec/poly-tenant-and-collateral.md) — schema (`poly_wallet_connections`, `poly_wallet_grants`) + tenant isolation
 - [task.0318 Phase B](../../../../work/items/task.0318.poly-wallet-multi-tenant-auth.md) — lifecycle carrier
 
 ## Boundaries

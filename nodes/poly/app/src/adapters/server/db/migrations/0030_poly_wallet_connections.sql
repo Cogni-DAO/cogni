@@ -1,8 +1,8 @@
 -- ============================================================================
 -- task.0318 Phase B — per-tenant Polymarket trading wallets.
 --
--- Spec: docs/spec/poly-trader-wallet-port.md
---       docs/spec/poly-multi-tenant-auth.md (Phase B)
+-- Spec: docs/spec/poly-tenant-and-collateral.md
+--       docs/spec/poly-tenant-and-collateral.md (Phase B)
 --
 -- Stores one per-tenant `poly_wallet_connections` row binding a billing
 -- account to a Privy server-wallet (in the DEDICATED user-wallets Privy app,
@@ -13,7 +13,7 @@
 -- the referenced billing_account. Partial unique index enforces one active
 -- wallet per tenant.
 --
--- PINNED INVARIANTS (source: docs/spec/poly-trader-wallet-port.md)
+-- PINNED INVARIANTS (source: docs/spec/poly-tenant-and-collateral.md)
 --
 --   TENANT_SCOPED
 --     Every row carries (billing_account_id, created_by_user_id). NOT NULL.

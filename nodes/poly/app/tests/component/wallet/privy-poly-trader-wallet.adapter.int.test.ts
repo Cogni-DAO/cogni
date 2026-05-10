@@ -18,7 +18,7 @@
  *   - REVOKE_IS_DURABLE: revoke soft-deletes the active row and resolve/getAddress
  *     fail closed for that tenant while the other tenant remains active.
  * Side-effects: IO (database operations via testcontainers)
- * Links: docs/spec/poly-trader-wallet-port.md,
+ * Links: docs/spec/poly-tenant-and-collateral.md,
  *        nodes/poly/app/src/adapters/server/wallet/privy-poly-trader-wallet.adapter.ts
  * @public
  */

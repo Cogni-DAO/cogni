@@ -11,7 +11,7 @@
  *   - CAPS_LIVE_IN_GRANT — daily / hourly USDC caps are enforced downstream by `PolyTraderWalletPort.authorizeIntent` against the tenant's `poly_wallet_grants` row. `planMirrorFromFill` is intentionally unaware of caps so a single cap decision lives in one place (the authorize boundary).
  *   - NO_KILL_SWITCH (bug.0438): there is no per-tenant kill-switch gate. The active-target / active-grant chain in the cross-tenant enumerator is the only gate; an explicit POST of a target IS the user's opt-in.
  * Side-effects: none
- * Links: docs/spec/poly-multi-tenant-auth.md, work/items/task.0318, work/items/task.5005, work/items/bug.5045
+ * Links: docs/spec/poly-tenant-and-collateral.md, work/items/task.0318, work/items/task.5005, work/items/bug.5045
  * @public
  */
 

@@ -32,11 +32,11 @@ last_commit: 921413314
 
 ## Decisions Made
 
-- [Revised Phase B to Privy-per-user, Safe+4337 deferred to future OSS-hardening task](../../docs/spec/poly-multi-tenant-auth.md#phase-b-signing-backend-decision-revised-2026-04-20)
-- [SEPARATE_PRIVY_APP: new Privy app for user wallets, distinct from operator](../../docs/spec/poly-trader-wallet-port.md#env--separation-of-system-and-user-wallet-privy-apps)
+- [Revised Phase B to Privy-per-user, Safe+4337 deferred to future OSS-hardening task](../../docs/spec/poly-tenant-and-collateral.md)
+- [SEPARATE_PRIVY_APP: new Privy app for user wallets, distinct from operator](../../docs/spec/poly-tenant-and-collateral.md)
 - [Branded `AuthorizedSigningContext` for compile-time scope/cap bypass protection](../../packages/poly-wallet/src/port/poly-trader-wallet.port.ts) — `placeOrder` will accept only the branded type
-- [Advisory-locked `provision` + halt-future-only `revoke` + WITHDRAW_BEFORE_REVOKE UX contract](../../docs/spec/poly-trader-wallet-port.md#invariants)
-- [Custodial consent persisted on row; agent-actor path requires follow-up API-key auth](../../docs/spec/poly-trader-wallet-port.md#onboarding)
+- [Advisory-locked `provision` + halt-future-only `revoke` + WITHDRAW_BEFORE_REVOKE UX contract](../../docs/spec/poly-tenant-and-collateral.md)
+- [Custodial consent persisted on row; agent-actor path requires follow-up API-key auth](../../docs/spec/poly-tenant-and-collateral.md)
 - [B2.11 orphan sweep deferred to follow-up task.0348](../items/task.0348.poly-wallet-orphan-sweep.md)
 - [Review feedback r3/r4 truth-sync — B2.10 fixed and B2.12 completed](../items/task.0318.poly-wallet-multi-tenant-auth.md#review-feedback-revision-3--2026-04-20-phase-b-slice-on-pr-968)
 
@@ -64,8 +64,8 @@ last_commit: 921413314
 | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
 | [PR #968](https://github.com/Cogni-DAO/node-template/pull/968)                                               | The slice; PR body lists the smells reviewers have already flagged                                           |
 | [docs/guides/poly-wallet-provisioning.md](../../docs/guides/poly-wallet-provisioning.md)                     | Runbook: 5-secret setup, `/profile` + API exercise paths, Loki handshake, § Architecture (honest accounting) |
-| [docs/spec/poly-trader-wallet-port.md](../../docs/spec/poly-trader-wallet-port.md)                           | Port/adapter contract + 11 acceptance checks (tests must hit these)                                          |
-| [docs/spec/poly-multi-tenant-auth.md](../../docs/spec/poly-multi-tenant-auth.md)                             | Tenant-isolation contract + schema                                                                           |
+| [docs/spec/poly-tenant-and-collateral.md](../../docs/spec/poly-tenant-and-collateral.md)                     | Port/adapter contract + 11 acceptance checks (tests must hit these)                                          |
+| [docs/spec/poly-tenant-and-collateral.md](../../docs/spec/poly-tenant-and-collateral.md)                     | Tenant-isolation contract + schema                                                                           |
 | [work/items/task.0318.poly-wallet-multi-tenant-auth.md](../items/task.0318.poly-wallet-multi-tenant-auth.md) | Lifecycle carrier — B2 checkpoint table shows shipped/open, r3 review feedback matrix                        |
 | `packages/poly-wallet/src/port/poly-trader-wallet.port.ts`                                                   | The port interface (branded types)                                                                           |
 | `nodes/poly/app/src/adapters/server/wallet/privy-poly-trader-wallet.adapter.ts`                              | The adapter                                                                                                  |

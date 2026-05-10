@@ -24,7 +24,7 @@
  *     dashboard, not an unbounded archive export.
  * Side-effects: IO (DB read, optional Polymarket Data API + CLOB public reads).
  * Links: nodes/poly/packages/node-contracts/src/poly.wallet.execution.v1.contract.ts,
- *        docs/spec/poly-trader-wallet-port.md,
+ *        docs/spec/poly-tenant-and-collateral.md,
  *        work/items/task.0354.poly-trading-hardening-followups.md
  * @public
  */

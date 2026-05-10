@@ -30,7 +30,7 @@
  *   - SWEEP_IS_NOT_AN_ARCHITECTURE: only legitimate sweep is the catch-up
  *     replay bounded by `poly_subscription_cursors.last_processed_block`.
  * Side-effects: none (schema only).
- * Links: docs/design/poly-positions.md, work/items/task.0388.poly-redeem-job-queue-capability-b.md
+ * Links: docs/spec/poly-copy-trade-execution.md, work/items/task.0388.poly-redeem-job-queue-capability-b.md
  * @public
  */
 

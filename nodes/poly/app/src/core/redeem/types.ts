@@ -12,7 +12,7 @@
  *   - The `RedeemJobStatus` and `RedeemLifecycleState` enums are mirrored
  *     verbatim by the SQL CHECK constraints in migration 0033.
  * Side-effects: none
- * Links: docs/design/poly-positions.md, work/items/task.0388
+ * Links: docs/spec/poly-copy-trade-execution.md, work/items/task.0388
  * @public
  */
 
@@ -48,7 +48,7 @@ export type RedeemFailureClass = "transient_exhausted" | "malformed";
 
 /**
  * Position lifecycle state, surfaced to the dashboard for Open vs History
- * tab membership (CP2 of task.0388). Mirrors `docs/design/poly-positions.md`.
+ * tab membership (CP2 of task.0388). Mirrors `docs/spec/poly-copy-trade-execution.md`.
  *
  * Worker writes one of these on every `decideRedeem` evaluation; subscriber
  * advances it on observed events.

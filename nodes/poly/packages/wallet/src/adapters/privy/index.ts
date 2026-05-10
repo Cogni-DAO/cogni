@@ -7,7 +7,7 @@
  * Scope: Barrel placeholder only. Does not export any runtime today.
  * Invariants: none (placeholder file).
  * Side-effects: none
- * Links: docs/spec/poly-trader-wallet-port.md §§ Adapter, Behavior
+ * Links: docs/spec/poly-tenant-and-collateral.md §§ Adapter, Behavior
  * @public
  */
 

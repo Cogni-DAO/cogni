@@ -14,7 +14,7 @@ tags: [poly, polymarket, wallets, multi-tenant, privy, runbook]
 
 # Poly per-tenant Trading Wallet — Provisioning Runbook
 
-> Operator-facing runbook for task.0318 Phase B. Covers what's shipped in PR #968 and what to do to exercise it on candidate-a. Pairs with [poly-trader-wallet-port](../spec/poly-trader-wallet-port.md) (the contract) and [poly-multi-tenant-auth](../spec/poly-multi-tenant-auth.md) (tenant-isolation shape).
+> Operator-facing runbook for task.0318 Phase B. Covers what's shipped in PR #968 and what to do to exercise it on candidate-a. Pairs with [poly-trader-wallet-port](../spec/poly-tenant-and-collateral.md) (the contract) and [poly-multi-tenant-auth](../spec/poly-tenant-and-collateral.md) (tenant-isolation shape).
 
 ## Status at PR #968
 
@@ -97,7 +97,7 @@ Known regression boundary:
 
 ### 1. Create a NEW Privy app for user wallets (manual, one-time)
 
-**Separate from the operator-wallet Privy app** — `SEPARATE_PRIVY_APP` invariant. Reasons in [poly-trader-wallet-port § Env](../spec/poly-trader-wallet-port.md#env--separation-of-system-and-user-wallet-privy-apps).
+**Separate from the operator-wallet Privy app** — `SEPARATE_PRIVY_APP` invariant. Reasons in [poly-trader-wallet-port § Env](../spec/poly-tenant-and-collateral.md).
 
 1. Sign in at <https://dashboard.privy.io> (Cogni-DAO account).
 2. "Create app" → name it `cogni-user-wallets-candidate-a` (or similar).
@@ -268,7 +268,7 @@ Ordered by blocking priority:
 
 ## Related
 
-- [poly-trader-wallet-port spec](../spec/poly-trader-wallet-port.md) — port/adapter contract
-- [poly-multi-tenant-auth spec](../spec/poly-multi-tenant-auth.md) — tenant-isolation contract
+- [poly-trader-wallet-port spec](../spec/poly-tenant-and-collateral.md) — port/adapter contract
+- [poly-multi-tenant-auth spec](../spec/poly-tenant-and-collateral.md) — tenant-isolation contract
 - [task.0318 work item](../../work/items/task.0318.poly-wallet-multi-tenant-auth.md) — lifecycle carrier
 - PR [#968](https://github.com/Cogni-DAO/node-template/pull/968) — the slice covered by this runbook

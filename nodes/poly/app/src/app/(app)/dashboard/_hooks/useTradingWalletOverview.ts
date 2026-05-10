@@ -7,7 +7,7 @@
  * balances first, live Polymarket valuation and P/L chart second.
  * Scope: Client-side React Query composition only. No route logic.
  * Side-effects: IO (HTTP fetch via React Query).
- * Links: docs/design/poly-dashboard-balance-and-positions.md
+ * Links: docs/spec/poly-copy-trade-execution.md
  * @internal
  */
 

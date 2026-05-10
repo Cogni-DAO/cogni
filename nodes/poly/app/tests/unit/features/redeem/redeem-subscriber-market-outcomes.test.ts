@@ -10,7 +10,7 @@
  *   to "lifecycle-only" mode and dashboard rows stop classifying as
  *   `winner | loser` until the redeem job lifecycle catches up.
  * Scope: Unit test with mocked candidates + ports.
- * Links: docs/design/poly-redeem-chain-authority.md
+ * Links: docs/spec/poly-copy-trade-execution.md
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";

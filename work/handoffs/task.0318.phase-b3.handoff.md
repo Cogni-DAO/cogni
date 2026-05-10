@@ -35,10 +35,10 @@ Verification on branch HEAD (`00237c0cc`):
 
 ## Decisions Made
 
-- [Stage 1 `authorizeIntent` owns scope + cap + grant-revoke checks on the hot path; `planMirrorFromFill` stays pure and cap-free](../../docs/spec/poly-trader-wallet-port.md#invariants)
+- [Stage 1 `authorizeIntent` owns scope + cap + grant-revoke checks on the hot path; `planMirrorFromFill` stays pure and cap-free](../../docs/spec/poly-tenant-and-collateral.md)
 - [`purge_no_bridge` Stage 4 — Privy app boundary makes prototype data migration impossible; operator recovers balance manually](../items/task.0318.poly-wallet-multi-tenant-auth.md#phase-b-stage-4-rollout)
-- [Agent-tool surface accepts v0 regression: `polyTradeCapability` binding removed from `createToolBindings`; agent tools return "not configured" until per-tenant agent auth lands in B4](../../docs/spec/poly-trader-wallet-port.md)
-- [Rename audit landed inline with staging: `decide → planMirrorFromFill`, `mirror-coordinator → mirror-pipeline`, `PolyTradeBundle → PolyTradeExecutor`. Naming rationale captured in the design review.](../../docs/spec/poly-trader-wallet-port.md)
+- [Agent-tool surface accepts v0 regression: `polyTradeCapability` binding removed from `createToolBindings`; agent tools return "not configured" until per-tenant agent auth lands in B4](../../docs/spec/poly-tenant-and-collateral.md)
+- [Rename audit landed inline with staging: `decide → planMirrorFromFill`, `mirror-coordinator → mirror-pipeline`, `PolyTradeBundle → PolyTradeExecutor`. Naming rationale captured in the design review.](../../docs/spec/poly-tenant-and-collateral.md)
 - [Test fixtures — all new unit tests use `COGNI_SYSTEM_BILLING_ACCOUNT_ID` + `TEST_USER_ID_1` from `@tests/_fakes` instead of hardcoded UUID strings](../../.claude/skills/test-expert/SKILL.md)
 
 ## Next Actions
@@ -62,7 +62,7 @@ Verification on branch HEAD (`00237c0cc`):
 | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
 | [work/items/task.0318.poly-wallet-multi-tenant-auth.md](../items/task.0318.poly-wallet-multi-tenant-auth.md) | Lifecycle carrier; Phase B3 Validation block                                                            |
 | [work/handoffs/task.0318.handoff.md](./task.0318.handoff.md)                                                 | Phase B2 handoff (merged)                                                                               |
-| [docs/spec/poly-trader-wallet-port.md](../../docs/spec/poly-trader-wallet-port.md)                           | Port contract — `authorizeIntent` scope + cap semantics                                                 |
+| [docs/spec/poly-tenant-and-collateral.md](../../docs/spec/poly-tenant-and-collateral.md)                     | Port contract — `authorizeIntent` scope + cap semantics                                                 |
 | `packages/poly-wallet/src/port/poly-trader-wallet.port.ts`                                                   | Port interface — branded `AuthorizedSigningContext` for compile-time scope bypass protection            |
 | `nodes/poly/app/src/adapters/server/wallet/privy-poly-trader-wallet.adapter.ts`                              | `authorizeIntent` + `provisionWithGrant` + `revoke` implementation                                      |
 | `nodes/poly/app/src/bootstrap/capabilities/poly-trade-executor.ts`                                           | `PolyTradeExecutor` + `PolyTradeExecutorFactory` — sole app-local `@polymarket/clob-client` import seam |

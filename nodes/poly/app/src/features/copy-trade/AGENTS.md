@@ -15,9 +15,9 @@ Thin copy-trade slice — the pure `planMirrorFromFill()` policy that, given a n
 
 - [task.0315 — Phase 1 plan](../../../../../../work/items/task.0315.poly-copy-trade-prototype.md)
 - [task.0318 — Multi-tenant auth + per-tenant execution](../../../../../../work/items/task.0318.poly-wallet-multi-tenant-auth.md)
-- [Phase 1 spec](../../../../../../docs/spec/poly-copy-trade-phase1.md)
-- [Multi-tenant auth spec](../../../../../../docs/spec/poly-multi-tenant-auth.md)
-- [Poly trader wallet port](../../../../../../docs/spec/poly-trader-wallet-port.md) — where caps + scope are enforced
+- [Phase 1 spec](../../../../../../docs/spec/poly-copy-trade-execution.md)
+- [Multi-tenant auth spec](../../../../../../docs/spec/poly-tenant-and-collateral.md)
+- [Poly trader wallet port](../../../../../../docs/spec/poly-tenant-and-collateral.md) — where caps + scope are enforced
 - [Root poly node AGENTS.md](../AGENTS.md)
 - Sibling layers: [../trading/AGENTS.md](../trading/AGENTS.md), [../wallet-watch/AGENTS.md](../wallet-watch/AGENTS.md)
 
@@ -42,7 +42,7 @@ Thin copy-trade slice — the pure `planMirrorFromFill()` policy that, given a n
 ## Public Surface
 
 - **Exports (pure):** `planMirrorFromFill()` — the stable-boundary planner function. No cap checks; emits `{kind: "place", intent}` or `{kind: "skip", reason}` with bounded `position_branch`. Threads `MirrorTargetConfig.placement` into `intent.attributes.placement` and mirror semantics into `intent.attributes.position_branch`.
-- **Exports (types):** `MirrorTargetConfig` (carries `billing_account_id` + `created_by_user_id` + `sizing` + `placement` + optional `position_followup`), `RuntimeState` (optional `position: MirrorPositionView` + `target_position: TargetConditionPositionView`), `MirrorPositionView` (per-condition mirror cache view — authority #4 only, signal not truth; see `docs/design/poly-mirror-position-projection.md`), `TargetConditionPositionView` (live target position read model; v0 Data API, vNext Postgres-backed), `MirrorPlan`, `MirrorReason`, `PlanMirrorInput` (includes optional market `tick_size`), `SizingPolicy` (`min_bet` | `target_percentile` | `target_percentile_scaled`), `PlacementPolicy` (`mirror_limit` | `market_fok`).
+- **Exports (types):** `MirrorTargetConfig` (carries `billing_account_id` + `created_by_user_id` + `sizing` + `placement` + optional `position_followup`), `RuntimeState` (optional `position: MirrorPositionView` + `target_position: TargetConditionPositionView`), `MirrorPositionView` (per-condition mirror cache view — authority #4 only, signal not truth; see `docs/spec/poly-copy-trade-execution.md`), `TargetConditionPositionView` (live target position read model; v0 Data API, vNext Postgres-backed), `MirrorPlan`, `MirrorReason`, `PlanMirrorInput` (includes optional market `tick_size`), `SizingPolicy` (`min_bet` | `target_percentile` | `target_percentile_scaled`), `PlacementPolicy` (`mirror_limit` | `market_fok`).
 - **Exports (pure):** `aggregatePositionRows(rows) → Map<condition_id, MirrorPositionView>` — collapses generic `PositionIntentAggregate[]` from trading into the mirror-vocabulary view. Called per-tick from mirror-pipeline.
 - **Exports (pipeline):** `runMirrorTick(deps)` — orchestrates wallet-watch → `planMirrorFromFill` → `PolyTradeExecutorFactory.getFor(tenant).placeIntent`. BUY path inspects `findOpenForMarket` results: same-price-band → skip as `already_resting`, materially-stale-price → cancel-then-place (bug.5035). SELL path runs a cancel pre-step over `findOpenForMarket` before the position-close. `MirrorPipelineDeps.cancelOrder` is optional in tests, required in production.
 - **Exports (target source):** `CopyTradeTargetSource` port + `EnumeratedTarget` shape, `envTargetSource(wallets)` (local-dev), `dbTargetSource({appDb, serviceDb})` (production). Two methods: `listForActor(actorId)` (RLS-clamped) + `listAllActive()` (the ONE sanctioned BYPASSRLS read; grant-aware join against `poly_wallet_connections` + `poly_wallet_grants`).

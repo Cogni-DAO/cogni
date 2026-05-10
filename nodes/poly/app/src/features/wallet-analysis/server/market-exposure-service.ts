@@ -55,7 +55,7 @@
  * Side-effects: DB read across `poly_copy_trade_targets`,
  *   `poly_trader_wallets`, `poly_trader_position_snapshots`,
  *   `poly_trader_fills`. No upstream Polymarket calls.
- * Links: docs/design/poly-hedge-followup-policy.md
+ * Links: docs/spec/poly-copy-trade-execution.md
  * @internal
  */
 

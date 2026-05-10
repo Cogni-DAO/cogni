@@ -14,7 +14,7 @@ Generic Polymarket placement + order-ledger substrate. Every path that places an
 ## Pointers
 
 - [task.0315 — Phase 1 plan](../../../../../../work/items/task.0315.poly-copy-trade-prototype.md)
-- [Phase 1 spec](../../../../../../docs/spec/poly-copy-trade-phase1.md)
+- [Phase 1 spec](../../../../../../docs/spec/poly-copy-trade-execution.md)
 - [Root poly node AGENTS.md](../AGENTS.md)
 - Sibling layers: [../copy-trade/AGENTS.md](../copy-trade/AGENTS.md), [../wallet-watch/AGENTS.md](../wallet-watch/AGENTS.md)
 

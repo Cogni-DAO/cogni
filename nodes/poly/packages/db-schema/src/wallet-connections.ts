@@ -26,8 +26,8 @@
  *     Cleared app-side alongside revoked_at so a fresh post-revoke row
  *     re-runs the approvals flow.
  * Side-effects: none (schema only)
- * Links: docs/spec/poly-trader-wallet-port.md,
- *        docs/spec/poly-multi-tenant-auth.md,
+ * Links: docs/spec/poly-tenant-and-collateral.md,
+ *        docs/spec/poly-tenant-and-collateral.md,
  *        work/items/task.0318.poly-wallet-multi-tenant-auth.md
  * @public
  */

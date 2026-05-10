@@ -15,7 +15,7 @@
  *     exactly match the requested withdrawal before any signing call starts.
  * Side-effects: IO (DB lookup, Privy signing, Polygon transaction).
  * Links: nodes/poly/packages/node-contracts/src/poly.wallet.withdraw.v1.contract.ts,
- *        docs/spec/poly-trader-wallet-port.md
+ *        docs/spec/poly-tenant-and-collateral.md
  * @public
  */
 

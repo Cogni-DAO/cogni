@@ -55,16 +55,16 @@ Load multiple if you're crossing domains (e.g., a research view that drives a ta
 
 **Specs (as-built):**
 
-- [docs/spec/poly-copy-trade-phase1.md](../../../docs/spec/poly-copy-trade-phase1.md) — Phase 1 layer boundaries, invariants, `fill_id` shape
-- [docs/spec/poly-order-position-lifecycle.md](../../../docs/spec/poly-order-position-lifecycle.md) — order status vs position lifecycle vs redeem job state machine
-- [docs/spec/poly-multi-tenant-auth.md](../../../docs/spec/poly-multi-tenant-auth.md) — Phase A tenant-scoped copy-trade tables + RLS
-- [docs/spec/poly-trader-wallet-port.md](../../../docs/spec/poly-trader-wallet-port.md) — Phase B `PolyTraderWalletPort` (AEAD, consent, invariants)
+- [docs/spec/poly-copy-trade-execution.md](../../../docs/spec/poly-copy-trade-execution.md) — Phase 1 layer boundaries, invariants, `fill_id` shape
+- [docs/spec/poly-copy-trade-execution.md](../../../docs/spec/poly-copy-trade-execution.md) — order status vs position lifecycle vs redeem job state machine
+- [docs/spec/poly-tenant-and-collateral.md](../../../docs/spec/poly-tenant-and-collateral.md) — Phase A tenant-scoped copy-trade tables + RLS
+- [docs/spec/poly-tenant-and-collateral.md](../../../docs/spec/poly-tenant-and-collateral.md) — Phase B `PolyTraderWalletPort` (AEAD, consent, invariants)
 
 **Current design/research pointers:**
 
-- [docs/design/poly-mirror-position-projection.md](../../../docs/design/poly-mirror-position-projection.md) — `MirrorPositionView`, position authority boundaries, follow-up branch predicates, decision-log observability contract
-- [docs/design/poly-positions.md](../../../docs/design/poly-positions.md) — canonical position model; do not confuse local mirror policy cache with chain/Data API authority
-- [docs/design/poly-bet-sizer-v1.md](../../../docs/design/poly-bet-sizer-v1.md) — current as-built hardcoded RN1/swisstony target-position pXX policy
+- [docs/spec/poly-copy-trade-execution.md](../../../docs/spec/poly-copy-trade-execution.md) — `MirrorPositionView`, position authority boundaries, follow-up branch predicates, decision-log observability contract
+- [docs/spec/poly-copy-trade-execution.md](../../../docs/spec/poly-copy-trade-execution.md) — canonical position model; do not confuse local mirror policy cache with chain/Data API authority
+- [docs/spec/poly-copy-trade-execution.md](../../../docs/spec/poly-copy-trade-execution.md) — current as-built hardcoded RN1/swisstony target-position pXX policy
 - [docs/research/poly/layering-policy-spike-2026-05-02.md](../../../docs/research/poly/layering-policy-spike-2026-05-02.md) — historical layering research; do not treat its order-flow pXX as the active position-pXX policy
 - [nodes/poly/app/src/bootstrap/jobs/copy-trade-mirror.job.ts](../../../nodes/poly/app/src/bootstrap/jobs/copy-trade-mirror.job.ts) — current hardcoded v0 sizing snapshots and position-follow-up defaults
 - [nodes/poly/app/src/features/copy-trade/plan-mirror.ts](../../../nodes/poly/app/src/features/copy-trade/plan-mirror.ts) — pure planner for pXX, layer, hedge, and SELL-close branch decisions

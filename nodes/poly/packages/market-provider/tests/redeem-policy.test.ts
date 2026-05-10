@@ -3,11 +3,11 @@
 
 /**
  * Module: `@cogni/poly-market-provider/tests/redeem-policy`
- * Purpose: Unit-test `decideRedeem` against the 7-class fixture matrix from docs/design/poly-positions.md (binary-winner, binary-loser, binary-already-redeemed, neg-risk-parent, neg-risk-adapter, multi-outcome-winner, multi-outcome-loser) plus malformed-input edges.
+ * Purpose: Unit-test `decideRedeem` against the 7-class fixture matrix from docs/spec/poly-copy-trade-execution.md (binary-winner, binary-loser, binary-already-redeemed, neg-risk-parent, neg-risk-adapter, multi-outcome-winner, multi-outcome-loser) plus malformed-input edges.
  * Scope: Pure decision function only. Does not hit any SDK or network.
  * Invariants: COVERAGE_COMPLETE — at least one assertion per design-doc class is preserved on every refactor.
  * Side-effects: none
- * Links: work/items/task.0387, docs/design/poly-positions.md
+ * Links: work/items/task.0387, docs/spec/poly-copy-trade-execution.md
  * @internal
  */
 

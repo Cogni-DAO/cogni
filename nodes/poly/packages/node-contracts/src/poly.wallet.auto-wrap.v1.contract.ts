@@ -17,7 +17,7 @@
  *     (= 1.00 USDC.e) is enforced server-side; the wire field is optional.
  * Side-effects: none
  * Links: work/items/task.0429.poly-auto-wrap-consent-loop.md,
- *        docs/spec/poly-trader-wallet-port.md
+ *        docs/spec/poly-tenant-and-collateral.md
  * @public
  */
 

@@ -10,7 +10,7 @@
  *   - PNL_SINGLE_SOURCE: P/L comes from the same Polymarket-native user-pnl slice as wallet analysis.
  *   - TRADE_FLOW_FROM_OBSERVATIONS: trade counts/notional come from `poly_trader_fills`, not ad hoc Data-API fetches.
  * Side-effects: none
- * Links: docs/design/poly-copy-target-performance-benchmark.md, work/items/task.5005
+ * Links: docs/spec/poly-copy-trade-execution.md, work/items/task.5005
  * @public
  */
 

@@ -14,7 +14,7 @@
  *     deactivate Cogni-wallet current-position rows unless an injected
  *     authority classifies the missing row terminal.
  * Side-effects: IO through injected Data API client + optional user-pnl client + injected DB.
- * Links: docs/design/poly-copy-target-performance-benchmark.md, work/items/task.5005, work/items/task.5012
+ * Links: docs/spec/poly-copy-trade-execution.md, work/items/task.5005, work/items/task.5012
  * @public
  */
 

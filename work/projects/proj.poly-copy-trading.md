@@ -123,11 +123,11 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 
 ## As-Built Specs
 
-- [Poly Copy-Trade Phase 1](../../docs/spec/poly-copy-trade-phase1.md) — layer boundaries, invariants, fill_id shape (as-built v0)
-- [Poly Multi-Tenant Auth](../../docs/spec/poly-multi-tenant-auth.md) — tenant-scoped copy-trade tables, `CopyTradeTargetSource` port (Phase A); `PolyTraderWalletPort` + `poly_wallet_{connections,grants}` + `PolyTradeExecutorFactory` (Phase B3, as-built)
-- [Poly Trader Wallet Port](../../docs/spec/poly-trader-wallet-port.md) — port contract, `authorizeIntent` + branded `AuthorizedSigningContext`, read-only `getBalances` + HTTP `poly.wallet.balances.v1` (Money page surface), Privy-app isolation, adapter lifecycle (Phase B3, as-built)
-- [Poly Position Exit](../../docs/spec/poly-position-exit.md) — authority split for close/redeem plus the readonly-first position-state model (`live_positions`, `closed_positions`, `pending_actions`)
-- [Poly Positions — object model + lifecycle (visual)](../../docs/design/poly-positions.md) — 7-state lifecycle diagram, four-authority contract, and the redeem-rewrite design that task.0387 + task.0388 implement
+- [Poly Copy-Trade Phase 1](../../docs/spec/poly-copy-trade-execution.md) — layer boundaries, invariants, fill_id shape (as-built v0)
+- [Poly Multi-Tenant Auth](../../docs/spec/poly-tenant-and-collateral.md) — tenant-scoped copy-trade tables, `CopyTradeTargetSource` port (Phase A); `PolyTraderWalletPort` + `poly_wallet_{connections,grants}` + `PolyTradeExecutorFactory` (Phase B3, as-built)
+- [Poly Trader Wallet Port](../../docs/spec/poly-tenant-and-collateral.md) — port contract, `authorizeIntent` + branded `AuthorizedSigningContext`, read-only `getBalances` + HTTP `poly.wallet.balances.v1` (Money page surface), Privy-app isolation, adapter lifecycle (Phase B3, as-built)
+- [Poly Position Exit](../../docs/spec/poly-copy-trade-execution.md) — authority split for close/redeem plus the readonly-first position-state model (`live_positions`, `closed_positions`, `pending_actions`)
+- [Poly Positions — object model + lifecycle (visual)](../../docs/spec/poly-copy-trade-execution.md) — 7-state lifecycle diagram, four-authority contract, and the redeem-rewrite design that task.0387 + task.0388 implement
 - [Polymarket Account Setup](../../docs/guides/polymarket-account-setup.md) — Privy operator onboarding runbook (guide, not spec)
 
 ## Design Notes
@@ -140,7 +140,7 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 
 - **Execution rows are a read model, not authority**: candidate-a also proved a close can succeed upstream while the dashboard still renders the old open row from the 30s wallet-analysis process cache. Immediate fix lives in task.0357: evict wallet-scoped execution/read-model cache keys after successful close/redeem. Proper follow-up is a readonly-first split between `live_positions`, `closed_positions`, and `pending_actions` so future MCP tooling can expose each authority cleanly.
 
-- **Readonly-first position state is the clean MCP seam**: the future tool surface is not "give me rows from the execution card." It is a readonly projection of three authorities: `live_positions` (current holdings), `closed_positions` (trade-derived lifecycle history), and `pending_actions` (app-owned write/reconcile state). The domain contract lives in [Poly Position Exit](../../docs/spec/poly-position-exit.md); the generic tool transport will later ride the shared MCP infrastructure from [MCP Control Plane](../../docs/spec/mcp-control-plane.md) and [Tool Use](../../docs/spec/tool-use.md).
+- **Readonly-first position state is the clean MCP seam**: the future tool surface is not "give me rows from the execution card." It is a readonly projection of three authorities: `live_positions` (current holdings), `closed_positions` (trade-derived lifecycle history), and `pending_actions` (app-owned write/reconcile state). The domain contract lives in [Poly Position Exit](../../docs/spec/poly-copy-trade-execution.md); the generic tool transport will later ride the shared MCP infrastructure from [MCP Control Plane](../../docs/spec/mcp-control-plane.md) and [Tool Use](../../docs/spec/tool-use.md).
 
 - **Target-source seam (`CopyTradeTargetSource`)**: Phase A lands the DB-backed impl (`dbTargetSource` over `poly_copy_trade_targets`) alongside the original `envTargetSource` (now local-dev only). The port has two methods: `listForActor(actorId)` RLS-clamped via appDb for per-user routes, and `listAllActive()` under serviceDb — the ONE sanctioned BYPASSRLS read — used exclusively by the mirror-poll enumerator in `container.ts`.
 

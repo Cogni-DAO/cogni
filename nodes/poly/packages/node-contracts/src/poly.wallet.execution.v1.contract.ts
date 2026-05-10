@@ -12,7 +12,7 @@
  *   - live_positions contains open/redeemable rows only; closed_positions contains closed rows only.
  *   - lifecycleState (optional) reflects the redeem-pipeline classification (task.0388). Drives Open vs History tab membership and the Redeem-button gate; absent / null when the pipeline has not yet classified the position.
  * Side-effects: none
- * Links: docs/design/poly-dashboard-balance-and-positions.md, docs/design/wallet-analysis-components.md
+ * Links: docs/spec/poly-copy-trade-execution.md, docs/design/wallet-analysis-components.md
  * @public
  */
 
@@ -186,7 +186,7 @@ export type WalletExecutionMarketLeg = z.infer<
  * VWAP, and P/L for both legs side-by-side and a `net` summary across them.
  * Hedge classification is current-state only (smaller cost-basis leg of a
  * two-leg condition). Server-side pivot per
- * docs/design/poly-dashboard-market-aggregation.md.
+ * docs/spec/poly-copy-trade-execution.md.
  */
 export const WalletExecutionMarketParticipantRowSchema = z.object({
   side: WalletExecutionMarketPositionSideSchema,

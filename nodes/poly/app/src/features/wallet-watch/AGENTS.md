@@ -15,7 +15,7 @@ Generic Polymarket wallet observation primitive. Emits normalized `Fill[]` for a
 
 - [task.0315 — Phase 1 plan](../../../../../../work/items/task.0315.poly-copy-trade-prototype.md)
 - [task.0322 — WS source replacement](../../../../../../work/items/task.0322.poly-copy-trade-phase4-design-prep.md)
-- [Phase 1 spec](../../../../../../docs/spec/poly-copy-trade-phase1.md)
+- [Phase 1 spec](../../../../../../docs/spec/poly-copy-trade-execution.md)
 - [Root poly node AGENTS.md](../AGENTS.md)
 - Sibling layers: [../copy-trade/AGENTS.md](../copy-trade/AGENTS.md), [../trading/AGENTS.md](../trading/AGENTS.md)
 

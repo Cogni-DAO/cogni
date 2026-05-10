@@ -22,7 +22,7 @@
  *   stamp on success).
  * Links: nodes/poly/packages/node-contracts/src/poly.wallet.enable-trading.v1.contract.ts,
  *        nodes/poly/packages/wallet/src/port/poly-trader-wallet.port.ts,
- *        docs/spec/poly-trader-wallet-port.md,
+ *        docs/spec/poly-tenant-and-collateral.md,
  *        work/items/task.0355.poly-trading-wallet-enable-trading.md
  * @public
  */

@@ -18,7 +18,7 @@
  * Side-effects: none
  * Notes: Target rows own the copy filter percentile and per-target max bet. Wallet grants
  *        remain the downstream authorization/cap layer before placement.
- * Links: docs/spec/poly-multi-tenant-auth.md, work/items/task.0318
+ * Links: docs/spec/poly-tenant-and-collateral.md, work/items/task.0318
  * @public
  */
 

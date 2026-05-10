@@ -10,7 +10,7 @@
  *   - CAPS_POSITIVE — both caps > 0.
  *   - NO_HOURLY_FILLS_EDIT — schema field exists but is not on the wire.
  * Side-effects: none
- * Links: docs/spec/poly-trader-wallet-port.md,
+ * Links: docs/spec/poly-tenant-and-collateral.md,
  *        nodes/poly/packages/db-schema/src/wallet-grants.ts,
  *        work/items/task.0347.poly-wallet-preferences-sizing-config.md
  * @public

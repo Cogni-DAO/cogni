@@ -4,7 +4,7 @@
 /**
  * Module: `@app/api/v1/poly/copy-trade/targets`
  * Purpose: HTTP GET (list) + POST (create) for the calling user's tracked Polymarket
- *          wallets. Per docs/spec/poly-multi-tenant-auth.md.
+ *          wallets. Per docs/spec/poly-tenant-and-collateral.md.
  * Scope: Thin validators — both ops resolve `(userId, billingAccountId)` from the
  *        session, then `withTenantScope(appDb, userId, ...)` so RLS enforces tenant
  *        isolation at the DB layer. App-side defense-in-depth verifies
@@ -25,7 +25,7 @@
  * Side-effects: IO (Postgres reads + writes via appDb).
  * Notes: DELETE/PATCH live in `[id]/route.ts`. Wallet grants remain downstream
  *        authorization/cap enforcement; target rows own the user-facing copy policy.
- * Links: docs/spec/poly-multi-tenant-auth.md, work/items/task.0318
+ * Links: docs/spec/poly-tenant-and-collateral.md, work/items/task.0318
  * @public
  */
 

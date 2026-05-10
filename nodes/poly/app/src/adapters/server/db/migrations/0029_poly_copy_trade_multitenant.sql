@@ -1,7 +1,7 @@
 -- ============================================================================
 -- task.0318 Phase A — multi-tenant copy-trade tables.
 --
--- Spec: docs/spec/poly-multi-tenant-auth.md (spec_state: proposed)
+-- Spec: docs/spec/poly-tenant-and-collateral.md (spec_state: proposed)
 --
 -- Adds tenant scoping to every poly_copy_trade_* table: `billing_account_id`
 -- is the data column (FK → billing_accounts), `created_by_user_id` is the
@@ -12,7 +12,7 @@
 --     USING ("created_by_user_id" = current_setting('app.current_user_id', true))
 --     WITH CHECK ("created_by_user_id" = current_setting('app.current_user_id', true));
 --
--- PINNED INVARIANTS (source: docs/spec/poly-multi-tenant-auth.md)
+-- PINNED INVARIANTS (source: docs/spec/poly-tenant-and-collateral.md)
 --
 --   TENANT_SCOPED_ROWS
 --     Every row carries (billing_account_id, created_by_user_id). NOT NULL.

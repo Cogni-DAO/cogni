@@ -22,7 +22,7 @@
  *     `BACKFILL_ENQUEUE_CONCURRENCY = 4` + `Promise.allSettled` so one
  *     condition's failure doesn't halt the rest.
  * Side-effects: IO (Data-API read, DB read, per-condition enqueue).
- * Links: docs/spec/poly-order-position-lifecycle.md, work/items/bug.5028
+ * Links: docs/spec/poly-copy-trade-execution.md, work/items/bug.5028
  * @public
  */
 

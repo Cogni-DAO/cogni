@@ -7,7 +7,7 @@
  * Scope: Types + constants only. No IO, no env reads, no logger or metrics behavior.
  * Invariants: CURSOR_IS_MAX_TIMESTAMP — `newSince` is the max `trade.timestamp` (unix seconds) seen in the tick.
  * Side-effects: none
- * Links: docs/spec/poly-copy-trade-phase1.md
+ * Links: docs/spec/poly-copy-trade-execution.md
  * @public
  */
 

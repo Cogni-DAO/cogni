@@ -7,7 +7,7 @@
  * Scope: Build tooling configuration only. Does not contain runtime code or exports.
  * Invariants: ESM output with type declarations.
  * Side-effects: IO
- * Links: docs/spec/poly-trader-wallet-port.md
+ * Links: docs/spec/poly-tenant-and-collateral.md
  * @internal
  */
 

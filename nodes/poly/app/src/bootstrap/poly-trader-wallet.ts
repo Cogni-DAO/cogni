@@ -10,7 +10,7 @@
  * Invariants:
  *   - SEPARATE_PRIVY_APP: this module reads PRIVY_USER_WALLETS_* never PRIVY_APP_* (the operator-wallet triple).
  * Side-effects: IO (PrivyClient construction) on first call.
- * Links: docs/spec/poly-trader-wallet-port.md, work/items/task.0318.poly-wallet-multi-tenant-auth.md
+ * Links: docs/spec/poly-tenant-and-collateral.md, work/items/task.0318.poly-wallet-multi-tenant-auth.md
  * @internal
  */
 
