@@ -54,7 +54,7 @@ describe("classifyRedeemError: chain reverts (consume retry budget)", () => {
   });
 });
 
-describe("classifyRedeemError: rpc_transient (does NOT consume retry budget)", () => {
+describe("classifyRedeemError: rpc_transient (no structured chain-revert signals)", () => {
   it('classifies Alchemy "Missing or invalid parameters" as rpc_transient', () => {
     expect(
       classifyRedeemError({
@@ -66,42 +66,22 @@ describe("classifyRedeemError: rpc_transient (does NOT consume retry budget)", (
     ).toBe("rpc_transient");
   });
 
-  it("classifies HTTP transport failure as rpc_transient", () => {
+  it("classifies an empty error shape as rpc_transient", () => {
     expect(
       classifyRedeemError({
         reason: null,
         data: null,
-        shortMessage: "HTTP request failed",
+        shortMessage: "",
       })
     ).toBe("rpc_transient");
   });
 
-  it("classifies JSON-RPC error as rpc_transient", () => {
+  it("classifies any non-chain-shaped error as rpc_transient", () => {
     expect(
       classifyRedeemError({
         reason: null,
         data: null,
-        shortMessage: "JSON-RPC error: server unreachable",
-      })
-    ).toBe("rpc_transient");
-  });
-
-  it("classifies socket timeouts as rpc_transient", () => {
-    expect(
-      classifyRedeemError({
-        reason: null,
-        data: null,
-        shortMessage: "Request timed out after 30s",
-      })
-    ).toBe("rpc_transient");
-  });
-
-  it("classifies rate-limit responses as rpc_transient", () => {
-    expect(
-      classifyRedeemError({
-        reason: null,
-        data: null,
-        shortMessage: "rate limited (429)",
+        shortMessage: "an entirely new failure shape we have not seen yet",
       })
     ).toBe("rpc_transient");
   });
@@ -116,27 +96,5 @@ describe("classifyRedeemError: chain_revert wins over rpc-shaped messages", () =
         shortMessage: "Missing or invalid parameters.",
       })
     ).toBe("chain_revert");
-  });
-});
-
-describe("classifyRedeemError: unknown (treated conservatively as 3-strike)", () => {
-  it("classifies an empty error shape as unknown", () => {
-    expect(
-      classifyRedeemError({
-        reason: null,
-        data: null,
-        shortMessage: "",
-      })
-    ).toBe("unknown");
-  });
-
-  it("classifies a novel-shape error as unknown", () => {
-    expect(
-      classifyRedeemError({
-        reason: null,
-        data: null,
-        shortMessage: "an entirely new failure shape we have not seen yet",
-      })
-    ).toBe("unknown");
   });
 });
