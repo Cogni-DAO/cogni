@@ -55,7 +55,16 @@ function hashOfMigration(sqlText) {
 function isAlreadyAppliedError(err) {
   const msg = err instanceof Error ? err.message : String(err);
   const cause = err?.cause instanceof Error ? err.cause.message : "";
-  return /already exists/i.test(`${msg} ${cause}`);
+  const combined = `${msg} ${cause}`;
+  // "already exists" — DDL collision when a schema migration replays.
+  // "duplicate key value" — DML collision when a data-only migration replays
+  //   (e.g. INSERT INTO domains with PK conflict on second run after the
+  //   first run's drizzle-tracking INSERT was rejected by Doltgres's
+  //   extended-protocol gap). Same signal: migration body already applied;
+  //   reconcile tracking via sql.unsafe.
+  return (
+    /already exists/i.test(combined) || /duplicate key value/i.test(combined)
+  );
 }
 
 async function reconcileTracking(sql, folder) {
