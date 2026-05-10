@@ -5,7 +5,7 @@ title: "Knowledge Domain Registry — FK Enforcement, HTTP API, and Phasing"
 status: draft
 spec_state: draft
 trust: draft
-summary: "Makes ENTRY_HAS_DOMAIN a real gate. Every write to `knowledge` (HTTP contributions and `core__knowledge_write`) verifies `domain` exists in `domains` before INSERT; unregistered domains return 400. Cookie-session HTTP + UI for registering domains preserves NODES_BOOT_EMPTY (no migrator seeding). Phased: Phase 1 single-node (operator manages knowledge_operator), Phase 2 registry-node hosts UIs for headless nodes."
+summary: "Makes ENTRY_HAS_DOMAIN a real gate. Every write to `knowledge` (HTTP contributions and `core__knowledge_write`) verifies `domain` exists in `domains` before INSERT; unregistered domains return 400. Base set seeded by the schema migrator (reference data, not content); cookie-session HTTP + UI extends beyond the base. Phased: Phase 1 single-node (operator manages knowledge_operator), Phase 2 registry-node hosts UIs for headless nodes."
 read_when: Implementing or reviewing the domain registry, debugging a `DomainNotRegisteredError`, designing a future registry node, or extracting `/knowledge` UI into a shared package.
 implements:
 owner: derekg1729
@@ -32,7 +32,7 @@ tags: [knowledge, dolt, domain, registry, fk, syntropy]
 
 ## Goal
 
-Close the gap where `ENTRY_HAS_DOMAIN` was declared as an invariant but not enforced. Make `domain` a foreign key in spirit — every write to `knowledge` verifies the domain is registered, or fails with `DomainNotRegisteredError`. Provide a UI to register domains so production seeds itself without touching the migrator (preserves `NODES_BOOT_EMPTY`).
+Close the gap where `ENTRY_HAS_DOMAIN` was declared as an invariant but not enforced. Make `domain` a foreign key in spirit — every write to `knowledge` verifies the domain is registered, or fails with `DomainNotRegisteredError`. Seed the base set in the schema migration (reference data) and provide a UI to extend beyond it.
 
 ---
 
