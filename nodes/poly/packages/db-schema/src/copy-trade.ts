@@ -18,7 +18,7 @@
  *     only signal. Target rows own the mirror filter percentile and per-target max bet; grants still
  *     enforce downstream tenant authorization/caps.
  * Side-effects: none (schema definitions only)
- * Links: docs/spec/poly-multi-tenant-auth.md, work/items/task.0318
+ * Links: docs/spec/poly-tenant-and-collateral.md, work/items/task.0318
  * @public
  */
 

@@ -6,7 +6,7 @@
  * Purpose: Pick the right ERC-20 `collateralToken` for `redeemPositions(...)` on a vanilla CTF position by chain-probing both candidates (pUSD, USDC.e) and matching the one whose `(token, collectionId)` hashes to the funder's known on-chain positionId. Mismatch silently zero-burns (bug.0428).
  * Scope: Two CTF view calls. No DB, no writes.
  * Side-effects: IO (Polygon RPC view calls).
- * Links: docs/spec/poly-collateral-currency.md, work/items/bug.0428.poly-redeem-worker-hardcodes-usdce.md
+ * Links: docs/spec/poly-tenant-and-collateral.md, work/items/bug.0428.poly-redeem-worker-hardcodes-usdce.md
  * @public
  */
 

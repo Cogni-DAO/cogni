@@ -28,7 +28,7 @@
  *     bumping `attempt_count`.
  *   - REDEEM_RETRY_IS_TRANSIENT_ONLY — malformed-class events skip the retry loop.
  * Side-effects: none
- * Links: docs/design/poly-positions.md § Lifecycle, work/items/task.0388,
+ * Links: docs/spec/poly-copy-trade-execution.md § Lifecycle, work/items/task.0388,
  *   work/items/bug.0403
  * @public
  */

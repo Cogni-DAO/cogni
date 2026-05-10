@@ -26,7 +26,7 @@
  *     Only `losing_outcome` is genuinely terminal — chain payoutNumerator=0
  *     never flips back.
  * Side-effects: none
- * Links: docs/design/poly-positions.md § Dust-state UI semantics, work/items/task.0388 § Static review Blocker #2, work/items/bug.5040
+ * Links: docs/spec/poly-copy-trade-execution.md § Dust-state UI semantics, work/items/task.0388 § Static review Blocker #2, work/items/bug.5040
  * @public
  */
 

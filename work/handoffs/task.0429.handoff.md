@@ -60,7 +60,7 @@ last_commit: 03b1e2160
 | [bug.0428](../items/bug.0428.poly-redeem-worker-hardcodes-usdce.md)                  | V2 redeem collateralToken bug doc                                    |
 | [task.0429](../items/task.0429.poly-auto-wrap-usdce-to-pusd.md)                      | Auto-wrap design + scope + first-three-commits                       |
 | [proj.poly-copy-trading.md](../projects/proj.poly-copy-trading.md)                   | P5 roadmap, all 4 items linked, severity context                     |
-| [docs/spec/poly-collateral-currency.md](../../docs/spec/poly-collateral-currency.md) | V2 collateral lifecycle (USDC.e / pUSD / Onramp)                     |
+| [docs/spec/poly-tenant-and-collateral.md](../../docs/spec/poly-tenant-and-collateral.md) | V2 collateral lifecycle (USDC.e / pUSD / Onramp)                     |
 | `nodes/poly/app/src/features/trading/order-ledger.ts:137-175`                        | `cumulativeIntentForMarket` — bug.0430 lives here                    |
 | `nodes/poly/app/src/features/redeem/redeem-worker.ts:255-275`                        | Vanilla CTF dispatch + USDC.e hardcode (bug.0428)                    |
 | `nodes/poly/app/src/features/redeem/resolve-redeem-decision.ts`                      | Redeem policy decision (bug.0431)                                    |

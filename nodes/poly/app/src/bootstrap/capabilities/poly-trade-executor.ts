@@ -49,7 +49,7 @@
  * Side-effects: on first `placeIntent` for a new tenant: HTTPS to Polymarket
  *   CLOB + Privy API. Subsequent calls reuse cached clients.
  * Links: work/items/task.0318 (Phase B3), work/items/task.0388,
- *   docs/spec/poly-trader-wallet-port.md
+ *   docs/spec/poly-tenant-and-collateral.md
  * @public
  */
 

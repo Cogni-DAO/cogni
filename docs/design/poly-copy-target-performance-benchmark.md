@@ -124,8 +124,8 @@ The target wallets operate at a different scale. A research surface that only sh
 
 ### Existing Flow To Preserve
 
-- `docs/design/poly-bet-sizer-v1.md` is the current as-built sizing spec.
-- `docs/design/poly-mirror-position-projection.md` is the current as-built mirror-position/VWAP projection spec.
+- `docs/spec/poly-copy-trade-execution.md` is the current as-built sizing spec.
+- `docs/spec/poly-copy-trade-execution.md` is the current as-built mirror-position/VWAP projection spec.
 - PR #1137 / `task.0431` is the order-flow distributions foundation on wallet research pages. It explains target style, but it is not the copy-performance attribution store.
 - `TOP_TARGET_SIZE_SNAPSHOTS` in `copy-trade-mirror.job.ts` hardcodes RN1 and swisstony p50/p75/p90/p95/p99 position cost-basis snapshots.
 - Default copied target policy is p75 and `$5` max per trade.

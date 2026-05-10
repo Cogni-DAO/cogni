@@ -33,7 +33,7 @@ You are the expert for every seam that **gets a wallet into a signing-ready stat
 4. **RLS** on `poly_wallet_connections`: tenant isolation via `EXISTS(SELECT 1 FROM billing_accounts WHERE id = billing_account_id AND owner_user_id = current_setting('app.current_user_id')::uuid)`. **Not** keyed on `created_by_user_id` — the pivot through `billing_accounts.owner_user_id` makes the policy principal-agnostic and forward-compatible with multi-user billing + agents-as-actors.
 5. **Response** — `{ connection_id, funder_address, requires_funding, suggested_usdc, suggested_matic }`. `requires_funding` + suggestions are currently hardcoded — [task.0347](../../../work/items/task.0347.poly-wallet-preferences-sizing-config.md) replaces them with honest RPC-backed reads + tenant-configured preferences.
 
-### Invariants (from `docs/spec/poly-trader-wallet-port.md`)
+### Invariants (from `docs/spec/poly-tenant-and-collateral.md`)
 
 - **`CUSTODIAL_CONSENT`** — enforced at _two_ layers:
   1. Zod (HTTP boundary): the `poly.wallet.connect.request.v1` schema requires both consent fields.

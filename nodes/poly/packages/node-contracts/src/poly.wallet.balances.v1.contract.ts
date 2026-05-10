@@ -7,7 +7,7 @@
  * Scope: GET /api/v1/poly/wallet/balances. Schema-only. TENANT_SCOPED (session auth). Does not provision wallets, does not move funds, does not modify allowance state, does not write any DB rows.
  * Invariants: PARTIAL_FAILURE_NEVER_THROWS; READ_ONLY (no signing, no Privy call); distinct from the legacy operator-only `/balance` (singular).
  * Side-effects: none
- * Links: docs/spec/poly-trader-wallet-port.md,
+ * Links: docs/spec/poly-tenant-and-collateral.md,
  *        nodes/poly/app/src/app/api/v1/poly/wallet/balances/route.ts
  * @public
  */

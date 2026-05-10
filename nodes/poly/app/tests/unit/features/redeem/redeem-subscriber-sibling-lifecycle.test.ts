@@ -8,7 +8,7 @@
  *   model is asset-scoped, so terminal skip siblings must still mirror even
  *   when their job enqueue collides with the winner row.
  * Scope: Unit test with mocked position resolution and ports only.
- * Links: src/features/redeem/redeem-subscriber.ts, docs/spec/poly-order-position-lifecycle.md
+ * Links: src/features/redeem/redeem-subscriber.ts, docs/spec/poly-copy-trade-execution.md
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";

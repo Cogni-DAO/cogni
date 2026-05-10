@@ -9,7 +9,7 @@
  *   - PACKAGES_NO_ENV: no env reads, lifecycle, or app imports.
  *   - CURSOR_IS_MAX_TIMESTAMP: `newSince` is the max trade timestamp observed in this fetch.
  * Side-effects: IO through injected Data API client plus caller-provided logger/metrics ports.
- * Links: docs/design/poly-copy-target-performance-benchmark.md, work/items/task.5005
+ * Links: docs/spec/poly-copy-trade-execution.md, work/items/task.5005
  * @public
  */
 

@@ -19,7 +19,7 @@
  *     emits `payout_redemption_observed` (worker only emits `submitted`).
  *   - SWEEP_IS_NOT_AN_ARCHITECTURE — no Data-API enumerate-and-fire.
  * Side-effects: IO (Polygon RPC long-poll, DB writes).
- * Links: docs/design/poly-positions.md § Three-subscription topology, task.0388
+ * Links: docs/spec/poly-copy-trade-execution.md § Three-subscription topology, task.0388
  * @public
  */
 

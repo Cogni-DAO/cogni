@@ -18,7 +18,7 @@
  *     UI re-renders the pills; the user retries. 4xx is reserved for
  *     preflight errors (no connection, RPC unconfigured).
  * Side-effects: none (schema only)
- * Links: docs/spec/poly-trader-wallet-port.md,
+ * Links: docs/spec/poly-tenant-and-collateral.md,
  *        nodes/poly/app/src/app/api/v1/poly/wallet/enable-trading/route.ts,
  *        work/items/task.0355.poly-trading-wallet-enable-trading.md
  * @public

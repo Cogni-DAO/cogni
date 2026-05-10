@@ -18,7 +18,7 @@
  *   - SEPARATE_PRIVY_APP: enforced at adapter construction time (see
  *     `@/adapters/server/wallet#getPolyTraderWalletAdapter`).
  * Side-effects: IO (Privy API call, DB writes).
- * Links: docs/spec/poly-trader-wallet-port.md, work/items/task.0318
+ * Links: docs/spec/poly-tenant-and-collateral.md, work/items/task.0318
  * @public
  */
 

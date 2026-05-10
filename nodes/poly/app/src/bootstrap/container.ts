@@ -862,7 +862,7 @@ function createContainer(): Container {
 
         // Target-set reconciler — ticks listAllActive every 30s, starts/stops
         // per-wallet polls to match. First tick fires immediately. See
-        // docs/spec/poly-multi-tenant-auth.md § POLL_RECONCILES_PER_TICK.
+        // docs/spec/poly-tenant-and-collateral.md § POLL_RECONCILES_PER_TICK.
         //
         // `listAllActive` joins `poly_wallet_connections` +
         // `poly_wallet_grants`, so the reconciler only hands us tenants that

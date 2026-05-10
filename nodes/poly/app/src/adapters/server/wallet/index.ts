@@ -7,7 +7,7 @@
  * Scope: Adapter class re-export only. Does not construct instances or read env.
  * Invariants: none (barrel file).
  * Side-effects: none
- * Links: docs/spec/poly-trader-wallet-port.md
+ * Links: docs/spec/poly-tenant-and-collateral.md
  * @internal
  */
 

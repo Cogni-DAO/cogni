@@ -7,7 +7,7 @@
  * Scope: Type re-exports only. Does not contain runtime code or export any adapter.
  * Invariants: none (barrel file).
  * Side-effects: none
- * Links: docs/spec/poly-trader-wallet-port.md
+ * Links: docs/spec/poly-tenant-and-collateral.md
  * @public
  */
 

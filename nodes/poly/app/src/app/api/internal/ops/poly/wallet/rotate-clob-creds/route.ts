@@ -14,7 +14,7 @@
  *     counts/error classes only.
  * Side-effects: Polymarket CLOB API key deletion/creation, encrypted DB update,
  *   process-local executor cache invalidation.
- * Links: docs/spec/poly-trader-wallet-port.md, work/items/bug.5007
+ * Links: docs/spec/poly-tenant-and-collateral.md, work/items/bug.5007
  * @internal
  */
 

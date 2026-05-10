@@ -18,7 +18,7 @@
  *     different topic hash than CTF `PayoutRedemption`. Subscriber must
  *     subscribe both independently.
  * Side-effects: none (pure constants + parseAbi)
- * Links: docs/design/poly-positions.md § Three-subscription topology,
+ * Links: docs/spec/poly-copy-trade-execution.md § Three-subscription topology,
  *   work/items/task.0388.poly-redeem-job-queue-capability-b.md
  *   <https://polygonscan.com/address/0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296#code>
  * @public

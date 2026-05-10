@@ -18,7 +18,7 @@
  *     condition is structurally meaningless. The Target Overlap surface
  *     reports exposure (USDC, markets, positions) and fill volume only.
  * Side-effects: none
- * Links: docs/design/poly-copy-target-performance-benchmark.md, work/items/bug.5020
+ * Links: docs/spec/poly-copy-trade-execution.md, work/items/bug.5020
  * @public
  */
 

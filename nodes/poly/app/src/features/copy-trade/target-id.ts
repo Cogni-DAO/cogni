@@ -12,7 +12,7 @@
  * Invariants: TARGET_ID_DETERMINISTIC — same wallet, same uuid (case-insensitive
  *             on the input). Namespace UUID is fixed; never change it.
  * Side-effects: none
- * Links: docs/spec/poly-copy-trade-phase1.md (IDEMPOTENT_BY_CLIENT_ID), docs/spec/poly-multi-tenant-auth.md
+ * Links: docs/spec/poly-copy-trade-execution.md (IDEMPOTENT_BY_CLIENT_ID), docs/spec/poly-tenant-and-collateral.md
  * @public
  */
 

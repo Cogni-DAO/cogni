@@ -14,7 +14,7 @@
  *   - SWEEP_IS_NOT_AN_ARCHITECTURE — only legitimate sweep is event-replay
  *     bounded by `last_processed_block`. No Data-API enumerate-and-fire.
  * Side-effects: IO (Polygon RPC `getLogs`, DB writes).
- * Links: docs/design/poly-positions.md, work/items/task.0388
+ * Links: docs/spec/poly-copy-trade-execution.md, work/items/task.0388
  * @public
  */
 

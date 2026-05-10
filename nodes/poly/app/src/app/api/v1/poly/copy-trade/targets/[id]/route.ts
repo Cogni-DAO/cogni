@@ -5,7 +5,7 @@
  * Module: `@app/api/v1/poly/copy-trade/targets/[id]`
  * Purpose: HTTP DELETE/PATCH for one of the calling user's tracked Polymarket wallets.
  *          DELETE soft-deletes by setting `disabled_at`; PATCH updates the per-target
- *          mirror sizing policy. Per docs/spec/poly-multi-tenant-auth.md.
+ *          mirror sizing policy. Per docs/spec/poly-tenant-and-collateral.md.
  * Scope: Validators + RLS-scoped UPDATEs. No cross-tenant access.
  * Invariants:
  *   - TENANT_SCOPED: UPDATE runs under `withTenantScope(appDb, sessionUser.id)`. RLS
@@ -14,7 +14,7 @@
  *   - SOFT_DELETE: writes `disabled_at = now()` rather than DELETE. Preserves
  *     attribution history in `poly_copy_trade_fills`.
  * Side-effects: IO (Postgres UPDATE via appDb).
- * Links: docs/spec/poly-multi-tenant-auth.md, work/items/task.0318
+ * Links: docs/spec/poly-tenant-and-collateral.md, work/items/task.0318
  * @public
  */
 

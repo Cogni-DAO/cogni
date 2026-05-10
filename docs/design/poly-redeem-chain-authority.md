@@ -27,7 +27,7 @@ Two independent authorities decide whether a position is redeemable, and they di
 | Read-model (display)  | `nodes/poly/app/src/features/wallet-analysis/server/current-position-read-model.ts:238-257` | DB-cached Polymarket Data-API `raw.redeemable` flag **OR** ledger `lifecycleState="winner"` | Dashboard `status="redeemable"` and Action button |
 | Redeem route (action) | `nodes/poly/app/src/features/redeem/resolve-redeem-decision.ts`                             | Live Data-API `/positions` + on-chain CTF `payoutNumerator/Denominator/balanceOf`           | What actually executes                            |
 
-`raw.redeemable=true` from Polymarket Data API means **"market resolved AND you held shares at snapshot time"** — _not_ "you have a winner." Loser shares are technically `redeemable` for $0 in CTF terms (`payoutNumerator=0`). Polymarket's UI shows a "Redeem" button on losing positions too; we mistook that signal for actionability. This violates `docs/spec/poly-order-position-lifecycle.md` § Required Matrix, which makes `lifecycle="winner"` the only redeemable signal.
+`raw.redeemable=true` from Polymarket Data API means **"market resolved AND you held shares at snapshot time"** — _not_ "you have a winner." Loser shares are technically `redeemable` for $0 in CTF terms (`payoutNumerator=0`). Polymarket's UI shows a "Redeem" button on losing positions too; we mistook that signal for actionability. This violates `docs/spec/poly-copy-trade-execution.md` § Required Matrix, which makes `lifecycle="winner"` the only redeemable signal.
 
 ## Approach: `poly_market_outcomes` becomes the single chain-resolution authority
 
@@ -112,7 +112,7 @@ The `redeem-subscriber` already receives every Polygon `ConditionResolution` cha
 
 ### 7. Spec update
 
-- **Modify** `docs/spec/poly-order-position-lifecycle.md`
+- **Modify** `docs/spec/poly-copy-trade-execution.md`
   - § Dashboard Classification: replace ledger-only flowchart with the new model — `poly_trader_current_positions` is current inventory, `poly_market_outcomes` is chain-resolution authority for `winner | loser`, `poly_copy_trade_fills` is closed history.
   - § Redeem State Machine: document `poly_market_outcomes` UPSERT as a fourth event in the redeem mirror table, sourced from `ConditionResolution`.
 

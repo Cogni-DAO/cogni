@@ -12,7 +12,7 @@
  *   - PNL_TIMESERIES_KEYED_BY_FIDELITY: `poly_trader_user_pnl_points` PK is `(trader_wallet_id, fidelity, ts)`; reader picks `1h` for short windows, `1d` for long.
  *   - PRICE_HISTORY_TIMESERIES_KEYED: `poly_market_price_history` PK is `(asset, fidelity, ts)`; reader picks `1h` for windows up to ~1 month, `1d` for longer.
  * Side-effects: none
- * Links: docs/design/poly-copy-target-performance-benchmark.md, work/items/task.5005, work/items/task.5012, work/items/task.5018
+ * Links: docs/spec/poly-copy-trade-execution.md, work/items/task.5005, work/items/task.5012, work/items/task.5018
  * @public
  */
 

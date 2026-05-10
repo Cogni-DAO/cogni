@@ -7,7 +7,7 @@
  * Scope: Pure function tests. No I/O. v0 does NOT yet branch on `state.position`; follow-on PRs (hedge-followup, SELL-mirror, layering) introduce the branches as predicates against this field.
  * Invariants: PLAN_IS_PURE — same input → same output across N runs.
  * Side-effects: none
- * Links: docs/design/poly-mirror-position-projection.md
+ * Links: docs/spec/poly-copy-trade-execution.md
  * @internal
  */
 

@@ -183,7 +183,7 @@ interface RedeemFailed {
 }
 ```
 
-The legacy synchronous `redeemResolvedPosition` executor method, the polling `runRedeemSweep`, and the in-process cooldown Map / sweep mutex have been deleted. CTF redemption is a chain-event-driven pipeline with N=5 finality + per-receipt funder-burn verification (`REDEEM_REQUIRES_BURN_OBSERVATION`). See `docs/design/poly-positions.md` for the lifecycle diagram and Class-A / Class-B abandoned-position runbook.
+The legacy synchronous `redeemResolvedPosition` executor method, the polling `runRedeemSweep`, and the in-process cooldown Map / sweep mutex have been deleted. CTF redemption is a chain-event-driven pipeline with N=5 finality + per-receipt funder-burn verification (`REDEEM_REQUIRES_BURN_OBSERVATION`). See `docs/spec/poly-copy-trade-execution.md` for the lifecycle diagram and Class-A / Class-B abandoned-position runbook.
 
 The important Phase 1 contract is behavioral:
 

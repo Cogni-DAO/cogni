@@ -1,7 +1,7 @@
 -- ============================================================================
 -- task.0388 — Event-driven redeem job queue.
 --
--- Spec: docs/design/poly-positions.md
+-- Spec: docs/spec/poly-copy-trade-execution.md
 --       work/items/task.0388.poly-redeem-job-queue-capability-b.md
 --
 -- Replaces the in-process polling sweep + cooldown Map + mutex in

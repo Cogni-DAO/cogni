@@ -13,7 +13,7 @@ Event-driven CTF redeem pipeline (task.0388). Replaces the deleted polling sweep
 
 ## Pointers
 
-- [Design — Poly Positions](../../../../../../docs/design/poly-positions.md) — lifecycle diagram, four-authority rule, abandoned-position runbook
+- [Design — Poly Positions](../../../../../../docs/spec/poly-copy-trade-execution.md) — lifecycle diagram, four-authority rule, abandoned-position runbook
 - [Bootstrap wiring](../../bootstrap/redeem-pipeline.ts) — boot helper that constructs and starts the pipeline
 - [Port](../../ports/redeem-jobs.port.ts) — `RedeemJobsPort` contract
 - [Adapter](../../adapters/server/redeem/drizzle-redeem-jobs.adapter.ts) — Postgres implementation

@@ -20,7 +20,7 @@ implements: bug.5003
 
 ## Reconciliation with the canonical position model
 
-`docs/design/poly-positions.md` (Derek, 2026-04-26) defines the project-wide position model: **one identity, four authorities, seven states.** This design is **not** an alternate position model — it is a strictly-bounded _cache view_ against authority **#4 Local DB**, used **only** as a _signal_ input to mirror policy decisions.
+`docs/spec/poly-copy-trade-execution.md` (Derek, 2026-04-26) defines the project-wide position model: **one identity, four authorities, seven states.** This design is **not** an alternate position model — it is a strictly-bounded _cache view_ against authority **#4 Local DB**, used **only** as a _signal_ input to mirror policy decisions.
 
 | Concern                                                                               | Authority used                                       | Type                                                   |
 | ------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------ |
@@ -201,7 +201,7 @@ This makes the new branches attributable in Loki without a Grafana refactor. The
 
 - [ ] **PLAN_IS_PURE preserved** — `planMirrorFromFill` reads `state.position` synchronously; no DB access added to the planner.
 - [ ] **POSITION_DERIVED_AT_SNAPSHOT** — `MirrorPositionView` is computed inside `OrderLedger.snapshotState` only. No second source of truth, no write-side maintenance, no cache layer.
-- [ ] **POSITION_VIEW_IS_CACHE_NOT_TRUTH** — view is _signal_, not authority. SELL execution + redeem flow still consult #1 chain / #3 Data API as today. Doc: docs/design/poly-positions.md.
+- [ ] **POSITION_VIEW_IS_CACHE_NOT_TRUTH** — view is _signal_, not authority. SELL execution + redeem flow still consult #1 chain / #3 Data API as today. Doc: docs/spec/poly-copy-trade-execution.md.
 - [ ] **WITHIN_TICK_FRESHNESS** — fill `N+1` in the same tick sees fill `N`'s placement in `state.position`. Today this is satisfied automatically because `snapshotState` runs per-fill and the SQL filter includes `pending` rows; a future per-tick `snapshotState` would need explicit in-tick mutation to keep this invariant.
 - [ ] **FAIL_CLOSED_ON_SNAPSHOT_READ** — DB error → `position_aggregates: []`, same warn log path.
 - [ ] **CAPS_LIVE_IN_GRANT untouched** — daily/hourly caps still resolve in `authorizeIntent` against `poly_wallet_grants`. The view is a _signal_ input, never a _cap_.
@@ -225,7 +225,7 @@ This makes the new branches attributable in Loki without a Grafana refactor. The
 - **Materialized `poly_copy_trade_positions` table** — write-path complexity, race against placement, ALTER. Defer until measured.
 - **Compute view inside `planMirrorFromFill`** — breaks `PLAN_IS_PURE`.
 - **Per-fill query for position** — adds N round-trips per tick where today there's one.
-- **Live position from Polymarket Data-API** — bypasses our own ledger, reintroduces clock-skew between target observation and our exposure. Also miscategorizes the authority (#3 Data API isn't authority for write decisions per `poly-positions.md`).
+- **Live position from Polymarket Data-API** — bypasses our own ledger, reintroduces clock-skew between target observation and our exposure. Also miscategorizes the authority (#3 Data API isn't authority for write decisions per `poly-copy-trade-execution.md`).
 - **Promote to shared package now** — only one runtime consumes it. Conditional on packages-architecture rules; promote when a second runtime arrives.
 - **Replace `OperatorPosition`** — that type serves a different authority (chain truth for SELL-execution); merging it with the cache view would conflate authorities. Both stay.
 

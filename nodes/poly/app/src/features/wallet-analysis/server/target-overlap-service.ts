@@ -26,7 +26,7 @@
  *     surface reports exposure (USDC, markets, positions) and fill volume
  *     only. Net P/L lives on the P/L tab.
  * Side-effects: DB reads only.
- * Links: docs/design/poly-copy-target-performance-benchmark.md, work/items/bug.5020
+ * Links: docs/spec/poly-copy-trade-execution.md, work/items/bug.5020
  * @public
  */
 

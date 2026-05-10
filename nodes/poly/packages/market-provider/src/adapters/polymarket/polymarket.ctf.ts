@@ -25,7 +25,7 @@ export const POLYGON_USDC_E =
 /** pUSD — Polymarket V2 protocol-internal stablecoin (post-2026-04-28
  * cutover). Source of truth: `@polymarket/clob-client-v2`'s
  * `getContractConfig(137).collateral`; hardcoded here to keep the redeem
- * pipeline free of the SDK dep. See `docs/spec/poly-collateral-currency.md`. */
+ * pipeline free of the SDK dep. See `docs/spec/poly-tenant-and-collateral.md`. */
 export const POLYGON_PUSD =
   "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB" as const;
 

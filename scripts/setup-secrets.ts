@@ -855,7 +855,7 @@ const SECRETS: Secret[] = [
   // have been PURGED. Per-tenant CLOB L2 creds are now derived server-side
   // at wallet-provision time from the user's per-user Privy wallet and
   // stored AEAD-encrypted in `poly_wallet_connections.clob_api_key_ciphertext`.
-  // See docs/spec/poly-trader-wallet-port.md.
+  // See docs/spec/poly-tenant-and-collateral.md.
 
   // ── Optional: WalletConnect ────────────────────────────────────────────
   {

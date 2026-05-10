@@ -17,7 +17,7 @@
  *   - POSITION_ID_IS_PERSISTED — neg-risk reads `balanceOf(funder, positionId)`,
  *     never derives a sentinel from `conditionId`.
  * Side-effects: none directly; `readBalance` is async and may do I/O.
- * Links: docs/design/poly-positions.md § Worker, work/items/task.0388
+ * Links: docs/spec/poly-copy-trade-execution.md § Worker, work/items/task.0388
  * @public
  */
 

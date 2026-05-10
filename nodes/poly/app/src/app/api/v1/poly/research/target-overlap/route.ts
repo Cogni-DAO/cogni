@@ -11,7 +11,7 @@
  *   - SAVED_FACTS_ONLY: reads Postgres observed trader facts; no live upstream
  *     Polymarket calls on page load.
  * Side-effects: DB reads only.
- * Links: docs/design/poly-copy-target-performance-benchmark.md, work/items/task.5005
+ * Links: docs/spec/poly-copy-trade-execution.md, work/items/task.5005
  * @public
  */
 

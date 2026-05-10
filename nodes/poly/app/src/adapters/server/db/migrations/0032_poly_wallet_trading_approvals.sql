@@ -1,7 +1,7 @@
 -- ============================================================================
 -- task.0355 — Per-tenant Polymarket token-approval readiness stamp.
 --
--- Spec: docs/spec/poly-trader-wallet-port.md (APPROVALS_BEFORE_PLACE)
+-- Spec: docs/spec/poly-tenant-and-collateral.md (APPROVALS_BEFORE_PLACE)
 --       work/items/task.0355.poly-trading-wallet-enable-trading.md
 --
 -- Polymarket's EOA trading path needs FIVE on-chain approvals before any

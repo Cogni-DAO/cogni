@@ -1,8 +1,8 @@
 -- ============================================================================
 -- task.0318 Phase B3 — per-tenant Polymarket trade-authorization grants.
 --
--- Spec: docs/spec/poly-trader-wallet-port.md (AUTHORIZED_SIGNING_ONLY)
---       docs/spec/poly-multi-tenant-auth.md
+-- Spec: docs/spec/poly-tenant-and-collateral.md (AUTHORIZED_SIGNING_ONLY)
+--       docs/spec/poly-tenant-and-collateral.md
 --       .cursor/plans/poly-per-tenant-trade-execution_92073c70.plan.md
 --
 -- One row per active (billing_account, grant) binding. `authorizeIntent` on

@@ -8,7 +8,7 @@
  * Invariants: Response shape is contract-defined; ordering is `observed_at DESC`; agent-tool placements are NOT in the ledger in v0 (follow-up).
  * Side-effects: IO (one DB SELECT via service-role client).
  * Notes: Authenticated via session. HARDCODED_USER — response is not user-scoped in v0.
- * Links: docs/spec/poly-copy-trade-phase1.md, work/items/task.0328.poly-sync-truth-ledger-cache.md (CP3)
+ * Links: docs/spec/poly-copy-trade-execution.md, work/items/task.0328.poly-sync-truth-ledger-cache.md (CP3)
  * @public
  */
 

@@ -13,7 +13,7 @@
  *   assets only (`usdc_e`, `pusd`, `pol`). pUSD withdrawal unwraps pUSD through
  *   Polymarket CollateralOfframp and delivers USDC.e.
  * Side-effects: none
- * Links: docs/spec/poly-trader-wallet-port.md,
+ * Links: docs/spec/poly-tenant-and-collateral.md,
  *        nodes/poly/app/src/app/api/v1/poly/wallet/withdraw/route.ts,
  *        https://docs.polymarket.com/concepts/pusd,
  *        https://docs.polymarket.com/resources/contracts

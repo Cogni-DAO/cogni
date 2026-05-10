@@ -14,7 +14,7 @@
  *     connection row exists; `trading_ready` from `trading_approvals_ready_at`.
  *     Privy / decrypt validation happens on `resolve` / `authorizeIntent`, not here.
  * Side-effects: IO (DB reads only).
- * Links: docs/spec/poly-trader-wallet-port.md, work/items/task.0318
+ * Links: docs/spec/poly-tenant-and-collateral.md, work/items/task.0318
  * @public
  */
 

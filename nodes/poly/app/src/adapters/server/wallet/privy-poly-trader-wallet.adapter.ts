@@ -66,8 +66,8 @@
  *     Polymarket mainnet addresses HARDCODED in this module. No env, no
  *     user input. Matches `scripts/experiments/approve-polymarket-allowances.ts`.
  * Side-effects: IO (Privy API, DB reads/writes, AEAD crypto).
- * Links: docs/spec/poly-trader-wallet-port.md,
- *        docs/spec/poly-multi-tenant-auth.md
+ * Links: docs/spec/poly-tenant-and-collateral.md,
+ *        docs/spec/poly-tenant-and-collateral.md
  * @internal
  */
 

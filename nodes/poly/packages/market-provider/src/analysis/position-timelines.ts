@@ -10,7 +10,7 @@
  *   - Open rows never synthesize a close marker.
  *   - Market URLs only come from upstream slug fields.
  * Side-effects: none
- * Links: docs/design/poly-dashboard-balance-and-positions.md
+ * Links: docs/spec/poly-copy-trade-execution.md
  * @public
  */
 

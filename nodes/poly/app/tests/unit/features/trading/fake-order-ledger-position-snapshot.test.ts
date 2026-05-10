@@ -6,7 +6,7 @@
  * Purpose: Unit tests for `FakeOrderLedger.snapshotState().position_aggregates` (generic intent aggregates) + `aggregatePositionRows()` (mirror-vocabulary overlay) — verifies the SQL semantics: intent-based shares, pending+open+filled+partial only, lifecycle filter, binary opposite_token_id, multi-outcome graceful, fail-closed empty array.
  * Scope: In-memory FakeOrderLedger + pure aggregator. No DB.
  * Side-effects: none
- * Links: docs/design/poly-mirror-position-projection.md, src/adapters/test/trading/fake-order-ledger.ts, src/features/copy-trade/types.ts
+ * Links: docs/spec/poly-copy-trade-execution.md, src/adapters/test/trading/fake-order-ledger.ts, src/features/copy-trade/types.ts
  * @internal
  */
 

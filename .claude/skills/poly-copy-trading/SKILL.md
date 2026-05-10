@@ -30,7 +30,7 @@ ledger updated + decision row written (placed | skipped | error)
 
 **Invariant order matters.** Flipping INSERT and PLACE means a successful CLOB submit whose ledger row never committed → next poll double-mirrors. Never reorder.
 
-Durable flowchart: [Poly Order And Position Lifecycle § Mirror Decision To Limit Order](../../../docs/spec/poly-order-position-lifecycle.md#0-mirror-decision-to-limit-order).
+Durable flowchart: [Poly Order And Position Lifecycle § Mirror Decision To Limit Order](../../../docs/spec/poly-copy-trade-execution.md).
 
 ## Key code landmarks
 

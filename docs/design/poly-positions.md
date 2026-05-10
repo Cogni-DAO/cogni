@@ -78,7 +78,7 @@ A position transition is decided by exactly one of these. Mixing them is the roo
 | 3   | **Polymarket Data API** (`/positions`, `/balance-allowance`) | 5–60 s lag         | Discovery + UI hints. **Never** authority for a write decision        |
 | 4   | **Local DB** (`poly_*` tables)                               | as-of-last-write   | App-owned write intent + cached read. Never authority for chain truth |
 
-Hard rule (carry-over from `poly-position-exit.md`): **a write decision must consult either #1 or #2. #3 is a hint, #4 is a cache.**
+Hard rule (carry-over from `poly-copy-trade-execution.md`): **a write decision must consult either #1 or #2. #3 is a hint, #4 is a cache.**
 
 Bug.0384's predicate read #3 (`position.redeemable` for enumeration), then read #1 (multicall `balanceOf` + `payoutNumerators`), then _also_ read #1 to decide. That part is correct in isolation. The bleed comes from a fifth implicit authority the code never names: **the in-process cooldown Map**, which is supposed to stand in for "is there a pending tx I just sent?" — a question only #1 can answer, and only after finality. The Map is a _wrong_ answer that survives 60 s and dies on pod restart.
 
@@ -208,7 +208,7 @@ Polling sweep over Data API dies. Capability A is consulted once per resolution 
 
 ### What stays
 
-- The `closing` half of the lifecycle (CLOB SELL flow) is already correctly modeled by `poly-position-exit.md`'s "trust write ack, treat reads as lagging" rule. No change.
+- The `closing` half of the lifecycle (CLOB SELL flow) is already correctly modeled by `poly-copy-trade-execution.md`'s "trust write ack, treat reads as lagging" rule. No change.
 - `decideRedeem` _as a name_ is fine; the implementation moves and grows.
 - The user-facing manual redeem button still works, but it inserts a job row instead of firing a tx directly. UI polls job status. One write path = one failure mode.
 
@@ -296,7 +296,7 @@ The contract endpoint (`GET /api/v1/poly/wallet/execution`) needs a new `lifecyc
 ## What this doc is not
 
 - It is not a task. No status flips, no `/implement` until we agree on the picture.
-- It is not a replacement for `poly-position-exit.md` — that spec owns the close half and the four-authority contract. This doc extends it with the resolved/redeem half and adds the visual.
+- It is not a replacement for `poly-copy-trade-execution.md` — that spec owns the close half and the four-authority contract. This doc extends it with the resolved/redeem half and adds the visual.
 - It does not specify the Postgres schema, the worker's exact backoff curve, or the viem subscription's reorg handling. Those land at `/implement` time, constrained by the invariants above.
 
 ## Resolved during review
@@ -308,4 +308,4 @@ The contract endpoint (`GET /api/v1/poly/wallet/execution`) needs a new `lifecyc
 
 ## Still open (deferred, not blocking /implement)
 
-5. Where does `closing → closed` actually land? Today it's inferred from a Data API reread — the same authority confusion in miniature. Out of scope for this doc; tracked as a follow-on note in `poly-position-exit.md`.
+5. Where does `closing → closed` actually land? Today it's inferred from a Data API reread — the same authority confusion in miniature. Out of scope for this doc; tracked as a follow-on note in `poly-copy-trade-execution.md`.

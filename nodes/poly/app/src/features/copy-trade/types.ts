@@ -12,7 +12,7 @@
  *   - SIZING_POLICY_IS_DISCRIMINATED — MirrorTargetConfig.sizing is a discriminated union on `kind`; future policies (proportional, percentile) add variants, never flat fields.
  *   - CAPS_LIVE_IN_GRANT — daily + hourly caps are enforced by `PolyTraderWalletPort.authorizeIntent` against the per-tenant `poly_wallet_grants` row. `planMirrorFromFill` no longer owns those checks; this config surface no longer carries them.
  * Side-effects: none
- * Links: docs/spec/poly-multi-tenant-auth.md, work/items/task.0318, work/items/task.0404, work/items/bug.5045
+ * Links: docs/spec/poly-tenant-and-collateral.md, work/items/task.0318, work/items/task.0404, work/items/bug.5045
  * @public
  */
 
@@ -180,7 +180,7 @@ export type MirrorTargetConfig = z.infer<typeof MirrorTargetConfigSchema>;
 
 /**
  * Mirror's local-DB cache view of our own exposure on a single Polymarket
- * `condition_id`. **Authority #4 only** (per `docs/design/poly-positions.md`).
+ * `condition_id`. **Authority #4 only** (per `docs/spec/poly-copy-trade-execution.md`).
  * Used as a *signal* input for mirror policy decisions (hedge-followup,
  * layering, SELL-routing pre-check). Never authority for "do we still hold
  * shares on chain?" — that path goes through `getOperatorPositions` (#3 →

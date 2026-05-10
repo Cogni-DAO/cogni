@@ -46,7 +46,7 @@ As-built behavior:
 - New-entry, layer, and hedge BUY branches all evaluate the target's current
   condition/token position cost basis against the table above.
 - Hedge threshold calibration is documented in
-  [`design.poly-hedge-followup-policy`](poly-hedge-followup-policy.md). The
+  [`design.poly-hedge-followup-policy`](poly-copy-trade-execution.md). The
   as-built default remains `min_target_hedge_ratio=0.02` and
   `min_target_hedge_usdc=$5`.
 

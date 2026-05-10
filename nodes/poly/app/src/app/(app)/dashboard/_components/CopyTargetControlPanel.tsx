@@ -8,7 +8,7 @@
  * Scope: Client component. Owns React Query wiring for copy targets and grants;
  *        delegates shared visual controls to kit components.
  * Side-effects: IO (fetch copy targets, mutate target rows, read/write grants).
- * Links: docs/design/poly-bet-sizer-v1.md,
+ * Links: docs/spec/poly-copy-trade-execution.md,
  *        nodes/poly/packages/node-contracts/src/poly.copy-trade.targets.v1.contract.ts
  * @public
  */

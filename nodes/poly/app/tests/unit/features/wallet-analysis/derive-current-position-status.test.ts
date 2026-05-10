@@ -9,7 +9,7 @@
  *   `raw.redeemable`. The function signature itself enforces this — there is
  *   no `redeemable: boolean` parameter to pass.
  * Scope: Pure helper unit test. No I/O.
- * Links: docs/design/poly-redeem-chain-authority.md, bug.5008
+ * Links: docs/spec/poly-copy-trade-execution.md, bug.5008
  */
 
 import { describe, expect, it } from "vitest";

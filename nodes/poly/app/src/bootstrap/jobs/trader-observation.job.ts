@@ -10,7 +10,7 @@
  *   - TICK_IS_SELF_HEALING: escaped errors are logged and the interval continues.
  *   - USER_PNL_OPTIONAL: `userPnlClient` is optional; when omitted (e.g. in component tests), the tick skips the user-pnl read model writer and prune entirely.
  * Side-effects: starts a timer, performs IO through injected deps.
- * Links: docs/design/poly-copy-target-performance-benchmark.md, work/items/task.5005, work/items/task.5012
+ * Links: docs/spec/poly-copy-trade-execution.md, work/items/task.5005, work/items/task.5012
  * @internal
  */
 

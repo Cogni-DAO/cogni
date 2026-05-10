@@ -10,8 +10,8 @@
  *   - CHECK_AT_WIRE: PUT body validated against contract refinement (`daily >= per_order`, `> 0`); 422 returned with `code: 'invalid_caps'` before any DB call.
  *   - SAFE_SUCCESS_SHAPE: GET returns 200 with `connected: false` for users without an active grant — never 404 (the Money page falls back to onboarding messaging).
  * Side-effects: IO via facade.
- * Links: docs/spec/poly-multi-tenant-auth.md,
- *        docs/spec/poly-trader-wallet-port.md,
+ * Links: docs/spec/poly-tenant-and-collateral.md,
+ *        docs/spec/poly-tenant-and-collateral.md,
  *        nodes/poly/packages/node-contracts/src/poly.wallet.grants.v1.contract.ts,
  *        nodes/poly/app/src/app/_facades/poly/wallet-grants.server.ts,
  *        work/items/task.0347.poly-wallet-preferences-sizing-config.md

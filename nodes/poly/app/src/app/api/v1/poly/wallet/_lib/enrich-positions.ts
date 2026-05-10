@@ -10,7 +10,7 @@
  *   - POSITION_MATCH_KEY: live overlays match only by `(conditionId, asset)`.
  *   - TRACE_IS_OBSERVED: missing live trace stays empty; no synthetic flatlines.
  * Side-effects: none
- * Links: docs/design/poly-dashboard-balance-and-positions.md
+ * Links: docs/spec/poly-copy-trade-execution.md
  * @internal
  */
 

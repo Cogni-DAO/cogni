@@ -18,7 +18,7 @@
  *   - DECIDE_REDEEM_IS_AUTHORITY — never re-implements policy; always defers
  *     to `@cogni/poly-market-provider/policy:decideRedeem`.
  * Side-effects: IO (Data-API HTTP, Polygon RPC).
- * Links: docs/design/poly-positions.md, work/items/task.0388
+ * Links: docs/spec/poly-copy-trade-execution.md, work/items/task.0388
  * @public
  */
 

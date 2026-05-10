@@ -17,7 +17,7 @@
  *   - MIRROR_BUY_CANCELED_ON_TARGET_SELL — every SELL fill cancels open mirror orders on `(target, market)` BEFORE the position-close path. `cancelOrder` is optional in tests; production wiring always sets it. Pending rows (no `order_id`) are silently skipped — race with in-flight placement is acceptable for v0. task.5001.
  *   - STALE_RESTING_CANCEL_REPLACE — BUY path: when an open row's `attributes.limit_price` differs from the new intent's `limit_price` by ≥3pp in the disadvantageous direction, the cancel pre-step runs (same machinery as MIRROR_BUY_CANCELED_ON_TARGET_SELL) and placement proceeds. Pending rows (no `order_id`) are treated as not-stale to avoid racing in-flight placements. bug.5035.
  * Side-effects: delegated — DB I/O via `OrderLedger`, HTTP via `WalletActivitySource`, Polymarket CLOB via `placeIntent`/`cancelOrder`. Pipeline itself is pure sequencing + logger/metrics calls.
- * Links: work/items/task.0318 (Phase B3), work/items/task.5001, docs/spec/poly-copy-trade-phase1.md, docs/spec/poly-multi-tenant-auth.md
+ * Links: work/items/task.0318 (Phase B3), work/items/task.5001, docs/spec/poly-copy-trade-execution.md, docs/spec/poly-tenant-and-collateral.md
  * @public
  */
 

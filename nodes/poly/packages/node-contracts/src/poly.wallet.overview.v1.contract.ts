@@ -12,7 +12,7 @@
  *   - PARTIAL_FAILURE_NEVER_THROWS: individual upstream failures surface via
  *     nullable fields plus `warnings[]`, not a 5xx.
  * Side-effects: none
- * Links: docs/design/poly-dashboard-balance-and-positions.md
+ * Links: docs/spec/poly-copy-trade-execution.md
  * @public
  */
 
