@@ -67,6 +67,37 @@ function isAlreadyAppliedError(err) {
   );
 }
 
+// Base domains seeded as reference data (DOMAIN_REGISTRY_EXTENDS_VIA_UI per
+// docs/spec/knowledge-domain-registry.md). Cannot ride a drizzle-kit migration
+// SQL file: drizzle-orm wraps migrations in a transaction and the parameterized
+// INSERT into drizzle.__drizzle_migrations rolls back the whole tx on Doltgres
+// 0.56, taking the seed rows with it (CREATE TABLE auto-commits past rollback,
+// data DML doesn't). Sidestep via sql.unsafe with idempotent SELECT-then-INSERT,
+// same pattern the reconcileTracking shim uses.
+const BASE_DOMAIN_SEEDS = [
+  { id: "meta", name: "Meta", description: "Knowledge about the knowledge system itself." },
+  { id: "prediction-market", name: "Prediction Markets", description: "Polymarket and adjacent prediction-market knowledge — base rates, market structure, calibration." },
+  { id: "infrastructure", name: "Infrastructure", description: "Runtime, deploy, observability, and capacity knowledge for Cogni nodes." },
+  { id: "governance", name: "Governance", description: "DAO formation, attribution, voting, and operator/node contracts." },
+  { id: "reservations", name: "Reservations", description: "Restaurant / venue reservation knowledge for the resy node domain." },
+  { id: "validate_candidate", name: "Validate Candidate", description: "Reserved for /validate-candidate smoke writes. Test surface, not real content." },
+];
+
+async function seedBaseDomains(sql) {
+  const sqlEscape = (v) => `'${String(v).replace(/'/g, "''")}'`;
+  const existing = await sql.unsafe(`SELECT id FROM domains`);
+  const have = new Set(existing.map((r) => r.id));
+  let inserted = 0;
+  for (const s of BASE_DOMAIN_SEEDS) {
+    if (have.has(s.id)) continue;
+    await sql.unsafe(
+      `INSERT INTO domains (id, name, description) VALUES (${sqlEscape(s.id)}, ${sqlEscape(s.name)}, ${sqlEscape(s.description)})`
+    );
+    inserted += 1;
+  }
+  return inserted;
+}
+
 async function reconcileTracking(sql, folder) {
   const journal = JSON.parse(
     await readFile(path.join(folder, "meta", "_journal.json"), "utf8")
@@ -123,11 +154,12 @@ try {
   const stampedRows = await withConnection((sql) =>
     reconcileTracking(sql, migrationsFolder)
   );
+  const seededDomains = await withConnection((sql) => seedBaseDomains(sql));
   await withConnection(
-    (sql) => sql`SELECT dolt_commit('-Am', 'migration: drizzle-orm batch')`
+    (sql) => sql`SELECT dolt_commit('-Am', 'migration: drizzle-orm batch + base domain seeds')`
   );
   console.log(
-    `✅ ${NODE} migrations ${migrateThrewAlreadyApplied ? "already-applied" : "applied"} + ${stampedRows} tracking row(s) reconciled + dolt_commit stamped in ${Date.now() - t0}ms`
+    `✅ ${NODE} migrations ${migrateThrewAlreadyApplied ? "already-applied" : "applied"} + ${stampedRows} tracking row(s) reconciled + ${seededDomains} base domain(s) seeded + dolt_commit stamped in ${Date.now() - t0}ms`
   );
 } catch (err) {
   console.error(`FATAL(${NODE}): migrate failed:`, err);

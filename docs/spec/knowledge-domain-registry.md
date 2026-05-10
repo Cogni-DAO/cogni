@@ -180,11 +180,13 @@ No edit, no delete, no row-detail Sheet in v0. The grid is read + register only.
 
 ### Seeding
 
-`domains` is **reference data**, not content. The base set is structural to the Cogni knowledge plane and ships in the schema migration — every fresh fork has these rows before any agent runs. This matches how Drizzle migrations seed enum/lookup tables.
+`domains` is **reference data**, not content. The base set is structural to the Cogni knowledge plane and ships with the migrator — every fresh fork has these rows before any agent runs.
 
 `NODES_BOOT_EMPTY` (from [knowledge-data-plane](./knowledge-data-plane.md)) scopes to **content tables** — `knowledge`, `citations`, `sources`. It does **not** apply to the `domains` registry.
 
-Base domains seeded by the migrator (`nodes/operator/app/src/adapters/server/db/doltgres-migrations/0002_seed_base_domains.sql`):
+**Seeding mechanism:** the migrator script (`nodes/operator/app/src/adapters/server/db/migrate-doltgres.mjs`) holds `BASE_DOMAIN_SEEDS` and runs a `seedBaseDomains()` step after schema migrations are reconciled. It uses `sql.unsafe` with a SELECT-then-INSERT idempotency check, sidestepping two Doltgres 0.56 quirks: (a) drizzle-orm wraps SQL migration files in transactions, and the parameterized-INSERT failure on `drizzle.__drizzle_migrations` rolls them back — DML doesn't survive but DDL does, so data-only `.sql` migrations can't safely apply; (b) `ON CONFLICT EXCLUDED` is broken. SELECT-then-INSERT via simple protocol avoids both. Same pattern as the existing `reconcileTracking` shim in the migrator.
+
+Base domains:
 
 | id                   | Purpose                                                                          |
 | -------------------- | -------------------------------------------------------------------------------- |
@@ -195,7 +197,7 @@ Base domains seeded by the migrator (`nodes/operator/app/src/adapters/server/db/
 | `reservations`       | Restaurant / venue knowledge for resy                                            |
 | `validate_candidate` | Reserved for `/validate-candidate` smoke writes (test surface, not real content) |
 
-Idempotency: each Doltgres database has its own `__drizzle_migrations` ledger; the seed migration runs exactly once per fresh DB. Re-runs are a no-op.
+Idempotency: `seedBaseDomains` SELECTs existing `domains.id` values and INSERTs only the missing ones. Re-runs are safe no-ops; net-new rows on first deploy.
 
 The UI's `+ Add domain` flow exists for **extension** — operators registering domains beyond the base set (e.g., `art-marketplace`, `dao-tooling`) as a node's specialization grows. UI registration is the path for net-new domains; it does not duplicate the base set.
 
