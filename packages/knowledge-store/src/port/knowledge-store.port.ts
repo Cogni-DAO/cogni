@@ -4,7 +4,7 @@
 /**
  * Module: `@cogni/knowledge-store/port`
  * Purpose: KnowledgeStorePort — typed capability for versioned domain knowledge.
- * Scope: Port interface + domain-registry types + typed errors. No I/O.
+ * Scope: Port interface + domain-registry types + typed errors. Does not contain implementations, I/O, or framework dependencies.
  * Invariants:
  *   - PORT_BEFORE_BACKEND: All knowledge access goes through this port.
  *   - PACKAGES_NO_ENV, PACKAGES_NO_LIFECYCLE.

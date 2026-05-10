@@ -3,15 +3,13 @@
 
 /**
  * Module: `@cogni/knowledge-store/adapters/doltgres/util`
- * Purpose: Shared SQL helpers for Doltgres adapters — escape utilities and the
- *   `assertDomainRegistered` FK-check used by both the main store adapter and
- *   the contribution-flow adapter (DOMAIN_FK_ENFORCED_AT_WRITE).
- * Scope: Pure helpers + a single `client`-bound query. Does not own state.
+ * Purpose: Shared SQL helpers for Doltgres adapters — escape utilities and the assertDomainRegistered FK-check used by both adapters.
+ * Scope: Pure helpers + a single client-bound query. Does not own state, lifecycle, or env access.
  * Invariants:
- *   - `escapeValue` strips NUL bytes and escapes single quotes; standard_conforming_strings.
- *   - `assertDomainRegistered` MUST run on the same client/branch as the subsequent INSERT,
+ *   - escapeValue strips NUL bytes and escapes single quotes; standard_conforming_strings.
+ *   - assertDomainRegistered MUST run on the same client/branch as the subsequent INSERT,
  *     so per-PR contribution branches check against the branch's own `domains` table.
- * Side-effects: IO (single SELECT inside `assertDomainRegistered`)
+ * Side-effects: IO (single SELECT inside assertDomainRegistered)
  * Links: docs/spec/knowledge-domain-registry.md
  * @internal
  */
