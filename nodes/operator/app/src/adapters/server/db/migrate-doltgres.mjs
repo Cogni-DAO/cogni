@@ -75,12 +75,41 @@ function isAlreadyAppliedError(err) {
 // data DML doesn't). Sidestep via sql.unsafe with idempotent SELECT-then-INSERT,
 // same pattern the reconcileTracking shim uses.
 const BASE_DOMAIN_SEEDS = [
-  { id: "meta", name: "Meta", description: "Knowledge about the knowledge system itself." },
-  { id: "prediction-market", name: "Prediction Markets", description: "Polymarket and adjacent prediction-market knowledge — base rates, market structure, calibration." },
-  { id: "infrastructure", name: "Infrastructure", description: "Runtime, deploy, observability, and capacity knowledge for Cogni nodes." },
-  { id: "governance", name: "Governance", description: "DAO formation, attribution, voting, and operator/node contracts." },
-  { id: "reservations", name: "Reservations", description: "Restaurant / venue reservation knowledge for the resy node domain." },
-  { id: "validate_candidate", name: "Validate Candidate", description: "Reserved for /validate-candidate smoke writes. Test surface, not real content." },
+  {
+    id: "meta",
+    name: "Meta",
+    description: "Knowledge about the knowledge system itself.",
+  },
+  {
+    id: "prediction-market",
+    name: "Prediction Markets",
+    description:
+      "Polymarket and adjacent prediction-market knowledge — base rates, market structure, calibration.",
+  },
+  {
+    id: "infrastructure",
+    name: "Infrastructure",
+    description:
+      "Runtime, deploy, observability, and capacity knowledge for Cogni nodes.",
+  },
+  {
+    id: "governance",
+    name: "Governance",
+    description:
+      "DAO formation, attribution, voting, and operator/node contracts.",
+  },
+  {
+    id: "reservations",
+    name: "Reservations",
+    description:
+      "Restaurant / venue reservation knowledge for the resy node domain.",
+  },
+  {
+    id: "validate_candidate",
+    name: "Validate Candidate",
+    description:
+      "Reserved for /validate-candidate smoke writes. Test surface, not real content.",
+  },
 ];
 
 async function seedBaseDomains(sql) {
@@ -156,7 +185,8 @@ try {
   );
   const seededDomains = await withConnection((sql) => seedBaseDomains(sql));
   await withConnection(
-    (sql) => sql`SELECT dolt_commit('-Am', 'migration: drizzle-orm batch + base domain seeds')`
+    (sql) =>
+      sql`SELECT dolt_commit('-Am', 'migration: drizzle-orm batch + base domain seeds')`
   );
   console.log(
     `✅ ${NODE} migrations ${migrateThrewAlreadyApplied ? "already-applied" : "applied"} + ${stampedRows} tracking row(s) reconciled + ${seededDomains} base domain(s) seeded + dolt_commit stamped in ${Date.now() - t0}ms`
