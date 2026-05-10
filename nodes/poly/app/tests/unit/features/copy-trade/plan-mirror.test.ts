@@ -177,6 +177,116 @@ describe("planMirrorFromFill() — place branches", () => {
   });
 });
 
+describe("planMirrorFromFill() — market_past_end_date gate (bug.5043)", () => {
+  const NOW_MS = Date.parse("2026-05-10T12:00:00.000Z");
+
+  it("skips when fill.attributes.end_date is at or before now_ms", () => {
+    const d = planMirrorFromFill({
+      fill: {
+        ...FILL,
+        attributes: {
+          ...FILL.attributes,
+          end_date: "2026-05-10T11:59:59.000Z",
+        },
+      },
+      config: CONFIG,
+      state: CLEAN_STATE,
+      client_order_id: COID,
+      min_usdc_notional: 1.0,
+      now_ms: NOW_MS,
+    });
+    expect(d).toEqual({
+      kind: "skip",
+      reason: "market_past_end_date",
+      position_branch: "new_entry",
+    });
+  });
+
+  it("places when fill.attributes.end_date is in the future", () => {
+    const d = planMirrorFromFill({
+      fill: {
+        ...FILL,
+        attributes: {
+          ...FILL.attributes,
+          end_date: "2026-06-15T00:00:00.000Z",
+        },
+      },
+      config: CONFIG,
+      state: CLEAN_STATE,
+      client_order_id: COID,
+      min_usdc_notional: 1.0,
+      now_ms: NOW_MS,
+    });
+    expect(d.kind).toBe("place");
+  });
+
+  it("places when fill.attributes.end_date is absent (defensive no-op)", () => {
+    const d = planMirrorFromFill({
+      fill: FILL,
+      config: CONFIG,
+      state: CLEAN_STATE,
+      client_order_id: COID,
+      min_usdc_notional: 1.0,
+      now_ms: NOW_MS,
+    });
+    expect(d.kind).toBe("place");
+  });
+
+  it("skips when fill.attributes.end_date equals now_ms exactly (>= boundary)", () => {
+    const d = planMirrorFromFill({
+      fill: {
+        ...FILL,
+        attributes: {
+          ...FILL.attributes,
+          end_date: new Date(NOW_MS).toISOString(),
+        },
+      },
+      config: CONFIG,
+      state: CLEAN_STATE,
+      client_order_id: COID,
+      min_usdc_notional: 1.0,
+      now_ms: NOW_MS,
+    });
+    expect(d.reason).toBe("market_past_end_date");
+  });
+
+  it("places when fill.attributes.end_date is unparseable (defensive no-op)", () => {
+    const d = planMirrorFromFill({
+      fill: {
+        ...FILL,
+        attributes: {
+          ...FILL.attributes,
+          end_date: "not-a-date",
+        },
+      },
+      config: CONFIG,
+      state: CLEAN_STATE,
+      client_order_id: COID,
+      min_usdc_notional: 1.0,
+      now_ms: NOW_MS,
+    });
+    expect(d.kind).toBe("place");
+  });
+
+  it("idempotency precedes the gate — already_placed wins on past-close re-process", () => {
+    const d = planMirrorFromFill({
+      fill: {
+        ...FILL,
+        attributes: {
+          ...FILL.attributes,
+          end_date: "2026-05-10T11:00:00.000Z",
+        },
+      },
+      config: CONFIG,
+      state: { ...CLEAN_STATE, already_placed_ids: [COID] },
+      client_order_id: COID,
+      min_usdc_notional: 1.0,
+      now_ms: NOW_MS,
+    });
+    expect(d.reason).toBe("already_placed");
+  });
+});
+
 describe("planMirrorFromFill() — idempotency round-trip", () => {
   it("client_order_id from clientOrderIdFor is what gates already_placed", () => {
     const coid = clientOrderIdFor(CONFIG.target_id, FILL.fill_id);

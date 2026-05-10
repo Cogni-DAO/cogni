@@ -12,7 +12,7 @@
  *   - SIZING_POLICY_IS_DISCRIMINATED — MirrorTargetConfig.sizing is a discriminated union on `kind`; future policies (proportional, percentile) add variants, never flat fields.
  *   - CAPS_LIVE_IN_GRANT — daily + hourly caps are enforced by `PolyTraderWalletPort.authorizeIntent` against the per-tenant `poly_wallet_grants` row. `planMirrorFromFill` no longer owns those checks; this config surface no longer carries them.
  * Side-effects: none
- * Links: docs/spec/poly-multi-tenant-auth.md, work/items/task.0318, work/items/task.0404
+ * Links: docs/spec/poly-multi-tenant-auth.md, work/items/task.0318, work/items/task.0404, work/items/bug.5045
  * @public
  */
 
@@ -392,6 +392,14 @@ export const MirrorReasonSchema = z.enum([
    * bug.5160.
    */
   "price_outside_clob_bounds",
+  /**
+   * Market's scheduled close (`fill.attributes.end_date` from Gamma) is at or
+   * before plan-time `now_ms`. Catches markets observed after their scheduled
+   * resolution window. Does NOT catch markets that resolve early (sports
+   * markets settle on game-end, often before the Gamma midnight-UTC close) —
+   * those need a snapshot-time `poly_market_outcomes.resolved_at` join.
+   */
+  "market_past_end_date",
 ]);
 export type MirrorReason = z.infer<typeof MirrorReasonSchema>;
 
@@ -435,6 +443,15 @@ export interface PlanMirrorInput {
    * limit_price to the nearest representable tick or skips if too far out.
    */
   tick_size?: number | undefined;
+  /**
+   * Plan-time clock injected by the caller. Compared against
+   * `fill.attributes.end_date` to skip BUYs onto markets past their scheduled
+   * Gamma resolution time. When absent, the gate is skipped — matches the
+   * codebase convention for optional pure-function inputs (cf.
+   * `min_usdc_notional`, `tick_size`). Preserves DECISION_IS_PURE_INPUT — the
+   * planner does not read the system clock itself.
+   */
+  now_ms?: number | undefined;
 }
 
 /**

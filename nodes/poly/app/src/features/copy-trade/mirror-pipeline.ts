@@ -278,6 +278,20 @@ async function processFill(
     log,
   });
 
+  const fillEndDate = fill.attributes?.end_date;
+  if (typeof fillEndDate !== "string" || fillEndDate.length === 0) {
+    log.warn(
+      {
+        event: "poly.mirror.fill.end_date_missing",
+        fill_id: fill.fill_id,
+        client_order_id,
+        market_id: fill.market_id,
+        attributes_keys: fill.attributes ? Object.keys(fill.attributes) : [],
+      },
+      "BUY fill missing fill.attributes.end_date — market-liveness gate is a no-op for this fill"
+    );
+  }
+
   const plan = planMirrorFromFill({
     fill,
     config: deps.target,
@@ -293,6 +307,7 @@ async function processFill(
     min_shares,
     min_usdc_notional,
     tick_size,
+    now_ms: Date.now(),
   });
 
   const decisionLogFields = buildDecisionLogFields({
