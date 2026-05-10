@@ -38,7 +38,7 @@ If no PR number, resolve it with `gh pr view --json number,headRefName -q .numbe
 
 2. **`gh` CLI authed.** `gh auth status` should be green. Stop if not.
 
-3. **Loki access available** — either the `mcp__grafana__*` tools or the `scripts/loki-query.sh` shell helper with `GRAFANA_URL` + `GRAFANA_SERVICE_ACCOUNT_TOKEN` in env (or a sourceable `.env.canary` / `.env.local`). If neither works, don't halt — mark observability cells `no-grafana-data-available` and proceed with the exercise step; the gap itself is a finding worth reporting.
+3. **Loki access available** — either the `mcp__grafana__*` tools or the `scripts/loki-query.sh` shell helper with `GRAFANA_URL` + `GRAFANA_SERVICE_ACCOUNT_TOKEN` in env (or a sourceable `.env.cogni`). If neither works, don't halt — mark observability cells `no-grafana-data-available` and proceed with the exercise step; the gap itself is a finding worth reporting.
 
 ## The flow
 
@@ -208,7 +208,7 @@ If only tier 4 matches, the observability cell is 🟡, not 🟢 — regardless 
 **Loki access — two paths, prefer whichever is available:**
 
 - `mcp__grafana__query_loki_logs` (MCP) — use when connected. Datasource uid: `grafanacloud-logs`.
-- `scripts/loki-query.sh '<logql>' [mins_back] [limit]` (shell fallback) — no MCP dependency. Reads `GRAFANA_URL` + `GRAFANA_SERVICE_ACCOUNT_TOKEN` from env (or `.env.canary` / `.env.local` auto-sourced). Outputs raw Loki JSON on stdout — pipe through `jq` to filter.
+- `scripts/loki-query.sh '<logql>' [mins_back] [limit]` (shell fallback) — no MCP dependency. Reads `GRAFANA_URL` + `GRAFANA_SERVICE_ACCOUNT_TOKEN` from env (or `.env.cogni` auto-sourced). Outputs raw Loki JSON on stdout — pipe through `jq` to filter.
 
 Example shell-fallback queries:
 

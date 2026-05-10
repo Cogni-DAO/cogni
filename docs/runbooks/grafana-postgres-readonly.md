@@ -114,10 +114,10 @@ If validation fails, the workflow exits non-zero — there is no longer a "warn-
 ### Verify end-to-end (agent-side, no SSH)
 
 ```bash
-# .env.cogni provides GRAFANA_URL; .env.<env> provides GRAFANA_SERVICE_ACCOUNT_TOKEN
+# .env.cogni provides GRAFANA_URL + GRAFANA_SERVICE_ACCOUNT_TOKEN (agent-side).
+# Deploy pipelines also expose the token via .env.<env> (canary/preview/production); either works.
 set -a
 . /path/to/.env.cogni
-. ./.env.<env>
 set +a
 
 scripts/grafana-postgres-query.sh \
