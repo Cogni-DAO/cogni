@@ -37,9 +37,12 @@
  *     populated, resolved legs get joined in to promote `active`/`inactive`
  *     → `winner`/`loser`/`resolved`.
  *   - RETURN_FROM_FILLS: per-position return is computed Modified-Dietz-style
- *     from `poly_trader_fills` (BUY notional + SELL realized cash) when
- *     available, falling back to position-derived cost basis for our wallet
- *     when no fills row exists yet. Targets always use fills (always observed).
+ *     from `poly_trader_fills` (BUY notional + SELL realized cash). The
+ *     committed-capital denominator is `max(fill rollup, Σ leg.costBasisUsdc)`
+ *     for both wallet classes: the rollup preserves original BUY notional
+ *     through partial closes (correct return anchor), while the snapshot
+ *     cost basis recovers the truth for wallets whose fill history predates
+ *     our backfill horizon (target wallets, fresh own-wallet provisioning).
  *   - EDGE_GAP_NULL_WITHOUT_TARGETS: `edgeGapUsdc` and `edgeGapPct` are null
  *     on lines/groups with zero target legs that have positive buy notional.
  *     "Edge gap vs. nobody" is undefined, not `-ourPnl`.

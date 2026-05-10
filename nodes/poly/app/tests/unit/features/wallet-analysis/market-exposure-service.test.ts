@@ -271,14 +271,14 @@ describe("buildMarketExposureGroups", () => {
     expect(line?.status).toBe("closed");
     // Current mark-to-market is correctly $0 (we exited).
     expect(line?.ourValueUsdc).toBe(0);
-    // Entry value preserves what we put on the line.
-    expect(line?.ourEntryValueUsdc).toBe(42);
-    // Targets had no snapshot rows here, so target entry value is 0 (target
-    // never surfaced as a leg). The wallet's fill rollup alone does not
-    // promote it into a leg — that's TARGET_LEGS_FROM_SNAPSHOTS.
+    // Entry value: max(fill rollup $42, pnl-derived snapshot cost $47.94).
+    // Snapshot wins here — same backfill-horizon resilience as bug.5044
+    // on target wallets, applied to closed-position fixtures whose fills
+    // and pnl-derived cost can drift due to fee rounding or partial-fill
+    // observation gaps.
+    expect(line?.ourEntryValueUsdc).toBe(47.94);
     expect(line?.targetEntryValueUsdc).toBe(0);
-    // Group rolls up to the same numbers (single line).
     expect(group?.ourValueUsdc).toBe(0);
-    expect(group?.ourEntryValueUsdc).toBe(42);
+    expect(group?.ourEntryValueUsdc).toBe(47.94);
   });
 });
