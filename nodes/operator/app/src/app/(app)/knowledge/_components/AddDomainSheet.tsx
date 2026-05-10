@@ -149,7 +149,7 @@ export function AddDomainSheet({
             </label>
             <textarea
               id="domain-description"
-              className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[var(--ring-width-sm)] focus-visible:ring-ring"
               placeholder="One-line summary of what this domain covers."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
