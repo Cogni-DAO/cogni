@@ -330,6 +330,13 @@
       "when": 1778100100000,
       "tag": "0046_reset_transient_exhausted_redeem_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1778469000000,
+      "tag": "0047_reset_transient_exhausted_redeem_jobs_round2",
+      "breakpoints": true
     }
   ]
 }

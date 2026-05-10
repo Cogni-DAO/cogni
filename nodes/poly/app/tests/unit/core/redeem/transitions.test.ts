@@ -189,6 +189,57 @@ describe("transition: transient_failure (REDEEM_HAS_CIRCUIT_BREAKER)", () => {
   });
 });
 
+describe("transition: rpc_transient_failure (bug.5041)", () => {
+  it("flips claimed → failed_transient WITHOUT incrementing attempt_count", () => {
+    const result = transition(baseJob, {
+      kind: "rpc_transient_failure",
+      error: "Missing or invalid parameters",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.transition.nextStatus).toBe("failed_transient");
+    expect(result.transition.incrementAttemptCount).toBe(false);
+    expect(result.transition.lastError).toBe("Missing or invalid parameters");
+  });
+
+  it("does NOT escalate to abandoned even at attemptCount=2 (3-strike circuit breaker is for chain reverts only)", () => {
+    const result = transition(
+      {
+        ...baseJob,
+        status: "claimed",
+        attemptCount: REDEEM_MAX_TRANSIENT_ATTEMPTS - 1,
+      },
+      {
+        kind: "rpc_transient_failure",
+        error: "Missing or invalid parameters",
+      }
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Critical bug.5041 invariant: an RPC fluke at strike 2 must NOT
+    // tip the row to abandoned. A 30-min Polygon outage hitting 3 ticks
+    // would otherwise mass-abandon the queue.
+    expect(result.transition.nextStatus).toBe("failed_transient");
+    expect(result.transition.incrementAttemptCount).toBe(false);
+  });
+
+  it("rejects rpc_transient from pending (must be claimed first)", () => {
+    const result = transition(pendingJob, {
+      kind: "rpc_transient_failure",
+      error: "rpc flake",
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects rpc_transient from submitted", () => {
+    const result = transition(
+      { ...baseJob, status: "submitted" },
+      { kind: "rpc_transient_failure", error: "rpc flake" }
+    );
+    expect(result.ok).toBe(false);
+  });
+});
+
 describe("transition: reaper_chain_evidence (REAPER_QUERIES_CHAIN_TRUTH)", () => {
   it("payout-observed → confirmed (regardless of burn flag)", () => {
     const result = transition(

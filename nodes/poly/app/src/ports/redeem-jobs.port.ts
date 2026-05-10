@@ -132,6 +132,17 @@ export interface RedeemJobsPort {
 
   markTransientFailure(input: { jobId: string; error: string }): Promise<void>;
 
+  /**
+   * RPC-infrastructure failure path (bug.5041) — returns the row to
+   * `failed_transient` so the next worker tick re-claims it, but does NOT
+   * bump `attempt_count`. The 3-strike circuit breaker is for permanently
+   * failing chain reverts; an Alchemy or network fluke must not consume
+   * that budget. Distinct method (rather than parameterizing
+   * `markTransientFailure`) so the call site is explicit and the audit
+   * grep is trivial.
+   */
+  markRpcDeferred(input: { jobId: string; error: string }): Promise<void>;
+
   markAbandoned(input: {
     jobId: string;
     errorClass: RedeemFailureClass;
