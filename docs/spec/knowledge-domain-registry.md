@@ -56,12 +56,19 @@ INSERT INTO knowledge (..., domain, ...) VALUES (..., $d, ...)
 
 Both write paths share one helper. The check lives **in the Doltgres adapters**, not in the capability layer:
 
-| Path                                        | Where the check fires                                                         |
-| ------------------------------------------- | ----------------------------------------------------------------------------- |
-| `core__knowledge_write` tool                | `DoltgresKnowledgeStoreAdapter.{add,upsert}Knowledge` calls helper            |
-| HTTP `POST /api/v1/knowledge/contributions` | `DoltgresKnowledgeContributionAdapter.create` calls helper before INSERT loop |
+| Path                                        | Where the check fires                                                                              |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `core__knowledge_write` tool                | `DoltgresKnowledgeStoreAdapter.{add,upsert,update}Knowledge` calls helper on `this.sql` (main)     |
+| HTTP `POST /api/v1/knowledge/contributions` | `DoltgresKnowledgeContributionAdapter.create` calls helper on `this.sql` BEFORE branch creation    |
 
-**Why adapter-level, not capability-level:** the contribution path runs on a per-PR Doltgres branch (different client than `main`); the helper takes the caller's `client` so it queries the same DB state the INSERT will hit. The capability layer (`createKnowledgeCapability`) stays a thin auto-commit wrapper, unmodified.
+**Why adapter-level, not capability-level:** the capability layer (`createKnowledgeCapability`) stays a thin auto-commit wrapper, unmodified. Putting the check in adapters means it covers every port consumer — including future ones — without re-wiring.
+
+**Why pre-check the contribution path on `main` (not on the per-PR branch):** the helper accepts `Sql | ReservedSql` so it _can_ run inside a reserved-conn / branch scope. But the contribution adapter chooses to call it on `this.sql` (main) **before** creating the branch, because:
+
+1. `DOMAIN_REGISTRATION_IS_STICKY` (no DELETE/PUT) guarantees `main.domains` ⊇ `<any-branch>.domains` for branches taken from `main HEAD`. Pre-checking on main is therefore safe — the check cannot pass on main and fail on the branch.
+2. Pre-checking before branch creation means an FK rejection costs zero side-effects. Pre-checking inside the reserved block would leak an empty `contrib/<...>` branch on every rejected entry.
+
+If a future invariant change weakens `DOMAIN_REGISTRATION_IS_STICKY` (e.g., per-domain RBAC with revocable rows), the contribution adapter MUST move the check inside the reserved-conn scope. The helper's `ReservedSql` overload exists exactly for that case.
 
 **Why one helper, not two parallel checks:** the two adapters live in two ports (`KnowledgeStorePort`, `KnowledgeContributionPort`) that don't share inheritance. A shared helper in `packages/knowledge-store/src/adapters/doltgres/util.ts` keeps DRY without coupling the ports.
 
@@ -73,7 +80,7 @@ Both write paths share one helper. The check lives **in the Doltgres adapters**,
 | -------------------------- | ----------- | ------------------------------------------- |
 | `DomainNotRegisteredError` | 400         | `{ error: "domain '<id>' not registered" }` |
 
-The `DomainNotRegisteredError` class lives in `packages/knowledge-store/src/domain/schemas.ts` alongside existing port error types. Route handlers (`_handlers.ts`) map it to 400 in their existing typed-error switch.
+The `DomainNotRegisteredError` class lives in `packages/knowledge-store/src/port/knowledge-store.port.ts` alongside the port interface. Route handlers (`_handlers.ts`) map it to 400 in their existing typed-error switch.
 
 ---
 
@@ -303,7 +310,7 @@ Phase 1 must therefore avoid hard-coding `knowledge_operator` anywhere in `packa
 | File                                                                                         | Purpose                                                         |
 | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | `packages/knowledge-store/src/port/knowledge-store.port.ts`                                  | `domainExists`, `listDomainsFull`, `registerDomain` on the port |
-| `packages/knowledge-store/src/domain/schemas.ts`                                             | `Domain`, `NewDomain`, `DomainNotRegisteredError`               |
+| `packages/knowledge-store/src/port/knowledge-store.port.ts`                                  | `Domain`, `NewDomain`, `DomainNotRegisteredError`, `DomainAlreadyRegisteredError` |
 | `packages/knowledge-store/src/adapters/doltgres/util.ts`                                     | `assertDomainRegistered(client, domain)` helper                 |
 | `packages/knowledge-store/src/adapters/doltgres/index.ts`                                    | Adapter calls helper before write                               |
 | `packages/knowledge-store/src/adapters/doltgres/contribution-adapter.ts`                     | Adapter calls helper before INSERT loop                         |
