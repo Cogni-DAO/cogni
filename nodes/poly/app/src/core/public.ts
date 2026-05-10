@@ -18,6 +18,7 @@ export * from "@cogni/node-core";
 // Example: export { ReservationModel } from "./reservations/model";
 
 export * from "./redeem/derive-negrisk-amounts";
+export * from "./redeem/error-classification";
 export * from "./redeem/transitions";
 // Redeem job lifecycle (task.0388)
 export * from "./redeem/types";

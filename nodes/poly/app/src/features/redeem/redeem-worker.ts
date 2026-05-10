@@ -61,7 +61,9 @@ import {
 import { polygon } from "viem/chains";
 
 import {
+  classifyRedeemError,
   REDEEM_MAX_TRANSIENT_ATTEMPTS,
+  type RedeemErrorClass,
   type RedeemFlavor,
   type RedeemJob,
   type RedeemLifecycleState,
@@ -344,31 +346,48 @@ export class RedeemWorker {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      const result = transition(job, { kind: "transient_failure", error: msg });
-      if (result.ok && result.transition.nextStatus === "abandoned") {
-        await this.deps.redeemJobs.markAbandoned({
-          jobId: job.id,
-          errorClass: "transient_exhausted",
-          error: msg,
-        });
-        await this.mirrorLifecycle(
-          job.conditionId,
-          job.positionId,
-          "abandoned",
-          "worker_transient_exhausted"
-        );
-      } else {
-        await this.deps.redeemJobs.markTransientFailure({
-          jobId: job.id,
-          error: msg,
-        });
-      }
-      // Decode the actual revert reason out of viem's wrapped error so Loki
-      // captures `revert_reason` + `revert_data` instead of just the
-      // generic "redeemPositions reverted" string. This is the diagnostic
-      // seam for bug.5041 — the underlying tx revert that's keeping ~39
-      // conditions stuck in abandoned across funders. (bug.5040 follow-up)
       const revert = decodeRevertReason(err);
+      const errorClass: RedeemErrorClass = classifyRedeemError({
+        reason: revert.reason,
+        data: revert.data,
+        shortMessage: revert.shortMessage,
+      });
+
+      if (errorClass === "rpc_transient") {
+        const rpcResult = transition(job, {
+          kind: "rpc_transient_failure",
+          error: msg,
+        });
+        if (rpcResult.ok) {
+          await this.deps.redeemJobs.markRpcDeferred({
+            jobId: job.id,
+            error: msg,
+          });
+        }
+      } else {
+        const result = transition(job, {
+          kind: "transient_failure",
+          error: msg,
+        });
+        if (result.ok && result.transition.nextStatus === "abandoned") {
+          await this.deps.redeemJobs.markAbandoned({
+            jobId: job.id,
+            errorClass: "transient_exhausted",
+            error: msg,
+          });
+          await this.mirrorLifecycle(
+            job.conditionId,
+            job.positionId,
+            "abandoned",
+            "worker_transient_exhausted"
+          );
+        } else {
+          await this.deps.redeemJobs.markTransientFailure({
+            jobId: job.id,
+            error: msg,
+          });
+        }
+      }
       this.deps.logger.warn(
         {
           event: "poly.ctf.redeem.tx_failed_transient",
@@ -380,6 +399,8 @@ export class RedeemWorker {
           collateral_token: job.collateralToken,
           attempt: job.attemptCount + 1,
           max_attempts: REDEEM_MAX_TRANSIENT_ATTEMPTS,
+          error_class: errorClass,
+          consumed_retry_budget: errorClass !== "rpc_transient",
           revert_reason: revert.reason,
           revert_data: revert.data,
           err_short: revert.shortMessage,

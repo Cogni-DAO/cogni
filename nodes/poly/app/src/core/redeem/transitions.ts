@@ -23,7 +23,9 @@
  *     position (`balance > 0`). Balance-zero with no payout is treated as
  *     "redeemed off-pipeline" and confirmed defensively.
  *   - REDEEM_HAS_CIRCUIT_BREAKER — three transient failures escalate to
- *     `abandoned/transient_exhausted`.
+ *     `abandoned/transient_exhausted`. Only `transient_failure` events
+ *     consume retry budget; `rpc_transient_failure` defers without
+ *     bumping `attempt_count`.
  *   - REDEEM_RETRY_IS_TRANSIENT_ONLY — malformed-class events skip the retry loop.
  * Side-effects: none
  * Links: docs/design/poly-positions.md § Lifecycle, work/items/task.0388,
@@ -46,7 +48,11 @@ export const REDEEM_MAX_TRANSIENT_ATTEMPTS = 3;
  *   event from funder at N=5 finality.
  * - `payout_redemption_reorged` — subscriber observed a removed log: a
  *   `PayoutRedemption` we'd already counted just got rolled back.
- * - `transient_failure` — worker hit RPC/gas/reorg-class error during submit.
+ * - `transient_failure` — chain-revert or unclassified error. Consumes
+ *   the 3-strike retry budget.
+ * - `rpc_transient_failure` — RPC-infrastructure error pre-broadcast.
+ *   Defers the row for re-claim on the next tick WITHOUT bumping
+ *   `attempt_count`.
  * - `reaper_chain_evidence` — N=5 blocks elapsed; reaper queried chain truth.
  *   `payoutObserved` ⇒ confirmed; `!payoutObserved && balance>0` ⇒ bleed →
  *   abandoned/malformed; `!payoutObserved && balance==0` ⇒ confirmed
@@ -69,6 +75,10 @@ export type RedeemEvent =
     }
   | {
       kind: "transient_failure";
+      error: string;
+    }
+  | {
+      kind: "rpc_transient_failure";
       error: string;
     }
   | {
@@ -230,6 +240,24 @@ export function transition(
           nextStatus: "failed_transient",
           lastError: event.error,
           incrementAttemptCount: true,
+        },
+      };
+    }
+
+    case "rpc_transient_failure": {
+      if (job.status !== "claimed") {
+        return {
+          ok: false,
+          rejection: "wrong_status_for_event",
+          reason: `rpc_transient from status=${job.status}`,
+        };
+      }
+      return {
+        ok: true,
+        transition: {
+          nextStatus: "failed_transient",
+          lastError: event.error,
+          incrementAttemptCount: false,
         },
       };
     }

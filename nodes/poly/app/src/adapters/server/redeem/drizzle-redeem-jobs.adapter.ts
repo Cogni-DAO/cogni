@@ -303,6 +303,20 @@ export class DrizzleRedeemJobsAdapter implements RedeemJobsPort {
       .where(eq(polyRedeemJobs.id, input.jobId));
   }
 
+  async markRpcDeferred(input: {
+    jobId: string;
+    error: string;
+  }): Promise<void> {
+    await this.db
+      .update(polyRedeemJobs)
+      .set({
+        status: "failed_transient",
+        lastError: input.error,
+        updatedAt: new Date(),
+      })
+      .where(eq(polyRedeemJobs.id, input.jobId));
+  }
+
   async markAbandoned(input: {
     jobId: string;
     errorClass: RedeemFailureClass;

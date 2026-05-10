@@ -132,6 +132,13 @@ export interface RedeemJobsPort {
 
   markTransientFailure(input: { jobId: string; error: string }): Promise<void>;
 
+  /**
+   * RPC-infrastructure failure — defers the row to `failed_transient`
+   * without bumping `attempt_count`. Counterpart to `markTransientFailure`,
+   * which does bump.
+   */
+  markRpcDeferred(input: { jobId: string; error: string }): Promise<void>;
+
   markAbandoned(input: {
     jobId: string;
     errorClass: RedeemFailureClass;
