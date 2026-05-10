@@ -622,6 +622,7 @@ export class PolymarketClobAdapter implements MarketProviderPort {
         },
         `placeOrder: ${result}`
       );
+      attachDetailsIfMissing(err, details);
       throw err;
     }
   }
@@ -742,6 +743,7 @@ export class PolymarketClobAdapter implements MarketProviderPort {
         },
         `sellPositionAtMarket: ${result}`
       );
+      attachDetailsIfMissing(err, details);
       throw err;
     }
   }
@@ -1343,6 +1345,30 @@ export function classifyClientError(err: unknown): ClobFailureDetails {
     ...(http_status !== undefined ? { http_status } : {}),
     reason: error_code,
   });
+}
+
+/**
+ * Stamp `classifyClientError`'s structured details onto a thrown err so
+ * upstream callers (mirror-pipeline `placement_failed` receipt) can read
+ * what the adapter already classified. ClobRejectionError already carries
+ * `.details`; this is for the axios / network / generic Error branch where
+ * the adapter would otherwise log the details and throw the raw err.
+ * No-op on non-objects and frozen errors.
+ */
+function attachDetailsIfMissing(err: unknown, details: ClobFailureDetails) {
+  if (
+    err == null ||
+    typeof err !== "object" ||
+    err instanceof ClobRejectionError ||
+    "details" in err
+  ) {
+    return;
+  }
+  try {
+    (err as { details?: ClobFailureDetails }).details = details;
+  } catch {
+    // frozen / sealed err — nothing to do, log line already carried details
+  }
 }
 
 export function mapOrderResponseToReceipt(
