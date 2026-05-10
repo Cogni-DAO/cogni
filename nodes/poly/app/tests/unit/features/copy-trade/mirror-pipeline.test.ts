@@ -159,6 +159,105 @@ describe("mirror-pipeline.runMirrorTick — idempotent re-run", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Scenario A2 — placement_failed receipt observability.
+// Adapter throws carrying `details: ClobFailureDetails` → receipt JSONB must
+// surface `error_code`, `error_message`, `http_status`, `error_class`, `reason`
+// so SQL can group placement failures by cause.
+// Raw Errors without `.details` must still produce a structured receipt with
+// `error_code: "unknown"` + the constructor name, never `null`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("mirror-pipeline.runMirrorTick — placement_failed receipt", () => {
+  it("persists adapter ClobFailureDetails into the decision receipt", async () => {
+    const fill = makeFill();
+    const ledger = new FakeOrderLedger();
+    const metrics = createRecordingMetrics();
+    let cursor: number | undefined;
+
+    class ClobRejectionLike extends Error {
+      readonly details = {
+        error_code: "invalid_price_or_tick",
+        response_keys: ["error", "errorMsg"],
+        http_status: 400,
+        reason: "tick out of range",
+        error_class: "ClobRejectionError",
+        stack_top: "at PolymarketClobAdapter.placeOrder",
+      };
+      constructor() {
+        super("clob rejected");
+        this.name = "ClobRejectionError";
+      }
+    }
+    const placeIntent = vi.fn(async () => {
+      throw new ClobRejectionLike();
+    });
+
+    await runMirrorTick({
+      source: makeSource([fill]),
+      ledger,
+      placeIntent,
+      target: BASE_TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
+      getCursor: () => cursor,
+      setCursor: (n) => {
+        cursor = n;
+      },
+      logger: noopLogger,
+      metrics,
+    });
+
+    const errDec = ledger.decisions.find(
+      (d) => d.outcome === "error" && d.reason === "placement_failed"
+    );
+    expect(errDec).toBeDefined();
+    expect(errDec?.receipt).not.toBeNull();
+    expect(errDec?.receipt).toMatchObject({
+      error_code: "invalid_price_or_tick",
+      error_message: "clob rejected",
+      http_status: 400,
+      error_class: "ClobRejectionError",
+      reason: "tick out of range",
+    });
+  });
+
+  it("falls back to error_code=unknown with constructor name for plain Errors", async () => {
+    const fill = makeFill();
+    const ledger = new FakeOrderLedger();
+    const metrics = createRecordingMetrics();
+    let cursor: number | undefined;
+
+    const placeIntent = vi.fn(async () => {
+      throw new TypeError("network blew up");
+    });
+
+    await runMirrorTick({
+      source: makeSource([fill]),
+      ledger,
+      placeIntent,
+      target: BASE_TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
+      getCursor: () => cursor,
+      setCursor: (n) => {
+        cursor = n;
+      },
+      logger: noopLogger,
+      metrics,
+    });
+
+    const errDec = ledger.decisions.find(
+      (d) => d.outcome === "error" && d.reason === "placement_failed"
+    );
+    expect(errDec?.receipt).toMatchObject({
+      error_code: "unknown",
+      error_message: "network blew up",
+      http_status: null,
+      error_class: "TypeError",
+      reason: null,
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Scenario B — insert-then-crash resume.
 // ─────────────────────────────────────────────────────────────────────────────
 

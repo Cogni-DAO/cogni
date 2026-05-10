@@ -59,6 +59,41 @@ function nominalSizeUsdc(sizing: SizingPolicy): number {
   return sizing.max_usdc_per_trade;
 }
 
+/**
+ * Build the durable `receipt` JSONB for a `placement_failed` decision row.
+ * Before this, `receipt` was `null` for every error, so SQL could not group
+ * the 19k+ placement failures by cause (`error_code`, `http_status`, etc.).
+ * Adapter throws carry `.details: ClobFailureDetails`; raw Errors don't.
+ */
+function extractAdapterErrorReceipt(
+  err: unknown,
+  msg: string
+): Record<string, unknown> {
+  const details =
+    err && typeof err === "object" && "details" in err
+      ? ((err as { details?: unknown }).details ?? null)
+      : null;
+  const d = (details && typeof details === "object" ? details : {}) as Record<
+    string,
+    unknown
+  >;
+  const errorCode =
+    typeof d.error_code === "string" ? d.error_code : "unknown";
+  return {
+    error_code: errorCode,
+    error_message: msg,
+    http_status: typeof d.http_status === "number" ? d.http_status : null,
+    error_class:
+      typeof d.error_class === "string"
+        ? d.error_class
+        : err instanceof Error
+          ? err.constructor.name
+          : null,
+    reason: typeof d.reason === "string" ? d.reason : null,
+    response_keys: Array.isArray(d.response_keys) ? d.response_keys : null,
+  };
+}
+
 /** Minimal position shape needed by the pipeline — subset of PolymarketUserPosition. */
 export interface OperatorPosition {
   asset: string;
@@ -1034,7 +1069,7 @@ async function executeMirrorOrder(
         ...decisionLogFields,
         position_branch: decisionLogFields?.position_branch ?? "new_entry",
       }),
-      receipt: null,
+      receipt: extractAdapterErrorReceipt(err, msg),
     });
     const isFokNoMatch = adapterErrorCode === "fok_no_match";
     const logLevel = isFokNoMatch ? "info" : "error";
