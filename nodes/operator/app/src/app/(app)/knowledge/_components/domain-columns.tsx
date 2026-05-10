@@ -19,9 +19,7 @@ const col = createColumnHelper<DomainRow>();
 
 export const domainColumns = [
   col.accessor("id", {
-    header: ({ column }) => (
-      <DataGridColumnHeader column={column} title="ID" />
-    ),
+    header: ({ column }) => <DataGridColumnHeader column={column} title="ID" />,
     size: 180,
     cell: (info) => (
       <span className="font-mono text-foreground text-xs">
@@ -65,7 +63,8 @@ export const domainColumns = [
     size: 80,
     cell: (info) => {
       const v = info.getValue();
-      const tone = v > 0 ? "bg-success/15 text-success" : "bg-muted text-muted-foreground";
+      const tone =
+        v > 0 ? "bg-success/15 text-success" : "bg-muted text-muted-foreground";
       return (
         <span
           className={`inline-flex min-w-7 justify-center rounded-md px-1.5 py-0.5 font-mono text-xs ${tone}`}

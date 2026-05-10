@@ -22,8 +22,7 @@ const DomainIdSchema = z
   .min(2)
   .max(64)
   .regex(/^[a-z0-9][a-z0-9_-]*$/, {
-    message:
-      "domain id must start with [a-z0-9] and contain only [a-z0-9_-]",
+    message: "domain id must start with [a-z0-9] and contain only [a-z0-9_-]",
   });
 
 export const DomainSchema = z.object({

@@ -13,9 +13,7 @@
  * @internal
  */
 
-import {
-  DomainAlreadyRegisteredError,
-} from "@cogni/knowledge-store";
+import { DomainAlreadyRegisteredError } from "@cogni/knowledge-store";
 import {
   DomainsCreateRequestSchema,
   DomainsCreateResponseSchema,
