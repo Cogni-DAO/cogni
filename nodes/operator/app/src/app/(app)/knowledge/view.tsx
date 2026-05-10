@@ -612,8 +612,7 @@ function DomainsEmptyState({
       <Tags className="size-8 text-muted-foreground/60" />
       <p className="font-medium text-sm">No domains registered.</p>
       <p className="max-w-md text-muted-foreground text-xs leading-relaxed">
-        Base domains (
-        <code className="font-mono">meta</code>,{" "}
+        Base domains (<code className="font-mono">meta</code>,{" "}
         <code className="font-mono">prediction-market</code>,{" "}
         <code className="font-mono">infrastructure</code>,{" "}
         <code className="font-mono">governance</code>,{" "}
