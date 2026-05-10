@@ -52,6 +52,10 @@ Define a tenant-isolated copy-trade system where:
 - Mirror placement policy, planner invariants, ledger transitions — those live in [`poly-copy-trade-execution.md`](./poly-copy-trade-execution.md).
 - Withdraw / unwrap flow for pUSD → USDC.e (symmetric via the same Onramp; held for a future withdraw spec).
 
+## Design
+
+Sections below define the as-built tenancy model: a two-layer split (tracked wallets + actor wallets) sharing one `billing_account_id` tenant boundary, the `PolyTraderWalletPort` contract that abstracts the signing backend, the `authorizeIntent` fail-closed checkpoint that mints the branded `AuthorizedSigningContext`, the schema (tables + RLS policies + AEAD-at-rest for L2 creds), the USDC.e ↔ pUSD collateral lifecycle (Enable Trading ceremony + auto-wrap consent loop), and the user + agent onboarding flows. Load-bearing rules are captured under `## Invariants`.
+
 ## System overview
 
 ```mermaid

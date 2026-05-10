@@ -43,6 +43,10 @@ Mirror fills observed on a tracked target wallet onto a Cogni-controlled trading
 - Portfolio PnL math, historical valuation, or research views (lives in `wallet-analysis/`).
 - Tenant authorization model, grants/caps, or wallet provisioning — see `poly-tenant-and-collateral.md`.
 
+## Design
+
+Sections below define the as-built pipeline: layer decomposition, the four-authority position model and seven-state lifecycle, three independent state machines (order / position / redeem-job), the mirror-position cache view consumed by the pure planner, the redeem pipeline anchored on chain authority via `poly_market_outcomes`, user close + redeem flows, and the dashboard classification model. Schema constraints + implementation pointers follow the design narrative; load-bearing rules are captured under `## Invariants`.
+
 ## Layers
 
 Three sibling slices under `nodes/poly/app/src/features/`. Each owns its vocabulary; only `copy-trade/` may import from both `trading/` and `wallet-watch/`.
