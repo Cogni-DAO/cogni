@@ -610,18 +610,16 @@ function DomainsEmptyState({
   return (
     <div className="flex flex-col items-center gap-3 rounded-lg border border-border/60 bg-muted/20 px-6 py-16 text-center">
       <Tags className="size-8 text-muted-foreground/60" />
-      <p className="font-medium text-sm">No domains registered yet.</p>
+      <p className="font-medium text-sm">No domains registered.</p>
       <p className="max-w-md text-muted-foreground text-xs leading-relaxed">
-        Every knowledge entry's <code className="font-mono">domain</code> column
-        must reference a row here. Without registered domains, all writes to{" "}
-        <code className="font-mono">core__knowledge_write</code> and{" "}
-        <code className="font-mono">/contributions</code> return{" "}
-        <code className="font-mono">400</code>. Start with the standard set:{" "}
+        Base domains (
         <code className="font-mono">meta</code>,{" "}
         <code className="font-mono">prediction-market</code>,{" "}
         <code className="font-mono">infrastructure</code>,{" "}
         <code className="font-mono">governance</code>,{" "}
-        <code className="font-mono">reservations</code>.
+        <code className="font-mono">reservations</code>) ship in the schema
+        migration — if you see this screen, the migrator hasn't run. Otherwise
+        register a new extension domain.
       </p>
       <Button
         type="button"
@@ -630,7 +628,7 @@ function DomainsEmptyState({
         onClick={onAddDomain}
       >
         <Plus className="size-3.5" />
-        Register first domain
+        Add domain
       </Button>
     </div>
   );

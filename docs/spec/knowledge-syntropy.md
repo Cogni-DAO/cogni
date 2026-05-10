@@ -556,7 +556,7 @@ The librarian's retrieval contract (same `KnowledgeSearchHit` shape) is the x402
 | KNOWLEDGE_LOOP_CLOSED_VIA_SIGNED_IN_USER   | v0 merge gate: any wallet/cookie-session user can merge a contribution. Bearer-token agents cannot. The session cookie is the trust signal until per-user RBAC lands.                                        |
 | KNOWLEDGE_BROWSE_VIA_HTTP_REQUIRES_SESSION | The `GET /api/v1/knowledge` browse endpoint is cookie-session only. Bearer / x402 access remains future work (see [x402-e2e](./x402-e2e.md)).                                                                |
 | DOMAIN_FK_ENFORCED_AT_WRITE                | Every write to `knowledge` verifies `domain` exists in `domains` before INSERT. Unregistered → `DomainNotRegisteredError` → HTTP 400. Contract: [knowledge-domain-registry](./knowledge-domain-registry.md). |
-| DOMAIN_REGISTRY_VIA_UI                     | New domains are registered via cookie-session POST. Migrator never seeds `domains`. Contract: [knowledge-domain-registry](./knowledge-domain-registry.md).                                                   |
+| DOMAIN_REGISTRY_EXTENDS_VIA_UI             | Base domains are seeded by the schema migrator (reference data); UI extends beyond the base via cookie-session POST. `NODES_BOOT_EMPTY` scopes to content tables only. Contract: [knowledge-domain-registry](./knowledge-domain-registry.md). |
 
 ---
 

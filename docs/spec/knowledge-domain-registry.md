@@ -178,20 +178,25 @@ No edit, no delete, no row-detail Sheet in v0. The grid is read + register only.
 
 ---
 
-### Seeding (preserves `NODES_BOOT_EMPTY`)
+### Seeding
 
-The migrator does **not** seed the `domains` table. Production candidate-a starts with 0 rows. The operator (Derek) registers the starter domains via UI clicks on first visit:
+`domains` is **reference data**, not content. The base set is structural to the Cogni knowledge plane and ships in the schema migration — every fresh fork has these rows before any agent runs. This matches how Drizzle migrations seed enum/lookup tables.
 
-| id                   | Purpose                                             |
-| -------------------- | --------------------------------------------------- |
-| `meta`               | Knowledge about the knowledge system itself         |
-| `prediction-market`  | Polymarket and adjacent prediction-market knowledge |
-| `infrastructure`     | Runtime, deploy, observability                      |
-| `governance`         | DAO formation, attribution, voting                  |
-| `reservations`       | Restaurant / venue knowledge for resy               |
-| `validate_candidate` | Reserved for `/validate-candidate` smoke writes     |
+`NODES_BOOT_EMPTY` (from [knowledge-data-plane](./knowledge-data-plane.md)) scopes to **content tables** — `knowledge`, `citations`, `sources`. It does **not** apply to the `domains` registry.
 
-The local-dev seed script (`scripts/db/seed-doltgres.mts`) MAY include `validate_candidate` in `BASE_DOMAIN_SEEDS` so dev environments don't 400 on smoke writes. Production gets nothing from the migrator.
+Base domains seeded by the migrator (`nodes/operator/app/src/adapters/server/db/doltgres-migrations/0002_seed_base_domains.sql`):
+
+| id                  | Purpose                                             |
+| ------------------- | --------------------------------------------------- |
+| `meta`              | Knowledge about the knowledge system itself         |
+| `prediction-market` | Polymarket and adjacent prediction-market knowledge |
+| `infrastructure`    | Runtime, deploy, observability                      |
+| `governance`        | DAO formation, attribution, voting                  |
+| `reservations`      | Restaurant / venue knowledge for resy               |
+
+Idempotency: each Doltgres database has its own `__drizzle_migrations` ledger; the seed migration runs exactly once per fresh DB. Re-runs are a no-op.
+
+The UI's `+ Add domain` flow exists for **extension** — operators registering domains beyond the base set (e.g., `art-marketplace`, `dao-tooling`) as a node's specialization grows. UI registration is the path for net-new domains; it does not duplicate the base set.
 
 ---
 
@@ -284,7 +289,7 @@ Phase 1 must therefore avoid hard-coding `knowledge_operator` anywhere in `packa
 | Rule                            | Constraint                                                                                                                                                       |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DOMAIN_FK_ENFORCED_AT_WRITE`   | Every write to `knowledge` verifies `domain` exists in `domains` before INSERT. Unregistered → `DomainNotRegisteredError` → HTTP 400.                            |
-| `DOMAIN_REGISTRY_VIA_UI`        | New domains are registered via cookie-session POST. Migrator never seeds `domains` in production. Even base domains are registered via UI clicks on first visit. |
+| `DOMAIN_REGISTRY_EXTENDS_VIA_UI` | Base domains are seeded by the schema migrator (reference data). The UI's `POST /api/v1/knowledge/domains` is for **extension** — adding new domains beyond the seeded set. `NODES_BOOT_EMPTY` scopes to content tables (`knowledge`, `citations`, `sources`), not `domains`. |
 | `DOMAIN_CHECK_AT_ADAPTER_LAYER` | The check lives in the Doltgres adapters (not in `createKnowledgeCapability`), so it shares the caller's client and works on per-PR contribution branches.       |
 | `DOMAIN_REGISTRATION_IS_STICKY` | No DELETE / PUT endpoints in v0. Domain rows are append-only. (Inherits `DEPRECATE_NOT_DELETE` spirit.)                                                          |
 | `DOMAIN_HTTP_COOKIE_ONLY`       | GET + POST `/api/v1/knowledge/domains` reject Bearer / x402. Inherits `KNOWLEDGE_BROWSE_VIA_HTTP_REQUIRES_SESSION`.                                              |
