@@ -4,7 +4,7 @@
     "nodes/poly/app/src/foo.ts",
     ".claude/skills/poly-dev-manager/SKILL.md",
     ".github/workflows/ci.yaml",
-    "docs/spec/poly-copy-trade-execution.md",
+    "docs/design/poly-bet-sizer-v1.md",
     "docs/research/poly/layering-policy-spike-2026-05-02.md",
     "packages/repo-spec/AGENTS.md",
     "packages/repo-spec/src/accessors.ts",
