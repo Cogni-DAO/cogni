@@ -56,10 +56,10 @@ INSERT INTO knowledge (..., domain, ...) VALUES (..., $d, ...)
 
 Both write paths share one helper. The check lives **in the Doltgres adapters**, not in the capability layer:
 
-| Path                                        | Where the check fires                                                                              |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `core__knowledge_write` tool                | `DoltgresKnowledgeStoreAdapter.{add,upsert,update}Knowledge` calls helper on `this.sql` (main)     |
-| HTTP `POST /api/v1/knowledge/contributions` | `DoltgresKnowledgeContributionAdapter.create` calls helper on `this.sql` BEFORE branch creation    |
+| Path                                        | Where the check fires                                                                           |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `core__knowledge_write` tool                | `DoltgresKnowledgeStoreAdapter.{add,upsert,update}Knowledge` calls helper on `this.sql` (main)  |
+| HTTP `POST /api/v1/knowledge/contributions` | `DoltgresKnowledgeContributionAdapter.create` calls helper on `this.sql` BEFORE branch creation |
 
 **Why adapter-level, not capability-level:** the capability layer (`createKnowledgeCapability`) stays a thin auto-commit wrapper, unmodified. Putting the check in adapters means it covers every port consumer — including future ones — without re-wiring.
 
@@ -286,16 +286,16 @@ Phase 1 must therefore avoid hard-coding `knowledge_operator` anywhere in `packa
 
 ## Invariants
 
-| Rule                            | Constraint                                                                                                                                                       |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DOMAIN_FK_ENFORCED_AT_WRITE`   | Every write to `knowledge` verifies `domain` exists in `domains` before INSERT. Unregistered → `DomainNotRegisteredError` → HTTP 400.                            |
+| Rule                             | Constraint                                                                                                                                                                                                                                                                    |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DOMAIN_FK_ENFORCED_AT_WRITE`    | Every write to `knowledge` verifies `domain` exists in `domains` before INSERT. Unregistered → `DomainNotRegisteredError` → HTTP 400.                                                                                                                                         |
 | `DOMAIN_REGISTRY_EXTENDS_VIA_UI` | Base domains are seeded by the schema migrator (reference data). The UI's `POST /api/v1/knowledge/domains` is for **extension** — adding new domains beyond the seeded set. `NODES_BOOT_EMPTY` scopes to content tables (`knowledge`, `citations`, `sources`), not `domains`. |
-| `DOMAIN_CHECK_AT_ADAPTER_LAYER` | The check lives in the Doltgres adapters (not in `createKnowledgeCapability`), so it shares the caller's client and works on per-PR contribution branches.       |
-| `DOMAIN_REGISTRATION_IS_STICKY` | No DELETE / PUT endpoints in v0. Domain rows are append-only. (Inherits `DEPRECATE_NOT_DELETE` spirit.)                                                          |
-| `DOMAIN_HTTP_COOKIE_ONLY`       | GET + POST `/api/v1/knowledge/domains` reject Bearer / x402. Inherits `KNOWLEDGE_BROWSE_VIA_HTTP_REQUIRES_SESSION`.                                              |
-| `DOMAIN_LIST_SINGLE_QUERY`      | `listDomainsFull()` returns rows + `entry_count` in one SQL query (`LEFT JOIN knowledge … GROUP BY`). No N+1.                                                    |
-| `DOMAIN_HELPER_SQL_SAFE`        | The shared helper escapes its `domain` argument via `escapeValue()` (Doltgres requires `sql.unsafe`).                                                            |
-| `DOMAIN_REGISTER_AUTOCOMMITS`   | `registerDomain()` issues `dolt_commit('-Am', 'register domain <id>')` after INSERT. (Inherits `AUTO_COMMIT_ON_WRITE`.)                                          |
+| `DOMAIN_CHECK_AT_ADAPTER_LAYER`  | The check lives in the Doltgres adapters (not in `createKnowledgeCapability`), so it shares the caller's client and works on per-PR contribution branches.                                                                                                                    |
+| `DOMAIN_REGISTRATION_IS_STICKY`  | No DELETE / PUT endpoints in v0. Domain rows are append-only. (Inherits `DEPRECATE_NOT_DELETE` spirit.)                                                                                                                                                                       |
+| `DOMAIN_HTTP_COOKIE_ONLY`        | GET + POST `/api/v1/knowledge/domains` reject Bearer / x402. Inherits `KNOWLEDGE_BROWSE_VIA_HTTP_REQUIRES_SESSION`.                                                                                                                                                           |
+| `DOMAIN_LIST_SINGLE_QUERY`       | `listDomainsFull()` returns rows + `entry_count` in one SQL query (`LEFT JOIN knowledge … GROUP BY`). No N+1.                                                                                                                                                                 |
+| `DOMAIN_HELPER_SQL_SAFE`         | The shared helper escapes its `domain` argument via `escapeValue()` (Doltgres requires `sql.unsafe`).                                                                                                                                                                         |
+| `DOMAIN_REGISTER_AUTOCOMMITS`    | `registerDomain()` issues `dolt_commit('-Am', 'register domain <id>')` after INSERT. (Inherits `AUTO_COMMIT_ON_WRITE`.)                                                                                                                                                       |
 
 ---
 
@@ -312,19 +312,19 @@ Phase 1 must therefore avoid hard-coding `knowledge_operator` anywhere in `packa
 
 ## File Pointers
 
-| File                                                                                         | Purpose                                                         |
-| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `packages/knowledge-store/src/port/knowledge-store.port.ts`                                  | `domainExists`, `listDomainsFull`, `registerDomain` on the port |
+| File                                                                                         | Purpose                                                                           |
+| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `packages/knowledge-store/src/port/knowledge-store.port.ts`                                  | `domainExists`, `listDomainsFull`, `registerDomain` on the port                   |
 | `packages/knowledge-store/src/port/knowledge-store.port.ts`                                  | `Domain`, `NewDomain`, `DomainNotRegisteredError`, `DomainAlreadyRegisteredError` |
-| `packages/knowledge-store/src/adapters/doltgres/util.ts`                                     | `assertDomainRegistered(client, domain)` helper                 |
-| `packages/knowledge-store/src/adapters/doltgres/index.ts`                                    | Adapter calls helper before write                               |
-| `packages/knowledge-store/src/adapters/doltgres/contribution-adapter.ts`                     | Adapter calls helper before INSERT loop                         |
-| `packages/node-contracts/src/knowledge.domains.v1.contract.ts`                               | Zod contract for GET/POST                                       |
-| `nodes/operator/app/src/app/api/v1/knowledge/domains/route.ts`                               | Route wrapper                                                   |
-| `nodes/operator/app/src/app/api/v1/knowledge/domains/_handlers.ts`                           | `handleList`, `handleCreate` — error mapping                    |
-| `nodes/operator/app/src/app/(app)/knowledge/view.tsx`                                        | 3-mode toggle (Browse · Domains · Inbox)                        |
-| `nodes/operator/app/src/app/(app)/knowledge/_api/{fetch,create}Domain.ts`                    | Client-side fetchers                                            |
-| `nodes/operator/app/src/app/(app)/knowledge/_components/{domain-columns,AddDomainSheet}.tsx` | UI components                                                   |
+| `packages/knowledge-store/src/adapters/doltgres/util.ts`                                     | `assertDomainRegistered(client, domain)` helper                                   |
+| `packages/knowledge-store/src/adapters/doltgres/index.ts`                                    | Adapter calls helper before write                                                 |
+| `packages/knowledge-store/src/adapters/doltgres/contribution-adapter.ts`                     | Adapter calls helper before INSERT loop                                           |
+| `packages/node-contracts/src/knowledge.domains.v1.contract.ts`                               | Zod contract for GET/POST                                                         |
+| `nodes/operator/app/src/app/api/v1/knowledge/domains/route.ts`                               | Route wrapper                                                                     |
+| `nodes/operator/app/src/app/api/v1/knowledge/domains/_handlers.ts`                           | `handleList`, `handleCreate` — error mapping                                      |
+| `nodes/operator/app/src/app/(app)/knowledge/view.tsx`                                        | 3-mode toggle (Browse · Domains · Inbox)                                          |
+| `nodes/operator/app/src/app/(app)/knowledge/_api/{fetch,create}Domain.ts`                    | Client-side fetchers                                                              |
+| `nodes/operator/app/src/app/(app)/knowledge/_components/{domain-columns,AddDomainSheet}.tsx` | UI components                                                                     |
 
 ## Related
 
