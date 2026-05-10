@@ -3,11 +3,12 @@
 
 /**
  * Module: `@tests/contract/app/vcs.flight`
- * Purpose: Contract tests for POST /api/v1/vcs/flight — session chokepoint, CI gate, dispatch.
- * Scope: Verifies 412 session chokepoint, 422 CI gate, 202 success shape, 401 auth.
- *   Uses mocked VcsCapability, workItemSessions port, and repoSpec — no real GitHub or DB.
+ * Purpose: Contract tests for POST /api/v1/vcs/flight — audit decoration, CI gate, dispatch.
+ * Scope: Verifies session-context attachment, unmediated-flight logging, CI gate,
+ *   202 success shape, 401 auth. Uses mocked VcsCapability + workItemSessions port.
  * Invariants:
- *   - OPERATOR_MEDIATED_FLIGHT: 412 when no active session bound to (repoFullName, prNumber)
+ *   - OPERATOR_FLIGHT_AUDITABLE: dispatch logs always emit; mediated when session
+ *     exists, unmediated otherwise. Missing session never returns 412.
  *   - CI_GATE: 422 when allGreen=false or pending=true
  *   - AUTH_REQUIRED: 401 when no authenticated session
  *   - CONTRACTS_ARE_TRUTH: 202 response matches flightOperation.output schema
@@ -156,8 +157,10 @@ describe("POST /api/v1/vcs/flight", () => {
     });
   });
 
-  it("returns 412 when no active session is bound to the PR", async () => {
+  it("dispatches (unmediated) when no active session is bound to the PR", async () => {
     mockLookupActiveByPr.mockResolvedValue(null);
+    mockGetCiStatus.mockResolvedValue(makeGreenCiStatus());
+    mockDispatchCandidateFlight.mockResolvedValue(DISPATCH_RESULT);
 
     await testApiHandler({
       appHandler,
@@ -167,13 +170,10 @@ describe("POST /api/v1/vcs/flight", () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prNumber: 42 }),
         });
-        expect(res.status).toBe(412);
-        const body = await res.json();
-        expect(body.error).toMatch(/No active work-item session/);
-        expect(body.repoFullName).toBe("test-owner/test-repo");
-        expect(body.prNumber).toBe(42);
-        expect(mockGetCiStatus).not.toHaveBeenCalled();
-        expect(mockDispatchCandidateFlight).not.toHaveBeenCalled();
+        // Manual / human flights remain a first-class path.
+        expect(res.status).toBe(202);
+        expect(mockGetCiStatus).toHaveBeenCalled();
+        expect(mockDispatchCandidateFlight).toHaveBeenCalled();
       },
     });
   });

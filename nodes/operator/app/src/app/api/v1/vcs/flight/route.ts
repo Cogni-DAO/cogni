@@ -3,16 +3,16 @@
 
 /**
  * Module: `@app/api/v1/vcs/flight`
- * Purpose: Session-gated, CI-gated candidate-a flight request for external AI agents.
- *   Resolves an active work-item session bound to (repoFullName, prNumber); verifies
- *   CI is green for the PR head SHA; dispatches candidate-flight.yml. The candidate
- *   slot controller (GitHub Actions workflow) owns the actual slot lease — this
- *   endpoint does not replicate that logic.
- * Scope: Auth → session chokepoint → CI gate → dispatch. No lease table.
+ * Purpose: CI-gated candidate-a flight request, decorated with session context.
+ *   Looks up an active work_item_sessions row bound to (repoFullName, prNumber)
+ *   and attaches its identifiers to dispatch logs so every flight is auditable.
+ *   Unmediated dispatches (no session) are logged as such but not blocked —
+ *   manual / human flights remain a first-class path.
+ * Scope: Auth → audit-decorate → CI gate → dispatch. No lease table.
  * Invariants:
  *   - AUTH_REQUIRED: Bearer token (machine agents) or SIWE session. No open access.
- *   - OPERATOR_MEDIATED_FLIGHT: 412 if no active work_item_sessions row is bound to
- *     (repoFullName, prNumber). Every dispatch is auditable to a session.
+ *   - OPERATOR_FLIGHT_AUDITABLE: Every dispatch emits a structured log with
+ *     either session context (`mediated`) or a `unmediated` marker. Never 412.
  *   - CI_GATE: Rejects 422 if CI is not fully green for the PR head SHA.
  *   - CAPABILITY_BOUNDARY: Calls VcsCapability only — no direct Octokit in this file.
  *   - CONTRACTS_ARE_TRUTH: Input/output parsed through flightOperation contract.
@@ -69,9 +69,9 @@ export const POST = wrapRouteHandlerWithLogging(
     const container = getContainer();
     const vcs = container.vcsCapability;
 
-    // OPERATOR_MEDIATED_FLIGHT: every dispatch must originate from an active
-    // work-item session bound to (repoFullName, prNumber). Naked dispatches
-    // (no claim, no PR-link) are rejected here so flights are auditable.
+    // OPERATOR_FLIGHT_AUDITABLE: best-effort session lookup so dispatch logs
+    // carry session context when present. Missing session is logged, not blocked
+    // — manual / human flights stay a first-class path.
     const session = await container.workItemSessions.lookupActiveByPr({
       repoFullName,
       prNumber,
@@ -80,15 +80,7 @@ export const POST = wrapRouteHandlerWithLogging(
       logRequestWarn(
         ctx.log,
         { repoFullName, prNumber, reason: "no_active_session" },
-        "vcs_flight.precondition_failed"
-      );
-      return NextResponse.json(
-        {
-          error: `No active work-item session is bound to PR #${prNumber} in ${repoFullName}. Claim a work item and link the PR (POST /api/v1/work/items/:id/pr with repoFullName) before requesting flight.`,
-          repoFullName,
-          prNumber,
-        },
-        { status: 412 }
+        "vcs_flight.unmediated"
       );
     }
 
@@ -125,9 +117,10 @@ export const POST = wrapRouteHandlerWithLogging(
           repoFullName,
           prNumber,
           headSha: dispatch.headSha,
-          coordinationId: session.id,
-          workItemId: session.workItemId,
-          claimedByUserId: session.claimedByUserId,
+          mediated: session !== null,
+          coordinationId: session?.id ?? null,
+          workItemId: session?.workItemId ?? null,
+          claimedByUserId: session?.claimedByUserId ?? null,
         },
         "vcs_flight.dispatched"
       );

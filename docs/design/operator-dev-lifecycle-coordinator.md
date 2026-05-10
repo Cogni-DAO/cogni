@@ -17,31 +17,29 @@ tags: [operator, lifecycle, agentic, ci-cd, work-items]
 
 A registered agent claims a Cogni work item, stays reachable through a 30+ minute handshake while the operator updates `nextAction` from real CI / PR / flight signals, and is released when validation holds clear.
 
-## Chokepoint (the wedge)
+## Audit signal (the wedge)
 
-`POST /api/v1/vcs/flight` MUST resolve to an active `work_item_sessions` row bound to the same `(repo_full_name, pr_number)` as the dispatch target. No session = `412 Precondition Failed`.
+`POST /api/v1/vcs/flight` looks up an active `work_item_sessions` row bound to `(repo_full_name, pr_number)` and **decorates the dispatch log with session context** when present. Missing session → structured warn (`vcs_flight.unmediated`), then dispatch proceeds. **Never 412.** Manual / human flights stay a first-class path.
 
 ```ts
 // nodes/operator/app/src/app/api/v1/vcs/flight/route.ts
-// inserted immediately above the existing CI gate at line 68
 const session = await container.workItemSessions.lookupActiveByPr({
   repoFullName: `${owner}/${repo}`,
   prNumber,
 });
 if (!session) {
-  return NextResponse.json(
-    {
-      error:
-        "No active work-item session bound to this PR. Claim a work item and link the PR before requesting flight.",
-    },
-    { status: 412 }
+  logRequestWarn(
+    ctx.log,
+    { repoFullName, prNumber, reason: "no_active_session" },
+    "vcs_flight.unmediated"
   );
 }
+// ... CI gate, dispatch — dispatch log carries `mediated: boolean` + session ids.
 ```
 
-This is the lever that flips `proj.operator-glue` from red to yellow. Every other section of this doc is downstream support: sessions need `(repo, pr_number)` to look up; webhook ingest keeps `nextAction` honest after lookup succeeds; validation holds gate the second flight in the same lane. Without the chokepoint, all of it is window-dressing — agents keep flighting via human PAT.
+This is the lever that flips `proj.operator-glue` from red to yellow: the matrix red was about **knowing** who flights what, not about preventing humans from flighting. The signal is the ratio of `mediated:unmediated` dispatches in Loki, not a wall.
 
-GHA-side actor enforcement (rejecting `candidate-flight.yml` runs triggered by a non-GitHub-App actor) is the parallel lever and lives in `proj.operator-glue` as a separate item. Two doors, one room.
+Hard enforcement is rejected: blocking manual paths would break Derek's `/promote` and break the escape hatch agents need when sessions go wrong. The session lookup makes the audit trail real; the rest is policy that lives in Loki queries, not in the route.
 
 ## Picture
 
@@ -124,7 +122,7 @@ Default state-machine. LLM cells are leaves, **cached on input tuple change** (s
 - `CATALOG_IS_SSOT` — node names come from `infra/catalog/*.yaml`. No `nodes` table.
 - `WEBHOOK_INGEST_INDEPENDENT` — webhook 2xx response must not depend on Temporal availability. Outbox is the seam.
 - `LLM_LEAF_ONLY` — LLM is invoked at graph leaves and cached on input tuple. Heartbeats never trigger an LLM call by themselves.
-- `OPERATOR_MEDIATED_FLIGHT` — `candidate-flight.yml` dispatches must originate from the operator GitHub App identity through `POST /api/v1/vcs/flight`. Human-PAT bypass is the failure mode tracked in `proj.operator-glue`.
+- `OPERATOR_FLIGHT_AUDITABLE` — `POST /api/v1/vcs/flight` always emits a structured dispatch log carrying `mediated: boolean` + session ids when present. Unmediated flights are warned but never blocked; the matrix red flips on the _signal_, not on a wall.
 
 ## Stale-claim policy
 
@@ -149,12 +147,12 @@ Sequenced execution and per-PR scope live in **`proj.operator-glue`** (project d
 exercise:
 
 1. Agent claims `task.X`, links PR #N in repo R via `POST /pr` (carries `repoFullName`).
-2. **Chokepoint negative path**: a second agent claiming a different work item posts `POST /api/v1/vcs/flight { prNumber: N }` without a session bound to PR #N → `412 Precondition Failed`.
-3. **Chokepoint positive path**: original agent posts `POST /api/v1/vcs/flight { prNumber: N }` → 202 dispatched.
+2. **Unmediated path**: a second agent (different work item, no session linked to PR #N) posts `POST /api/v1/vcs/flight { prNumber: N }` → 202 dispatched. Loki shows `vcs_flight.unmediated` with `(repoFullName, prNumber, reason=no_active_session)` followed by `vcs_flight.dispatched` with `mediated: false`.
+3. **Mediated path**: original agent posts `POST /api/v1/vcs/flight { prNumber: N }` → 202 dispatched. Loki shows `vcs_flight.dispatched` with `mediated: true` + `coordinationId` + `workItemId`.
 4. CI runs → `check_run.completed` webhook arrives. Within 10s, `GET /coordination` returns `nextAction` reflecting CI state (`"CI green on PR #N — request flight"` or `"Fix failing job <jobName>"`).
 5. Operator restart mid-flight: next webhook still updates session (outbox is durable; worker resumes).
 6. (PR2) Two agents flight overlapping `node_targets`; second receives `202 queued` and is unblocked when first posts `validated`.
-7. **Definition of Done**: after `/validate-candidate` posts a passing scorecard and the session calls `PATCH /api/v1/work/items/:id { deployVerified: true }`, `GET /api/v1/work/items/:id` returns `deploy_verified: true`. Blocked today by `bug.5005` (PATCH allowlist excludes `deployVerified` for Doltgres-backed items); chokepoint work ships behind that, validation is incomplete until both land.
+7. **Definition of Done**: after `/validate-candidate` posts a passing scorecard and the session calls `PATCH /api/v1/work/items/:id { deployVerified: true }`, `GET /api/v1/work/items/:id` returns `deploy_verified: true`. Blocked today by `bug.5005` (PATCH allowlist excludes `deployVerified` for Doltgres-backed items); audit-signal work ships independently, validation is incomplete until both land.
 
 observability:
 
@@ -164,4 +162,4 @@ observability:
 | event=~"dev_coordination\\..*|coordinator_outbox\\..*|candidate_validation\\..*|vcs_flight\\..*"
 ```
 
-Every line carries `coordinationId`, `workItemId`, `claimedByUserId`. Validation lines add `prNumber`, `headSha`, `nodeTargets`. Webhook-driven updates add `(repoFullName, prNumber, eventType)`. Chokepoint rejection emits `vcs_flight.precondition_failed` with `(repoFullName, prNumber, reason)`.
+Every coordination line carries `coordinationId`, `workItemId`, `claimedByUserId`. Validation lines add `prNumber`, `headSha`, `nodeTargets`. Webhook-driven updates add `(repoFullName, prNumber, eventType)`. `vcs_flight.dispatched` always emits with `mediated: boolean` + `(coordinationId, workItemId, claimedByUserId)` nullable; `vcs_flight.unmediated` emits whenever no session is bound.
