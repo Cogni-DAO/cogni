@@ -1148,6 +1148,35 @@ describe("PolymarketClobAdapter — observability", () => {
     expect(errLog?.obj.reason).toBe(POLY_CLOB_ERROR_CODES.unknown);
   });
 
+  it("placeOrder attaches classified details to non-ClobRejectionError throws", async () => {
+    const { logger } = makeRecordingLogger();
+    const metrics = createRecordingMetrics();
+    const axiosErr = Object.assign(new Error("Request failed with status 502"), {
+      response: { status: 502 },
+    });
+    const createAndPostMarketOrder = vi.fn().mockRejectedValue(axiosErr);
+    const adapter = makeAdapter(
+      { createAndPostMarketOrder },
+      { logger, metrics }
+    );
+
+    let caught: unknown;
+    try {
+      await adapter.placeOrder(BASE_INTENT);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBe(axiosErr);
+    expect((caught as { details?: unknown }).details).toBeDefined();
+    expect(
+      (caught as { details: { error_code: string; http_status?: number } })
+        .details.error_code
+    ).toBe(POLY_CLOB_ERROR_CODES.httpError);
+    expect(
+      (caught as { details: { http_status?: number } }).details.http_status
+    ).toBe(502);
+  });
+
   it("placeOrder reclassifies FOK empty-response rejects as fok_no_match (bug.0405)", async () => {
     const { logger, calls } = makeRecordingLogger();
     const metrics = createRecordingMetrics();

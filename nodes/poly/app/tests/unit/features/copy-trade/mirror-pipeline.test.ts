@@ -160,9 +160,10 @@ describe("mirror-pipeline.runMirrorTick — idempotent re-run", () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scenario A2 — placement_failed receipt observability.
-// Adapter throws carrying `details: ClobFailureDetails` → receipt JSONB must
-// surface `error_code`, `error_message`, `http_status`, `error_class`, `reason`
-// so SQL can group placement failures by cause.
+// Adapter throws now attach `details: ClobFailureDetails` for every error
+// path (ClobRejectionError + axios/network). The decision receipt must
+// surface only stable structured fields (error_code, http_status, error_class,
+// reason, response_keys) per docs/spec/observability.md — no raw SDK msg text.
 // Raw Errors without `.details` must still produce a structured receipt with
 // `error_code: "unknown"` + the constructor name, never `null`.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -213,14 +214,62 @@ describe("mirror-pipeline.runMirrorTick — placement_failed receipt", () => {
     expect(errDec?.receipt).not.toBeNull();
     expect(errDec?.receipt).toMatchObject({
       error_code: "invalid_price_or_tick",
-      error_message: "clob rejected",
       http_status: 400,
       error_class: "ClobRejectionError",
       reason: "tick out of range",
+      response_keys: ["error", "errorMsg"],
+    });
+    expect(errDec?.receipt).not.toHaveProperty("error_message");
+  });
+
+  it("reads details attached to an axios-style error by the adapter", async () => {
+    const fill = makeFill();
+    const ledger = new FakeOrderLedger();
+    const metrics = createRecordingMetrics();
+    let cursor: number | undefined;
+
+    class AxiosLikeError extends Error {
+      details = {
+        error_code: "http_error",
+        response_keys: [],
+        http_status: 502,
+        reason: "http_error",
+        error_class: "AxiosError",
+      };
+      constructor() {
+        super("Request failed with status code 502");
+        this.name = "AxiosError";
+      }
+    }
+    const placeIntent = vi.fn(async () => {
+      throw new AxiosLikeError();
+    });
+
+    await runMirrorTick({
+      source: makeSource([fill]),
+      ledger,
+      placeIntent,
+      target: BASE_TARGET,
+      getMarketConstraints: MARKET_CONSTRAINTS,
+      getCursor: () => cursor,
+      setCursor: (n) => {
+        cursor = n;
+      },
+      logger: noopLogger,
+      metrics,
+    });
+
+    const errDec = ledger.decisions.find(
+      (d) => d.outcome === "error" && d.reason === "placement_failed"
+    );
+    expect(errDec?.receipt).toMatchObject({
+      error_code: "http_error",
+      http_status: 502,
+      error_class: "AxiosError",
     });
   });
 
-  it("falls back to error_code=unknown with constructor name for plain Errors", async () => {
+  it("falls back to error_code=unknown with constructor name when details absent", async () => {
     const fill = makeFill();
     const ledger = new FakeOrderLedger();
     const metrics = createRecordingMetrics();
@@ -249,11 +298,11 @@ describe("mirror-pipeline.runMirrorTick — placement_failed receipt", () => {
     );
     expect(errDec?.receipt).toMatchObject({
       error_code: "unknown",
-      error_message: "network blew up",
       http_status: null,
       error_class: "TypeError",
       reason: null,
     });
+    expect(errDec?.receipt).not.toHaveProperty("error_message");
   });
 });
 
