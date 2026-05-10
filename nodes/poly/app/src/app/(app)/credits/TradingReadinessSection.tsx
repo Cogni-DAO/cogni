@@ -50,7 +50,7 @@ export interface TradingReadinessSectionProps {
   readonly usdcBalance: number | null;
 }
 
-const MIN_POL_FOR_ENABLE = 0.02;
+const MIN_POL_FOR_ENABLE = 0.1;
 
 async function postEnableTrading(): Promise<PolyWalletEnableTradingOutput> {
   const res = await fetch("/api/v1/poly/wallet/enable-trading", {

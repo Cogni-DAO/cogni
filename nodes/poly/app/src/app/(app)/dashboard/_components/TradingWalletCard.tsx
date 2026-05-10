@@ -178,6 +178,20 @@ export function TradingWalletCard(): ReactElement {
           />
         ) : (
           <div className="space-y-5 py-1">
+            {lowGas ? (
+              <div
+                className={cn(
+                  "rounded-md px-3 py-2 text-xs",
+                  noGas
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-warning/15 text-warning"
+                )}
+              >
+                {noGas
+                  ? "No POL — wallet cannot pay gas. Send POL on Polygon to the address above."
+                  : `Low POL gas (${formatDecimal(data.pol_gas ?? null, 4)}). Send POL on Polygon to the address above before it runs out.`}
+              </div>
+            ) : null}
             {fullBreakdown ? (
               <div className="space-y-3">
                 <BalanceBar balance={fullBreakdown ?? undefined} />
