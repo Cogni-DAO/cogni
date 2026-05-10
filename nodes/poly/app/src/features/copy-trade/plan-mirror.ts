@@ -11,7 +11,7 @@
  *   - CAPS_LIVE_IN_GRANT — daily / hourly USDC caps are enforced downstream by `PolyTraderWalletPort.authorizeIntent` against the tenant's `poly_wallet_grants` row. `planMirrorFromFill` is intentionally unaware of caps so a single cap decision lives in one place (the authorize boundary).
  *   - NO_KILL_SWITCH (bug.0438): there is no per-tenant kill-switch gate. The active-target / active-grant chain in the cross-tenant enumerator is the only gate; an explicit POST of a target IS the user's opt-in.
  * Side-effects: none
- * Links: docs/spec/poly-multi-tenant-auth.md, work/items/task.0318, work/items/task.5005
+ * Links: docs/spec/poly-multi-tenant-auth.md, work/items/task.0318, work/items/task.5005, work/items/bug.5045
  * @public
  */
 
@@ -450,11 +450,18 @@ function targetFollowupThreshold(policy: SizingPolicy): number {
 
 /**
  * Gamma's market `endDate` (carried verbatim on `fill.attributes.end_date` per
- * the Data-API normalizer) is the scheduled close time. Markets observed
- * within seconds of close routinely resolve loser shortly after; mirroring a
- * BUY past that point spends real USDC on a near-dead market. Defensive: an
- * absent or unparseable `end_date` short-circuits to `false` so we never drop
- * a fill due to a missing field. bug.5043.
+ * the Data-API normalizer) is the scheduled close time. Mirroring a BUY past
+ * that point spends real USDC on a near-dead market. Defensive: an absent or
+ * unparseable `end_date` short-circuits to `false` so we never drop a fill due
+ * to a missing field.
+ *
+ * Caveat: catches the case where the chain settles AFTER scheduled close, not
+ * the inverse. Markets that resolve early (sports markets settle when the
+ * game ends, often days before the Gamma-scheduled midnight-UTC close) are
+ * NOT caught here — those need a `poly_market_outcomes.resolved_at` join at
+ * snapshot time. Production telemetry (last 14d): ~78% of buys-past-resolution
+ * are caught by this gate; the remaining 22% are concentrated on markets that
+ * resolved ~6 days before their scheduled end_date.
  */
 function isFillPastMarketEndDate(
   fill: PlanMirrorInput["fill"],

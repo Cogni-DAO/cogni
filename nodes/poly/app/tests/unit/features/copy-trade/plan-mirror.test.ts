@@ -232,6 +232,24 @@ describe("planMirrorFromFill() — market_past_end_date gate (bug.5043)", () => 
     expect(d.kind).toBe("place");
   });
 
+  it("skips when fill.attributes.end_date equals now_ms exactly (>= boundary)", () => {
+    const d = planMirrorFromFill({
+      fill: {
+        ...FILL,
+        attributes: {
+          ...FILL.attributes,
+          end_date: new Date(NOW_MS).toISOString(),
+        },
+      },
+      config: CONFIG,
+      state: CLEAN_STATE,
+      client_order_id: COID,
+      min_usdc_notional: 1.0,
+      now_ms: NOW_MS,
+    });
+    expect(d.reason).toBe("market_past_end_date");
+  });
+
   it("places when fill.attributes.end_date is unparseable (defensive no-op)", () => {
     const d = planMirrorFromFill({
       fill: {
