@@ -21,7 +21,7 @@ import { Prompt, Reveal, TerminalFrame } from "@/components";
 
 export function Terminal(): ReactElement {
   const steps = [
-    "git clone https://github.com/Cogni-DAO/cogni-template",
+    "git clone https://github.com/Cogni-DAO/cogni",
     "cd cogni-template",
     "pnpm setup local",
     "pnpm dev:stack 🎉",

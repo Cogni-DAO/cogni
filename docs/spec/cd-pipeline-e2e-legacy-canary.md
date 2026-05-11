@@ -569,7 +569,7 @@ generators:
 ```yaml
 generators:
   - git:
-      repoURL: https://github.com/cogni-dao/cogni-template.git
+      repoURL: https://github.com/cogni-dao/cogni.git
       revision: staging
       files:
         - path: "infra/catalog/*.yaml"

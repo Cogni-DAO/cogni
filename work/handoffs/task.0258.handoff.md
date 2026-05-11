@@ -3,7 +3,7 @@
 **Branch:** `feat/task-0258-multi-node-stack-tests`
 **Date:** 2026-04-02
 **Status:** Tests passing, CI deploy pipeline needs `COGNI_NODE_ENDPOINTS`
-**PR:** https://github.com/Cogni-DAO/node-template/pull/691
+**PR:** https://github.com/Cogni-DAO/cogni/pull/691
 
 ---
 

@@ -75,7 +75,7 @@ Reduce the node launch lifecycle to a single user action (button click after DAO
 - `dao_contract` (address) — from formation
 - `chain_id` (string) — from formation
 - `founder_address` (address) — initialHolder from formation
-- `repo_template` (string) — GitHub template repo (default: `Cogni-DAO/cogni-template`)
+- `repo_template` (string) — GitHub template repo (default: `Cogni-DAO/cogni`)
 
 **Provisioning Output (written to node record + repo-spec):**
 
@@ -235,7 +235,7 @@ metadata:
 spec:
   generators:
     - git:
-        repoURL: https://github.com/Cogni-DAO/cogni-template.git
+        repoURL: https://github.com/Cogni-DAO/cogni.git
         revision: staging
         directories:
           - path: infra/cd/nodes/*
@@ -245,7 +245,7 @@ spec:
     spec:
       project: default
       source:
-        repoURL: https://github.com/Cogni-DAO/cogni-template.git
+        repoURL: https://github.com/Cogni-DAO/cogni.git
         targetRevision: staging
         path: "{{path}}"
       destination:

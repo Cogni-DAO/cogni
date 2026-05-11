@@ -16,7 +16,7 @@ last_commit: f8e4ea4c
 - Cogni pinned Node 20.x across ~20 surfaces since repo scaffolding (Nov 2025) — convention inertia, not a hard constraint
 - Next.js 16.0.1 requires `>=20.9.0`; no dependency has an upper-bound excluding Node 22
 - OpenClaw has a hard `process.exit(1)` runtime guard on node < 22 — aligning to node:22 eliminates the ABI mismatch workaround that task.0031 (devtools image) was designed around
-- This work is **Done** and PRd to `staging` as [PR #379](https://github.com/Cogni-DAO/node-template/pull/379)
+- This work is **Done** and PRd to `staging` as [PR #379](https://github.com/Cogni-DAO/cogni/pull/379)
 
 ## Current State
 
@@ -33,7 +33,7 @@ last_commit: f8e4ea4c
 
 ## Next Actions
 
-- [ ] Merge [PR #379](https://github.com/Cogni-DAO/node-template/pull/379) after CI passes
+- [ ] Merge [PR #379](https://github.com/Cogni-DAO/cogni/pull/379) after CI passes
 - [ ] Each developer runs `volta install node@22` to update their global Volta default
 - [ ] Pick up **task.0031** — [spec](../items/task.0031.openclaw-cogni-dev-image.md), [handoff](task.0031.handoff.md)
 - [ ] After task.0031: pick up **task.0022** (git relay MVP) — [spec](../items/task.0022.git-relay-mvp.md)
@@ -47,10 +47,10 @@ last_commit: f8e4ea4c
 
 ## Pointers
 
-| File / Resource                                                | Why it matters                                                  |
-| -------------------------------------------------------------- | --------------------------------------------------------------- |
-| `work/items/task.0032.node-22-upgrade.md`                      | Completed task spec — checklist and compatibility analysis      |
-| `work/items/task.0031.openclaw-cogni-dev-image.md`             | Next task — devtools image, unblocked by this upgrade           |
-| `work/projects/proj.openclaw-capabilities.md`                  | Parent project — P1 roadmap with task.0031 → task.0022 sequence |
-| `docs/spec/openclaw-sandbox-spec.md`                           | Governing spec — 25 invariants for sandbox containers           |
-| [PR #379](https://github.com/Cogni-DAO/node-template/pull/379) | The PR for this work                                            |
+| File / Resource                                        | Why it matters                                                  |
+| ------------------------------------------------------ | --------------------------------------------------------------- |
+| `work/items/task.0032.node-22-upgrade.md`              | Completed task spec — checklist and compatibility analysis      |
+| `work/items/task.0031.openclaw-cogni-dev-image.md`     | Next task — devtools image, unblocked by this upgrade           |
+| `work/projects/proj.openclaw-capabilities.md`          | Parent project — P1 roadmap with task.0031 → task.0022 sequence |
+| `docs/spec/openclaw-sandbox-spec.md`                   | Governing spec — 25 invariants for sandbox containers           |
+| [PR #379](https://github.com/Cogni-DAO/cogni/pull/379) | The PR for this work                                            |

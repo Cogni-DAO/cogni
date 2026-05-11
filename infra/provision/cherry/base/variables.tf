@@ -60,7 +60,7 @@ variable "ghcr_deploy_token" {
 variable "cogni_repo_url" {
   description = "Git repo URL for Argo CD manifest clone"
   type        = string
-  default     = "https://github.com/Cogni-DAO/cogni-template.git"
+  default     = "https://github.com/Cogni-DAO/cogni.git"
 }
 
 variable "cogni_repo_ref" {

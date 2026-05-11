@@ -84,7 +84,7 @@ Run from a clean local checkout:
 git fetch origin
 
 BOOTSTRAP_DIR="$(mktemp -d)"
-git clone --branch deploy/canary --single-branch git@github.com:Cogni-DAO/node-template.git "$BOOTSTRAP_DIR"
+git clone --branch deploy/canary --single-branch git@github.com:Cogni-DAO/cogni.git "$BOOTSTRAP_DIR"
 cd "$BOOTSTRAP_DIR"
 
 mkdir -p infra/k8s/overlays/candidate-a
@@ -238,7 +238,7 @@ If reusing the current canary hostnames, set:
 
 ```bash
 gh variable set DOMAIN \
-  --repo Cogni-DAO/node-template \
+  --repo Cogni-DAO/cogni \
   --env candidate-a \
   --body "test.cognidao.org"
 ```

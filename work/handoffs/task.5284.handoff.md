@@ -31,7 +31,7 @@ last_commit: a3082f3a3
 - Spec canonical name = `docs/spec/development-lifecycle.md` (had more inbound refs than agentic-contribution-loop.md). 8 referencing files updated; `work/items/` legacy refs frozen.
 - `COMMENTS_ARE_NOTIFICATION` invariant codified at [docs/spec/development-lifecycle.md](../../docs/spec/development-lifecycle.md) — design + status mutations stay in Dolt; comments carry scorecards + nudges only.
 - Operator broadcaster v0 deferred from PR #1237 into a follow-up — kept this PR small, unbounded otherwise.
-- See PR body: [#1237](https://github.com/Cogni-DAO/node-template/pull/1237) — TLDR + validation plan + open questions.
+- See PR body: [#1237](https://github.com/Cogni-DAO/cogni/pull/1237) — TLDR + validation plan + open questions.
 
 ## Next Actions
 
@@ -56,7 +56,7 @@ last_commit: a3082f3a3
 
 | File / Resource                                                                                                                                      | Why it matters                                                                                |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| [PR #1237](https://github.com/Cogni-DAO/node-template/pull/1237)                                                                                     | The active PR — read body for TLDR + validation plan                                          |
+| [PR #1237](https://github.com/Cogni-DAO/cogni/pull/1237)                                                                                             | The active PR — read body for TLDR + validation plan                                          |
 | [`docs/spec/development-lifecycle.md`](../../docs/spec/development-lifecycle.md)                                                                     | Merged spec (this PR's edit). Source of truth for lifecycle + interaction graph + invariants. |
 | [`docs/design/operator-dev-lifecycle-coordinator.md`](../../docs/design/operator-dev-lifecycle-coordinator.md)                                       | Coordinator design — Phase 1 done, Phase 2/3 deferred                                         |
 | [`nodes/operator/app/src/features/work-item-sessions/session-policy.ts`](../../nodes/operator/app/src/features/work-item-sessions/session-policy.ts) | The policy edited this PR. `nextActionForWorkItem` is the function under test                 |

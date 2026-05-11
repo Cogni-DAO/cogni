@@ -17,7 +17,7 @@ last_commit: 1fa2a9b93
 
 Design lock: [`docs/design/wallet-analysis-components.md`](../../docs/design/wallet-analysis-components.md). It went through two `/review-design` passes; the v2 version is what you implement.
 
-PR: [#934](https://github.com/Cogni-DAO/node-template/pull/934) — open, all CI green, branch 8 commits ahead of main. **Do NOT recreate; build on top.**
+PR: [#934](https://github.com/Cogni-DAO/cogni/pull/934) — open, all CI green, branch 8 commits ahead of main. **Do NOT recreate; build on top.**
 
 ## Current State
 
@@ -103,7 +103,7 @@ aggregate over ResolvedPosition[]:
 
 | File / Resource                                                                                                 | Why it matters                                                          |
 | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| [PR #934](https://github.com/Cogni-DAO/node-template/pull/934)                                                  | This work item's PR — build on top, don't recreate                      |
+| [PR #934](https://github.com/Cogni-DAO/cogni/pull/934)                                                          | This work item's PR — build on top, don't recreate                      |
 | [Design doc](../../docs/design/wallet-analysis-components.md)                                                   | The spec. Every implementation choice traces back here.                 |
 | [task.0329 work item](../items/task.0329.wallet-analysis-component-extraction.md)                               | Acceptance gates                                                        |
 | [Checkpoint A barrel](../../nodes/poly/app/src/features/wallet-analysis/index.ts)                               | What's already exported and reusable                                    |

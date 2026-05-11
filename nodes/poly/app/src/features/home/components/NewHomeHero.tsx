@@ -111,7 +111,7 @@ export function NewHomeHero(): ReactElement {
                 </Link>
               </Button>
               <Button variant="outline" size="lg" asChild>
-                <Link href="https://github.com/cogni-dao/cogni-template">
+                <Link href="https://github.com/cogni-dao/cogni">
                   <Github className="mr-2 size-4" />
                   Start your own
                 </Link>

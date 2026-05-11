@@ -76,10 +76,10 @@ Per-environment (one block per env you provision):
 
 ```bash
 ENV=candidate-a   # or preview, production
-gh api repos/Cogni-DAO/node-template/environments/$ENV -X PUT --silent
-gh secret set VM_HOST          --repo Cogni-DAO/node-template --env $ENV --body "$(cat .local/$ENV-vm-ip)"
-gh secret set SSH_DEPLOY_KEY   --repo Cogni-DAO/node-template --env $ENV < .local/$ENV-vm-key
-gh variable set DOMAIN         --repo Cogni-DAO/node-template --env $ENV --body "$( case $ENV in candidate-a) echo test.cognidao.org;; preview) echo preview.cognidao.org;; production) echo cognidao.org;; esac )"
+gh api repos/Cogni-DAO/cogni/environments/$ENV -X PUT --silent
+gh secret set VM_HOST          --repo Cogni-DAO/cogni --env $ENV --body "$(cat .local/$ENV-vm-ip)"
+gh secret set SSH_DEPLOY_KEY   --repo Cogni-DAO/cogni --env $ENV < .local/$ENV-vm-key
+gh variable set DOMAIN         --repo Cogni-DAO/cogni --env $ENV --body "$( case $ENV in candidate-a) echo test.cognidao.org;; preview) echo preview.cognidao.org;; production) echo cognidao.org;; esac )"
 ```
 
 App secrets (LITELLM_MASTER_KEY, AUTH_SECRET, …) live as k8s sealed-secrets on the cluster, written by the provision script via `pnpm setup:secrets`. They are **not** GitHub secrets.

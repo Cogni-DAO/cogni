@@ -6,7 +6,7 @@
 - **Spec:** [docs/spec/poly-tenant-and-collateral.md](../../docs/spec/poly-tenant-and-collateral.md) — `spec_state: proposed`
 - **Project:** [proj.poly-copy-trading](../projects/proj.poly-copy-trading.md) — Phase 2 deliverable "User-owned tracked wallets + RLS …" = **In Review**
 - **Branch:** `feat/task-0318-phase-a` (worktree: `/Users/derek/dev/cogni-template-task-0318-phase-a/`)
-- **PR:** [#944](https://github.com/Cogni-DAO/node-template/pull/944)
+- **PR:** [#944](https://github.com/Cogni-DAO/cogni/pull/944)
 - **Code verified:** typecheck + unit tests (1322 pass locally). **DB / HTTP round-trip NOT executed** — requires `.env.test` infra that CI owns.
 
 Phase B (per-user signing wallets, `poly_wallet_connections` + `poly_wallet_grants`, `WalletSignerPort`) is **out of scope** and blocked on a 2-day Safe+4337 spike (task.0318 § Phase B checkpoints).

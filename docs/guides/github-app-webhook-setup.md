@@ -20,7 +20,7 @@ tags: [github, webhooks, ingestion, review, setup]
 | ----------- | ----------------------------- | ----------------------------------------------------------- | ----------------------------- |
 | Local dev   | `cogni-review-dev-<yourname>` | smee.io proxy (see below)                                   | your personal test repo       |
 | Preview     | `cogni-review-preview`        | `https://preview.cognidao.org/api/internal/webhooks/github` | `Cogni-DAO/preview-test-repo` |
-| Production  | `cogni-review-production`     | `https://cognidao.org/api/internal/webhooks/github`         | `Cogni-DAO/node-template`     |
+| Production  | `cogni-review-production`     | `https://cognidao.org/api/internal/webhooks/github`         | `Cogni-DAO/cogni`             |
 
 ## Create a GitHub App
 
@@ -28,13 +28,13 @@ tags: [github, webhooks, ingestion, review, setup]
 
 2. Fill in:
 
-| Field          | Value                                        |
-| -------------- | -------------------------------------------- |
-| App name       | See table above                              |
-| Homepage URL   | `https://github.com/Cogni-DAO/node-template` |
-| Webhook URL    | See table above                              |
-| Webhook secret | Generate below                               |
-| Webhook active | Checked                                      |
+| Field          | Value                                |
+| -------------- | ------------------------------------ |
+| App name       | See table above                      |
+| Homepage URL   | `https://github.com/Cogni-DAO/cogni` |
+| Webhook URL    | See table above                      |
+| Webhook secret | Generate below                       |
+| Webhook active | Checked                              |
 
 3. **Permissions (Repository):**
 
@@ -84,17 +84,17 @@ GH_WEBHOOK_PROXY_URL=https://smee.io/<your-channel>  # see below
 ```bash
 # Preview
 APP_ID=<preview-app-id>
-gh secret set GH_REVIEW_APP_ID --repo Cogni-DAO/node-template --env preview --body "$APP_ID"
-gh secret set GH_REVIEW_APP_PRIVATE_KEY_BASE64 --repo Cogni-DAO/node-template --env preview --body "$APP_KEY"
-gh secret set GH_WEBHOOK_SECRET --repo Cogni-DAO/node-template --env preview --body "$WEBHOOK_SECRET"
-gh variable set GH_REPOS --repo Cogni-DAO/node-template --env preview --body "Cogni-DAO/preview-test-repo"
+gh secret set GH_REVIEW_APP_ID --repo Cogni-DAO/cogni --env preview --body "$APP_ID"
+gh secret set GH_REVIEW_APP_PRIVATE_KEY_BASE64 --repo Cogni-DAO/cogni --env preview --body "$APP_KEY"
+gh secret set GH_WEBHOOK_SECRET --repo Cogni-DAO/cogni --env preview --body "$WEBHOOK_SECRET"
+gh variable set GH_REPOS --repo Cogni-DAO/cogni --env preview --body "Cogni-DAO/preview-test-repo"
 
 # Production
 APP_ID=<prod-app-id>
-gh secret set GH_REVIEW_APP_ID --repo Cogni-DAO/node-template --env production --body "$APP_ID"
-gh secret set GH_REVIEW_APP_PRIVATE_KEY_BASE64 --repo Cogni-DAO/node-template --env production --body "$APP_KEY"
-gh secret set GH_WEBHOOK_SECRET --repo Cogni-DAO/node-template --env production --body "$WEBHOOK_SECRET"
-gh variable set GH_REPOS --repo Cogni-DAO/node-template --env production --body "Cogni-DAO/node-template"
+gh secret set GH_REVIEW_APP_ID --repo Cogni-DAO/cogni --env production --body "$APP_ID"
+gh secret set GH_REVIEW_APP_PRIVATE_KEY_BASE64 --repo Cogni-DAO/cogni --env production --body "$APP_KEY"
+gh secret set GH_WEBHOOK_SECRET --repo Cogni-DAO/cogni --env production --body "$WEBHOOK_SECRET"
+gh variable set GH_REPOS --repo Cogni-DAO/cogni --env production --body "Cogni-DAO/cogni"
 ```
 
 ## Local Dev — smee.io Webhook Proxy

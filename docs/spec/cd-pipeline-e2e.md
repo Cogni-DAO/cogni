@@ -520,7 +520,7 @@ The old design hardcoded environment paths and app lists inside Argo configurati
 ```yaml
 generators:
   - git:
-      repoURL: https://github.com/cogni-dao/cogni-template.git
+      repoURL: https://github.com/cogni-dao/cogni.git
       revision: deploy/preview
       files:
         - path: "infra/catalog/*.yaml"

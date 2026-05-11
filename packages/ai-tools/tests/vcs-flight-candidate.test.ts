@@ -229,7 +229,7 @@ describe("vcs_flight_candidate output schema", () => {
       prNumber: 954,
       headSha: "27379ae7",
       workflowUrl:
-        "https://github.com/Cogni-DAO/node-template/actions/workflows/candidate-flight.yml",
+        "https://github.com/Cogni-DAO/cogni/actions/workflows/candidate-flight.yml",
       message: "Flight dispatched for PR #954",
     });
     expect(result.dispatched).toBe(true);
@@ -241,7 +241,7 @@ describe("vcs_flight_candidate output schema", () => {
       prNumber: 954,
       headSha: null,
       workflowUrl:
-        "https://github.com/Cogni-DAO/node-template/actions/workflows/candidate-flight.yml",
+        "https://github.com/Cogni-DAO/cogni/actions/workflows/candidate-flight.yml",
       message: "ok",
     });
     expect(result.headSha).toBeNull();

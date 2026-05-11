@@ -128,7 +128,7 @@ If anything breaks between Steps 2–5, see the "Rollback" section at the end of
 
 ## Related
 
-- PR #894: https://github.com/Cogni-DAO/node-template/pull/894
+- PR #894: https://github.com/Cogni-DAO/cogni/pull/894
 - Task: `work/items/task.0311.poly-knowledge-syntropy-seed.md`
 - Skill: `.claude/skills/database-expert/SKILL.md`
 - Agent API guide: `docs/guides/agent-api-validation.md`

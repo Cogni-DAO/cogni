@@ -50,8 +50,8 @@ last_commit: 315874bfc
 
 - [task.0372 work item, revision 3](../items/task.0372.candidate-flight-matrix-cutover.md) — symmetric 3-env scope, aggregator pattern (gap-2/gap-3/gap-4 inline), pinned invariants (concurrency format, source-sha-map per cell, AGGREGATOR_OWNS_LEASE, AFFECTED_FROM_TURBO destination preserved with detect-affected.sh as v0 implementation).
 - [task.0320 design + GR-1..GR-6](../items/task.0320.per-node-candidate-flighting.md) — substrate + guardrails. AppSet shape is **4 git generators in one ApplicationSet** (Argo doesn't template `revision` per file). Dogfood ordering: this PR ships under the existing whole-slot workflows.
-- [task.0374 PR #1053](https://github.com/Cogni-DAO/node-template/pull/1053) — catalog SSoT + decide-job pattern in `candidate-flight.yml` (the worked example to mirror). Files: `scripts/ci/lib/image-tags.sh`, `scripts/ci/detect-affected.sh`, `infra/catalog/*.yaml`, axiom 16 in `docs/spec/ci-cd.md`.
-- [task.0373 PR #1047](https://github.com/Cogni-DAO/node-template/pull/1047) — snapshot/restore around rsync. Keep in matrix cells.
+- [task.0374 PR #1053](https://github.com/Cogni-DAO/cogni/pull/1053) — catalog SSoT + decide-job pattern in `candidate-flight.yml` (the worked example to mirror). Files: `scripts/ci/lib/image-tags.sh`, `scripts/ci/detect-affected.sh`, `infra/catalog/*.yaml`, axiom 16 in `docs/spec/ci-cd.md`.
+- [task.0373 PR #1047](https://github.com/Cogni-DAO/cogni/pull/1047) — snapshot/restore around rsync. Keep in matrix cells.
 - `release.yml` only reads `deploy/preview/.promote-state/current-sha` (verified: `scripts/ci/create-release.sh:22`). Aggregator-updates-this-file is a ~5-line solution; release.yml unchanged.
 
 ## Pre-implement verification spike (~1–2 hours, do this first)

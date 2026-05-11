@@ -16,7 +16,7 @@ last_commit: e4b9d37d
 - The governance UI (`/gov/epoch`, `/gov/history`, `/gov/holdings`) was wired to real ledger API endpoints in `c012921e` — hooks multi-fetch epochs, allocations, activity, and statements, then compose view models client-side
 - An empty dev database rendered blank pages — `pnpm db:seed` now populates realistic data for visual dev workflows
 - Two GET API routes were missing (`allocations`, `statement`) that the hooks depend on — these returned 405 and blocked rendering
-- Seed data is modeled after real GitHub activity from `Cogni-DAO/node-template` with 2 real contributors: `derekg1729` (human) and `Cogni-1729` (AI agent)
+- Seed data is modeled after real GitHub activity from `Cogni-DAO/cogni` with 2 real contributors: `derekg1729` (human) and `Cogni-1729` (AI agent)
 - The seed script coexists safely with Temporal's `LEDGER_INGEST` schedule — `ensureEpochForWindow()` reuses seeded epochs by window match
 
 ## Current State
@@ -60,7 +60,7 @@ last_commit: e4b9d37d
 | File / Resource                                                  | Why it matters                                                    |
 | ---------------------------------------------------------------- | ----------------------------------------------------------------- |
 | `scripts/db/seed.mts`                                            | The seed script — all epoch/event/allocation data definitions     |
-| `scripts/_seed-reference-data.json`                              | Real GitHub data from Cogni-DAO/node-template used to model seed  |
+| `scripts/_seed-reference-data.json`                              | Real GitHub data from Cogni-DAO/cogni used to model seed          |
 | `src/app/api/v1/attribution/epochs/[id]/allocations/route.ts`    | GET + PATCH handlers for epoch allocations                        |
 | `src/app/api/v1/attribution/epochs/[id]/statement/route.ts`      | GET handler for epoch payout statements                           |
 | `src/features/governance/hooks/useCurrentEpoch.ts`               | Hook showing exact API endpoints the UI fetches                   |

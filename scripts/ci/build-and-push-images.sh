@@ -109,7 +109,7 @@ build_target() {
         --file nodes/operator/app/Dockerfile \
         --target runner \
         --build-arg "BUILD_SHA=${git_sha}" \
-        --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni-template" \
+        --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni" \
         --label "org.opencontainers.image.revision=${git_sha}" \
         --label "org.opencontainers.image.created=${build_timestamp}" \
         --cache-from "type=gha,scope=build-operator" \
@@ -124,7 +124,7 @@ build_target() {
         --file nodes/poly/app/Dockerfile \
         --target runner \
         --build-arg "BUILD_SHA=${git_sha}" \
-        --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni-template" \
+        --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni" \
         --label "org.opencontainers.image.revision=${git_sha}" \
         --label "org.opencontainers.image.created=${build_timestamp}" \
         --cache-from "type=gha,scope=build-poly" \
@@ -139,7 +139,7 @@ build_target() {
         --file nodes/resy/app/Dockerfile \
         --target runner \
         --build-arg "BUILD_SHA=${git_sha}" \
-        --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni-template" \
+        --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni" \
         --label "org.opencontainers.image.revision=${git_sha}" \
         --label "org.opencontainers.image.created=${build_timestamp}" \
         --cache-from "type=gha,scope=build-resy" \
@@ -152,7 +152,7 @@ build_target() {
       docker buildx build \
         --platform "$PLATFORM" \
         --file services/scheduler-worker/Dockerfile \
-        --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni-template" \
+        --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni" \
         --label "org.opencontainers.image.revision=${git_sha}" \
         --label "org.opencontainers.image.created=${build_timestamp}" \
         --cache-from "type=gha,scope=build-scheduler-worker" \

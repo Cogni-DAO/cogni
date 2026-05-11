@@ -1,6 +1,6 @@
 {
-  "_comment": "Reference data from Cogni-DAO/node-template GitHub API (2026-02-24). Used to model dev seed script.",
-  "repo": "Cogni-DAO/node-template",
+  "_comment": "Reference data from Cogni-DAO/cogni GitHub API (2026-02-24). Used to model dev seed script.",
+  "repo": "Cogni-DAO/cogni",
   "fetchedAt": "2026-02-24T05:15:00Z",
   "contributors": {
     "derekg1729": { "databaseId": 58641509, "role": "admin/primary dev" },

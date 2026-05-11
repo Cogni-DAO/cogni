@@ -157,7 +157,7 @@ D5 and D6 are coordinator/skill-side fixes — out of scope for the eval-loop gr
 ## Pointers
 
 - Work items: `bug.5004`, `bug.5005`, `task.5004` — all in Doltgres on preview
-- PRs: [#1183](https://github.com/Cogni-DAO/node-template/pull/1183) (bug.5005), [#1184](https://github.com/Cogni-DAO/node-template/pull/1184) (bug.5004)
+- PRs: [#1183](https://github.com/Cogni-DAO/cogni/pull/1183) (bug.5005), [#1184](https://github.com/Cogni-DAO/cogni/pull/1184) (bug.5004)
 - Charter regrade: [`work/charters/ENGINEERING.md`](../../work/charters/ENGINEERING.md) (matrix updated 2026-05-01)
 - Coordinator drift memo: `feedback_eval_loop_coordinator_drift.md` (engineering-optimizer memory)
 - Lifecycle spec: [`docs/spec/development-lifecycle.md`](../spec/development-lifecycle.md) (skip-design rule codified 2026-05-01)

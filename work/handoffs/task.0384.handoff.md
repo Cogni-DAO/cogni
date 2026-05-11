@@ -36,7 +36,7 @@ last_commit: "218903946"
 
 ## Next Actions
 
-- [ ] Review PR #1021: https://github.com/Cogni-DAO/node-template/pull/1021
+- [ ] Review PR #1021: https://github.com/Cogni-DAO/cogni/pull/1021
 - [ ] Merge to `main` (squash preferred per repo convention)
 - [ ] Set `status: done` on `work/items/task.0370.vcs-flight-endpoint.md`
 - [ ] Flight to `candidate-a` via `POST /api/v1/vcs/flight` on a CI-green PR (dogfood it)
@@ -60,4 +60,4 @@ last_commit: "218903946"
 | `nodes/operator/app/src/adapters/server/vcs/github-vcs.adapter.ts` | Real VCS adapter                                                                   |
 | `docs/spec/agentic-contribution-loop.md`                           | As-built spec for the full agent contribution loop                                 |
 | `docs/guides/agent-api-validation.md`                              | How to exercise API features after flight                                          |
-| PR #1021                                                           | https://github.com/Cogni-DAO/node-template/pull/1021                               |
+| PR #1021                                                           | https://github.com/Cogni-DAO/cogni/pull/1021                                       |

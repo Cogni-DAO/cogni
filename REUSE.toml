@@ -1,7 +1,7 @@
 version = 1
 SPDX-PackageName = "cogni-template"
 SPDX-PackageSupplier = "Organization: CogniDAO"
-SPDX-PackageDownloadLocation = "https://github.com/Cogni-DAO/cogni-template"
+SPDX-PackageDownloadLocation = "https://github.com/Cogni-DAO/cogni"
 
 [[annotations]]
 path = "docs/**"

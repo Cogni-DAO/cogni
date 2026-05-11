@@ -49,7 +49,7 @@ getDefaultConfig is on the client`.
 ## Decisions Made
 
 - Original SSR-disable was added on 2026-04-03 in
-  [`a898569b`](https://github.com/Cogni-DAO/node-template/commit/a898569b) —
+  [`a898569b`](https://github.com/Cogni-DAO/cogni/commit/a898569b) —
   commit message explicitly: _"@walletconnect accesses indexedDB at
   module load time. When providers.client.tsx is statically imported in
   the server-component layout, Next.js evaluates the full import chain
@@ -58,7 +58,7 @@ getDefaultConfig is on the client`.
   uses next/dynamic with ssr:false to lazy-load providers.client.tsx.
   The layout imports the loader instead of the providers directly,
   breaking the SSR evaluation path."_
-- Earlier sibling commit [`2ea421e0`](https://github.com/Cogni-DAO/node-template/commit/2ea421e0):
+- Earlier sibling commit [`2ea421e0`](https://github.com/Cogni-DAO/cogni/commit/2ea421e0):
   _"keep WagmiProvider app-local — transpilePackages breaks wagmi SSR…
   wagmi internals access indexedDB during SSR static page generation.
   When WalletProvider is compiled via transpilePackages, the 'use client'
@@ -67,12 +67,12 @@ getDefaultConfig is on the client`.
   existed: **the `'use client'` directive does not prevent server-side
   module evaluation during Next's static-page-generation pass.** The
   shim was the only thing keeping `next build` green.
-- Today's PR ([`eb4e3834`](https://github.com/Cogni-DAO/node-template/commit/eb4e3834))
+- Today's PR ([`eb4e3834`](https://github.com/Cogni-DAO/cogni/commit/eb4e3834))
   re-introduced the static import chain that `a898569b` was breaking.
   All four nodes now fail the same way `a898569b` originally fixed.
-- Two later attempts to patch ([`6d4dce07`](https://github.com/Cogni-DAO/node-template/commit/6d4dce07)
+- Two later attempts to patch ([`6d4dce07`](https://github.com/Cogni-DAO/cogni/commit/6d4dce07)
   added `export const dynamic = "force-dynamic"`;
-  [`9a63e9fc`](https://github.com/Cogni-DAO/node-template/commit/9a63e9fc) wrapped
+  [`9a63e9fc`](https://github.com/Cogni-DAO/cogni/commit/9a63e9fc) wrapped
   `headers()` in try/catch) did **not** fix it — they only address the
   runtime invocation, not the module-graph import.
 
@@ -120,7 +120,7 @@ getDefaultConfig is on the client`.
   `next build`, which only runs in the Docker image build. Reproduce
   with `pnpm --filter operator build` locally before pushing.
 - **`'use client'` is not a server-eval barrier.** Per
-  [`2ea421e0`](https://github.com/Cogni-DAO/node-template/commit/2ea421e0),
+  [`2ea421e0`](https://github.com/Cogni-DAO/cogni/commit/2ea421e0),
   Next.js still evaluates the module body of `'use client'` files
   during static page collection. The only thing that breaks the eval
   chain is `next/dynamic({ ssr: false })`. Don't trust the directive
@@ -138,17 +138,17 @@ getDefaultConfig is on the client`.
 
 ## Pointers
 
-| File / Resource                                                                                              | Why it matters                                                                                                                  |
-| ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| [`a898569b` commit](https://github.com/Cogni-DAO/node-template/commit/a898569b)                              | The original `ssr:false` wrapper fix — explains why it exists                                                                   |
-| [`2ea421e0` commit](https://github.com/Cogni-DAO/node-template/commit/2ea421e0)                              | Why WagmiProvider is app-local, not in `@cogni/node-app`                                                                        |
-| [`eb4e3834` commit](https://github.com/Cogni-DAO/node-template/commit/eb4e3834)                              | The breaking change in this PR                                                                                                  |
-| `nodes/operator/app/src/app/layout.tsx`                                                                      | Imports `wagmiConfig` from server context — the bug                                                                             |
-| `nodes/operator/app/src/shared/web3/wagmi.config.ts`                                                         | Calls `getDefaultConfig()` — flagged `'use client'` in current RainbowKit                                                       |
-| `nodes/operator/app/src/app/providers.client.tsx`                                                            | Composes WagmiProvider; reorder + `initialState` work was correct                                                               |
-| `docs/research/nextjs-frontend-perf.md`                                                                      | The spike that motivated this work — keep                                                                                       |
-| `work/items/task.0402.scope-wallet-provider-restore-ssr.md`                                                  | Design doc; "Fallback design" section already mentions `createConfig` w/ lazy WC connector — that **is** Path B in this handoff |
-| `next.config.ts` (per node)                                                                                  | `transpilePackages: ["@cogni/node-app"]` — explains why providers stay per-node                                                 |
-| [wagmi `with-next-app` example](https://github.com/rainbow-me/rainbowkit/tree/main/examples/with-next-app)   | Canonical RainbowKit + wagmi App Router example — uses `getDefaultConfig`, may show updated pattern                             |
-| [PR #1081](https://github.com/Cogni-DAO/node-template/pull/1081)                                             | Currently red; needs decision before any retry                                                                                  |
-| Last failed run: [PR Build 24983896419](https://github.com/Cogni-DAO/node-template/actions/runs/24983896419) | The exact `getDefaultConfig from the server` error                                                                              |
+| File / Resource                                                                                            | Why it matters                                                                                                                  |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| [`a898569b` commit](https://github.com/Cogni-DAO/cogni/commit/a898569b)                                    | The original `ssr:false` wrapper fix — explains why it exists                                                                   |
+| [`2ea421e0` commit](https://github.com/Cogni-DAO/cogni/commit/2ea421e0)                                    | Why WagmiProvider is app-local, not in `@cogni/node-app`                                                                        |
+| [`eb4e3834` commit](https://github.com/Cogni-DAO/cogni/commit/eb4e3834)                                    | The breaking change in this PR                                                                                                  |
+| `nodes/operator/app/src/app/layout.tsx`                                                                    | Imports `wagmiConfig` from server context — the bug                                                                             |
+| `nodes/operator/app/src/shared/web3/wagmi.config.ts`                                                       | Calls `getDefaultConfig()` — flagged `'use client'` in current RainbowKit                                                       |
+| `nodes/operator/app/src/app/providers.client.tsx`                                                          | Composes WagmiProvider; reorder + `initialState` work was correct                                                               |
+| `docs/research/nextjs-frontend-perf.md`                                                                    | The spike that motivated this work — keep                                                                                       |
+| `work/items/task.0402.scope-wallet-provider-restore-ssr.md`                                                | Design doc; "Fallback design" section already mentions `createConfig` w/ lazy WC connector — that **is** Path B in this handoff |
+| `next.config.ts` (per node)                                                                                | `transpilePackages: ["@cogni/node-app"]` — explains why providers stay per-node                                                 |
+| [wagmi `with-next-app` example](https://github.com/rainbow-me/rainbowkit/tree/main/examples/with-next-app) | Canonical RainbowKit + wagmi App Router example — uses `getDefaultConfig`, may show updated pattern                             |
+| [PR #1081](https://github.com/Cogni-DAO/cogni/pull/1081)                                                   | Currently red; needs decision before any retry                                                                                  |
+| Last failed run: [PR Build 24983896419](https://github.com/Cogni-DAO/cogni/actions/runs/24983896419)       | The exact `getDefaultConfig from the server` error                                                                              |

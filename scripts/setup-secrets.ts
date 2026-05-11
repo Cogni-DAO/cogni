@@ -934,7 +934,7 @@ const SECRETS: Secret[] = [
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const REPO = "Cogni-DAO/node-template";
+const REPO = "Cogni-DAO/cogni";
 /** Deploy environments. Secrets are set per-env, not repo-level. */
 const ENVIRONMENTS = ["candidate-a", "preview", "production"] as const;
 const LEGACY_ENV_ALIASES: Record<string, (typeof ENVIRONMENTS)[number]> = {

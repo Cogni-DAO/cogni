@@ -22,7 +22,7 @@ last_commit: d6387ef3
 ## Current State
 
 - **Done**: Port interfaces, domain types, transition table, MarkdownWorkItemAdapter, contract test suite, spec (`docs/spec/work-items-port.md`)
-- **PR open**: https://github.com/Cogni-DAO/node-template/pull/542 — needs merge to staging
+- **PR open**: https://github.com/Cogni-DAO/cogni/pull/542 — needs merge to staging
 - **Worktree**: `.claude/worktrees/agentic-pm` (branch `design/agentic-project-management`)
 - **Not done**: No consumer wired. The web app `/work` page still uses the bespoke `apps/operator/src/lib/work-scanner.ts` scanner. Skills (`/triage`, `/implement`, etc.) still hand-edit frontmatter
 - **task.0152** exists at `needs_design` for skill migration, blocked on task.0156

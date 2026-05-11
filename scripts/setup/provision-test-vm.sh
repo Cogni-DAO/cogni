@@ -252,7 +252,7 @@ POSTHOG_API_KEY="${POSTHOG_API_KEY:-phc_placeholder_test}"
 POSTHOG_HOST="${POSTHOG_HOST:-https://us.i.posthog.com}"
 
 # Repo URL/ref for git-sync
-COGNI_REPO_URL="https://github.com/Cogni-DAO/cogni-template.git"
+COGNI_REPO_URL="https://github.com/Cogni-DAO/cogni.git"
 COGNI_REPO_REF="$BRANCH"
 
 # LiteLLM node endpoints — billing callback routing (Compose→k8s NodePorts via host gateway)
@@ -416,7 +416,7 @@ log_step "Phase 4c: Patch EndpointSlice IPs to $VM_IP on $DEPLOY_BRANCH"
 # promote-and-deploy.yml no longer rsyncs overlays — only updates digests.
 # Provision is the one writer for IP state.
 DEPLOY_TMP=$(mktemp -d)
-REPO_URL="https://${GHCR_USERNAME:-Cogni-1729}:${GHCR_TOKEN}@github.com/Cogni-DAO/cogni-template.git"
+REPO_URL="https://${GHCR_USERNAME:-Cogni-1729}:${GHCR_TOKEN}@github.com/Cogni-DAO/cogni.git"
 
 log_info "Cloning $DEPLOY_BRANCH..."
 git clone --depth=1 --branch "$DEPLOY_BRANCH" "$REPO_URL" "$DEPLOY_TMP" 2>/dev/null

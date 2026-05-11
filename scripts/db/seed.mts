@@ -70,7 +70,7 @@ const repoSpecContent = fs.readFileSync(
 );
 const repoSpec = parseRepoSpec(repoSpecContent);
 
-const REPO_REF = "Cogni-DAO/node-template";
+const REPO_REF = "Cogni-DAO/cogni";
 const NODE_ID = extractNodeId(repoSpec);
 const SCOPE_ID = extractScopeId(repoSpec);
 // Must match cogni-v0.0 profile defaultWeightConfig

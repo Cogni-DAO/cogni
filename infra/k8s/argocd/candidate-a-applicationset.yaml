@@ -11,22 +11,22 @@ spec:
   goTemplate: true
   generators:
     - git:
-        repoURL: https://github.com/cogni-dao/cogni-template.git
+        repoURL: https://github.com/cogni-dao/cogni.git
         revision: deploy/candidate-a-operator
         files:
           - path: "infra/catalog/operator.yaml"
     - git:
-        repoURL: https://github.com/cogni-dao/cogni-template.git
+        repoURL: https://github.com/cogni-dao/cogni.git
         revision: deploy/candidate-a-poly
         files:
           - path: "infra/catalog/poly.yaml"
     - git:
-        repoURL: https://github.com/cogni-dao/cogni-template.git
+        repoURL: https://github.com/cogni-dao/cogni.git
         revision: deploy/candidate-a-resy
         files:
           - path: "infra/catalog/resy.yaml"
     - git:
-        repoURL: https://github.com/cogni-dao/cogni-template.git
+        repoURL: https://github.com/cogni-dao/cogni.git
         revision: deploy/candidate-a-scheduler-worker
         files:
           - path: "infra/catalog/scheduler-worker.yaml"
@@ -39,7 +39,7 @@ spec:
     spec:
       project: default
       source:
-        repoURL: https://github.com/cogni-dao/cogni-template.git
+        repoURL: https://github.com/cogni-dao/cogni.git
         targetRevision: "deploy/candidate-a-{{.name}}"
         path: "infra/k8s/overlays/candidate-a/{{.name}}"
       destination:

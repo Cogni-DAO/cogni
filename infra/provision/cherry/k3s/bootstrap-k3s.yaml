@@ -123,7 +123,7 @@ write_files:
       REPO_DIR="/tmp/cogni-bootstrap-repo"
       rm -rf "$REPO_DIR"
       git clone --depth=1 --branch "${git_branch:-canary}" \
-        "https://github.com/cogni-dao/cogni-template.git" "$REPO_DIR"
+        "https://github.com/cogni-dao/cogni.git" "$REPO_DIR"
 
       echo "Applying ApplicationSets..."
       for appset in canary-applicationset.yaml preview-applicationset.yaml production-applicationset.yaml; do

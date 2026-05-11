@@ -1,8 +1,8 @@
 # First Ever Operator-Flighted Candidate Build
 
 **Date:** 2026-04-24
-**PR:** [Cogni-DAO/node-template#1034](https://github.com/Cogni-DAO/node-template/pull/1034) — `fix(poly): bug.0342 float round-trip + wallet total double-count`
-**Workflow run:** https://github.com/Cogni-DAO/node-template/actions/runs/24902457894
+**PR:** [Cogni-DAO/cogni#1034](https://github.com/Cogni-DAO/cogni/pull/1034) — `fix(poly): bug.0342 float round-trip + wallet total double-count`
+**Workflow run:** https://github.com/Cogni-DAO/cogni/actions/runs/24902457894
 **Head SHA:** `ffd56570`
 **Triggered by:** `cogni-node-template[bot]` (the Operator's GitHub App)
 **Model:** gpt-4o-mini, via `core__vcs_flight_candidate`
@@ -32,7 +32,7 @@ This is the proof-of-life moment for the Operator as an **agentic git-manager**.
 ## Receipts
 
 ```
-$ gh api repos/Cogni-DAO/node-template/actions/runs/24902457894 --jq '.triggering_actor.login'
+$ gh api repos/Cogni-DAO/cogni/actions/runs/24902457894 --jq '.triggering_actor.login'
 cogni-node-template[bot]
 ```
 
@@ -40,7 +40,7 @@ cogni-node-template[bot]
 
 ## Addendum — Codex executor still toolless
 
-Same day, Derek asked the Codex graph executor to flight PR [#1012](https://github.com/Cogni-DAO/node-template/pull/1012) with the same "sonarcloud nonblocking" guidance. It could not.
+Same day, Derek asked the Codex graph executor to flight PR [#1012](https://github.com/Cogni-DAO/cogni/pull/1012) with the same "sonarcloud nonblocking" guidance. It could not.
 
 The Codex executor reported:
 
@@ -54,7 +54,7 @@ So the maiden flight on PR #1034 stands — but it's backend-scoped: the VCS MCP
 
 Derek re-homed the same request ("flight 1012, sonarcloud nonblocking") onto Kimi-K2 via the standard graph executor. It worked.
 
-- **PR:** [Cogni-DAO/node-template#1012](https://github.com/Cogni-DAO/node-template/pull/1012) — `feat(poly): windowed wallet stats — batched endpoint + 60s cache`
+- **PR:** [Cogni-DAO/cogni#1012](https://github.com/Cogni-DAO/cogni/pull/1012) — `feat(poly): windowed wallet stats — batched endpoint + 60s cache`
 - **Head SHA:** `c6ddb246`
 - **Model:** Kimi-K2 (paid)
 - **Tool surface:** `core__repo_open`, `core__vcs_get_ci_status`, `core__vcs_flight_candidate` — all available on the normal graph executor

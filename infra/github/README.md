@@ -49,7 +49,7 @@ This forces a clear policy: **PR-only workflows (CodeQL default-setup, Validate 
 
 ```bash
 diff <(jq 'with_entries(select(.key | startswith("_") | not))' infra/github/branch-protection.json) \
-     <(gh api repos/Cogni-DAO/node-template/branches/main/protection \
+     <(gh api repos/Cogni-DAO/cogni/branches/main/protection \
         | jq '{required_status_checks:{strict:.required_status_checks.strict,contexts:.required_status_checks.contexts},
                enforce_admins:null,required_pull_request_reviews:null,restrictions:null,
                required_linear_history:.required_linear_history.enabled,

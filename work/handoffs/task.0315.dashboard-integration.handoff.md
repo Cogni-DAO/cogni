@@ -14,7 +14,7 @@ audience: the dev on PR #918 (feat/poly-mirror-dashboard)
 
 ## Context
 
-You opened [PR #918](https://github.com/Cogni-DAO/node-template/pull/918) (`feat/poly-mirror-dashboard`) before the backend was fully validated. It's validated now.
+You opened [PR #918](https://github.com/Cogni-DAO/cogni/pull/918) (`feat/poly-mirror-dashboard`) before the backend was fully validated. It's validated now.
 
 - PR #920 (`feat/poly-mirror-v0`, ready-to-merge) shipped the mirror backend: poll + wallet-watch + coordinator + order-ledger + 3 read APIs + candidate-a deployment.
 - End-to-end live-money validation on candidate-a 2026-04-18 — mirror detected + copied a real $4.925 BUY with a $0.985 mirror order in ≤90s. Evidence on PR #920.
@@ -29,7 +29,7 @@ Also:
 - [task.0315](../items/task.0315.poly-copy-trade-prototype.md) — parent spec + P2 RLS note
 - [task.0323](../items/task.0323.poly-copy-trade-v1-hardening.md) — **v0 gaps your dashboard will surface** (status-sync lag, noopMetrics, balance-endpoint client rebuild)
 - [task.0322](../items/task.0322.poly-copy-trade-phase4-design-prep.md) — P4 streaming / adversarial design
-- [PR #920 evidence comment](https://github.com/Cogni-DAO/node-template/pull/920#issuecomment-4274910814) — validation scorecard
+- [PR #920 evidence comment](https://github.com/Cogni-DAO/cogni/pull/920#issuecomment-4274910814) — validation scorecard
 
 ## The three endpoints your dashboard consumes
 

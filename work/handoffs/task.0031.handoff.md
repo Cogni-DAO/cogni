@@ -85,5 +85,5 @@ Missing: a boot-time step that populates `/workspace/repo` as a writable checkou
 
 ## PR
 
-- PR #383: https://github.com/Cogni-DAO/node-template/pull/383
+- PR #383: https://github.com/Cogni-DAO/cogni/pull/383
 - Branch: `feat/openclaw-devtools-image` (20 commits from staging)

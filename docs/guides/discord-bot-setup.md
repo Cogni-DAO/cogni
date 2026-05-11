@@ -49,7 +49,7 @@ DISCORD_BOT_TOKEN=your-token-here
 **Production (GitHub Actions):**
 
 ```bash
-gh secret set DISCORD_BOT_TOKEN --repo Cogni-DAO/node-template
+gh secret set DISCORD_BOT_TOKEN --repo Cogni-DAO/cogni
 ```
 
 ## 4. Invite the Bot to Your Server
