@@ -39,6 +39,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -80,10 +81,6 @@ function formatSignedUsd(value: number): string {
 function formatPrice(value: number | null): string {
   if (value === null) return "—";
   return value.toFixed(3);
-}
-
-function formatShares(value: number): string {
-  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 function pnlClass(value: number): string {
@@ -500,9 +497,27 @@ function ParticipantsTable({
   line: WalletExecutionMarketLine;
 }): ReactElement {
   // Two-row thead: row 1 carries leg-group spans (Primary/Hedge/Net), row 2
-  // carries the real per-column labels (Value/VWAP/P/L). `border-l`/`border-r`
-  // on group cells visually delimit the leg sections; row 2 inherits them via
-  // adjacent `border-l` to keep group boundaries crisp through both rows.
+  // carries the real per-column labels (Value/VWAP/P/L). `border-l` on the
+  // first cell of each group keeps the leg boundaries crisp through both
+  // header rows, body rows, and tfoot rows.
+  //
+  // tfoot carries one row per side ("Σ Our wallet", "Σ All targets") with
+  // line-level totals from `line.{our,target}{Entry,}ValueUsdc`. Per-target
+  // entry/value isn't on the contract today (bug.5038); the line-level
+  // figures are server-aggregated from `poly_trader_fills` (entry) and
+  // `poly_trader_position_snapshots` (current value), so they're the
+  // canonical source of truth — exactly the numbers the outer row's
+  // "Our entry / Our value / Target entry / Target value" cells display,
+  // visually tying the inner expansion to the outer row.
+  const targetCount = line.participants.filter(
+    (p) => p.side === "copy_target"
+  ).length;
+  const ourPnL = line.participants
+    .filter((p) => p.side === "our_wallet")
+    .reduce((sum, p) => sum + p.net.pnlUsdc, 0);
+  const targetPnL = line.participants
+    .filter((p) => p.side === "copy_target")
+    .reduce((sum, p) => sum + p.net.pnlUsdc, 0);
   return (
     <div className="overflow-hidden rounded-md border bg-background">
       <Table className="text-xs">
@@ -552,8 +567,58 @@ function ParticipantsTable({
             />
           ))}
         </TableBody>
+        <TableFooter>
+          <LineTotalRow
+            label="Σ Our wallet"
+            entryUsdc={line.ourEntryValueUsdc}
+            valueUsdc={line.ourValueUsdc}
+            pnlUsdc={ourPnL}
+          />
+          <LineTotalRow
+            label={`Σ All targets${targetCount > 0 ? ` (${targetCount})` : ""}`}
+            entryUsdc={line.targetEntryValueUsdc}
+            valueUsdc={line.targetValueUsdc}
+            pnlUsdc={targetPnL}
+          />
+        </TableFooter>
       </Table>
     </div>
+  );
+}
+
+function LineTotalRow({
+  label,
+  entryUsdc,
+  valueUsdc,
+  pnlUsdc,
+}: {
+  label: string;
+  entryUsdc: number;
+  valueUsdc: number;
+  pnlUsdc: number;
+}): ReactElement {
+  return (
+    <TableRow className="border-t bg-muted/20">
+      <TableCell className="py-1.5 font-medium">{label}</TableCell>
+      <TableCell
+        colSpan={6}
+        className="border-l py-1.5 text-right text-muted-foreground tabular-nums"
+        title="Σ BUY notional from fills, this market line"
+      >
+        Entry {formatUsd(entryUsdc)}
+      </TableCell>
+      <TableCell className="border-l py-1.5 text-right font-medium tabular-nums">
+        {formatUsd(valueUsdc)}
+      </TableCell>
+      <TableCell
+        className={cn(
+          "py-1.5 text-right font-medium tabular-nums",
+          pnlClass(pnlUsdc)
+        )}
+      >
+        {formatSignedUsd(pnlUsdc)}
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -572,10 +637,8 @@ function ParticipantRow({
               : participant.label}
           </span>
           {participant.primary ? (
-            <span className="text-[11px] text-muted-foreground">
+            <span className="font-medium text-sm">
               {participant.primary.outcome}
-              {" · "}
-              {formatShares(participant.primary.shares)} sh
             </span>
           ) : null}
         </div>
