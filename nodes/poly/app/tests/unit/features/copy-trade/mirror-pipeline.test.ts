@@ -845,3 +845,209 @@ describe("mirror-pipeline.runMirrorTick — happy path", () => {
     expect(placeIntent.mock.calls[0]?.[0].client_order_id).toBe(expectedCid);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// bug.5048 — pipeline-level component tests
+// Verifies the target-dominance branch + VWAP gate + wrong-side counter +
+// WARN log fire end-to-end through `runMirrorTick`, with decision-log fields
+// landing in the intent JSONB.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("mirror-pipeline.runMirrorTick — bug.5048 target dominance + wrong-side", () => {
+  const OVER = "12345"; // target dominant
+  const UNDER = "99999"; // target minority
+
+  const TARGET_5048: MirrorTargetConfig = {
+    ...BASE_TARGET,
+    sizing: {
+      kind: "target_percentile_scaled",
+      max_usdc_per_trade: 10,
+      statistic: {
+        wallet: TARGET_WALLET,
+        label: "test",
+        captured_at: "2026-05-03T00:00:00Z",
+        sample_size: 1085,
+        percentile: 80,
+        min_target_usdc: 100,
+        max_target_usdc: 4809,
+      },
+    },
+    min_target_side_fraction: 0.2,
+    vwap_tolerance: 0.005,
+  };
+
+  // Target's per-condition snapshot: 95.6% OVER / 4.4% UNDER (Chelsea shape).
+  // OVER vwap = 22807/60000 ≈ 0.380; UNDER vwap = 1059/2500 ≈ 0.4236.
+  const ASYMMETRIC_OVER = () => ({
+    condition_id:
+      "0x302f5a4e8b475db09ef63f2df542ce3330599c3c4b4aa58173208a60229e1374",
+    tokens: [
+      {
+        token_id: OVER,
+        size_shares: 60000,
+        cost_usdc: 22807,
+        current_value_usdc: 31000,
+      },
+      {
+        token_id: UNDER,
+        size_shares: 2500,
+        cost_usdc: 1059,
+        current_value_usdc: 1000,
+      },
+    ],
+  });
+
+  it("UNDER (minority) fill with no mirror → skip target_dominant_other_side; decision-log carries dominance fields", async () => {
+    const fill = makeFill({
+      fill_id: "data-api:0xfresh:99999:BUY:1713302400",
+      price: 0.4,
+      size_usdc: 1,
+      attributes: {
+        asset: UNDER,
+        condition_id:
+          "0x302f5a4e8b475db09ef63f2df542ce3330599c3c4b4aa58173208a60229e1374",
+      },
+    });
+    const ledger = new FakeOrderLedger();
+    const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
+    const metrics = createRecordingMetrics();
+    const getTargetConditionPosition = vi
+      .fn()
+      .mockResolvedValue(ASYMMETRIC_OVER());
+
+    await runMirrorTick({
+      source: makeSource([fill]),
+      ledger,
+      placeIntent,
+      target: TARGET_5048,
+      getMarketConstraints: MARKET_CONSTRAINTS,
+      getTargetConditionPosition,
+      getCursor: () => undefined,
+      setCursor: () => {},
+      logger: noopLogger,
+      metrics,
+    });
+
+    expect(placeIntent).not.toHaveBeenCalled();
+    const skip = ledger.decisions.find(
+      (d) =>
+        d.outcome === "skipped" && d.reason === "target_dominant_other_side"
+    );
+    expect(skip).toBeDefined();
+    expect(skip?.intent.target_dominant_token_id).toBe(OVER);
+    expect(skip?.intent.target_side_fraction).toBeCloseTo(0.0444, 3);
+    expect(skip?.intent.min_target_side_fraction).toBe(0.2);
+    expect(skip?.intent.vwap_tolerance).toBe(0.005);
+    expect(skip?.intent.wrong_side_holding_detected).toBe(false);
+
+    const skipMetric = metrics.emissions.find(
+      (e) =>
+        e.kind === "counter" &&
+        e.name === MIRROR_PIPELINE_METRICS.decisionsTotal &&
+        e.labels.outcome === "skipped" &&
+        e.labels.reason === "target_dominant_other_side"
+    );
+    expect(skipMetric).toBeDefined();
+  });
+
+  it("dominant OVER fill while wallet holds UNDER (cross-target leg) → place + wrong_side counter + WARN log (option C)", async () => {
+    const fill = makeFill({
+      fill_id: "data-api:0xover:12345:BUY:1713400000",
+      price: 0.35,
+      size_usdc: 1,
+      attributes: {
+        asset: OVER,
+        condition_id:
+          "0x302f5a4e8b475db09ef63f2df542ce3330599c3c4b4aa58173208a60229e1374",
+      },
+    });
+    // Seed wallet with a prior UNDER fill (from another target's mirror loop).
+    // This pins MirrorPositionView.our_token_id = UNDER (the minority side).
+    const priorCid = clientOrderIdFor(
+      TARGET_ID,
+      "data-api:0xother:99999:BUY:1713000000"
+    );
+    const ledger = new FakeOrderLedger({
+      initial: [
+        {
+          target_id: TARGET_ID,
+          fill_id: "data-api:0xother:99999:BUY:1713000000",
+          observed_at: new Date(fill.observed_at),
+          client_order_id: priorCid,
+          order_id: "0xpriorunder",
+          status: "filled",
+          position_lifecycle: null,
+          attributes: {
+            market_id: fill.market_id,
+            token_id: UNDER,
+            side: "BUY",
+            size_usdc: 5,
+            limit_price: 0.42,
+          },
+          created_at: new Date(),
+          updated_at: new Date(),
+          synced_at: null,
+          billing_account_id: COGNI_SYSTEM_BILLING_ACCOUNT_ID,
+        },
+      ],
+    });
+    const placeIntent = vi.fn(
+      async (i: OrderIntent): Promise<OrderReceipt> =>
+        makeReceipt("0xoptCorder", i.client_order_id)
+    );
+    const metrics = createRecordingMetrics();
+
+    type WarnCall = { obj: Record<string, unknown>; msg: string | undefined };
+    const warnCalls: WarnCall[] = [];
+    const captureLogger = {
+      debug() {},
+      info() {},
+      warn(obj: Record<string, unknown>, msg?: string) {
+        warnCalls.push({ obj, msg });
+      },
+      error() {},
+      child() {
+        return captureLogger;
+      },
+    };
+
+    await runMirrorTick({
+      source: makeSource([fill]),
+      ledger,
+      placeIntent,
+      target: TARGET_5048,
+      getMarketConstraints: MARKET_CONSTRAINTS,
+      getTargetConditionPosition: vi.fn().mockResolvedValue(ASYMMETRIC_OVER()),
+      getCursor: () => undefined,
+      setCursor: () => {},
+      logger: captureLogger,
+      metrics,
+    });
+
+    // Order was placed on OVER (target's dominant side).
+    expect(placeIntent).toHaveBeenCalledTimes(1);
+    expect(placeIntent.mock.calls[0]?.[0].attributes?.token_id).toBe(OVER);
+
+    // Wrong-side counter fired.
+    const wrongSide = metrics.emissions.find(
+      (e) =>
+        e.kind === "counter" &&
+        e.name === MIRROR_PIPELINE_METRICS.wrongSideHoldingTotal
+    );
+    expect(wrongSide).toBeDefined();
+    expect(wrongSide?.labels.target_id).toBe(TARGET_ID);
+
+    // WARN log fired with diagnostic fields.
+    const warn = warnCalls.find(
+      (c) => c.obj.phase === "wrong_side_holding_detected"
+    );
+    expect(warn).toBeDefined();
+    expect(warn?.obj.our_minority_token_id).toBe(UNDER);
+    expect(warn?.obj.target_dominant_token_id).toBe(OVER);
+
+    // Decision row carries the flag.
+    const placed = ledger.decisions.find((d) => d.outcome === "placed");
+    expect(placed?.intent.wrong_side_holding_detected).toBe(true);
+    expect(placed?.intent.position_branch).toBe("new_entry");
+  });
+});

@@ -65,6 +65,20 @@ const WARMUP_BACKLOG_SEC = 60;
 const MIRROR_POLL_MS = 30_000;
 const DEFAULT_MIRROR_MAX_USDC_PER_TRADE = 5;
 const DEFAULT_CONVICTION_FILTER_PERCENTILE = 75;
+/**
+ * bug.5048 — target-dominance gate threshold. Fill on a token holding < 20% of
+ * target's total condition cost is rejected as `target_dominant_other_side`.
+ * Catches Chelsea/Nott-Forest (4.4% minority) with margin; permissive enough
+ * for genuine 70/30 hedges to route through the hedge branch. Tunable
+ * per-target.
+ */
+const DEFAULT_MIN_TARGET_SIDE_FRACTION = 0.2;
+/**
+ * bug.5048 — upward tolerance above target's VWAP on the fill's token. 0.005
+ * = 0.5pp on the 0–1 price scale. Covers tick-grid rounding + ladder
+ * slippage. Above this we refuse to place (`vwap_floor_breach`).
+ */
+const DEFAULT_VWAP_TOLERANCE = 0.005;
 const DEFAULT_POSITION_FOLLOWUP_POLICY: PositionFollowupPolicy = {
   enabled: true,
   min_mirror_position_usdc: 5,
@@ -233,6 +247,10 @@ export function buildMirrorTargetConfig(params: {
     // task.5001 — default to mirror_limit (resting GTC at target's entry).
     // Persistence to a per-target column is deferred to task.0347.
     placement: { kind: "mirror_limit" },
+    // bug.5048 — gate new_entry + layer routing against target's per-side
+    // cost asymmetry, and refuse to place above target's per-token VWAP.
+    min_target_side_fraction: DEFAULT_MIN_TARGET_SIDE_FRACTION,
+    vwap_tolerance: DEFAULT_VWAP_TOLERANCE,
     ...(snapshotForTargetWallet(params.targetWallet) !== undefined
       ? { position_followup: DEFAULT_POSITION_FOLLOWUP_POLICY }
       : {}),

@@ -3,15 +3,20 @@
 
 /**
  * Module: `@features/copy-trade/plan-mirror`
- * Purpose: Pure copy-trade planning function — given a normalized Fill, the target config, and a runtime-state snapshot, return either `place` with a concrete OrderIntent or `skip` with a bounded reason code.
- * Scope: Pure function. Does not perform I/O, does not read env, does not import adapters. All runtime state (idempotency set) is supplied by the caller.
+ * Purpose: Pure copy-trade planning function — given a normalized Fill, the target config, and a runtime-state snapshot, return either `place` with a concrete OrderIntent or `skip` with a bounded reason code. Branch selection is target-dominance-driven: target's per-condition cost fractions decide entry/layer/hedge first, then our position state routes within (bug.5048).
+ * Scope: Pure function. Does not perform I/O, does not read env, does not import adapters. All runtime state (idempotency set + per-condition target/our position snapshots) is supplied by the caller.
+ * Exports: `planMirrorFromFill()` (planner), `analyzeTargetDominance()` (per-condition side-fraction analyzer), `targetVwapForToken()` (per-token VWAP from target_position), `applySizingPolicy()` (sizing helper).
  * Invariants:
  *   - IDEMPOTENT_BY_CLIENT_ID — repeat of the same `(target_id, fill_id)` is silently dropped via `already_placed_ids`. Matches the DB PK on `poly_copy_trade_fills`.
  *   - PLAN_IS_PURE — no side effects; same input → same output.
  *   - CAPS_LIVE_IN_GRANT — daily / hourly USDC caps are enforced downstream by `PolyTraderWalletPort.authorizeIntent` against the tenant's `poly_wallet_grants` row. `planMirrorFromFill` is intentionally unaware of caps so a single cap decision lives in one place (the authorize boundary).
  *   - NO_KILL_SWITCH (bug.0438): there is no per-tenant kill-switch gate. The active-target / active-grant chain in the cross-tenant enumerator is the only gate; an explicit POST of a target IS the user's opt-in.
+ *   - TARGET_DOMINANCE_DRIVES_BRANCH (bug.5048): when `config.min_target_side_fraction` is set + target_position is available, `decideMirrorBranch` computes target's dominant side first, then routes by our position state per the spec branch table. Below-threshold (minority) fills always skip as `target_dominant_other_side` — master switch covering entry, layer, AND hedge. When disabled (threshold unset / no target data), legacy our-position routing applies for backward-compat.
+ *   - NEVER_PAY_ABOVE_TARGET_VWAP (bug.5048): when `config.vwap_tolerance` is set, `applyVwapGate` skips `vwap_floor_breach` if `fill.price > target_vwap_for_fill_token + tolerance`. Asymmetric upward gate; fails open when target VWAP is unknown.
+ *   - HEDGE_PREDICATE_NOOPS_ON_UNKNOWN_OPPOSITE: hedge branch fires only when `state.position.opposite_token_id` is known from prior aggregation. No inference from condition structure alone.
+ * Skip-reason precedence (first match wins): already_placed → market_past_end_date → price_outside_clob_bounds → target_dominant_other_side → vwap_floor_breach → sizing-reason skip (below_target_percentile / below_market_min / position_cap_reached / target_position_below_threshold / followup_position_too_small / followup_not_needed) → place.
  * Side-effects: none
- * Links: docs/spec/poly-tenant-and-collateral.md, work/items/task.0318, work/items/task.5005, work/items/bug.5045
+ * Links: docs/spec/poly-copy-trade-execution.md, docs/spec/poly-tenant-and-collateral.md, work/items/bug.5048, work/items/task.0318
  * @public
  */
 
@@ -22,6 +27,7 @@ import {
 
 import type {
   MirrorPlan,
+  MirrorReason,
   PlacementPolicy,
   PlanMirrorInput,
   PositionBranch,
@@ -170,10 +176,21 @@ function applyMarketFloors(
  *   1. already placed (PK+cid)        → skip/already_placed
  *   2. market past Gamma `end_date`   → skip/market_past_end_date  (bug.5043)
  *   3. price outside CLOB tick grid   → skip/price_outside_clob_bounds
- *   4. position-followup policy       → skip/place (layer | hedge)
- *   5. sizing below market min        → skip/below_market_min
- *   6. mode === 'paper'               → place (paper adapter)
- *   7. otherwise                      → place (live)
+ *   4. `decideMirrorBranch`           → skip/target_dominant_other_side (bug.5048)
+ *                                       OR place-branch selection (new_entry / layer / hedge)
+ *                                       with pre-computed `SizingResult`
+ *   5. VWAP gate                      → skip/vwap_floor_breach (bug.5048)
+ *   6. sizing.ok check                → skip/below_target_percentile | below_market_min |
+ *                                       position_cap_reached | target_position_below_threshold |
+ *                                       followup_position_too_small | followup_not_needed
+ *   7. mode === 'paper'               → place (paper adapter)
+ *   8. otherwise                      → place (live), reason ∈ {ok, layer_scale_in, hedge_followup}
+ *
+ * Branch selection is target-dominance-driven (TARGET_DOMINANCE_DRIVES_BRANCH):
+ * `state.target_position.tokens[].cost_usdc` gives per-side fractions; the
+ * incoming fill's token is classified minority/dominant against
+ * `config.min_target_side_fraction`. Minority fills always skip (master
+ * switch). See spec branch table in `poly-copy-trade-execution.md`.
  *
  * Daily / hourly caps are NOT checked here — those live on the tenant's
  * `poly_wallet_grants` row and are enforced by `authorizeIntent` at the
@@ -226,186 +243,415 @@ export function planMirrorFromFill(input: PlanMirrorInput): MirrorPlan {
           fill: { ...fill, price: normalizedPrice.price },
         } as const);
 
-  const followup = applyPositionFollowupPolicy(
+  const decision = decideMirrorBranch(
     planningInput,
     min_shares,
     min_usdc_notional
   );
-  if (followup !== undefined) {
-    if (!followup.sizing.ok) {
-      return {
-        kind: "skip",
-        reason: followup.sizing.reason,
-        position_branch: followup.position_branch,
-      };
-    }
-    const intent = buildIntent(
-      fill,
-      followup.sizing.size_usdc,
-      client_order_id,
-      config.placement,
-      followup.position_branch,
-      normalizedPrice.price
-    );
+
+  if (decision.kind === "skip") {
     return {
-      kind: "place",
-      reason: followup.reason,
-      position_branch: followup.position_branch,
-      intent,
+      kind: "skip",
+      reason: decision.reason,
+      position_branch: decision.position_branch,
     };
   }
 
-  const sizing = applySizingPolicy(
-    config.sizing,
-    normalizedPrice.price,
-    targetSizingUsdcForFill(fill, state, config.sizing),
-    min_shares,
-    min_usdc_notional,
-    state.cumulative_intent_usdc_for_market
-  );
-  if (!sizing.ok) {
+  // VWAP gate (bug.5048) — applied AFTER branch selection, BEFORE sizing
+  // finalization. Fires on every place-bound branch. Fails open when target
+  // VWAP for the fill's token is unknown.
+  const vwapSkip = applyVwapGate(planningInput);
+  if (vwapSkip !== undefined) {
     return {
       kind: "skip",
-      reason: sizing.reason,
-      position_branch: "new_entry",
+      reason: vwapSkip,
+      position_branch: decision.position_branch,
+    };
+  }
+
+  if (!decision.sizing.ok) {
+    return {
+      kind: "skip",
+      reason: decision.sizing.reason,
+      position_branch: decision.position_branch,
     };
   }
 
   const intent = buildIntent(
     fill,
-    sizing.size_usdc,
+    decision.sizing.size_usdc,
     client_order_id,
     config.placement,
-    "new_entry",
+    decision.position_branch,
     normalizedPrice.price
   );
 
   return {
     kind: "place",
-    reason: config.mode === "paper" ? "mode_paper" : "ok",
-    position_branch: "new_entry",
+    reason: decision.reason,
+    position_branch: decision.position_branch,
     intent,
+    wrong_side_holding_detected: decision.wrong_side_holding_detected,
   };
 }
 
-function applyPositionFollowupPolicy(
+/**
+ * bug.5048 — analyze target's per-condition cost distribution and report
+ * whether the incoming fill is on target's minority side. Gate disabled when
+ * `threshold` is undefined or target_position is unavailable (fail-open per
+ * TARGET_DOMINANCE_FAIL_OPEN_ON_MISSING_DATA).
+ */
+interface TargetDominanceSignal {
+  /** True when threshold + target data are both available and total cost > 0. */
+  dominance_known: boolean;
+  /** True when gate fired: fill is on target's minority side (fraction < threshold). */
+  fill_is_minority: boolean;
+  /** Token id with highest cost when dominance_known; else undefined. */
+  dominant_token_id: string | undefined;
+  /** Fraction of target's total cost on the fill's token, or null when unknown. */
+  fill_token_fraction: number | null;
+}
+
+export function analyzeTargetDominance(
+  targetPosition: TargetConditionPositionView | undefined,
+  threshold: number | undefined,
+  fillTokenId: string
+): TargetDominanceSignal {
+  const disabled: TargetDominanceSignal = {
+    dominance_known: false,
+    fill_is_minority: false,
+    dominant_token_id: undefined,
+    fill_token_fraction: null,
+  };
+  if (threshold === undefined || threshold <= 0) return disabled;
+  if (
+    !targetPosition ||
+    targetPosition.tokens.length === 0 ||
+    fillTokenId === ""
+  ) {
+    return disabled;
+  }
+  let total = 0;
+  let fillCost = 0;
+  let dominantTokenId: string | undefined;
+  let dominantCost = -1;
+  for (const t of targetPosition.tokens) {
+    total += t.cost_usdc;
+    if (t.token_id === fillTokenId) fillCost += t.cost_usdc;
+    if (t.cost_usdc > dominantCost) {
+      dominantCost = t.cost_usdc;
+      dominantTokenId = t.token_id;
+    }
+  }
+  if (total <= 0) return disabled;
+  const fraction = fillCost / total;
+  return {
+    dominance_known: true,
+    fill_is_minority: fraction < threshold,
+    dominant_token_id: dominantTokenId,
+    fill_token_fraction: fraction,
+  };
+}
+
+/**
+ * bug.5048 — target's VWAP on a specific token, derived from
+ * `cost_usdc / size_shares`. Returns undefined when shares are zero or token
+ * is absent (fail-open semantics).
+ */
+export function targetVwapForToken(
+  targetPosition: TargetConditionPositionView | undefined,
+  tokenId: string
+): number | undefined {
+  if (!targetPosition || tokenId === "") return undefined;
+  let cost = 0;
+  let shares = 0;
+  for (const t of targetPosition.tokens) {
+    if (t.token_id === tokenId) {
+      cost += t.cost_usdc;
+      shares += t.size_shares;
+    }
+  }
+  if (shares <= 0) return undefined;
+  return cost / shares;
+}
+
+/**
+ * bug.5048 — refuse to place above target's average entry on the fill's
+ * token. Tolerance is asymmetric (upward only); we are happy to enter below
+ * target VWAP. Fail-open when target VWAP is unknown.
+ */
+function applyVwapGate(
+  input: PlanMirrorInput
+): "vwap_floor_breach" | undefined {
+  const tolerance = input.config.vwap_tolerance;
+  if (tolerance === undefined) return undefined;
+  const tokenId =
+    typeof input.fill.attributes?.asset === "string"
+      ? input.fill.attributes.asset
+      : "";
+  if (tokenId === "") return undefined;
+  const vwap = targetVwapForToken(input.state.target_position, tokenId);
+  if (vwap === undefined) return undefined;
+  if (input.fill.price > vwap + tolerance) return "vwap_floor_breach";
+  return undefined;
+}
+
+/**
+ * bug.5048 — single entry-point branch decision. Replaces the legacy
+ * `applyPositionFollowupPolicy` which selected branches off OUR position
+ * first. Now: target's dominant side drives the routing, our position is
+ * downstream.
+ *
+ * Modes:
+ *   1. Dominance routing (when `config.min_target_side_fraction` is set AND
+ *      target_position is available with non-zero total cost). Implements the
+ *      bug.5048 branch table.
+ *   2. Legacy our-position routing (fallback). Preserves existing tests that
+ *      did not configure the dominance gate. fill on `our_token_id` → layer;
+ *      fill on `opposite_token_id` → hedge; else → new_entry.
+ *
+ * Invariants: TARGET_DOMINANCE_DRIVES_BRANCH (when enabled),
+ * OPTION_C_TOLERATES_MULTI_TARGET, MIRROR_REASON_BOUNDED, PLANNER_IS_PURE.
+ */
+type BranchDecision =
+  | {
+      kind: "skip";
+      reason: Exclude<MirrorReason, "ok" | "sell_closed_position">;
+      position_branch: PositionBranch;
+    }
+  | {
+      kind: "place";
+      reason: "ok" | "mode_paper" | "layer_scale_in" | "hedge_followup";
+      position_branch: PositionBranch;
+      sizing: SizingResult;
+      wrong_side_holding_detected: boolean;
+    };
+
+function decideMirrorBranch(
   input: PlanMirrorInput,
   minShares: number | undefined,
   minUsdcNotional: number | undefined
-):
-  | {
-      reason: "layer_scale_in" | "hedge_followup";
-      position_branch: "layer" | "hedge";
-      sizing: SizingResult;
-    }
-  | undefined {
+): BranchDecision {
   const { fill, config, state } = input;
-  const policy = config.position_followup;
-  if (!policy?.enabled || fill.side !== "BUY") return undefined;
-
-  const tokenId =
+  const fillTokenId =
     typeof fill.attributes?.asset === "string" ? fill.attributes.asset : "";
+
+  const dominance = analyzeTargetDominance(
+    state.target_position,
+    config.min_target_side_fraction,
+    fillTokenId
+  );
+
+  // Gate: minority-side fills are below the configured conviction
+  // threshold for this condition; we never mirror them, regardless of our
+  // position state. Master switch — entries, layer scale-in, AND hedges on
+  // a below-threshold token all skip. Hedge mirroring only fires when the
+  // opposite-side fill itself sits above `min_target_side_fraction` (e.g.
+  // a 70/30 target — the 30% side passes the gate and routes to hedge if
+  // we hold the 70% primary).
+  if (dominance.fill_is_minority) {
+    return {
+      kind: "skip",
+      reason: "target_dominant_other_side",
+      position_branch: "new_entry",
+    };
+  }
+
   const position = state.position;
-  if (!tokenId || !position?.our_token_id) return undefined;
+  const ourTokenId = position?.our_token_id;
+  const oppositeTokenId = position?.opposite_token_id;
+  const followup = config.position_followup;
 
-  const isLayer = tokenId === position.our_token_id;
-  const isHedge =
-    position.opposite_token_id !== undefined &&
-    tokenId === position.opposite_token_id;
-  if (!isLayer && !isHedge) return undefined;
+  let isLayer = false;
+  let isHedge = false;
+  let wrong_side_holding_detected = false;
 
-  const branch: "layer" | "hedge" = isHedge ? "hedge" : "layer";
-  const followupReason: "layer_scale_in" | "hedge_followup" = isHedge
-    ? "hedge_followup"
-    : "layer_scale_in";
+  if (dominance.dominance_known && dominance.dominant_token_id !== undefined) {
+    // Dominance-driven routing (bug.5048).
+    const fillIsOnDominant = fillTokenId === dominance.dominant_token_id;
+    if (fillIsOnDominant) {
+      if (ourTokenId === dominance.dominant_token_id) {
+        isLayer = true;
+      } else if (
+        ourTokenId !== undefined &&
+        ourTokenId !== dominance.dominant_token_id
+      ) {
+        // OPTION_C_TOLERATES_MULTI_TARGET — wallet holds a non-dominant side
+        // from cross-target activity. Ignore the wrong-side leg for routing;
+        // open the dominant-side parallel leg. Pipeline emits a counter +
+        // WARN log when this flag fires.
+        wrong_side_holding_detected = true;
+      }
+    } else {
+      // Fill not on dominant; not minority either (gate filtered above).
+      // Happens in multi-outcome (e.g. 50/30/20 fill on 30% token with
+      // threshold 0.20) or binary 50/50. Route by our-position match.
+      isLayer = ourTokenId !== undefined && fillTokenId === ourTokenId;
+      isHedge =
+        oppositeTokenId !== undefined && fillTokenId === oppositeTokenId;
+    }
+  } else {
+    // Legacy our-position routing (threshold unset or no target data).
+    isLayer = ourTokenId !== undefined && fillTokenId === ourTokenId;
+    isHedge = oppositeTokenId !== undefined && fillTokenId === oppositeTokenId;
+  }
+
+  // Layer/Hedge branches require position_followup AND BUY-side. Without
+  // either, fall through to new_entry — matches legacy fall-through.
+  if (
+    isLayer &&
+    followup?.enabled &&
+    fill.side === "BUY" &&
+    position !== undefined
+  ) {
+    return {
+      kind: "place",
+      reason: "layer_scale_in",
+      position_branch: "layer",
+      sizing: sizeLayerDominant(input, followup, minShares, minUsdcNotional),
+      wrong_side_holding_detected,
+    };
+  }
+  if (
+    isHedge &&
+    followup?.enabled &&
+    fill.side === "BUY" &&
+    position?.our_token_id !== undefined
+  ) {
+    return {
+      kind: "place",
+      reason: "hedge_followup",
+      position_branch: "hedge",
+      sizing: sizeHedge(input, followup, minShares, minUsdcNotional),
+      wrong_side_holding_detected,
+    };
+  }
+
+  // New entry path.
+  return {
+    kind: "place",
+    reason: config.mode === "paper" ? "mode_paper" : "ok",
+    position_branch: "new_entry",
+    sizing: applySizingPolicy(
+      config.sizing,
+      fill.price,
+      targetSizingUsdcForFill(fill, state, config.sizing),
+      minShares,
+      minUsdcNotional,
+      state.cumulative_intent_usdc_for_market
+    ),
+    wrong_side_holding_detected,
+  };
+}
+
+/**
+ * Layer-branch sizing — verbatim extraction of the layer body from the legacy
+ * `applyPositionFollowupPolicy`. Preserves the inherited gates:
+ * `min_mirror_position_usdc` + `market_floor_multiple` (via
+ * `effectiveMinPositionUsdc`), `max_layer_fraction_of_position`, and the
+ * `targetFollowupThreshold` check on the fill's token.
+ */
+function sizeLayerDominant(
+  input: PlanMirrorInput,
+  followup: PositionFollowupPolicy,
+  minShares: number | undefined,
+  minUsdcNotional: number | undefined
+): SizingResult {
+  const { fill, state, config } = input;
+  const position = state.position;
+  if (!position) {
+    return { ok: false, reason: "followup_position_too_small" };
+  }
   const mirrorExposureUsdc = mirrorExposureUsdcForBranch(
     position.our_qty_shares,
     position.our_vwap_usdc,
     fill.price
   );
-  const minPositionUsdc = effectiveMinPositionUsdc(policy, minUsdcNotional);
+  const minPositionUsdc = effectiveMinPositionUsdc(followup, minUsdcNotional);
   if (mirrorExposureUsdc < minPositionUsdc) {
-    return {
-      reason: followupReason,
-      position_branch: branch,
-      sizing: { ok: false, reason: "followup_position_too_small" },
-    };
+    return { ok: false, reason: "followup_position_too_small" };
   }
-
+  const tokenId =
+    typeof fill.attributes?.asset === "string" ? fill.attributes.asset : "";
   const targetThreshold = targetFollowupThreshold(config.sizing);
   const targetBranchCost = targetTokenCostUsdc(state.target_position, tokenId);
   if (targetBranchCost < targetThreshold) {
-    return {
-      reason: followupReason,
-      position_branch: branch,
-      sizing: { ok: false, reason: "target_position_below_threshold" },
-    };
+    return { ok: false, reason: "target_position_below_threshold" };
   }
+  return applyFollowupSizing({
+    policy: config.sizing,
+    price: fill.price,
+    desiredSizeUsdc: minUsdcNotional,
+    maxFollowupUsdc:
+      mirrorExposureUsdc * followup.max_layer_fraction_of_position,
+    minShares,
+    minUsdcNotional,
+    cumulativeIntentForMarket: state.cumulative_intent_usdc_for_market,
+  });
+}
 
-  if (isLayer) {
-    return {
-      reason: "layer_scale_in",
-      position_branch: "layer",
-      sizing: applyFollowupSizing({
-        policy: config.sizing,
-        price: fill.price,
-        desiredSizeUsdc: minUsdcNotional,
-        maxFollowupUsdc:
-          mirrorExposureUsdc * policy.max_layer_fraction_of_position,
-        minShares,
-        minUsdcNotional,
-        cumulativeIntentForMarket: state.cumulative_intent_usdc_for_market,
-      }),
-    };
+/**
+ * Hedge-branch sizing — verbatim extraction of the hedge body from the legacy
+ * `applyPositionFollowupPolicy`. Preserves the inherited gates: shared
+ * `min_mirror_position_usdc` + market-floor floor, `targetFollowupThreshold`,
+ * `min_target_hedge_usdc`, `min_target_hedge_ratio`, desired-delta positivity,
+ * and `max_hedge_fraction_of_position`.
+ */
+function sizeHedge(
+  input: PlanMirrorInput,
+  followup: PositionFollowupPolicy,
+  minShares: number | undefined,
+  minUsdcNotional: number | undefined
+): SizingResult {
+  const { fill, state, config } = input;
+  const position = state.position;
+  if (!position?.our_token_id) {
+    return { ok: false, reason: "followup_position_too_small" };
   }
-
+  const mirrorExposureUsdc = mirrorExposureUsdcForBranch(
+    position.our_qty_shares,
+    position.our_vwap_usdc,
+    fill.price
+  );
+  const minPositionUsdc = effectiveMinPositionUsdc(followup, minUsdcNotional);
+  if (mirrorExposureUsdc < minPositionUsdc) {
+    return { ok: false, reason: "followup_position_too_small" };
+  }
+  const tokenId =
+    typeof fill.attributes?.asset === "string" ? fill.attributes.asset : "";
+  const targetThreshold = targetFollowupThreshold(config.sizing);
   const targetHedgeCost = targetTokenCostUsdc(state.target_position, tokenId);
+  if (targetHedgeCost < targetThreshold) {
+    return { ok: false, reason: "target_position_below_threshold" };
+  }
+  if (targetHedgeCost < followup.min_target_hedge_usdc) {
+    return { ok: false, reason: "target_position_below_threshold" };
+  }
   const targetPrimaryCost = targetTokenCostUsdc(
     state.target_position,
     position.our_token_id
   );
-  if (targetHedgeCost < policy.min_target_hedge_usdc) {
-    return {
-      reason: "hedge_followup",
-      position_branch: "hedge",
-      sizing: { ok: false, reason: "target_position_below_threshold" },
-    };
-  }
   const targetHedgeRatio =
     targetPrimaryCost > 0 ? targetHedgeCost / targetPrimaryCost : 0;
-  if (targetHedgeRatio < policy.min_target_hedge_ratio) {
-    return {
-      reason: "hedge_followup",
-      position_branch: "hedge",
-      sizing: { ok: false, reason: "target_position_below_threshold" },
-    };
+  if (targetHedgeRatio < followup.min_target_hedge_ratio) {
+    return { ok: false, reason: "target_position_below_threshold" };
   }
-
   const existingHedgeUsdc = position.opposite_qty_shares * fill.price;
   const desiredHedgeUsdc = mirrorExposureUsdc * targetHedgeRatio;
   const desiredDeltaUsdc = desiredHedgeUsdc - existingHedgeUsdc;
   if (desiredDeltaUsdc <= 0) {
-    return {
-      reason: "hedge_followup",
-      position_branch: "hedge",
-      sizing: { ok: false, reason: "followup_not_needed" },
-    };
+    return { ok: false, reason: "followup_not_needed" };
   }
-
-  return {
-    reason: "hedge_followup",
-    position_branch: "hedge",
-    sizing: applyFollowupSizing({
-      policy: config.sizing,
-      price: fill.price,
-      desiredSizeUsdc: desiredDeltaUsdc,
-      maxFollowupUsdc:
-        mirrorExposureUsdc * policy.max_hedge_fraction_of_position,
-      minShares,
-      minUsdcNotional,
-      cumulativeIntentForMarket: state.cumulative_intent_usdc_for_market,
-    }),
-  };
+  return applyFollowupSizing({
+    policy: config.sizing,
+    price: fill.price,
+    desiredSizeUsdc: desiredDeltaUsdc,
+    maxFollowupUsdc:
+      mirrorExposureUsdc * followup.max_hedge_fraction_of_position,
+    minShares,
+    minUsdcNotional,
+    cumulativeIntentForMarket: state.cumulative_intent_usdc_for_market,
+  });
 }
 
 function targetSizingUsdcForFill(
