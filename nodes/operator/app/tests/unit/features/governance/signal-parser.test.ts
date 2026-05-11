@@ -21,16 +21,14 @@ describe("features/governance/signal-parser", () => {
       const ref = parseRepoRef("https://github.com/cogni-dao/cogni");
       expect(ref.host).toBe("github.com");
       expect(ref.owner).toBe("cogni-dao");
-      expect(ref.repo).toBe("cogni-template");
+      expect(ref.repo).toBe("cogni");
       expect(ref.url).toBe("https://github.com/cogni-dao/cogni");
     });
 
     it("strips .git suffix", () => {
-      const ref = parseRepoRef(
-        "https://github.com/cogni-dao/cogni.git"
-      );
+      const ref = parseRepoRef("https://github.com/cogni-dao/cogni.git");
       expect(ref.owner).toBe("cogni-dao");
-      expect(ref.repo).toBe("cogni-template");
+      expect(ref.repo).toBe("cogni");
       expect(ref.url).toBe("https://github.com/cogni-dao/cogni");
     });
 
