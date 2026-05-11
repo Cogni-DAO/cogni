@@ -65,6 +65,24 @@ export const knowledgeColumns = [
     meta: { headerTitle: "Entry" },
   }),
 
+  col.accessor("entryType", {
+    header: ({ column }) => (
+      <DataGridColumnHeader
+        column={column}
+        title="Type"
+        filter={<HeaderFilter column={column} />}
+      />
+    ),
+    size: 110,
+    cell: (info) => (
+      <span className="inline-flex rounded-md bg-muted px-1.5 py-0.5 font-mono text-muted-foreground text-xs">
+        {info.getValue()}
+      </span>
+    ),
+    filterFn: "arrIncludesSome",
+    meta: { headerTitle: "Type" },
+  }),
+
   col.accessor("confidencePct", {
     header: ({ column }) => (
       <DataGridColumnHeader column={column} title="Confidence" />

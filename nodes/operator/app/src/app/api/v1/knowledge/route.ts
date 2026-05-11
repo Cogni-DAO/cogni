@@ -86,6 +86,7 @@ export const GET = wrapRouteHandlerWithLogging(
           entityId: r.entityId ?? null,
           title: r.title,
           content: r.content,
+          entryType: r.entryType ?? "finding",
           confidencePct: r.confidencePct ?? null,
           sourceType: r.sourceType,
           sourceRef: r.sourceRef ?? null,

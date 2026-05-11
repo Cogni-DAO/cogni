@@ -279,6 +279,7 @@ function BrowsePanel({
         d.title.toLowerCase().includes(q) ||
         d.content.toLowerCase().includes(q) ||
         d.domain.toLowerCase().includes(q) ||
+        d.entryType.toLowerCase().includes(q) ||
         (d.entityId?.toLowerCase().includes(q) ?? false)
       );
     },
@@ -292,7 +293,7 @@ function BrowsePanel({
         hasActiveFilters={columnFilters.length > 0}
         onClearFilters={() => setColumnFilters([])}
         table={table}
-        searchPlaceholder="Search id, title, content, domain…"
+        searchPlaceholder="Search id, title, content, domain, type…"
       />
       {error ? (
         <p className="py-8 text-center text-destructive">

@@ -42,6 +42,7 @@ function rowToKnowledge(row: Record<string, unknown>): Knowledge {
     entityId: (row.entity_id as string) ?? null,
     title: row.title as string,
     content: row.content as string,
+    entryType: row.entry_type as string,
     confidencePct:
       row.confidence_pct != null ? Number(row.confidence_pct) : null,
     sourceType: row.source_type as Knowledge["sourceType"],

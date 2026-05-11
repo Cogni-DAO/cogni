@@ -34,6 +34,8 @@ export {
   DoltCommitSchema,
   type DoltDiffEntry,
   DoltDiffEntrySchema,
+  type EntryType,
+  EntryTypeSchema,
   type Knowledge,
   KnowledgeSchema,
   type NewKnowledge,
