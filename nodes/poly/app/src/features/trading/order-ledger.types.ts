@@ -433,6 +433,20 @@ export interface OrderLedger {
   listTenantPositions(opts: ListTenantPositionsOptions): Promise<LedgerRow[]>;
 
   /**
+   * Daily executed-trade counts for the dashboard chart. SQL-aggregates
+   * `poly_copy_trade_fills` by UTC day with the same predicate as
+   * `shouldCountLedgerTrade` (filled_size_usdc > 0, or status in
+   * filled/partial with size_usdc > 0). Avoids the LIMIT-truncation bug
+   * that hits when an account has more recent rows than the listTenantPositions
+   * cap can return (bug.5012 pattern; cf. wallet-analysis-service.ts daily-counts).
+   */
+  dailyTradeCounts(opts: {
+    billing_account_id: string;
+    capturedAt: Date;
+    windowDays: number;
+  }): Promise<Array<{ day: string; n: number }>>;
+
+  /**
    * Return all rows with `status IN ('pending', 'open')` that are older than
    * `olderThanMs` milliseconds (default 30 000). Ordered by `created_at ASC`
    * so the reconciler processes oldest-first. Default limit 200.

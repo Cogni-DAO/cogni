@@ -18,6 +18,53 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LedgerRow } from "@/features/trading";
+import { shouldCountLedgerTrade } from "@/features/trading";
+
+/**
+ * Test-only stand-in for the deleted in-JS `summarizeDailyTradeCounts`. Lets
+ * existing tests keep injecting rows via `mockListTenantPositions` and still
+ * assert `json.dailyTradeCounts`; the production route now reads the chart
+ * directly from `orderLedger.dailyTradeCounts` (SQL-aggregated).
+ */
+function summarizeDailyTradeCountsForTest(
+  rows: readonly LedgerRow[],
+  capturedAt: Date,
+  windowDays: number
+): Array<{ day: string; n: number }> {
+  const todayUtc = Date.UTC(
+    capturedAt.getUTCFullYear(),
+    capturedAt.getUTCMonth(),
+    capturedAt.getUTCDate()
+  );
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const counts = new Map<string, number>();
+  let oldestCountedMs = Number.POSITIVE_INFINITY;
+  for (const row of rows) {
+    if (!shouldCountLedgerTrade(row)) continue;
+    const day = row.observed_at.toISOString().slice(0, 10);
+    counts.set(day, (counts.get(day) ?? 0) + 1);
+    const tsMs = row.observed_at.getTime();
+    if (tsMs < oldestCountedMs) oldestCountedMs = tsMs;
+  }
+  const minStart = todayUtc - (windowDays - 1) * MS_PER_DAY;
+  const start = Math.min(
+    minStart,
+    Number.isFinite(oldestCountedMs)
+      ? Date.UTC(
+          new Date(oldestCountedMs).getUTCFullYear(),
+          new Date(oldestCountedMs).getUTCMonth(),
+          new Date(oldestCountedMs).getUTCDate()
+        )
+      : minStart
+  );
+  const total = Math.floor((todayUtc - start) / MS_PER_DAY) + 1;
+  const out: Array<{ day: string; n: number }> = [];
+  for (let i = 0; i < total; i++) {
+    const day = new Date(start + i * MS_PER_DAY).toISOString().slice(0, 10);
+    out.push({ day, n: counts.get(day) ?? 0 });
+  }
+  return out;
+}
 
 const SESSION_USER = { id: "11111111-1111-4111-8111-111111111111" };
 const ACCOUNT = { id: "billing-account-1" };
@@ -51,6 +98,7 @@ const EMPTY_14_DAY_COUNTS = [
 const mockAccountsForUser = vi.fn();
 const mockGetOrCreateBillingAccountForUser = vi.fn();
 const mockListTenantPositions = vi.fn();
+const mockDailyTradeCounts = vi.fn();
 const mockGetPolyTraderWalletAdapter = vi.fn();
 const mockGetBalances = vi.fn();
 const mockGetAddress = vi.fn();
@@ -101,6 +149,7 @@ vi.mock("@/bootstrap/container", () => ({
     accountsForUser: mockAccountsForUser,
     orderLedger: {
       listTenantPositions: mockListTenantPositions,
+      dailyTradeCounts: mockDailyTradeCounts,
       updateStatus: mockUpdateStatus,
       markPositionClosedByAsset: mockMarkPositionClosedByAsset,
       markPositionLifecycleByAsset: mockMarkPositionLifecycleByAsset,
@@ -281,6 +330,21 @@ describe("poly wallet dashboard DB read routes", () => {
     mockMarkPositionClosedByAsset.mockResolvedValue(1);
     mockMarkPositionLifecycleByAsset.mockResolvedValue(1);
     mockMarkSynced.mockResolvedValue(undefined);
+    mockDailyTradeCounts.mockImplementation(async (opts: {
+      billing_account_id: string;
+      capturedAt: Date;
+      windowDays: number;
+    }) => {
+      const rows = await mockListTenantPositions({
+        billing_account_id: opts.billing_account_id,
+        statuses: [...ALL_LEDGER_STATUSES],
+      });
+      return summarizeDailyTradeCountsForTest(
+        (rows ?? []) as LedgerRow[],
+        opts.capturedAt,
+        opts.windowDays
+      );
+    });
     mockCurrentPositionModel();
     mockGetExecutionSlice.mockRejectedValue(new Error("data api unavailable"));
     row = {

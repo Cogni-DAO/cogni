@@ -16,6 +16,7 @@ import {
   isLedgerRestingOrder,
   ledgerExecutedUsdc,
   shouldCountLedgerMarketIntent,
+  shouldCountLedgerTrade,
 } from "@/features/trading/ledger-lifecycle";
 import {
   AlreadyRestingError,
@@ -551,6 +552,35 @@ export class FakeOrderLedger implements OrderLedger {
       )
       .sort((a, b) => b.observed_at.getTime() - a.observed_at.getTime())
       .slice(0, limit);
+  }
+
+  async dailyTradeCounts(opts: {
+    billing_account_id: string;
+    capturedAt: Date;
+    windowDays: number;
+  }): Promise<Array<{ day: string; n: number }>> {
+    const todayUtc = Date.UTC(
+      opts.capturedAt.getUTCFullYear(),
+      opts.capturedAt.getUTCMonth(),
+      opts.capturedAt.getUTCDate()
+    );
+    const MS_PER_DAY = 24 * 60 * 60 * 1000;
+    const windowStartMs = todayUtc - (opts.windowDays - 1) * MS_PER_DAY;
+    const counts = new Map<string, number>();
+    for (const row of this.rows) {
+      if (row.billing_account_id !== opts.billing_account_id) continue;
+      if (!shouldCountLedgerTrade(row)) continue;
+      const tsMs = row.observed_at.getTime();
+      if (tsMs < windowStartMs) continue;
+      const day = row.observed_at.toISOString().slice(0, 10);
+      counts.set(day, (counts.get(day) ?? 0) + 1);
+    }
+    const out: Array<{ day: string; n: number }> = [];
+    for (let i = opts.windowDays - 1; i >= 0; i--) {
+      const day = new Date(todayUtc - i * MS_PER_DAY).toISOString().slice(0, 10);
+      out.push({ day, n: counts.get(day) ?? 0 });
+    }
+    return out;
   }
 
   async listOpenOrPending(
