@@ -612,13 +612,12 @@ function DomainsEmptyState({
       <Tags className="size-8 text-muted-foreground/60" />
       <p className="font-medium text-sm">No domains registered.</p>
       <p className="max-w-md text-muted-foreground text-xs leading-relaxed">
-        Base domains (<code className="font-mono">meta</code>,{" "}
-        <code className="font-mono">prediction-market</code>,{" "}
+        Operator base domains (<code className="font-mono">meta</code>,{" "}
+        <code className="font-mono">nodes</code>,{" "}
         <code className="font-mono">infrastructure</code>,{" "}
-        <code className="font-mono">governance</code>,{" "}
-        <code className="font-mono">reservations</code>) ship in the schema
-        migration — if you see this screen, the migrator hasn't run. Otherwise
-        register a new extension domain.
+        <code className="font-mono">governance</code>) ship in the migrator — if
+        you see this screen, it hasn't run. Otherwise register an extension
+        domain.
       </p>
       <Button
         type="button"

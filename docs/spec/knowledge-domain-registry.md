@@ -186,16 +186,16 @@ No edit, no delete, no row-detail Sheet in v0. The grid is read + register only.
 
 **Seeding mechanism:** the migrator script (`nodes/operator/app/src/adapters/server/db/migrate-doltgres.mjs`) holds `BASE_DOMAIN_SEEDS` and runs a `seedBaseDomains()` step after schema migrations are reconciled. It uses `sql.unsafe` with a SELECT-then-INSERT idempotency check, sidestepping two Doltgres 0.56 quirks: (a) drizzle-orm wraps SQL migration files in transactions, and the parameterized-INSERT failure on `drizzle.__drizzle_migrations` rolls them back — DML doesn't survive but DDL does, so data-only `.sql` migrations can't safely apply; (b) `ON CONFLICT EXCLUDED` is broken. SELECT-then-INSERT via simple protocol avoids both. Same pattern as the existing `reconcileTracking` shim in the migrator.
 
-Base domains:
+Base domains (operator's set):
 
-| id                   | Purpose                                                                          |
-| -------------------- | -------------------------------------------------------------------------------- |
-| `meta`               | Knowledge about the knowledge system itself                                      |
-| `prediction-market`  | Polymarket and adjacent prediction-market knowledge                              |
-| `infrastructure`     | Runtime, deploy, observability                                                   |
-| `governance`         | DAO formation, attribution, voting                                               |
-| `reservations`       | Restaurant / venue knowledge for resy                                            |
-| `validate_candidate` | Reserved for `/validate-candidate` smoke writes (test surface, not real content) |
+| id               | Purpose                                                                   |
+| ---------------- | ------------------------------------------------------------------------- |
+| `meta`           | Knowledge about the knowledge system itself                               |
+| `nodes`          | Registry / lifecycle facts about other nodes in the Cogni network         |
+| `infrastructure` | Runtime, deploy, observability                                            |
+| `governance`     | DAO formation, attribution, voting                                        |
+
+**Per-node domain sets are per-node, not operator-wide.** Each node has its own Doltgres database; each node's migrator owns its own `BASE_DOMAIN_SEEDS`. Operator does NOT seed `prediction-market` (poly's domain) or `reservations` (resy's domain); those are seeded by `nodes/poly/.../migrate-doltgres.mjs` and `nodes/resy/.../migrate-doltgres.mjs` respectively when those nodes ship parallel registry surfaces (out of this PR's scope; see Phase 2 § Registry Node and `Rd-PORTABLE`).
 
 Idempotency: `seedBaseDomains` SELECTs existing `domains.id` values and INSERTs only the missing ones. Re-runs are safe no-ops; net-new rows on first deploy.
 

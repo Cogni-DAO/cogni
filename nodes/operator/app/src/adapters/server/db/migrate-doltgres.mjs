@@ -74,6 +74,11 @@ function isAlreadyAppliedError(err) {
 // 0.56, taking the seed rows with it (CREATE TABLE auto-commits past rollback,
 // data DML doesn't). Sidestep via sql.unsafe with idempotent SELECT-then-INSERT,
 // same pattern the reconcileTracking shim uses.
+// Operator-scoped base domains. Per-node concerns (prediction-market, reservations)
+// live in the respective node's own Doltgres DB and ship via that node's migrator
+// — operator never has them. `validate_candidate` was dropped: validation writes
+// should target `meta` (knowledge about the knowledge system) instead of carving
+// out a test-only domain.
 const BASE_DOMAIN_SEEDS = [
   {
     id: "meta",
@@ -81,10 +86,10 @@ const BASE_DOMAIN_SEEDS = [
     description: "Knowledge about the knowledge system itself.",
   },
   {
-    id: "prediction-market",
-    name: "Prediction Markets",
+    id: "nodes",
+    name: "Nodes",
     description:
-      "Polymarket and adjacent prediction-market knowledge — base rates, market structure, calibration.",
+      "Registry / lifecycle facts about other nodes in the Cogni network — formation, contracts, status.",
   },
   {
     id: "infrastructure",
@@ -97,18 +102,6 @@ const BASE_DOMAIN_SEEDS = [
     name: "Governance",
     description:
       "DAO formation, attribution, voting, and operator/node contracts.",
-  },
-  {
-    id: "reservations",
-    name: "Reservations",
-    description:
-      "Restaurant / venue reservation knowledge for the resy node domain.",
-  },
-  {
-    id: "validate_candidate",
-    name: "Validate Candidate",
-    description:
-      "Reserved for /validate-candidate smoke writes. Test surface, not real content.",
   },
 ];
 
