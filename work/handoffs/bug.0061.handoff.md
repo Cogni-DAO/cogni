@@ -57,7 +57,7 @@ Make negative credit balances visible & accurate in UI. Fix cost estimates to ma
 
 ## Commits
 
-See [`fix/bug.0061-ui-balance`](https://github.com/cogni-dao/cogni-template/compare/staging...fix/bug.0061-ui-balance) branch (8 commits total).
+See [`fix/bug.0061-ui-balance`](https://github.com/cogni-dao/cogni/compare/staging...fix/bug.0061-ui-balance) branch (8 commits total).
 
 ## Related Docs
 

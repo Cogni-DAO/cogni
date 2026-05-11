@@ -18,20 +18,20 @@ import { parseRepoRef } from "@/features/governance/signal-parser";
 describe("features/governance/signal-parser", () => {
   describe("parseRepoRef", () => {
     it("parses a standard GitHub URL", () => {
-      const ref = parseRepoRef("https://github.com/cogni-dao/cogni-template");
+      const ref = parseRepoRef("https://github.com/cogni-dao/cogni");
       expect(ref.host).toBe("github.com");
       expect(ref.owner).toBe("cogni-dao");
       expect(ref.repo).toBe("cogni-template");
-      expect(ref.url).toBe("https://github.com/cogni-dao/cogni-template");
+      expect(ref.url).toBe("https://github.com/cogni-dao/cogni");
     });
 
     it("strips .git suffix", () => {
       const ref = parseRepoRef(
-        "https://github.com/cogni-dao/cogni-template.git"
+        "https://github.com/cogni-dao/cogni.git"
       );
       expect(ref.owner).toBe("cogni-dao");
       expect(ref.repo).toBe("cogni-template");
-      expect(ref.url).toBe("https://github.com/cogni-dao/cogni-template");
+      expect(ref.url).toBe("https://github.com/cogni-dao/cogni");
     });
 
     it("handles GitLab subgroups", () => {
@@ -42,7 +42,7 @@ describe("features/governance/signal-parser", () => {
     });
 
     it("lowercases hostname", () => {
-      const ref = parseRepoRef("https://GitHub.COM/Cogni-DAO/cogni-template");
+      const ref = parseRepoRef("https://GitHub.COM/Cogni-DAO/cogni");
       expect(ref.host).toBe("github.com");
     });
 

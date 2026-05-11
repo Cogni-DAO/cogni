@@ -142,7 +142,7 @@ All 10 invariants from [node-operator-contract.md](./node-operator-contract.md) 
 
 ```
 1. FORK
-   $ git clone https://github.com/Cogni-DAO/node-template.git my-ai-dao
+   $ git clone https://github.com/Cogni-DAO/cogni.git my-ai-dao
    $ cd my-ai-dao
 
 2. CONFIGURE (3 env vars + 1 config file — NO PRIVATE KEYS)

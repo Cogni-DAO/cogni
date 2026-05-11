@@ -34,7 +34,7 @@ function makeSignal(overrides: Partial<Signal> = {}): Signal {
     dao: "0x1234567890abcdef1234567890abcdef12345678",
     chainId: BigInt(8453),
     vcs: "github",
-    repoUrl: "https://github.com/cogni-dao/cogni-template",
+    repoUrl: "https://github.com/cogni-dao/cogni",
     action: "merge",
     target: "change",
     resource: "42",

@@ -30,7 +30,7 @@ last_commit: 4851e7e7e
 
 ## Decisions Made
 
-- Per-node identity via repo-spec UUIDs, not env var slugs — [task.0257](../items/task.0257.node-identity-via-repo-spec.md), [PR #690](https://github.com/Cogni-DAO/node-template/pull/690)
+- Per-node identity via repo-spec UUIDs, not env var slugs — [task.0257](../items/task.0257.node-identity-via-repo-spec.md), [PR #690](https://github.com/Cogni-DAO/cogni/pull/690)
 - DB-per-node, not tenancy columns — [multi-node-tenancy spec](../../docs/spec/multi-node-tenancy.md)
 - Shared identity provider, per-node sessions — [multi-node-tenancy spec §Auth](../../docs/spec/multi-node-tenancy.md#auth-model)
 - Node formation outputs repo-spec YAML — [node-formation spec](../../docs/spec/node-formation.md)

@@ -74,8 +74,8 @@ Objective is met when rows 1–8 all pass.
 `candidate-flight.yml`'s new `Deploy Compose infra to candidate-a VM` step passes ~60 env vars from `secrets.*` to `deploy-infra.sh`. The `candidate-a` GitHub environment must have parity with `preview`. Run before dispatching:
 
 ```bash
-gh api /repos/Cogni-DAO/node-template/environments/candidate-a/secrets --jq '.secrets[].name' | sort > /tmp/candidate-a-secrets
-gh api /repos/Cogni-DAO/node-template/environments/preview/secrets --jq '.secrets[].name' | sort > /tmp/preview-secrets
+gh api /repos/Cogni-DAO/cogni/environments/candidate-a/secrets --jq '.secrets[].name' | sort > /tmp/candidate-a-secrets
+gh api /repos/Cogni-DAO/cogni/environments/preview/secrets --jq '.secrets[].name' | sort > /tmp/preview-secrets
 diff /tmp/preview-secrets /tmp/candidate-a-secrets
 ```
 
@@ -181,7 +181,7 @@ Live investigation against main `c5db7f232` (post-#869, post-#870) surfaced conc
 
 ```bash
 # Candidate Flight dispatch — ran to completion, lease released cleanly.
-gh workflow run candidate-flight.yml --repo Cogni-DAO/node-template -f pr_number=865
+gh workflow run candidate-flight.yml --repo Cogni-DAO/cogni -f pr_number=865
 # → run 24480504763 success
 # → deploy/candidate-a HEAD: 3a8527580 candidate-flight: release pr-865 e7c23cf47302735…
 # → candidate-a /readyz 200 on all three nodes
@@ -192,7 +192,7 @@ gh workflow run candidate-flight.yml --repo Cogni-DAO/node-template -f pr_number
 
 ```bash
 # Promote and Deploy dispatched for preview with a known-complete preview-* SHA.
-gh workflow run promote-and-deploy.yml --repo Cogni-DAO/node-template \
+gh workflow run promote-and-deploy.yml --repo Cogni-DAO/cogni \
   -f environment=preview \
   -f source_sha=6d901954ea53d345e81d1526d6baa393c890d021
 # → run 24480505655

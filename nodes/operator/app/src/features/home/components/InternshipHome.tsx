@@ -203,7 +203,7 @@ function HeroSection(): ReactElement {
             </a>
           </Button>
           <Button asChild size="lg" variant="outline">
-            <Link href="https://github.com/cogni-dao/cogni-template">
+            <Link href="https://github.com/cogni-dao/cogni">
               <Github className="mr-2 size-4" />
               Read the repo
             </Link>

@@ -50,7 +50,7 @@ last_commit: 0c0f73567ada4c24ec1c582e440a342c61409a83
 - [ ] Clean up orphan PRs/branches on `derekg1729/test-repo` from failed test runs
 - [ ] Run `pnpm check` to validate lint/type/format on all changes
 - [ ] Commit all uncommitted changes
-- [ ] Set `GH_WEBHOOK_SECRET` in preview: `gh secret set GH_WEBHOOK_SECRET --repo Cogni-DAO/cogni-template --env preview --body "$GH_WEBHOOK_SECRET"`
+- [ ] Set `GH_WEBHOOK_SECRET` in preview: `gh secret set GH_WEBHOOK_SECRET --repo Cogni-DAO/cogni --env preview --body "$GH_WEBHOOK_SECRET"`
 - [ ] Configure GitHub App webhook URL to `https://preview.cognidao.org/api/internal/webhooks/github`
 
 ## Risks / Gotchas

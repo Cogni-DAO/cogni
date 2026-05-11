@@ -30,7 +30,7 @@ Two distinct user journeys:
 **Single command gets you developing:**
 
 ```bash
-git clone https://github.com/Cogni-DAO/cogni-template
+git clone https://github.com/Cogni-DAO/cogni
 cd cogni-template
 pnpm setup local
 pnpm dev  # You're ready!
@@ -140,7 +140,7 @@ pnpm setup github --env production
        - **Webhook URL must be set in the GitHub App** to `https://<domain>/api/internal/webhooks/github` (e.g. `https://preview.cognidao.org/api/internal/webhooks/github`)
        - See [VCS Integration Spec](../../docs/spec/vcs-integration.md) for app permissions and setup
      - **GitHub repos for ingestion:**
-       - `GH_REPOS` (comma-separated, e.g. `Cogni-DAO/node-template` — set as GitHub Actions **variable**, not secret)
+       - `GH_REPOS` (comma-separated, e.g. `Cogni-DAO/cogni` — set as GitHub Actions **variable**, not secret)
      - **Grafana (optional):**
        - `GRAFANA_URL` (Grafana instance URL)
        - `GRAFANA_SERVICE_ACCOUNT_TOKEN` (Grafana stack service-account token, usually `glsa_`, with `datasources:read`, `datasources:query`, `datasources:create`, and `datasources:write` when setup/deploy provisions datasources; do not use a Grafana Cloud access-policy token prefixed `glc_`; use Grafana Cloud PDC or another private path for database datasources, never public inbound Postgres)

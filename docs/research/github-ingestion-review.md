@@ -61,7 +61,7 @@ Even with valid app credentials, `GH_REPOS` must be set (comma-separated). If em
 
 ### 4. GitHub App not installed on the target repo
 
-`GitHubAppTokenProvider` resolves the installation ID dynamically. If the GitHub App isn't installed on `Cogni-DAO/node-template`, it throws — which Temporal retries and eventually fails.
+`GitHubAppTokenProvider` resolves the installation ID dynamically. If the GitHub App isn't installed on `Cogni-DAO/cogni`, it throws — which Temporal retries and eventually fails.
 
 ---
 

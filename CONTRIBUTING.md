@@ -102,7 +102,7 @@ pnpm db:setup:test          # Create test database + run migrations
    ```bash
    git clone git@github.com:<your-username>/cogni-template.git
    cd cogni-template
-   git remote add upstream git@github.com:Cogni-DAO/cogni-template.git
+   git remote add upstream git@github.com:Cogni-DAO/cogni.git
    ```
 
 3. **Always branch from main using Conventional Commit types:**
@@ -124,7 +124,7 @@ pnpm db:setup:test          # Create test database + run migrations
 
 6. **Open PRs to main:**
    - Push: `git push origin feat/xyz`
-   - Open PR: `your-fork:feat/xyz → Cogni-DAO/cogni-template:main`
+   - Open PR: `your-fork:feat/xyz → Cogni-DAO/cogni:main`
 
 7. All CI and AI gates must pass for auto-merge.
 

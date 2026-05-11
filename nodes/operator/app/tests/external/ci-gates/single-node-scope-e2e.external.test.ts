@@ -4,7 +4,7 @@
 /**
  * Module: `@cogni/tests/external/ci-gates/single-node-scope-e2e.external.test`
  * Purpose: End-to-end proof that the `single-node-scope` CI gate fails a real cross-node PR with the spec'd diagnostic.
- * Scope: Self-test of this repo's own gate — opens a draft PR on `Cogni-DAO/node-template` touching two non-operator nodes, polls Actions, asserts conclusion + annotation. Does NOT mock the workflow.
+ * Scope: Self-test of this repo's own gate — opens a draft PR on `Cogni-DAO/cogni` touching two non-operator nodes, polls Actions, asserts conclusion + annotation. Does NOT mock the workflow.
  * Invariants: The gate concludes `failure`; annotation names both touched domains and instructs to split (matches §Diagnostic contract in spec.node-ci-cd-contract).
  * Side-effects: IO (git push to a transient branch, gh PR create/close, GitHub Actions execution).
  * Links: docs/spec/node-ci-cd-contract.md §Single-Domain Scope, .github/workflows/ci.yaml#single-node-scope, work/items/task.0381.*
@@ -21,7 +21,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // Config — skip entire suite if `gh` CLI not installed or auth unavailable
 // ---------------------------------------------------------------------------
 
-const TEST_REPO = process.env.E2E_GATE_REPO ?? "Cogni-DAO/node-template";
+const TEST_REPO = process.env.E2E_GATE_REPO ?? "Cogni-DAO/cogni";
 const CHECK_RUN_NAME = "single-node-scope";
 const POLL_INTERVAL_MS = 3_000;
 

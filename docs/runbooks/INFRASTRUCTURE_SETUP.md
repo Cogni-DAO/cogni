@@ -142,7 +142,7 @@ plan                 = "B1-8-8gb-80s-shared"
 region               = "LT-Siauliai"
 public_key_path      = "keys/cogni_template_preview_deploy.pub"
 ghcr_deploy_username = "Cogni-1729"
-cogni_repo_url       = "https://github.com/Cogni-DAO/cogni-template.git"
+cogni_repo_url       = "https://github.com/Cogni-DAO/cogni.git"
 cogni_repo_ref       = "staging"
 EOF
 # Sensitive vars set via environment (TF_VAR_*):
@@ -178,7 +178,7 @@ plan                 = "B1-8-8gb-80s-shared"
 region               = "LT-Siauliai"
 public_key_path      = "keys/cogni_template_production_deploy.pub"
 ghcr_deploy_username = "Cogni-1729"
-cogni_repo_url       = "https://github.com/Cogni-DAO/cogni-template.git"
+cogni_repo_url       = "https://github.com/Cogni-DAO/cogni.git"
 cogni_repo_ref       = "main"
 EOF
 # Sensitive vars set via environment (TF_VAR_*):

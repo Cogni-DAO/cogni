@@ -64,7 +64,7 @@ describe("createPromotionSelectionPolicy", () => {
       metadata: {
         baseBranch: "staging",
         mergeCommitSha: "sha-abc",
-        repo: "Cogni-DAO/node-template",
+        repo: "Cogni-DAO/cogni",
       },
     });
 
@@ -97,7 +97,7 @@ describe("createPromotionSelectionPolicy", () => {
       metadata: {
         baseBranch: "staging",
         mergeCommitSha: "sha-human",
-        repo: "Cogni-DAO/node-template",
+        repo: "Cogni-DAO/cogni",
       },
     });
 
@@ -126,7 +126,7 @@ describe("createPromotionSelectionPolicy", () => {
       metadata: {
         baseBranch: "staging",
         mergeCommitSha: "sha-x",
-        repo: "Cogni-DAO/node-template",
+        repo: "Cogni-DAO/cogni",
       },
     });
 
@@ -163,7 +163,7 @@ describe("createPromotionSelectionPolicy", () => {
       metadata: {
         baseBranch: "staging",
         mergeCommitSha: "sha-old-staging",
-        repo: "Cogni-DAO/node-template",
+        repo: "Cogni-DAO/cogni",
       },
     });
 
@@ -195,7 +195,7 @@ describe("createPromotionSelectionPolicy", () => {
       metadata: {
         baseBranch: "staging",
         mergeCommitSha: "sha-rev",
-        repo: "Cogni-DAO/node-template",
+        repo: "Cogni-DAO/cogni",
       },
     });
 
@@ -204,7 +204,7 @@ describe("createPromotionSelectionPolicy", () => {
       eventType: "review_submitted",
       platformLogin: "Cogni-1729",
       metadata: {
-        repo: "Cogni-DAO/node-template",
+        repo: "Cogni-DAO/cogni",
         prNumber: 2,
       },
     });
@@ -236,7 +236,7 @@ describe("createPromotionSelectionPolicy", () => {
       metadata: {
         baseBranch: "staging",
         mergeCommitSha: "sha-null",
-        repo: "Cogni-DAO/node-template",
+        repo: "Cogni-DAO/cogni",
       },
     });
 

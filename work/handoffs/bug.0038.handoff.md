@@ -17,7 +17,7 @@ last_commit: fd107d73
 - Root cause: `deploy.sh` ran a blanket `docker compose pull` of ALL 15+ services (including pinned-digest images that never change), AND the SSH connection had no keepalive settings
 - The SSH test connection in the GH Actions workflow had `ServerAliveInterval` but the actual deploy SSH did not
 - Follow-on from bug.0015 (disk cleanup ordering), which fixed WHEN cleanup runs but left the blanket pull in place
-- Failed run: https://github.com/Cogni-DAO/node-template/actions/runs/21936705892/job/63354600251
+- Failed run: https://github.com/Cogni-DAO/cogni/actions/runs/21936705892/job/63354600251
 
 ## Final State
 

@@ -33,7 +33,7 @@ tags: [ci-cd, gitops, candidate-flight, agents]
 
    ```bash
    gh workflow run candidate-flight.yml \
-     --repo Cogni-DAO/node-template \
+     --repo Cogni-DAO/cogni \
      --field pr_number=<PR_NUMBER>
    ```
 
@@ -41,7 +41,7 @@ tags: [ci-cd, gitops, candidate-flight, agents]
 
    ```bash
    gh workflow run candidate-flight.yml \
-     --repo Cogni-DAO/node-template \
+     --repo Cogni-DAO/cogni \
      --field pr_number=<PR_NUMBER> \
      --field head_sha=<SHA>
    ```

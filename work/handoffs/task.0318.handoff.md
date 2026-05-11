@@ -62,7 +62,7 @@ last_commit: 921413314
 
 | File / Resource                                                                                              | Why it matters                                                                                               |
 | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| [PR #968](https://github.com/Cogni-DAO/node-template/pull/968)                                               | The slice; PR body lists the smells reviewers have already flagged                                           |
+| [PR #968](https://github.com/Cogni-DAO/cogni/pull/968)                                               | The slice; PR body lists the smells reviewers have already flagged                                           |
 | [docs/guides/poly-wallet-provisioning.md](../../docs/guides/poly-wallet-provisioning.md)                     | Runbook: 5-secret setup, `/profile` + API exercise paths, Loki handshake, § Architecture (honest accounting) |
 | [docs/spec/poly-tenant-and-collateral.md](../../docs/spec/poly-tenant-and-collateral.md)                     | Port/adapter contract + 11 acceptance checks (tests must hit these)                                          |
 | [docs/spec/poly-tenant-and-collateral.md](../../docs/spec/poly-tenant-and-collateral.md)                     | Tenant-isolation contract + schema                                                                           |

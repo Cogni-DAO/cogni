@@ -28,7 +28,7 @@ last_commit: b423a97d
 
 ## Decisions Made
 
-- LLM backend swap happens at `LlmService` level, not `GraphExecutorPort` — preserves graph logic ([commit 9c45ec46](https://github.com/Cogni-DAO/node-template/pull/612))
+- LLM backend swap happens at `LlmService` level, not `GraphExecutorPort` — preserves graph logic ([commit 9c45ec46](https://github.com/Cogni-DAO/cogni/pull/612))
 - `ExecutionScope.llmServiceOverride` is the current mechanism — spec says replace with explicit `resolveLlmService(modelRef)` factory dispatch
 - Credit check skips for non-platform providers via `req.modelConnectionId` check in `PreflightCreditCheckDecorator` — spec says use `modelRef.provider !== "platform"` instead
 - `UsageFact.source` is currently always `"litellm"` — spec adds `"codex" | "ollama"` to `SourceSystem`
@@ -69,4 +69,4 @@ last_commit: b423a97d
 | `apps/operator/src/shared/ai/model-catalog.server.ts:300-360`                | The `CHATGPT_MODEL_IDS` hacks to delete                   |
 | `apps/operator/src/features/ai/components/ModelPicker.tsx:41-82`             | The `CHATGPT_MODELS` hardcoded array to delete            |
 | `packages/ai-core/src/billing/source-system.ts`                              | `SourceSystem` enum — needs `"codex"                      | "ollama"` |
-| https://github.com/Cogni-DAO/node-template/pull/612                          | PR with all crawl + walk implementation                   |
+| https://github.com/Cogni-DAO/cogni/pull/612                          | PR with all crawl + walk implementation                   |

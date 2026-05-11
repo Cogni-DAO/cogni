@@ -271,4 +271,4 @@ Ordered by blocking priority:
 - [poly-trader-wallet-port spec](../spec/poly-tenant-and-collateral.md) — port/adapter contract
 - [poly-multi-tenant-auth spec](../spec/poly-tenant-and-collateral.md) — tenant-isolation contract
 - [task.0318 work item](../../work/items/task.0318.poly-wallet-multi-tenant-auth.md) — lifecycle carrier
-- PR [#968](https://github.com/Cogni-DAO/node-template/pull/968) — the slice covered by this runbook
+- PR [#968](https://github.com/Cogni-DAO/cogni/pull/968) — the slice covered by this runbook

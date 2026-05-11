@@ -57,7 +57,7 @@ const EnvSchema = z.object({
     .optional()
     .or(z.literal("").transform(() => undefined)),
 
-  /** Comma-separated repos for GitHub activity collection (e.g., "Cogni-DAO/node-template") */
+  /** Comma-separated repos for GitHub activity collection (e.g., "Cogni-DAO/cogni") */
   GH_REPOS: z
     .string()
     .min(1)

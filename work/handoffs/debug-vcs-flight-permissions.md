@@ -20,7 +20,7 @@ This happens when running on **poly-test** (the test Cogni app/node) when trying
 
 ## What Already Verified
 
-- Manual `gh workflow run candidate-flight.yml --repo Cogni-DAO/node-template -f pr_number=961` works fine
+- Manual `gh workflow run candidate-flight.yml --repo Cogni-DAO/cogni -f pr_number=961` works fine
 - The GitHub App has "Actions" and "Workflows" permissions set to "Read and write" in GitHub settings
 - PR #961 flighted successfully via CI (run 24750326973)
 

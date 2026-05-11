@@ -16,7 +16,7 @@ last_commit: be07f605
 - Move Next.js app from repo root (`src/`, root configs) into `apps/operator/` as a pnpm workspace member
 - Flatten `platform/` (3+ levels deep) into `infra/` + `scripts/`
 - Prerequisite for adding `apps/operator/` in GitOps roadmap (proj.cicd-services-gitops P2)
-- PR #547 open against `staging`: https://github.com/Cogni-DAO/node-template/pull/547
+- PR #547 open against `staging`: https://github.com/Cogni-DAO/cogni/pull/547
 - Checkpoints 1-2 (file moves, path updates) are done. Checkpoint 3 (validation) is in progress.
 
 ## Current State
@@ -75,4 +75,4 @@ last_commit: be07f605
 | `infra/compose/runtime/docker-compose.dev.yml:69`        | `COGNI_REPO_PATH=${COGNI_REPO_PATH:-/repo/current}` default              |
 | `apps/operator/next.config.ts`                           | `outputFileTracingRoot`, `turbopack.resolveAlias` for thread-stream stub |
 | `work/items/bug.0157.walletconnect-pino-ssr-bundling.md` | Real fix for thread-stream (ssr: false)                                  |
-| PR #547                                                  | https://github.com/Cogni-DAO/node-template/pull/547                      |
+| PR #547                                                  | https://github.com/Cogni-DAO/cogni/pull/547                      |

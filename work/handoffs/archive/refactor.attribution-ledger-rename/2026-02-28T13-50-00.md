@@ -3,7 +3,7 @@ id: refactor.attribution-ledger-rename.handoff
 type: handoff
 work_item_id: refactor.ledger-renaming
 status: needs_merge
-pr: https://github.com/Cogni-DAO/node-template/pull/494
+pr: https://github.com/Cogni-DAO/cogni/pull/494
 created: 2026-02-28
 updated: 2026-02-28
 branch: refactor/attribution-ledger

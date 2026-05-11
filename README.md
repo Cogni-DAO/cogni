@@ -16,7 +16,7 @@ A production-ready Next.js template for AI-powered autonomous organizations.
 _We love you! ❤️_
 
 ```bash
-git clone https://github.com/Cogni-DAO/cogni-template
+git clone https://github.com/Cogni-DAO/cogni
 cd cogni-template
 scripts/bootstrap/setup.sh   # Install tools + dependencies, prompts to start dev stack
 cp .env.local.example .env.local  # Configure environment (add OpenRouter API key)

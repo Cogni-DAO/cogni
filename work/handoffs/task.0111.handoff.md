@@ -17,7 +17,7 @@ last_commit: 0c4e0b16
 - Account linking lets an authenticated user bind additional OAuth providers (GitHub/Discord/Google) to their existing identity.
 - Linking uses a **DB-backed fail-closed** flow: `link_transactions` table is the authority, consumed atomically in the signIn callback.
 - Server-side auth routing lives in `src/proxy.ts` (single routing authority).
-- PR: https://github.com/Cogni-DAO/node-template/pull/496
+- PR: https://github.com/Cogni-DAO/cogni/pull/496
 
 ## Current State
 
