@@ -142,6 +142,7 @@ The atomic unit of what the node believes. Each row is a single assertion with p
 | `source_ref`     | text        |                           | Pointer to origin (URL, signal ID, commit hash)                               |
 | `source_node`    | text        |                           | Which AI node/agent created this                                              |
 | `evaluate_at`    | timestamptz |                           | When this row should be resolved. REQUIRED for `entry_type='hypothesis'`; null otherwise. Resolver cron reads pending rows (see § The EDO Loop). |
+| `resolution_strategy` | text   |                           | Namespaced resolver identifier on hypothesis rows. NULL = no automation (cron skips; row is "manual"). v0 non-null value: `agent`. Future kinds (`market:<id>`, `metric:<query>`, `http:<url>`, `deadline`) add new values, not new schema. |
 | `created_at`     | timestamptz | NOT NULL, default now     |                                                                               |
 | `updated_at`     | timestamptz | NOT NULL, default now     |                                                                               |
 
@@ -515,14 +516,18 @@ Existing types (`supports`, `contradicts`, `extends`, `supersedes`) remain for n
 
 `hypothesis` rows MUST set `evaluate_at` (timestamptz). It is the appointment with truth. Orphan hypotheses are surfaced by `pendingResolutions(now)` — they cannot rot silently.
 
-**Resolution strategy in v0: opt-in via `tags.resolve`.** Every hypothesis sets a `resolve` key in its `tags` JSONB with one of two values:
+**Resolution strategy in v0: opt-in via `resolution_strategy` column.** Hypothesis writes set this namespaced text column to declare how the row should be resolved:
 
-| `tags.resolve` | Resolver behavior                                                                                                       |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `manual` (default) | Cron does nothing. Hypothesis surfaces in the operator `/knowledge` inbox alongside open contributions for human resolution. |
-| `agent`        | Cron hands off to a single resolver graph that gathers evidence and files the outcome via `core__edo_record_outcome`.   |
+| `resolution_strategy` | Resolver behavior                                                                                                       |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `NULL` (default)      | Cron skips the row. No automation policy set. Row is available for explicit `core__edo_record_outcome` calls by operator scripts or, when the manual-inbox surface lands, by humans through `/knowledge`. |
+| `agent`               | Cron hands off to a single resolver graph that gathers evidence and files the outcome via `core__edo_record_outcome`.   |
 
-This keeps v0 cost-bounded — LLM cost only fires when an agent explicitly opts in. Richer resolver kinds (`market:<id>`, `metric:<query>`, `http:<url>`) are filed when v1 data justifies them. The tags-key convention adds zero columns; new kinds become new values, not new schema.
+**Why a column, not a `tags` key:** the shipped `tags` field is `jsonb` typed as `string[]` (an array, not an object), and Doltgres 0.56 has known limitations on JSONB `@>` / `->>` operators (see the data-plane spec's "Surface today"). A dedicated text column is indexable (`CREATE INDEX ... WHERE resolution_strategy IS NOT NULL`), queryable with `=` or `LIKE 'agent%'`, and the NULL default is semantically clean — absence of a policy means "no automation".
+
+**Why namespaced text, not an enum:** v0 ships with one allowed value (`agent`). Future resolver kinds (`market:0x123abc`, `metric:rate(...)`, `http://...`, `deadline`) are new values, never new columns. Validation of allowed values lives in the Zod schema of `core__edo_hypothesize`, not in a DB CHECK constraint — so adding a resolver kind is a code-change, not a schema migration.
+
+LLM cost is bounded by default: NULL is free, only `agent` opts into the resolver graph.
 
 Either resolution path lands the outcome row + `validates`/`invalidates` citation on `main` with a Dolt commit, and triggers `recomputeConfidence` on the cited hypothesis.
 
@@ -537,7 +542,7 @@ Invariants live at the adapter layer — the universal choke point — mirroring
 | `OUTCOME_CITES_HYPOTHESIS`         | `addKnowledge` for `entry_type='outcome'` requires the atomic `core__edo_record_outcome` path (raw write rejects)      |
 | `DECISION_CITES_HYPOTHESIS`        | `addKnowledge` for `entry_type='decision'` requires the atomic `core__edo_decide` path (raw write rejects)             |
 
-Bypass paths (`core__knowledge_write` with an EDO entry_type) get rejected with a typed error mapped to HTTP 400. Agents must use the atomic tools for the four EDO beats.
+**Fail-closed enumeration.** Define `RAW_WRITE_REJECTS_TYPES = {hypothesis, decision, outcome}`. The `core__knowledge_write` tool rejects rows whose `entry_type ∈ RAW_WRITE_REJECTS_TYPES` with a typed error mapped to HTTP 400. `entry_type='event'` is NOT in the set — events flow through `core__knowledge_write` unchanged. Adding a future EDO-like entry_type is a deliberate two-step: define the type AND add it to the set. Categorical wording ("EDO types") is rejected — it fails open on additions.
 
 ### Computation Surface
 
@@ -557,6 +562,17 @@ interface EdoResolverPort {
 ```
 
 `recomputeConfidence` walks `citations` one hop in v1 and applies the formula from § "Confidence Is Computed, Not Assigned". Multi-hop transitive propagation is filed when v1 data shows the need — premature optimization otherwise.
+
+### Port Surface Additions
+
+The canonical `KnowledgeStorePort` shape lives in [knowledge-data-plane.md § Port Interface](./knowledge-data-plane.md#port-interface) — never redefined here. This spec contributes these methods:
+
+| Method on `KnowledgeStorePort`                       | Why                                                                                          |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `addCitation(edge: NewCitation): Promise<Citation>`  | Citation writes have no existing port surface. Required by `OUTCOME_CITES_HYPOTHESIS` etc.   |
+| `knowledgeExists(id: string): Promise<boolean>`      | Shared check for `CITATION_TARGET_EXISTS_AT_WRITE`. Mirrors `domainExists` from registry spec. |
+
+`EdoResolverPort` (above) lives separately — causal/evaluative concerns are not CRUD.
 
 ### Atomic Agent Tools
 
@@ -702,7 +718,7 @@ The librarian's retrieval contract (same `KnowledgeSearchHit` shape) is the x402
 | CITATION_TARGET_EXISTS_AT_WRITE            | Every `citations.cited_id` MUST reference an existing `knowledge.id` at write time. Enforced at the adapter layer via `port.knowledgeExists(id)` before INSERT. Mirrors `DOMAIN_FK_ENFORCED_AT_WRITE`.                                       |
 | OUTCOME_CITES_HYPOTHESIS                   | Every `entry_type='outcome'` row MUST have ≥1 `validates` OR `invalidates` citation edge. Enforced by routing all `outcome` writes through `core__edo_record_outcome` (raw `core__knowledge_write` rejects EDO entry_types).                  |
 | DECISION_CITES_HYPOTHESIS                  | Every `entry_type='decision'` row MUST have ≥1 `derives_from` citation edge to a hypothesis. Enforced by routing all `decision` writes through `core__edo_decide`. Decisions without a falsifiable prediction get filed as `finding` instead. |
-| RESOLUTION_HINT_OPT_IN                     | v0: every hypothesis sets `tags.resolve` ∈ `{manual, agent}`. Default `manual` — cron is a no-op; row surfaces in operator inbox. `agent` opts into the resolver graph. Bounds LLM cost; new resolver kinds added as new tag values.            |
+| RESOLUTION_STRATEGY_NULL_MEANS_MANUAL      | `knowledge.resolution_strategy` is NULL by default — cron skips. Non-null is a namespaced resolver identifier; v0 allows `agent`. New kinds (`market:<id>`, `metric:<query>`, `http:<url>`, `deadline`) are new column values, never new columns or new tables. Validation in Zod, not DB CHECK. |
 | EDO_RECURSION_VIA_CITATIONS                | EDO chain depth is emergent from the citation DAG. No `parent_id`, no `chain_id`, no chain table. To walk a chain, follow citation edges.                                                                                                     |
 | CONFIDENCE_RECOMPUTE_ON_RESOLVE            | `validates` / `invalidates` writes trigger a 1-hop `recomputeConfidence` on the cited row. Multi-hop transitive propagation is deferred until v1 data shows the need.                                                                          |
 | RESOLVER_IDEMPOTENT                        | `resolveDueHypotheses` MUST be idempotent on hypothesis id. Double-firing a resolution is a no-op (already-resolved hypotheses are skipped).                                                                                                  |

@@ -61,13 +61,14 @@ Designed in **[docs/spec/knowledge-syntropy.md § The EDO Loop](../../docs/spec/
 
 ## Constraints
 
-- **No new tables, one new column.** The four beats are `entry_type` values on the existing `knowledge` table; recursion is emergent from `citations`. Only `evaluate_at` is added. Materializing EDO trees as DDL is rejected — see spec § Why No New Tables.
+- **No new tables, two new columns.** The four beats are `entry_type` values on the existing `knowledge` table; recursion is emergent from `citations`. Only `evaluate_at` (timestamptz) + `resolution_strategy` (text, nullable) are added. Materializing EDO trees as DDL is rejected — see spec § Why No New Tables.
 - **App-layer confidence only.** Doltgres 0.56 has no PL/pgSQL. `recomputeConfidence` runs in the adapter.
 - **1-hop in v1.** Multi-hop transitive propagation is filed when v1 data shows the need.
 - **Scheduler-worker, not Temporal.** The resolver cron matches the existing pattern (review, order-reconciler).
 - **Type-narrow tools (revisit in P0).** Three distinct tools shipped first for model accuracy; consolidation to a single `core__edo_write({beat, citations[]})` reconsidered if/when 3-tool usage shows redundancy. Decision deferred to P0 implementation.
 - **Per-node sovereignty bounds EDO chains.** `DOLTGRES_PER_NODE_DATABASE` means an outcome on poly cannot cite a hypothesis on operator. Cross-node EDO compounding waits on Dolt remotes (🔴 in [KNOWLEDGE charter](../charters/KNOWLEDGE.md)). Within-node compounding is the v1 goal.
-- **Resolution opt-in by default.** `tags.resolve = "manual"` is the default; agents must explicitly opt into auto-resolution. Bounds LLM cost. See spec § `evaluate_at`: The Loop Closer.
+- **Resolution opt-in by default.** `resolution_strategy IS NULL` is the default; cron skips. Non-null values are namespaced text (`agent` in v0; future kinds like `market:<id>` add values, not columns). Bounds LLM cost. See spec § `evaluate_at`: The Loop Closer.
+- **One canonical port surface.** `KnowledgeStorePort` lives in `knowledge-data-plane.md § Port Interface`; this project contributes `addCitation` + `knowledgeExists` to that surface. Other specs never redefine the interface.
 
 ## Dependencies
 
@@ -105,7 +106,7 @@ User clarification 2026-05-11: EDO = event → decision → outcome, with recurs
 
 ### Open questions (tracked in spec § Open Questions)
 
-- Resolver graph shape: one generic graph that takes a hypothesis + `tags.resolve` value, or per-domain resolvers? Start with one; split when domains diverge.
+- Resolver graph shape: one generic graph that dispatches by `resolution_strategy` namespace prefix, or per-domain resolvers? Start with one; split when domains diverge.
 - Concurrency on `recomputeConfidence`: two simultaneous outcome writes against the same hypothesis race. v0: serialize via reserved-conn per cited_id; revisit if measurable contention.
 - Brain prompt acceptance: minimum bar is a brain stack test that asserts the tool-call sequence (`core__edo_hypothesize` before `core__knowledge_write` when a prediction is being made). To be added with the prompt change in P1.
 - Chain UI library (P2): no graph-viz dep installed today. Start with an indented text view in the existing DataGrid; pick a library (react-flow vs cytoscape vs dagre) only if the text view proves insufficient.
