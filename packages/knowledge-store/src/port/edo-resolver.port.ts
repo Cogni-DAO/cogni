@@ -63,12 +63,7 @@ export interface ResolutionInput {
   /** Did the prediction hold? `validates` | `invalidates`. */
   edge: ResolutionEdge;
   /** Where the outcome data came from. */
-  sourceType:
-    | "human"
-    | "agent"
-    | "analysis_signal"
-    | "external"
-    | "derived";
+  sourceType: "human" | "agent" | "analysis_signal" | "external" | "derived";
   /** Optional pointer (URL, signal ID, etc.). */
   sourceRef?: string | null;
   /** Optional node identifier ("operator", "poly-cron", etc.). */
@@ -109,7 +104,7 @@ export interface EdoResolverPort {
    */
   pendingResolutions(
     now: Date,
-    opts?: PendingResolutionsOptions,
+    opts?: PendingResolutionsOptions
   ): Promise<Knowledge[]>;
 
   /**

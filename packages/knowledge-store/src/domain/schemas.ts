@@ -105,7 +105,7 @@ export const ResolutionStrategySchema = z
   .max(200)
   .regex(
     /^[a-z][a-z0-9_]*(:[A-Za-z0-9_./~^-]+)?$/,
-    "resolution_strategy must be a namespaced identifier: 'agent' | 'kind:<value>' (e.g. market:0x123)",
+    "resolution_strategy must be a namespaced identifier: 'agent' | 'kind:<value>' (e.g. market:0x123)"
   );
 export type ResolutionStrategy = z.infer<typeof ResolutionStrategySchema>;
 

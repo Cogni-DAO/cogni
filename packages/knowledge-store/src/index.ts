@@ -13,7 +13,6 @@
 
 // Capability factories (shared across all nodes)
 export { createKnowledgeCapability } from "./capability.js";
-export { createEdoCapability } from "./edo-capability.js";
 // Contribution domain
 export {
   type ContributionDiffEntry,
@@ -54,6 +53,7 @@ export {
   type SourceType,
   SourceTypeSchema,
 } from "./domain/schemas.js";
+export { createEdoCapability } from "./edo-capability.js";
 export {
   ContributionConflictError,
   ContributionForbiddenError,
@@ -62,6 +62,14 @@ export {
   ContributionStateError,
   type KnowledgeContributionPort,
 } from "./port/contribution.port.js";
+// EDO resolver port (hypothesis loop)
+export type {
+  EdoResolverPort,
+  PendingResolutionsOptions,
+  ResolutionEdge,
+  ResolutionInput,
+  ResolutionResult,
+} from "./port/edo-resolver.port.js";
 // Port interfaces + domain-registry types/errors
 export {
   CitationTargetNotFoundError,
@@ -74,14 +82,6 @@ export {
   type KnowledgeStorePort,
   type NewDomain,
 } from "./port/knowledge-store.port.js";
-// EDO resolver port (hypothesis loop)
-export type {
-  EdoResolverPort,
-  PendingResolutionsOptions,
-  ResolutionEdge,
-  ResolutionInput,
-  ResolutionResult,
-} from "./port/edo-resolver.port.js";
 // Contribution service (framework-agnostic, cross-node shared)
 export {
   type ContributionService,

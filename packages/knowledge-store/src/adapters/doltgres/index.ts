@@ -79,7 +79,7 @@ function rowToCitation(row: Record<string, unknown>): Citation {
 function citationId(
   citingId: string,
   citedId: string,
-  type: CitationType,
+  type: CitationType
 ): string {
   return `${citingId}->${citedId}:${type}`;
 }
@@ -419,7 +419,7 @@ export class DoltgresKnowledgeStoreAdapter implements KnowledgeStorePort {
         edge.citationType,
         edge.citedId,
         citedEntryType,
-        expected,
+        expected
       );
     }
 
@@ -429,7 +429,7 @@ export class DoltgresKnowledgeStoreAdapter implements KnowledgeStorePort {
     // Idempotent on the unique (citing_id, cited_id, citation_type) index.
     try {
       const rows = await this.sql.unsafe(
-        `INSERT INTO citations (id, citing_id, cited_id, citation_type, context) VALUES (${escapeValue(id)}, ${escapeValue(edge.citingId)}, ${escapeValue(edge.citedId)}, ${escapeValue(edge.citationType)}, ${escapeValue(edge.context ?? null)}) RETURNING *`,
+        `INSERT INTO citations (id, citing_id, cited_id, citation_type, context) VALUES (${escapeValue(id)}, ${escapeValue(edge.citingId)}, ${escapeValue(edge.citedId)}, ${escapeValue(edge.citationType)}, ${escapeValue(edge.context ?? null)}) RETURNING *`
       );
       return rowToCitation(rows[0] as Record<string, unknown>);
     } catch (e: unknown) {
@@ -437,7 +437,7 @@ export class DoltgresKnowledgeStoreAdapter implements KnowledgeStorePort {
       if (!msg.toLowerCase().includes("duplicate")) throw e;
       // Already exists — return the canonical row.
       const rows = await this.sql.unsafe(
-        `SELECT * FROM citations WHERE citing_id = ${escapeValue(edge.citingId)} AND cited_id = ${escapeValue(edge.citedId)} AND citation_type = ${escapeValue(edge.citationType)} LIMIT 1`,
+        `SELECT * FROM citations WHERE citing_id = ${escapeValue(edge.citingId)} AND cited_id = ${escapeValue(edge.citedId)} AND citation_type = ${escapeValue(edge.citationType)} LIMIT 1`
       );
       if (rows.length === 0) throw e;
       return rowToCitation(rows[0] as Record<string, unknown>);
@@ -446,14 +446,14 @@ export class DoltgresKnowledgeStoreAdapter implements KnowledgeStorePort {
 
   async listCitationsByCitingId(citingId: string): Promise<Citation[]> {
     const rows = await this.sql.unsafe(
-      `SELECT * FROM citations WHERE citing_id = ${escapeValue(citingId)} ORDER BY created_at`,
+      `SELECT * FROM citations WHERE citing_id = ${escapeValue(citingId)} ORDER BY created_at`
     );
     return rows.map((r) => rowToCitation(r as Record<string, unknown>));
   }
 
   async listCitationsByCitedId(citedId: string): Promise<Citation[]> {
     const rows = await this.sql.unsafe(
-      `SELECT * FROM citations WHERE cited_id = ${escapeValue(citedId)} ORDER BY created_at`,
+      `SELECT * FROM citations WHERE cited_id = ${escapeValue(citedId)} ORDER BY created_at`
     );
     return rows.map((r) => rowToCitation(r as Record<string, unknown>));
   }

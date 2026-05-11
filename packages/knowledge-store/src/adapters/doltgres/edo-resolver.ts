@@ -92,7 +92,7 @@ export class DoltgresEdoResolverAdapter implements EdoResolverPort {
 
   async pendingResolutions(
     now: Date,
-    opts?: PendingResolutionsOptions,
+    opts?: PendingResolutionsOptions
   ): Promise<Knowledge[]> {
     const limit = opts?.limit ?? 100;
     const strategyFilter =
@@ -115,9 +115,11 @@ export class DoltgresEdoResolverAdapter implements EdoResolverPort {
              AND c.citation_type IN ('validates', 'invalidates')
          )
        ORDER BY k.evaluate_at
-       LIMIT ${limit}`,
+       LIMIT ${limit}`
     );
-    return rows.map((r) => rowToKnowledgeForResolver(r as Record<string, unknown>));
+    return rows.map((r) =>
+      rowToKnowledgeForResolver(r as Record<string, unknown>)
+    );
   }
 
   async resolveHypothesis(input: ResolutionInput): Promise<ResolutionResult> {
@@ -126,7 +128,7 @@ export class DoltgresEdoResolverAdapter implements EdoResolverPort {
       `SELECT id, citing_id, citation_type FROM citations
        WHERE cited_id = ${escapeValue(input.hypothesisId)}
          AND citation_type IN ('validates', 'invalidates')
-       LIMIT 1`,
+       LIMIT 1`
     );
     if (existing.length > 0) {
       const row = existing[0] as Record<string, unknown>;
@@ -164,12 +166,12 @@ export class DoltgresEdoResolverAdapter implements EdoResolverPort {
 
     // 3. Recompute confidence on the hypothesis (1-hop, pure).
     const resolvedConfidence = await this.recomputeConfidence(
-      input.hypothesisId,
+      input.hypothesisId
     );
 
     // 4. One Dolt commit per resolution.
     await this.store.commit(
-      `edo: resolve hypothesis ${input.hypothesisId} (${input.edge}, conf: ${resolvedConfidence}%)`,
+      `edo: resolve hypothesis ${input.hypothesisId} (${input.edge}, conf: ${resolvedConfidence}%)`
     );
 
     return {
@@ -188,9 +190,8 @@ export class DoltgresEdoResolverAdapter implements EdoResolverPort {
       throw new Error(`recomputeConfidence: entry '${entryId}' not found`);
     }
 
-    const incoming: Citation[] = await this.store.listCitationsByCitedId(
-      entryId,
-    );
+    const incoming: Citation[] =
+      await this.store.listCitationsByCitedId(entryId);
 
     const initial = initialConfidenceForSource(entry.sourceType);
     let supportCount = 0;

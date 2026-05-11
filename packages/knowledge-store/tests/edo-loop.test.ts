@@ -12,12 +12,11 @@
  */
 
 import { describe, expect, it } from "vitest";
-
-import { createEdoCapability } from "../src/edo-capability.js";
 import {
   FakeEdoResolverAdapter,
   FakeKnowledgeStoreAdapter,
 } from "../src/adapters/fake/index.js";
+import { createEdoCapability } from "../src/edo-capability.js";
 import {
   CitationTargetNotFoundError,
   CitationTypeMismatchError,
@@ -50,7 +49,7 @@ describe("EDO foundation — invariants", () => {
         entryType: "hypothesis",
         sourceType: "agent",
         // evaluateAt deliberately omitted
-      }),
+      })
     ).rejects.toBeInstanceOf(HypothesisMissingEvaluateAtError);
   });
 
@@ -69,7 +68,7 @@ describe("EDO foundation — invariants", () => {
         citingId: "evt-1",
         citedId: "does-not-exist",
         citationType: "evidence_for",
-      }),
+      })
     ).rejects.toBeInstanceOf(CitationTargetNotFoundError);
   });
 
@@ -98,7 +97,7 @@ describe("EDO foundation — invariants", () => {
         citingId: "evt-source",
         citedId: "evt-target",
         citationType: "derives_from",
-      }),
+      })
     ).rejects.toBeInstanceOf(CitationTypeMismatchError);
   });
 
@@ -205,12 +204,14 @@ describe("EDO foundation — full hypothesis loop", () => {
     expect(outcomeResult.resolvedConfidence).toBeGreaterThan(30); // agent baseline + at least one validates
 
     // 5. The chain is observable in the citations table.
-    const hypothesisIncoming = await store.listCitationsByCitedId(hypothesis.id);
+    const hypothesisIncoming = await store.listCitationsByCitedId(
+      hypothesis.id
+    );
     expect(
-      hypothesisIncoming.find((c) => c.citationType === "validates"),
+      hypothesisIncoming.find((c) => c.citationType === "validates")
     ).toBeDefined();
     expect(
-      hypothesisIncoming.find((c) => c.citationType === "derives_from"),
+      hypothesisIncoming.find((c) => c.citationType === "derives_from")
     ).toBeDefined(); // from the decision
 
     // 6. The outcome row exists with the right shape.
@@ -221,22 +222,16 @@ describe("EDO foundation — full hypothesis loop", () => {
     const stillPending = await resolver.pendingResolutions(afterTime, {
       strategy: "agent",
     });
-    expect(
-      stillPending.find((r) => r.id === hypothesis.id),
-    ).toBeUndefined();
+    expect(stillPending.find((r) => r.id === hypothesis.id)).toBeUndefined();
 
     // 8. Commit history records each beat (RESOLVER + atomic tools each commit).
     const commits = await store.log();
     expect(commits.length).toBeGreaterThanOrEqual(4); // domain register + hypothesize + decide + resolve
-    expect(
-      commits.some((c) => c.message.includes("hypothesize")),
-    ).toBe(true);
-    expect(
-      commits.some((c) => c.message.includes("decide")),
-    ).toBe(true);
-    expect(
-      commits.some((c) => c.message.includes("resolve hypothesis")),
-    ).toBe(true);
+    expect(commits.some((c) => c.message.includes("hypothesize"))).toBe(true);
+    expect(commits.some((c) => c.message.includes("decide"))).toBe(true);
+    expect(commits.some((c) => c.message.includes("resolve hypothesis"))).toBe(
+      true
+    );
   });
 
   it("RESOLVER_IDEMPOTENT — double-resolve returns existing state, no double-write", async () => {
@@ -275,10 +270,8 @@ describe("EDO foundation — full hypothesis loop", () => {
     // No second outcome row was created.
     expect(await store.getKnowledge("o:rep-2")).toBeNull();
     // Only one resolving citation exists.
-    const resolving = (
-      await store.listCitationsByCitedId("h:rep")
-    ).filter(
-      (c) => c.citationType === "validates" || c.citationType === "invalidates",
+    const resolving = (await store.listCitationsByCitedId("h:rep")).filter(
+      (c) => c.citationType === "validates" || c.citationType === "invalidates"
     );
     expect(resolving).toHaveLength(1);
   });

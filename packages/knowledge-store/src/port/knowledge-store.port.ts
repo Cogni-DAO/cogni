@@ -76,7 +76,7 @@ export class HypothesisMissingEvaluateAtError extends Error {
   readonly entryId: string;
   constructor(entryId: string) {
     super(
-      `hypothesis '${entryId}' is missing evaluate_at — hypothesis rows must declare a resolution date`,
+      `hypothesis '${entryId}' is missing evaluate_at — hypothesis rows must declare a resolution date`
     );
     this.name = "HypothesisMissingEvaluateAtError";
     this.entryId = entryId;
@@ -111,10 +111,10 @@ export class CitationTypeMismatchError extends Error {
     citationType: CitationType,
     citedId: string,
     citedEntryType: string,
-    expectedEntryType: string,
+    expectedEntryType: string
   ) {
     super(
-      `citation_type '${citationType}' requires cited entry_type='${expectedEntryType}', but '${citedId}' has entry_type='${citedEntryType}'`,
+      `citation_type '${citationType}' requires cited entry_type='${expectedEntryType}', but '${citedId}' has entry_type='${citedEntryType}'`
     );
     this.name = "CitationTypeMismatchError";
     this.citationType = citationType;
@@ -133,7 +133,7 @@ export class EdoEntryTypeRequiresAtomicToolError extends Error {
   readonly entryType: string;
   constructor(entryType: string) {
     super(
-      `entry_type '${entryType}' must be written via the atomic core__edo_* tool, not core__knowledge_write`,
+      `entry_type '${entryType}' must be written via the atomic core__edo_* tool, not core__knowledge_write`
     );
     this.name = "EdoEntryTypeRequiresAtomicToolError";
     this.entryType = entryType;

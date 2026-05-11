@@ -26,7 +26,11 @@ import type { BoundTool, ToolContract, ToolImplementation } from "../types";
 export const EdoRecordOutcomeInputSchema = z.object({
   id: z.string().min(1).max(200).describe("Unique ID for the outcome row"),
   domain: z.string().min(1).describe("Registered knowledge domain"),
-  title: z.string().min(1).max(500).describe("One-line summary of what happened"),
+  title: z
+    .string()
+    .min(1)
+    .max(500)
+    .describe("One-line summary of what happened"),
   content: z
     .string()
     .min(1)
@@ -35,7 +39,7 @@ export const EdoRecordOutcomeInputSchema = z.object({
     .string()
     .min(1)
     .describe(
-      "ID of the hypothesis being resolved. MUST refer to entry_type='hypothesis'.",
+      "ID of the hypothesis being resolved. MUST refer to entry_type='hypothesis'."
     ),
   edge: z
     .enum(["validates", "invalidates"])
@@ -65,7 +69,9 @@ export const EdoRecordOutcomeOutputSchema = z.object({
   committed: z.boolean(),
   message: z.string(),
 });
-export type EdoRecordOutcomeOutput = z.infer<typeof EdoRecordOutcomeOutputSchema>;
+export type EdoRecordOutcomeOutput = z.infer<
+  typeof EdoRecordOutcomeOutputSchema
+>;
 export type EdoRecordOutcomeRedacted = EdoRecordOutcomeOutput;
 
 // ─── Contract ────────────────────────────────────────────────────────────────
@@ -106,7 +112,7 @@ export interface EdoRecordOutcomeDeps {
 }
 
 export function createEdoRecordOutcomeImplementation(
-  deps: EdoRecordOutcomeDeps,
+  deps: EdoRecordOutcomeDeps
 ): ToolImplementation<EdoRecordOutcomeInput, EdoRecordOutcomeOutput> {
   return {
     execute: async (input) => {
@@ -151,7 +157,7 @@ export const edoRecordOutcomeStubImplementation: ToolImplementation<
 > = {
   execute: async () => {
     throw new Error(
-      "EdoCapability not configured. Hypothesis-loop access not available.",
+      "EdoCapability not configured. Hypothesis-loop access not available."
     );
   },
 };

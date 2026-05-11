@@ -31,13 +31,13 @@ export const EdoDecideInputSchema = z.object({
     .string()
     .min(1)
     .describe(
-      "Full decision — what we did (or chose not to do) and why, anchored to the hypothesis",
+      "Full decision — what we did (or chose not to do) and why, anchored to the hypothesis"
     ),
   derivesFromHypothesisId: z
     .string()
     .min(1)
     .describe(
-      "ID of the hypothesis this decision acts on. MUST refer to entry_type='hypothesis' — the adapter rejects otherwise.",
+      "ID of the hypothesis this decision acts on. MUST refer to entry_type='hypothesis' — the adapter rejects otherwise."
     ),
   sourceType: z
     .enum(["human", "agent", "analysis_signal", "external", "derived"])
@@ -98,7 +98,7 @@ export interface EdoDecideDeps {
 }
 
 export function createEdoDecideImplementation(
-  deps: EdoDecideDeps,
+  deps: EdoDecideDeps
 ): ToolImplementation<EdoDecideInput, EdoDecideOutput> {
   return {
     execute: async (input) => {
@@ -137,7 +137,7 @@ export const edoDecideStubImplementation: ToolImplementation<
 > = {
   execute: async () => {
     throw new Error(
-      "EdoCapability not configured. Hypothesis-loop access not available.",
+      "EdoCapability not configured. Hypothesis-loop access not available."
     );
   },
 };

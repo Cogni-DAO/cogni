@@ -62,7 +62,7 @@ function toEntry(k: {
  */
 export function createEdoCapability(
   store: KnowledgeStorePort,
-  resolver: EdoResolverPort,
+  resolver: EdoResolverPort
 ): EdoCapability {
   return {
     async hypothesize(params: HypothesizeParams): Promise<KnowledgeEntry> {
@@ -92,7 +92,7 @@ export function createEdoCapability(
 
       // 3. One commit per hypothesize call.
       await store.commit(
-        `edo: hypothesize '${params.id}' (resolve: ${params.resolutionStrategy ?? "manual"})`,
+        `edo: hypothesize '${params.id}' (resolve: ${params.resolutionStrategy ?? "manual"})`
       );
 
       return toEntry(entry);
@@ -121,13 +121,15 @@ export function createEdoCapability(
         citationType: "derives_from",
       });
 
-      await store.commit(`edo: decide '${params.id}' from '${params.derivesFromHypothesisId}'`);
+      await store.commit(
+        `edo: decide '${params.id}' from '${params.derivesFromHypothesisId}'`
+      );
 
       return toEntry(entry);
     },
 
     async recordOutcome(
-      params: RecordOutcomeParams,
+      params: RecordOutcomeParams
     ): Promise<RecordOutcomeResult> {
       // resolveHypothesis writes outcome + citation + recomputes confidence +
       // commits — all enforced through the same port.
@@ -146,7 +148,7 @@ export function createEdoCapability(
       const outcome = await store.getKnowledge(result.outcomeId);
       if (!outcome) {
         throw new Error(
-          `recordOutcome: outcome row '${result.outcomeId}' missing after resolve`,
+          `recordOutcome: outcome row '${result.outcomeId}' missing after resolve`
         );
       }
 

@@ -21,8 +21,8 @@ import type {
   NewKnowledge,
 } from "../../domain/schemas.js";
 import { HYPOTHESIS_TARGETED_EDGES } from "../../domain/schemas.js";
-import type { EdoResolverPort } from "../../port/edo-resolver.port.js";
 import type {
+  EdoResolverPort,
   PendingResolutionsOptions,
   ResolutionInput,
   ResolutionResult,
@@ -78,7 +78,7 @@ function expectedEntryTypeForEdge(t: CitationType): string | null {
 function citationId(
   citingId: string,
   citedId: string,
-  type: CitationType,
+  type: CitationType
 ): string {
   return `${citingId}->${citedId}:${type}`;
 }
@@ -103,35 +103,37 @@ export class FakeKnowledgeStoreAdapter implements KnowledgeStorePort {
 
   async listKnowledge(
     domain: string,
-    opts?: { tags?: string[]; limit?: number },
+    opts?: { tags?: string[]; limit?: number }
   ): Promise<Knowledge[]> {
     let out = Array.from(this.rows.values()).filter((r) => r.domain === domain);
     if (opts?.tags?.length) {
       const wanted = new Set(opts.tags);
       out = out.filter((r) => (r.tags ?? []).some((t) => wanted.has(t)));
     }
-    out.sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+    out.sort(
+      (a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)
+    );
     return opts?.limit ? out.slice(0, opts.limit) : out;
   }
 
   async searchKnowledge(
     domain: string,
     query: string,
-    opts?: { limit?: number },
+    opts?: { limit?: number }
   ): Promise<Knowledge[]> {
     const q = query.toLowerCase();
     const out = Array.from(this.rows.values()).filter(
       (r) =>
         r.domain === domain &&
         (r.title.toLowerCase().includes(q) ||
-          r.content.toLowerCase().includes(q)),
+          r.content.toLowerCase().includes(q))
     );
     return opts?.limit ? out.slice(0, opts.limit) : out;
   }
 
   async listDomains(): Promise<string[]> {
     return Array.from(
-      new Set(Array.from(this.rows.values()).map((r) => r.domain)),
+      new Set(Array.from(this.rows.values()).map((r) => r.domain))
     ).sort();
   }
 
@@ -144,8 +146,9 @@ export class FakeKnowledgeStoreAdapter implements KnowledgeStorePort {
   async listDomainsFull(): Promise<Domain[]> {
     return Array.from(this.domainsMap.values()).map((d) => ({
       ...d,
-      entryCount: Array.from(this.rows.values()).filter((r) => r.domain === d.id)
-        .length,
+      entryCount: Array.from(this.rows.values()).filter(
+        (r) => r.domain === d.id
+      ).length,
     }));
   }
 
@@ -214,7 +217,7 @@ export class FakeKnowledgeStoreAdapter implements KnowledgeStorePort {
 
   async updateKnowledge(
     id: string,
-    update: Partial<NewKnowledge>,
+    update: Partial<NewKnowledge>
   ): Promise<Knowledge> {
     const existing = this.rows.get(id);
     if (!existing) throw new Error(`Knowledge ${id} not found`);
@@ -270,7 +273,7 @@ export class FakeKnowledgeStoreAdapter implements KnowledgeStorePort {
         edge.citationType,
         edge.citedId,
         citedRow.entryType ?? "(none)",
-        expected,
+        expected
       );
     }
     const id =
@@ -292,14 +295,12 @@ export class FakeKnowledgeStoreAdapter implements KnowledgeStorePort {
 
   async listCitationsByCitingId(citingId: string): Promise<Citation[]> {
     return Array.from(this.edges.values()).filter(
-      (c) => c.citingId === citingId,
+      (c) => c.citingId === citingId
     );
   }
 
   async listCitationsByCitedId(citedId: string): Promise<Citation[]> {
-    return Array.from(this.edges.values()).filter(
-      (c) => c.citedId === citedId,
-    );
+    return Array.from(this.edges.values()).filter((c) => c.citedId === citedId);
   }
 
   // --- Doltgres versioning (stubbed) ---
@@ -345,7 +346,7 @@ export class FakeEdoResolverAdapter implements EdoResolverPort {
 
   async pendingResolutions(
     now: Date,
-    opts?: PendingResolutionsOptions,
+    opts?: PendingResolutionsOptions
   ): Promise<Knowledge[]> {
     const limit = opts?.limit ?? 100;
     const strategy = opts?.strategy;
@@ -368,23 +369,25 @@ export class FakeEdoResolverAdapter implements EdoResolverPort {
         }
         const incoming = await this.store.listCitationsByCitedId(r.id);
         const isResolved = incoming.some(
-          (c) => c.citationType === "validates" || c.citationType === "invalidates",
+          (c) =>
+            c.citationType === "validates" || c.citationType === "invalidates"
         );
         if (isResolved) continue;
         candidates.push(r);
       }
     }
     candidates.sort(
-      (a, b) =>
-        (a.evaluateAt?.getTime() ?? 0) - (b.evaluateAt?.getTime() ?? 0),
+      (a, b) => (a.evaluateAt?.getTime() ?? 0) - (b.evaluateAt?.getTime() ?? 0)
     );
     return candidates.slice(0, limit);
   }
 
   async resolveHypothesis(input: ResolutionInput): Promise<ResolutionResult> {
-    const incoming = await this.store.listCitationsByCitedId(input.hypothesisId);
+    const incoming = await this.store.listCitationsByCitedId(
+      input.hypothesisId
+    );
     const existing = incoming.find(
-      (c) => c.citationType === "validates" || c.citationType === "invalidates",
+      (c) => c.citationType === "validates" || c.citationType === "invalidates"
     );
     if (existing) {
       const confidence = await this.recomputeConfidence(input.hypothesisId);
@@ -417,11 +420,11 @@ export class FakeEdoResolverAdapter implements EdoResolverPort {
     });
 
     const resolvedConfidence = await this.recomputeConfidence(
-      input.hypothesisId,
+      input.hypothesisId
     );
 
     await this.store.commit(
-      `edo: resolve hypothesis ${input.hypothesisId} (${input.edge}, conf: ${resolvedConfidence}%)`,
+      `edo: resolve hypothesis ${input.hypothesisId} (${input.edge}, conf: ${resolvedConfidence}%)`
     );
 
     return {
@@ -448,7 +451,7 @@ export class FakeEdoResolverAdapter implements EdoResolverPort {
     const next = clamp(
       initial +
         Math.min(SUPPORT_CAP, SUPPORT_BUMP * supportCount) -
-        CONTRADICT_PENALTY * contradictCount,
+        CONTRADICT_PENALTY * contradictCount
     );
     await this.store.updateKnowledge(entryId, { confidencePct: next });
     return next;

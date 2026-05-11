@@ -28,7 +28,7 @@ export const EdoHypothesizeInputSchema = z.object({
     .min(1)
     .max(200)
     .describe(
-      "Unique ID for this hypothesis (e.g., 'pm:fed-rate-cut-march-2026')",
+      "Unique ID for this hypothesis (e.g., 'pm:fed-rate-cut-march-2026')"
     ),
   domain: z.string().min(1).describe("Registered knowledge domain"),
   title: z.string().min(1).max(500).describe("One-line falsifiable prediction"),
@@ -36,13 +36,13 @@ export const EdoHypothesizeInputSchema = z.object({
     .string()
     .min(1)
     .describe(
-      "Full hypothesis — the prediction, the reasoning, the expected outcome",
+      "Full hypothesis — the prediction, the reasoning, the expected outcome"
     ),
   evaluateAt: z
     .string()
     .datetime()
     .describe(
-      "ISO timestamp — when this hypothesis should be resolved (the appointment with truth). REQUIRED.",
+      "ISO timestamp — when this hypothesis should be resolved (the appointment with truth). REQUIRED."
     ),
   resolutionStrategy: z
     .string()
@@ -50,13 +50,13 @@ export const EdoHypothesizeInputSchema = z.object({
     .max(200)
     .optional()
     .describe(
-      "Namespaced resolver identifier. Omit (or 'manual') = cron skips; only humans resolve. 'agent' = cron hands off to a resolver graph. Future: 'market:<id>', 'metric:<query>', 'http:<url>', 'deadline'.",
+      "Namespaced resolver identifier. Omit (or 'manual') = cron skips; only humans resolve. 'agent' = cron hands off to a resolver graph. Future: 'market:<id>', 'metric:<query>', 'http:<url>', 'deadline'."
     ),
   evidenceForIds: z
     .array(z.string())
     .optional()
     .describe(
-      "IDs of event/observation/finding rows that motivate this prediction. One evidence_for citation will be written per id.",
+      "IDs of event/observation/finding rows that motivate this prediction. One evidence_for citation will be written per id."
     ),
   sourceType: z
     .enum(["human", "agent", "analysis_signal", "external", "derived"])
@@ -123,7 +123,7 @@ export interface EdoHypothesizeDeps {
 }
 
 export function createEdoHypothesizeImplementation(
-  deps: EdoHypothesizeDeps,
+  deps: EdoHypothesizeDeps
 ): ToolImplementation<EdoHypothesizeInput, EdoHypothesizeOutput> {
   return {
     execute: async (input) => {
@@ -174,7 +174,7 @@ export const edoHypothesizeStubImplementation: ToolImplementation<
 > = {
   execute: async () => {
     throw new Error(
-      "EdoCapability not configured. Hypothesis-loop access not available.",
+      "EdoCapability not configured. Hypothesis-loop access not available."
     );
   },
 };
