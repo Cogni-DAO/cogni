@@ -270,6 +270,38 @@ describe("planMirrorFromFill — target-dominance branch table (bug.5048)", () =
     });
   });
 
+  describe("ROW 5b — fill on minority + mirror on DOMINANT → still skip (master switch)", () => {
+    it("skips a 5% minority fill even when we hold target's dominant primary (v1 hedge gating)", () => {
+      // Chelsea-shape target (95/5). UNDER fraction = 0.044 < 0.20 → minority.
+      // Even when we hold the 95% OVER primary, minority skip is the master
+      // switch — we do not chase tiny hedge scalps. Spec branch table row 1.
+      const fill = makeFill(UNDER_TOKEN, 1, 0.4);
+      const d = planMirrorFromFill({
+        fill,
+        config: FOLLOWUP_CONFIG,
+        state: makeState({
+          targetPosition: ASYMMETRIC_OVER,
+          ourPosition: {
+            condition_id: CONDITION_ID,
+            our_token_id: OVER_TOKEN,
+            our_qty_shares: 200,
+            our_vwap_usdc: 0.35,
+            opposite_token_id: UNDER_TOKEN,
+            opposite_qty_shares: 0,
+          },
+        }),
+        client_order_id: clientOrderIdFor(TARGET_ID, fill.fill_id),
+        min_shares: 1,
+        min_usdc_notional: 1,
+      });
+      expect(d).toEqual({
+        kind: "skip",
+        reason: "target_dominant_other_side",
+        position_branch: "new_entry",
+      });
+    });
+  });
+
   describe("ROW 6 — fill on minority + mirror on minority → skip", () => {
     it("stops continued bleeding on minority side", () => {
       const fill = makeFill(UNDER_TOKEN, 1);

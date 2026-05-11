@@ -422,8 +422,13 @@ function decideMirrorBranch(
     fillTokenId
   );
 
-  // Gate: skip when fill is on target's minority side, regardless of our
-  // position state. Catches both no-mirror-yet AND wrong-side-mirror cases.
+  // Gate: minority-side fills are below the configured conviction
+  // threshold for this condition; we never mirror them, regardless of our
+  // position state. Master switch — entries, layer scale-in, AND hedges on
+  // a below-threshold token all skip. Hedge mirroring only fires when the
+  // opposite-side fill itself sits above `min_target_side_fraction` (e.g.
+  // a 70/30 target — the 30% side passes the gate and routes to hedge if
+  // we hold the 70% primary).
   if (dominance.fill_is_minority) {
     return {
       kind: "skip",
