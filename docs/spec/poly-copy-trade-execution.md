@@ -423,14 +423,45 @@ export const RuntimeStateSchema = z.object({
 
 `mirror-pipeline.ts:processFill` calls `aggregatePositionRows(snapshot.position_aggregates)` and picks `.get(fill.market_id)` into `state.position`. No I/O added to the planner.
 
-### How follow-ons reduce to predicates
+### Branch decision — target-dominance drives routing (bug.5048)
 
-| Follow-on                          | Predicate on `state.position`                                                             | Action                                                                                                                                                                                |
-| ---------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Hedge-followup                     | `position?.our_qty_shares > 0 && fill.attributes.token_id === position.opposite_token_id` | Size = `min(market_min, position.our_qty_shares × fill.price, max_usdc_per_trade)`                                                                                                    |
-| SELL-mirror (close-on-target-SELL) | `fill.side === 'SELL' && position?.our_token_id === fill.attributes.token_id`             | Route to `closePosition` sized `min(target_close_pct × position.our_qty_shares, position.our_qty_shares)`. SELL execution still requires the live `getOperatorPositions` chain check. |
-| Layering-aware filter              | `fill.side === 'BUY' && position?.our_token_id === fill.attributes.token_id`              | Bypass percentile filter; same-side scale-in                                                                                                                                          |
-| Bankroll-fractional sizer          | Reads `position?.our_qty_shares` and `our_vwap_usdc` as inputs                            | Size = `f(target_$, target_bankroll, our_bankroll, position?.our_qty_shares ?? 0)`                                                                                                    |
+Branch detection is computed from target's per-condition cost fractions first, then routed by our position state. Our position is downstream; it may be empty, undersized, or on the wrong side from cross-target activity.
+
+**Dominance signal** (computed per fill via `analyzeTargetDominance` in `plan-mirror.ts`):
+
+- `side_fraction[token_id] = cost_usdc[token_id] / Σ cost_usdc` over `state.target_position.tokens`.
+- "**Minority**" = `side_fraction[fill.tokenId] < config.min_target_side_fraction`. Single-threshold model.
+- "**Dominant**" = `arg max(cost_usdc)` over `state.target_position.tokens`. Not minority.
+- Disabled (gate inactive, fall back to legacy our-position routing) when `min_target_side_fraction` is undefined, target_position is unavailable, or total cost is 0.
+
+**Branch table:**
+
+| target side of fill                                    | our position state                | branch                                      | action                                                                                     |
+| ------------------------------------------------------ | --------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| dominant                                               | no mirror                         | `new_entry_dominant`                        | `applySizingPolicy` (percentile/scaled sizing)                                             |
+| dominant                                               | mirror on dominant                | `layer_dominant`                            | `sizeLayerDominant` (inherits `position_followup` layer gates)                             |
+| dominant                                               | mirror on minority (cross-target) | `new_entry_dominant` + `wrong_side_holding` | open dominant-side parallel leg; emit `poly_mirror_wrong_side_holding_total` + WARN        |
+| minority                                               | mirror on dominant                | `hedge`                                     | `sizeHedge` (inherits hedge ratio + min_usdc + max_fraction gates)                         |
+| minority                                               | no mirror OR mirror on minority   | skip `target_dominant_other_side`           | catches Chelsea/Nott-Forest (bug.5048); regardless of our position state                   |
+| neither minority nor dominant (multi-outcome non-edge) | any                               | fall back to legacy our-position routing    | layer if `our_token_id` matches fill; hedge if `opposite_token_id` matches; else new_entry |
+
+**VWAP gate** (after branch selection, before sizing finalization):
+
+- `target_vwap[token] = Σ cost_usdc / Σ size_shares` over rows matching `fill.tokenId` in `target_position.tokens`.
+- If `fill.price > target_vwap + config.vwap_tolerance`, skip with `vwap_floor_breach`. Asymmetric — only the upward bound is gated.
+- Fail-open when target VWAP is unknown (no target_position, no matching token, or zero shares).
+
+### Skip-reason precedence (decision ordering)
+
+The first matching predicate wins:
+
+1. `already_placed` — idempotency.
+2. `market_past_end_date` — liveness.
+3. `price_outside_clob_bounds` — tick-grid normalization.
+4. **`target_dominant_other_side`** — dominance gate.
+5. **`vwap_floor_breach`** — VWAP gate (only on place-bound branches).
+6. Sizing skips: `below_target_percentile` / `below_market_min` / `position_cap_reached` / `target_position_below_threshold` / `followup_position_too_small` / `followup_not_needed`.
+7. `already_resting` — pipeline-level dedup (post-plan, pre-insert).
 
 ## Redeem pipeline
 
@@ -694,6 +725,10 @@ Code review criteria. Every invariant has a named owner file in the Implementati
 - **`MIRROR_REASON_BOUNDED`** — `MirrorReason` is a closed enum. Used verbatim as a Prom label (`poly_mirror_decisions_total{outcome, reason}`). Keep small + stable.
 - **`DECISIONS_TOTAL_HAS_SOURCE`** — `poly_mirror_decisions_total{outcome, reason, source="data-api"}` always carries `source`. Forward-compatible values: `source ∈ {data-api, clob-ws}`.
 - **`DECISION_LOG_NAMES_VIEW`** — any decision branched on `state.position` must include `position_branch ∈ {none, hedge, layer, sell_close, new_entry}` + `position_qty_shares` + `position_token_id` on the structured Loki log.
+- **`TARGET_DOMINANCE_DRIVES_BRANCH`** (bug.5048) — when `config.min_target_side_fraction` is set AND `state.target_position` is available with non-zero total cost, branch selection is computed from `analyzeTargetDominance` (target's per-condition side fractions) FIRST, then routed by our position state per the branch table in "How follow-ons reduce to predicates." Our position is a downstream input, never the primary discriminator. When disabled (threshold unset or no target data), the planner falls back to legacy our-position routing for backward-compat with pre-bug.5048 tests.
+- **`NEVER_PAY_ABOVE_TARGET_VWAP`** (bug.5048) — when `config.vwap_tolerance` is set, the planner skips with `vwap_floor_breach` when `fill.price > target_vwap_for_fill_token + vwap_tolerance`. Asymmetric upward gate; we are happy to enter below target VWAP. Fails open when target VWAP is unknown.
+- **`NO_SELL_IN_MIRROR`** — the mirror never SELLs to rebalance. Wrong-side residue (from cross-target activity or pre-fix legacy) holds to redemption. The mirror's response to target's hedging is to BUY the opposite side via the `hedge` branch, not to unwind ours.
+- **`OPTION_C_TOLERATES_MULTI_TARGET`** (bug.5048) — `MirrorPositionView` aggregates fills across all targets on the same condition. When `decideMirrorBranch` detects we hold a non-dominant leg from a different target's mirror activity AND the current target's dominant fill arrives, it (a) routes as `new_entry_dominant` ignoring the wrong-side leg, (b) sets `plan.wrong_side_holding_detected: true`, (c) the pipeline increments `poly_mirror_wrong_side_holding_total{target_id, condition_id}` and emits a WARN log. Contradictory targets on the same condition (A dominant OVER, B dominant UNDER) result in parallel legs in both directions; cross-target coherence is a v3 design.
 - **`KILL_SWITCH_FAIL_CLOSED_COUNTED`** (legacy) — every fail-closed branch increments `poly_mirror_kill_switch_fail_closed_total`. Largely vestigial now that `NO_KILL_SWITCH` (bug.0438) removed the per-tenant switch.
 - **`NO_STATIC_CLOB_IMPORT`** — none of the policy modules may statically `import` from `@polymarket/clob-client` or `@privy-io/node/viem`. Enforced by Biome `noRestrictedImports`.
 

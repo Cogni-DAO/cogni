@@ -104,6 +104,8 @@ export const MIRROR_PIPELINE_METRICS = {
   decisionsTotal: "poly_mirror_decisions_total",
   /** `poly_mirror_placement_errors_total` — `placeIntent` throw after pending insert. */
   placementErrorsTotal: "poly_mirror_placement_errors_total",
+  /** bug.5048 — `poly_mirror_wrong_side_holding_total{target_id, condition_id}` fires when option C is taken (wallet held a non-dominant leg from cross-target activity at decision time). Alertable. */
+  wrongSideHoldingTotal: "poly_mirror_wrong_side_holding_total",
 } as const;
 
 /** `Fill.source` values that land in `decisions_total{source}`. */
@@ -343,13 +345,42 @@ async function processFill(
     now_ms: Date.now(),
   });
 
+  const wrongSideHoldingDetected =
+    plan.kind === "place" && plan.wrong_side_holding_detected === true;
+
   const decisionLogFields = buildDecisionLogFields({
     branch: plan.position_branch,
     fill,
     position,
     target: deps.target,
     targetPosition,
+    wrongSideHoldingDetected,
   });
+
+  // bug.5048 — fire the wrong-side counter + WARN log when option C taken.
+  if (wrongSideHoldingDetected) {
+    deps.metrics.incr(MIRROR_PIPELINE_METRICS.wrongSideHoldingTotal, {
+      target_id: deps.target.target_id,
+      condition_id:
+        typeof fill.attributes?.condition_id === "string"
+          ? fill.attributes.condition_id
+          : fill.market_id,
+    });
+    log.warn(
+      {
+        event: EVENT_NAMES.POLY_MIRROR_DECISION,
+        phase: "wrong_side_holding_detected",
+        source,
+        fill_id: fill.fill_id,
+        client_order_id,
+        market_id: fill.market_id,
+        our_minority_token_id: position?.our_token_id ?? null,
+        target_dominant_token_id: decisionLogFields.target_dominant_token_id,
+        target_side_fraction: decisionLogFields.target_side_fraction,
+      },
+      "mirror pipeline: option C — wallet holds non-dominant leg from cross-target activity; opening dominant-side parallel leg"
+    );
+  }
 
   if (plan.kind === "skip") {
     emitDecisionMetric(deps.metrics, "skipped", plan.reason, source, placement);
@@ -520,7 +551,9 @@ async function fetchTargetConditionPosition(args: {
 function needsTargetPosition(target: MirrorTargetConfig): boolean {
   return (
     target.position_followup?.enabled === true ||
-    target.sizing.kind !== "min_bet"
+    target.sizing.kind !== "min_bet" ||
+    target.min_target_side_fraction !== undefined ||
+    target.vwap_tolerance !== undefined
   );
 }
 
@@ -543,8 +576,16 @@ function buildDecisionLogFields(args: {
   position: MirrorPositionView | undefined;
   target: MirrorTargetConfig;
   targetPosition: TargetConditionPositionView | undefined;
+  wrongSideHoldingDetected?: boolean;
 }): Record<string, unknown> {
-  const { branch, fill, position, target, targetPosition } = args;
+  const {
+    branch,
+    fill,
+    position,
+    target,
+    targetPosition,
+    wrongSideHoldingDetected,
+  } = args;
   const tokenId =
     typeof fill.attributes?.asset === "string" ? fill.attributes.asset : "";
   return {
@@ -554,6 +595,12 @@ function buildDecisionLogFields(args: {
     target_token_cost_usdc: targetTokenCostUsdc(targetPosition, tokenId),
     target_position_usdc: targetPositionTotalUsdc(targetPosition),
     target_hedge_ratio: targetHedgeRatio(position, targetPosition),
+    target_side_fraction: targetSideFraction(targetPosition, tokenId),
+    target_dominant_token_id: targetDominantTokenId(targetPosition),
+    target_vwap_for_fill_token: targetVwapForFillToken(targetPosition, tokenId),
+    min_target_side_fraction: target.min_target_side_fraction ?? null,
+    vwap_tolerance: target.vwap_tolerance ?? null,
+    wrong_side_holding_detected: wrongSideHoldingDetected ?? false,
     sizing_policy_kind: target.sizing.kind,
     mirror_max_usdc_per_trade: target.sizing.max_usdc_per_trade,
     sizing_percentile:
@@ -567,6 +614,54 @@ function buildDecisionLogFields(args: {
         ? target.sizing.statistic.max_target_usdc
         : null,
   };
+}
+
+/** bug.5048 — fraction of target's total condition cost on the fill's token, or null when unknown. */
+function targetSideFraction(
+  targetPosition: TargetConditionPositionView | undefined,
+  tokenId: string | undefined
+): number | null {
+  if (!targetPosition || !tokenId) return null;
+  const total = targetPosition.tokens.reduce((sum, t) => sum + t.cost_usdc, 0);
+  if (total <= 0) return null;
+  const thisCost = targetPosition.tokens
+    .filter((t) => t.token_id === tokenId)
+    .reduce((sum, t) => sum + t.cost_usdc, 0);
+  return Number((thisCost / total).toFixed(4));
+}
+
+/** bug.5048 — token id with the highest cost in target's condition position, or null. */
+function targetDominantTokenId(
+  targetPosition: TargetConditionPositionView | undefined
+): string | null {
+  if (!targetPosition || targetPosition.tokens.length === 0) return null;
+  let dominantId: string | null = null;
+  let dominantCost = -1;
+  for (const t of targetPosition.tokens) {
+    if (t.cost_usdc > dominantCost) {
+      dominantCost = t.cost_usdc;
+      dominantId = t.token_id;
+    }
+  }
+  return dominantCost > 0 ? dominantId : null;
+}
+
+/** bug.5048 — target's VWAP on the fill's token, derived from cost_usdc / size_shares, or null. */
+function targetVwapForFillToken(
+  targetPosition: TargetConditionPositionView | undefined,
+  tokenId: string | undefined
+): number | null {
+  if (!targetPosition || !tokenId) return null;
+  let cost = 0;
+  let shares = 0;
+  for (const t of targetPosition.tokens) {
+    if (t.token_id === tokenId) {
+      cost += t.cost_usdc;
+      shares += t.size_shares;
+    }
+  }
+  if (shares <= 0) return null;
+  return Number((cost / shares).toFixed(4));
 }
 
 function targetPositionTotalUsdc(

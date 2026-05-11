@@ -175,6 +175,22 @@ export const MirrorTargetConfigSchema = z.object({
    * configured entry sizing policy exactly as before.
    */
   position_followup: PositionFollowupPolicySchema.optional(),
+  /**
+   * bug.5048 — minimum fraction of target's total condition cost that must sit
+   * on the fill's token before the planner routes to a place-branch. Below the
+   * threshold, the planner skips with `target_dominant_other_side` regardless
+   * of our position state. Undefined ⇒ dominance gate disabled (legacy
+   * behavior). Range [0,1]; default 0.20 in bootstrap.
+   */
+  min_target_side_fraction: z.number().min(0).max(1).optional(),
+  /**
+   * bug.5048 — upward tolerance (in 0–1 price units) above target's VWAP on
+   * the fill's token. When `fill.price > target_vwap + vwap_tolerance`, the
+   * planner skips with `vwap_floor_breach`. Undefined ⇒ VWAP gate disabled.
+   * Default 0.005 (0.5pp) in bootstrap — covers tick-grid rounding + ladder
+   * slippage.
+   */
+  vwap_tolerance: z.number().min(0).max(1).optional(),
 });
 export type MirrorTargetConfig = z.infer<typeof MirrorTargetConfigSchema>;
 
@@ -400,6 +416,18 @@ export const MirrorReasonSchema = z.enum([
    * those need a snapshot-time `poly_market_outcomes.resolved_at` join.
    */
   "market_past_end_date",
+  /**
+   * bug.5048 — target's cost on the fill's token is below
+   * `config.min_target_side_fraction` × target's total condition cost. Skip
+   * regardless of our position state — catches new_entry on minority side AND
+   * layer accumulation on a side that is in fact target's minority.
+   */
+  "target_dominant_other_side",
+  /**
+   * bug.5048 — `fill.price > target_vwap_for_fill_token + config.vwap_tolerance`.
+   * We refuse to place above target's average entry on this token.
+   */
+  "vwap_floor_breach",
 ]);
 export type MirrorReason = z.infer<typeof MirrorReasonSchema>;
 
@@ -413,6 +441,13 @@ export type MirrorPlan =
       reason: "ok" | "mode_paper" | "layer_scale_in" | "hedge_followup";
       position_branch: PositionBranch;
       intent: OrderIntent;
+      /**
+       * bug.5048 — true when option C was taken (wallet held a non-dominant
+       * leg from cross-target activity AND the current target's dominant fill
+       * arrived). Pipeline emits `poly_mirror_wrong_side_holding_total` + WARN
+       * log. Optional; absent on legacy paths. OPTION_C_TOLERATES_MULTI_TARGET.
+       */
+      wrong_side_holding_detected?: boolean;
     }
   | {
       kind: "skip";
