@@ -250,12 +250,12 @@ interface KnowledgeStorePort {
   getKnowledge(id: string): Promise<Knowledge | null>;
   listKnowledge(
     domain: string,
-    opts?: { tags?: string[]; limit?: number },
+    opts?: { tags?: string[]; limit?: number }
   ): Promise<Knowledge[]>;
   searchKnowledge(
     domain: string,
     query: string,
-    opts?: { limit?: number },
+    opts?: { limit?: number }
   ): Promise<Knowledge[]>;
   knowledgeExists(id: string): Promise<boolean>; // shared FK check (knowledge-syntropy)
 
@@ -267,7 +267,10 @@ interface KnowledgeStorePort {
   // Write — rows
   addKnowledge(entry: NewKnowledge): Promise<Knowledge>; // insert-only
   upsertKnowledge(entry: NewKnowledge): Promise<Knowledge>; // insert-or-update by id
-  updateKnowledge(id: string, update: Partial<NewKnowledge>): Promise<Knowledge>;
+  updateKnowledge(
+    id: string,
+    update: Partial<NewKnowledge>
+  ): Promise<Knowledge>;
   deleteKnowledge(id: string): Promise<void>; // admin/cleanup only; agents use DEPRECATE_NOT_DELETE
 
   // Write — edges (knowledge-syntropy)

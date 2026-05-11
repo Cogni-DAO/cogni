@@ -42,6 +42,12 @@ import {
   createWebSearchImplementation,
   createWorkItemQueryImplementation,
   createWorkItemTransitionImplementation,
+  EDO_DECIDE_NAME,
+  EDO_HYPOTHESIZE_NAME,
+  EDO_RECORD_OUTCOME_NAME,
+  edoDecideStubImplementation,
+  edoHypothesizeStubImplementation,
+  edoRecordOutcomeStubImplementation,
   GET_CURRENT_TIME_NAME,
   getCurrentTimeImplementation,
   KNOWLEDGE_READ_NAME,
@@ -150,6 +156,14 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
     [KNOWLEDGE_WRITE_NAME]: createKnowledgeWriteImplementation({
       knowledgeCapability: deps.knowledgeCapability,
     }) as AnyToolImplementation,
+
+    // EDO hypothesis-loop tools (knowledge-syntropy.md § The Hypothesis Loop)
+    // Bound to stubs in v0; runtime wire-up of EdoCapability is a follow-up.
+    [EDO_HYPOTHESIZE_NAME]:
+      edoHypothesizeStubImplementation as AnyToolImplementation,
+    [EDO_DECIDE_NAME]: edoDecideStubImplementation as AnyToolImplementation,
+    [EDO_RECORD_OUTCOME_NAME]:
+      edoRecordOutcomeStubImplementation as AnyToolImplementation,
 
     // I/O tools (require capability injection)
     [MARKET_LIST_NAME]: createMarketListImplementation({
