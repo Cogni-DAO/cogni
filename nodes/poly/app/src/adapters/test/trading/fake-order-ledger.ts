@@ -577,7 +577,9 @@ export class FakeOrderLedger implements OrderLedger {
     }
     const out: Array<{ day: string; n: number }> = [];
     for (let i = opts.windowDays - 1; i >= 0; i--) {
-      const day = new Date(todayUtc - i * MS_PER_DAY).toISOString().slice(0, 10);
+      const day = new Date(todayUtc - i * MS_PER_DAY)
+        .toISOString()
+        .slice(0, 10);
       out.push({ day, n: counts.get(day) ?? 0 });
     }
     return out;

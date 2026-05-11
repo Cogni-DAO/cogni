@@ -607,15 +607,18 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
           GROUP BY 1
           ORDER BY 1
         `)) as unknown as { rows?: Array<Record<string, unknown>> };
-        const list = rows.rows ?? (rows as unknown as Array<Record<string, unknown>>);
+        const list =
+          rows.rows ?? (rows as unknown as Array<Record<string, unknown>>);
         const byDay = new Map<string, number>();
         for (const r of list as Array<Record<string, unknown>>) {
           byDay.set(String(r.day ?? ""), Number(r.n ?? 0));
         }
-        return buildUtcDayWindow(opts.capturedAt, opts.windowDays).map((day) => ({
-          day,
-          n: byDay.get(day) ?? 0,
-        }));
+        return buildUtcDayWindow(opts.capturedAt, opts.windowDays).map(
+          (day) => ({
+            day,
+            n: byDay.get(day) ?? 0,
+          })
+        );
       } catch (err) {
         log.warn(
           {

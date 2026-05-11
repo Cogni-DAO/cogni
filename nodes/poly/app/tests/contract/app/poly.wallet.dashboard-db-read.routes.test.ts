@@ -330,21 +330,23 @@ describe("poly wallet dashboard DB read routes", () => {
     mockMarkPositionClosedByAsset.mockResolvedValue(1);
     mockMarkPositionLifecycleByAsset.mockResolvedValue(1);
     mockMarkSynced.mockResolvedValue(undefined);
-    mockDailyTradeCounts.mockImplementation(async (opts: {
-      billing_account_id: string;
-      capturedAt: Date;
-      windowDays: number;
-    }) => {
-      const rows = await mockListTenantPositions({
-        billing_account_id: opts.billing_account_id,
-        statuses: [...ALL_LEDGER_STATUSES],
-      });
-      return summarizeDailyTradeCountsForTest(
-        (rows ?? []) as LedgerRow[],
-        opts.capturedAt,
-        opts.windowDays
-      );
-    });
+    mockDailyTradeCounts.mockImplementation(
+      async (opts: {
+        billing_account_id: string;
+        capturedAt: Date;
+        windowDays: number;
+      }) => {
+        const rows = await mockListTenantPositions({
+          billing_account_id: opts.billing_account_id,
+          statuses: [...ALL_LEDGER_STATUSES],
+        });
+        return summarizeDailyTradeCountsForTest(
+          (rows ?? []) as LedgerRow[],
+          opts.capturedAt,
+          opts.windowDays
+        );
+      }
+    );
     mockCurrentPositionModel();
     mockGetExecutionSlice.mockRejectedValue(new Error("data api unavailable"));
     row = {
