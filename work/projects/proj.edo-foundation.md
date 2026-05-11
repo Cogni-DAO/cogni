@@ -34,13 +34,14 @@ Designed in **[docs/spec/knowledge-syntropy.md § The EDO Loop](../../docs/spec/
 
 | Deliverable                                                          | Status      | Est | Work Item |
 | -------------------------------------------------------------------- | ----------- | --- | --------- |
-| Schema extension: add `evaluate_at` + `resolution_strategy` columns to `knowledge`; widen `EntryTypeSchema` enum (+`event`,`hypothesis`,`decision`,`outcome`); add `CitationTypeSchema` Zod enum (8 values total); add `'agent'` to `SourceTypeSchema` (fixes shipped drift) | Not Started | 1   | —         |
-| Define `Citation` + `NewCitation` Zod schemas in `packages/knowledge-store/src/domain/schemas.ts` (forward-ref from the port) | Not Started | 1   | —         |
-| Port additions on `KnowledgeStorePort`: `addCitation`, `knowledgeExists` (canonical surface lives in `knowledge-data-plane.md`) | Not Started | 1   | —         |
-| Adapter enforcement: `HYPOTHESIS_HAS_EVALUATE_AT`, `CITATION_TARGET_EXISTS_AT_WRITE`, `EDGE_TYPE_MATCHES_CITED_ENTRY_TYPE`, `RAW_WRITE_REJECTS_TYPES`. Typed errors mapped to HTTP 400 | Not Started | 2   | —         |
-| `EdoResolverPort` + Doltgres adapter + 1-hop `recomputeConfidence` (pure-from-citations per `RECOMPUTE_IS_PURE_FROM_CITATIONS`) | Not Started | 2   | —         |
-| `createEdoCapability(knowledgePort, resolverPort)` — atomic write+cite+commit | Not Started | 1   | —         |
-| Three tools (committed permanently): `core__edo_hypothesize`, `core__edo_decide`, `core__edo_record_outcome` (registered in `TOOL_CATALOG`) | Not Started | 2   | —         |
+| Schema extension: add `evaluate_at` + `resolution_strategy` columns to `knowledge`; widen `EntryTypeSchema` enum (+`event`,`hypothesis`,`decision`,`outcome`); add `CitationTypeSchema` Zod enum (8 values total); add `'agent'` to `SourceTypeSchema` (fixes shipped drift) | In Progress | 1   | task.5040 |
+| Define `Citation` + `NewCitation` Zod schemas in `packages/knowledge-store/src/domain/schemas.ts` (forward-ref from the port) | In Progress | 1   | task.5040 |
+| Port additions on `KnowledgeStorePort`: `addCitation`, `knowledgeExists` (canonical surface lives in `knowledge-data-plane.md`) | In Progress | 1   | task.5040 |
+| Adapter enforcement: `HYPOTHESIS_HAS_EVALUATE_AT`, `CITATION_TARGET_EXISTS_AT_WRITE`, `EDGE_TYPE_MATCHES_CITED_ENTRY_TYPE`, `RAW_WRITE_REJECTS_TYPES`. Typed errors mapped to HTTP 400 | In Progress | 2   | task.5040 |
+| `EdoResolverPort` + Doltgres adapter + 1-hop `recomputeConfidence` (pure-from-citations per `RECOMPUTE_IS_PURE_FROM_CITATIONS`) | In Progress | 2   | task.5040 |
+| `createEdoCapability(knowledgePort, resolverPort)` — atomic write+cite+commit | In Progress | 1   | task.5040 |
+| Three tools (committed permanently): `core__edo_hypothesize`, `core__edo_decide`, `core__edo_record_outcome` (registered in `TOOL_CATALOG`) | In Progress | 2   | task.5040 |
+| Stack test: fake-adapter-driven full loop (`edo_hypothesize` → `edo_decide` → `edo_record_outcome` + recompute). Real-Doltgres testcontainer harness is a separate follow-up (the knowledge plane has no test harness today). | In Progress | 1   | task.5040 |
 
 ### Walk (P1) — Close the Loop
 
