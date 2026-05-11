@@ -414,7 +414,11 @@ function applyVwapGate(
  * OPTION_C_TOLERATES_MULTI_TARGET, MIRROR_REASON_BOUNDED, PLANNER_IS_PURE.
  */
 type BranchDecision =
-  | { kind: "skip"; reason: MirrorReason; position_branch: PositionBranch }
+  | {
+      kind: "skip";
+      reason: Exclude<MirrorReason, "ok" | "sell_closed_position">;
+      position_branch: PositionBranch;
+    }
   | {
       kind: "place";
       reason: "ok" | "mode_paper" | "layer_scale_in" | "hedge_followup";
