@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>delta-analyzer · poly trading design</title>
+    <style>
+      :root {
+        --bg: #0a0e0c;
+        --fg: #d8e0db;
+        --dim: #6b7770;
+        --line: #2a3530;
+        --ok: #4ade80;
+        --skip: #f87171;
+        --layer: #60a5fa;
+        --hedge: #c084fc;
+        --warn: #facc15;
+        --target: #34d399;
+        --us: #5eead4;
+        --gate: #fb923c;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 24px;
+        background: var(--bg);
+        color: var(--fg);
+        font: 13px/1.4 ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      h1 { font-size: 14px; font-weight: 600; margin: 0 0 16px; color: var(--dim); letter-spacing: 0.05em; }
+      .stage {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 32px;
+        max-width: 1320px;
+      }
+      svg { width: 100%; height: auto; display: block; }
+      .panel-side { display: flex; flex-direction: column; gap: 20px; min-width: 340px; }
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.015);
+      }
+      .panel h2 {
+        font-size: 11px;
+        font-weight: 600;
+        margin: 0 0 12px;
+        color: var(--dim);
+        letter-spacing: 0.1em;
+      }
+      .legend { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; }
+      .swatch { width: 14px; height: 14px; border-radius: 3px; }
+      .sizer-svg { background: transparent; }
+      .axis-label { fill: var(--dim); font-size: 10px; font-family: inherit; letter-spacing: 0.05em; }
+      .node-label { fill: var(--fg); font-size: 12px; font-weight: 600; font-family: inherit; letter-spacing: 0.04em; }
+      .sub-label { fill: var(--dim); font-size: 10px; font-family: inherit; letter-spacing: 0.05em; }
+      .micro-label { fill: var(--dim); font-size: 9px; font-family: inherit; letter-spacing: 0.05em; }
+      .flow-line { stroke: var(--line); stroke-width: 1.5; fill: none; }
+      .flow-line.ok { stroke: var(--ok); }
+      .flow-line.skip { stroke: var(--skip); stroke-dasharray: 4 3; }
+      .flow-line.side { stroke: var(--dim); stroke-dasharray: 2 4; opacity: 0.7; }
+      .arrow-ok { fill: var(--ok); }
+      .arrow-skip { fill: var(--skip); }
+      .arrow-line { fill: var(--line); }
+      .arrow-side { fill: var(--dim); }
+      .box { fill: rgba(255, 255, 255, 0.02); stroke: var(--line); stroke-width: 1; }
+      .box-target { stroke: var(--target); }
+      .box-us { stroke: var(--us); }
+      .box-gate { stroke: var(--gate); }
+      .box-layer { stroke: var(--layer); }
+      .box-hedge { stroke: var(--hedge); }
+      .box-warn { stroke: var(--warn); }
+      .box-skip { stroke: var(--skip); }
+      .box-side { stroke: var(--dim); opacity: 0.5; }
+      .pill { fill: rgba(255, 255, 255, 0.04); stroke-width: 1.2; rx: 8; }
+      .dot { r: 3; fill: var(--dim); }
+    </style>
+  </head>
+  <body>
+    <h1>delta-analyzer · trading design</h1>
+    <div class="stage">
+      <svg viewBox="0 0 900 620" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="poly trading pipeline">
+        <defs>
+          <marker id="arrow-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="arrow-ok" />
+          </marker>
+          <marker id="arrow-skip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="arrow-skip" />
+          </marker>
+          <marker id="arrow-line" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="arrow-line" />
+          </marker>
+          <marker id="arrow-side" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="arrow-side" />
+          </marker>
+        </defs>
+
+        <!-- TARGET -->
+        <rect class="box box-target" x="20" y="40" width="140" height="60" rx="6" />
+        <text class="node-label" x="90" y="70" text-anchor="middle">TARGET</text>
+        <text class="sub-label" x="90" y="86" text-anchor="middle">polymarket</text>
+
+        <!-- WALLET WATCH -->
+        <rect class="box" x="200" y="40" width="140" height="60" rx="6" />
+        <text class="node-label" x="270" y="70" text-anchor="middle">WATCH</text>
+        <text class="sub-label" x="270" y="86" text-anchor="middle">data-api</text>
+
+        <!-- PIPELINE -->
+        <rect class="box" x="380" y="40" width="140" height="60" rx="6" />
+        <text class="node-label" x="450" y="70" text-anchor="middle">PIPELINE</text>
+        <text class="sub-label" x="450" y="86" text-anchor="middle">per-fill</text>
+
+        <!-- EXECUTOR -->
+        <rect class="box" x="560" y="40" width="140" height="60" rx="6" />
+        <text class="node-label" x="630" y="70" text-anchor="middle">EXECUTE</text>
+        <text class="sub-label" x="630" y="86" text-anchor="middle">clob</text>
+
+        <!-- OUR WALLET -->
+        <rect class="box box-us" x="740" y="40" width="140" height="60" rx="6" />
+        <text class="node-label" x="810" y="70" text-anchor="middle">WALLET</text>
+        <text class="sub-label" x="810" y="86" text-anchor="middle">cogni</text>
+
+        <!-- top-row flow lines -->
+        <line class="flow-line ok" x1="160" y1="70" x2="200" y2="70" marker-end="url(#arrow-ok)" />
+        <line class="flow-line ok" x1="340" y1="70" x2="380" y2="70" marker-end="url(#arrow-ok)" />
+        <line class="flow-line ok" x1="520" y1="70" x2="560" y2="70" marker-end="url(#arrow-ok)" />
+        <line class="flow-line ok" x1="700" y1="70" x2="740" y2="70" marker-end="url(#arrow-ok)" />
+
+        <!-- PIPELINE expansion (decideMirrorBranch flow) -->
+        <line class="flow-line side" x1="450" y1="100" x2="450" y2="140" marker-end="url(#arrow-line)" />
+
+        <!-- decideMirrorBranch container -->
+        <rect class="box" x="220" y="140" width="460" height="370" rx="8" stroke-dasharray="4 3" />
+        <text class="sub-label" x="232" y="158">decideMirrorBranch · planMirrorFromFill</text>
+
+        <!-- early gates -->
+        <rect class="box box-skip" x="240" y="170" width="120" height="42" rx="5" />
+        <text class="node-label" x="300" y="187" text-anchor="middle">DEDUPE</text>
+        <text class="micro-label" x="300" y="201" text-anchor="middle">already_placed</text>
+
+        <rect class="box box-skip" x="380" y="170" width="120" height="42" rx="5" />
+        <text class="node-label" x="440" y="187" text-anchor="middle">LIVENESS</text>
+        <text class="micro-label" x="440" y="201" text-anchor="middle">end_date</text>
+
+        <rect class="box box-skip" x="520" y="170" width="120" height="42" rx="5" />
+        <text class="node-label" x="580" y="187" text-anchor="middle">TICK</text>
+        <text class="micro-label" x="580" y="201" text-anchor="middle">clob_bounds</text>
+
+        <!-- DOMINANCE GATE (master switch) -->
+        <rect class="box box-gate" x="280" y="240" width="320" height="70" rx="6" />
+        <text class="node-label" x="440" y="263" text-anchor="middle">DOMINANCE</text>
+        <text class="sub-label" x="440" y="280" text-anchor="middle">target side-fractions</text>
+        <text class="micro-label" x="440" y="298" text-anchor="middle">minority → skip · master switch</text>
+
+        <line class="flow-line ok" x1="440" y1="310" x2="440" y2="338" marker-end="url(#arrow-ok)" />
+
+        <!-- BRANCH ROUTING -->
+        <rect class="box" x="240" y="340" width="120" height="50" rx="5" stroke="var(--ok)" />
+        <text class="node-label" x="300" y="360" text-anchor="middle">NEW_ENTRY</text>
+        <text class="micro-label" x="300" y="376" text-anchor="middle">no mirror</text>
+
+        <rect class="box box-layer" x="380" y="340" width="120" height="50" rx="5" />
+        <text class="node-label" x="440" y="360" text-anchor="middle">LAYER</text>
+        <text class="micro-label" x="440" y="376" text-anchor="middle">same side</text>
+
+        <rect class="box box-hedge" x="520" y="340" width="120" height="50" rx="5" />
+        <text class="node-label" x="580" y="360" text-anchor="middle">HEDGE</text>
+        <text class="micro-label" x="580" y="376" text-anchor="middle">opposite side</text>
+
+        <!-- VWAP GATE -->
+        <line class="flow-line ok" x1="300" y1="390" x2="300" y2="418" />
+        <line class="flow-line ok" x1="440" y1="390" x2="440" y2="418" />
+        <line class="flow-line ok" x1="580" y1="390" x2="580" y2="418" />
+        <line class="flow-line ok" x1="300" y1="418" x2="580" y2="418" />
+
+        <rect class="box box-gate" x="320" y="420" width="240" height="50" rx="6" />
+        <text class="node-label" x="440" y="442" text-anchor="middle">VWAP GATE</text>
+        <text class="micro-label" x="440" y="458" text-anchor="middle">price &gt; target_vwap + ε → skip</text>
+
+        <line class="flow-line ok" x1="440" y1="470" x2="440" y2="488" marker-end="url(#arrow-ok)" />
+
+        <!-- SIZER -->
+        <rect class="box" x="320" y="488" width="240" height="18" rx="3" stroke="var(--us)" />
+        <text class="node-label" x="440" y="502" text-anchor="middle">SIZER · p80 → p100</text>
+
+        <!-- pipeline exit downward to executor -->
+        <line class="flow-line ok" x1="450" y1="510" x2="450" y2="540" />
+        <path class="flow-line ok" d="M 450 540 L 450 555 L 630 555 L 630 100" marker-end="url(#arrow-ok)" />
+
+        <!-- SIDE EFFECTS -->
+        <rect class="box box-side" x="20" y="540" width="160" height="40" rx="5" />
+        <text class="node-label" x="100" y="558" text-anchor="middle">POSTGRES</text>
+        <text class="micro-label" x="100" y="572" text-anchor="middle">decisions · fills</text>
+
+        <rect class="box box-side" x="200" y="540" width="160" height="40" rx="5" />
+        <text class="node-label" x="280" y="558" text-anchor="middle">LOKI</text>
+        <text class="micro-label" x="280" y="572" text-anchor="middle">decision · skip · warn</text>
+
+        <rect class="box box-side" x="720" y="540" width="160" height="40" rx="5" />
+        <text class="node-label" x="800" y="558" text-anchor="middle">PROM</text>
+        <text class="micro-label" x="800" y="572" text-anchor="middle">decisions · wrong_side</text>
+
+        <!-- side flow lines from pipeline to observability -->
+        <line class="flow-line side" x1="380" y1="540" x2="350" y2="510" />
+        <line class="flow-line side" x1="220" y1="540" x2="200" y2="510" />
+        <line class="flow-line side" x1="720" y1="540" x2="700" y2="510" />
+
+        <!-- skip arrows from gates pointing down to skip area -->
+        <line class="flow-line skip" x1="300" y1="212" x2="200" y2="540" marker-end="url(#arrow-skip)" />
+        <line class="flow-line skip" x1="440" y1="212" x2="220" y2="540" marker-end="url(#arrow-skip)" />
+        <line class="flow-line skip" x1="580" y1="212" x2="240" y2="540" marker-end="url(#arrow-skip)" />
+        <line class="flow-line skip" x1="600" y1="275" x2="320" y2="540" marker-end="url(#arrow-skip)" />
+        <line class="flow-line skip" x1="560" y1="445" x2="340" y2="540" marker-end="url(#arrow-skip)" />
+
+        <!-- OPTION C warn callout -->
+        <rect class="box box-warn" x="640" y="430" width="160" height="60" rx="6" />
+        <text class="node-label" x="720" y="453" text-anchor="middle">OPTION C</text>
+        <text class="sub-label" x="720" y="469" text-anchor="middle">wrong-side leg</text>
+        <text class="micro-label" x="720" y="483" text-anchor="middle">counter + WARN</text>
+        <line class="flow-line side" x1="640" y1="460" x2="600" y2="365" marker-end="url(#arrow-side)" />
+      </svg>
+
+      <div class="panel-side">
+        <div class="panel">
+          <h2>SIZER · p80 → p100</h2>
+          <svg class="sizer-svg" viewBox="0 0 300 180" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="sizer curve">
+            <!-- skip zone -->
+            <rect x="20" y="20" width="40" height="120" fill="rgba(248,113,113,0.07)" />
+            <text class="micro-label" x="40" y="155" text-anchor="middle">skip</text>
+            <text class="micro-label" x="40" y="168" text-anchor="middle">&lt;pXX</text>
+
+            <!-- ramp zone -->
+            <rect x="60" y="20" width="180" height="120" fill="rgba(94,234,212,0.04)" />
+            <line x1="60" y1="135" x2="240" y2="35" stroke="var(--us)" stroke-width="2" />
+            <line x1="60" y1="135" x2="60" y2="135" stroke="var(--dim)" />
+            <line x1="60" y1="140" x2="240" y2="140" stroke="var(--line)" />
+            <line x1="60" y1="20" x2="60" y2="140" stroke="var(--line)" />
+
+            <!-- max plateau -->
+            <line x1="240" y1="35" x2="280" y2="35" stroke="var(--us)" stroke-width="2" />
+            <rect x="240" y="20" width="40" height="120" fill="rgba(94,234,212,0.04)" />
+
+            <!-- axis labels -->
+            <text class="axis-label" x="40" y="14" text-anchor="middle">$</text>
+            <text class="axis-label" x="60" y="155" text-anchor="middle">pXX</text>
+            <text class="axis-label" x="240" y="155" text-anchor="middle">p100</text>
+            <text class="axis-label" x="260" y="155" text-anchor="middle">+</text>
+
+            <text class="sub-label" x="40" y="135" text-anchor="middle"></text>
+            <text class="sub-label" x="60" y="148" text-anchor="middle"></text>
+            <text class="sub-label" x="245" y="32" text-anchor="end">max</text>
+            <text class="sub-label" x="60" y="148" text-anchor="middle"></text>
+            <text class="sub-label" x="62" y="135" text-anchor="start">floor</text>
+
+            <!-- title labels -->
+            <text class="micro-label" x="150" y="178" text-anchor="middle">target_token_cost</text>
+            <text class="micro-label" x="6" y="80" text-anchor="middle" transform="rotate(-90 6 80)">our $</text>
+          </svg>
+        </div>
+
+        <div class="panel">
+          <h2>BRANCH ROUTING</h2>
+          <svg viewBox="0 0 300 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="branch routing matrix">
+            <!-- header row -->
+            <text class="sub-label" x="80" y="20">target →</text>
+            <text class="sub-label" x="160" y="20" text-anchor="middle">dominant</text>
+            <text class="sub-label" x="240" y="20" text-anchor="middle">minority</text>
+
+            <text class="sub-label" x="40" y="50" text-anchor="end">none</text>
+            <rect x="120" y="32" width="80" height="22" rx="3" stroke="var(--ok)" fill="rgba(74,222,128,0.08)" />
+            <text class="micro-label" x="160" y="46" text-anchor="middle">new_entry</text>
+            <rect x="200" y="32" width="80" height="22" rx="3" stroke="var(--skip)" fill="rgba(248,113,113,0.08)" />
+            <text class="micro-label" x="240" y="46" text-anchor="middle">skip</text>
+
+            <text class="sub-label" x="40" y="80" text-anchor="end">dominant</text>
+            <rect x="120" y="62" width="80" height="22" rx="3" stroke="var(--layer)" fill="rgba(96,165,250,0.08)" />
+            <text class="micro-label" x="160" y="76" text-anchor="middle">layer</text>
+            <rect x="200" y="62" width="80" height="22" rx="3" stroke="var(--hedge)" fill="rgba(192,132,252,0.08)" />
+            <text class="micro-label" x="240" y="76" text-anchor="middle">hedge</text>
+
+            <text class="sub-label" x="40" y="110" text-anchor="end">minority</text>
+            <rect x="120" y="92" width="80" height="22" rx="3" stroke="var(--warn)" fill="rgba(250,204,21,0.08)" />
+            <text class="micro-label" x="160" y="106" text-anchor="middle">option C</text>
+            <rect x="200" y="92" width="80" height="22" rx="3" stroke="var(--skip)" fill="rgba(248,113,113,0.08)" />
+            <text class="micro-label" x="240" y="106" text-anchor="middle">skip</text>
+
+            <text class="axis-label" x="40" y="135" text-anchor="end">our pos</text>
+            <text class="axis-label" x="150" y="135" text-anchor="middle">fill side</text>
+
+            <!-- spacer -->
+            <line x1="20" y1="155" x2="280" y2="155" stroke="var(--line)" />
+
+            <!-- skip reasons -->
+            <text class="sub-label" x="20" y="175">skips</text>
+            <text class="micro-label" x="20" y="190">· target_dominant_other_side</text>
+            <text class="micro-label" x="20" y="203">· vwap_floor_breach</text>
+            <text class="micro-label" x="20" y="216">· below_target_percentile · cap</text>
+          </svg>
+        </div>
+
+        <div class="panel">
+          <h2>LEGEND</h2>
+          <div class="legend">
+            <div class="swatch" style="background: var(--ok);"></div><span>place</span>
+            <div class="swatch" style="background: var(--skip);"></div><span>skip</span>
+            <div class="swatch" style="background: var(--layer);"></div><span>layer</span>
+            <div class="swatch" style="background: var(--hedge);"></div><span>hedge</span>
+            <div class="swatch" style="background: var(--gate);"></div><span>gate</span>
+            <div class="swatch" style="background: var(--warn);"></div><span>warn</span>
+            <div class="swatch" style="background: var(--target);"></div><span>target</span>
+            <div class="swatch" style="background: var(--us);"></div><span>us</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
