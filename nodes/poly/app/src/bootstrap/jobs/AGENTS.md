@@ -36,7 +36,7 @@ Job modules that wire business logic to the application container for ops-trigge
 
 **copy-trade-mirror.job.ts** — 30s mirror poll per `(target, tenant)`. `buildMirrorTargetConfig` defaults `placement: {kind: "mirror_limit"}`. Sizing defaults to `{kind: "min_bet"}` except curated RN1/swisstony targets, which use hardcoded target-position pXX snapshots with `{kind: "target_percentile_scaled"}`. Individual target orders are triggers only. Wires `MirrorPipelineDeps.cancelOrder` from the per-tenant `PolyTradeExecutor`. task.5001, task.5005.
 
-**poly-mirror-resting-sweep.job.ts** — `setInterval` (default 60s) TTL sweeper. Cancels mirror orders with `created_at < now() - MIRROR_RESTING_TTL_MINUTES` (default 20) AND `status IN ('pending','open','partial')`. Single global `findStaleOpen` query; app-side groupBy on `billing_account_id`; per-tenant `executor.cancelOrder` dispatch. Emits `poly_mirror_resting_swept_total{reason}`. task.5001.
+**poly-mirror-resting-sweep.job.ts** — `setInterval` (default 60s) TTL sweeper. Cancels mirror orders with `created_at < now() - MIRROR_RESTING_TTL_MINUTES` (default 2) AND `status IN ('pending','open','partial')`. Tightened from 20 → 2 min so a live-sports goal-driven reversal does not leave a stale bid resting at the target's entry price for ~20 min after that price became unattractive. Worst-case stale window now ~3 min (TTL + 1 sweep cycle). Cancel-and-replace on subsequent target activity (bug.5035 STALE_RESTING_CANCEL_REPLACE) still re-engages on real target signal. Single global `findStaleOpen` query; app-side groupBy on `billing_account_id`; per-tenant `executor.cancelOrder` dispatch. Emits `poly_mirror_resting_swept_total{reason}`. task.5001.
 
 ## Ports (optional)
 

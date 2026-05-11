@@ -4,8 +4,13 @@
 /**
  * Module: `@bootstrap/jobs/poly-mirror-resting-sweep`
  * Purpose: Per-process TTL sweeper. Cancels resting mirror orders older than
- *   `MIRROR_RESTING_TTL_MINUTES` (default 20). Bounds dust accumulation when
- *   the target never sends a SELL signal.
+ *   `MIRROR_RESTING_TTL_MINUTES` (default 2). Bounds dust accumulation AND
+ *   stale-fill risk when the target never sends a SELL signal. The prior 20
+ *   minute default was tuned for political-style markets where prices move
+ *   slowly; for live sports markets a single goal can move price 10pp+ in
+ *   seconds, so a 20-min stale window leaves us exposed to filling at the
+ *   target's entry price long after that price has become unattractive.
+ *   Worst-case stale window with 2-min TTL + 60s sweep interval ≈ 3 min.
  * Scope: setInterval cadence + per-tenant cancel dispatch.
  * Invariants:
  *   - Single global `findStaleOpen` query → app-side groupBy on
@@ -37,14 +42,14 @@ export interface RestingSweepDeps {
   metrics: MetricsPort;
   /** Sweep cadence (ms). Default 60_000 (1 min). */
   intervalMs?: number;
-  /** Max age (minutes) for an open mirror order. Default 20. */
+  /** Max age (minutes) for an open mirror order. Default 2. */
   ttlMinutes?: number;
 }
 
 export type RestingSweepStopFn = () => void;
 
 const DEFAULT_INTERVAL_MS = 60_000;
-const DEFAULT_TTL_MINUTES = 20;
+const DEFAULT_TTL_MINUTES = 2;
 
 /**
  * Start the TTL sweep. Returns a stop fn.
