@@ -11,7 +11,7 @@
  * @public
  */
 
-// Capability factory (shared across all nodes)
+// Capability factories (shared across all nodes)
 export { createKnowledgeCapability } from "./capability.js";
 // Contribution domain
 export {
@@ -30,19 +30,30 @@ export {
 } from "./domain/contribution-schemas.js";
 // Domain types & schemas
 export {
+  type Citation,
+  CitationSchema,
+  type CitationType,
+  CitationTypeSchema,
   type DoltCommit,
   DoltCommitSchema,
   type DoltDiffEntry,
   DoltDiffEntrySchema,
   type EntryType,
   EntryTypeSchema,
+  HYPOTHESIS_TARGETED_EDGES,
   type Knowledge,
   KnowledgeSchema,
+  type NewCitation,
+  NewCitationSchema,
   type NewKnowledge,
   NewKnowledgeSchema,
+  RAW_WRITE_REJECTS_TYPES,
+  type ResolutionStrategy,
+  ResolutionStrategySchema,
   type SourceType,
   SourceTypeSchema,
 } from "./domain/schemas.js";
+export { createEdoCapability } from "./edo-capability.js";
 export {
   ContributionConflictError,
   ContributionForbiddenError,
@@ -51,11 +62,23 @@ export {
   ContributionStateError,
   type KnowledgeContributionPort,
 } from "./port/contribution.port.js";
+// EDO resolver port (hypothesis loop)
+export type {
+  EdoResolverPort,
+  PendingResolutionsOptions,
+  ResolutionEdge,
+  ResolutionInput,
+  ResolutionResult,
+} from "./port/edo-resolver.port.js";
 // Port interfaces + domain-registry types/errors
 export {
+  CitationTargetNotFoundError,
+  CitationTypeMismatchError,
   type Domain,
   DomainAlreadyRegisteredError,
   DomainNotRegisteredError,
+  EdoEntryTypeRequiresAtomicToolError,
+  HypothesisMissingEvaluateAtError,
   type KnowledgeStorePort,
   type NewDomain,
 } from "./port/knowledge-store.port.js";

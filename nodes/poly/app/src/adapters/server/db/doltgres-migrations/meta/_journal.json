@@ -15,6 +15,13 @@
       "when": 1777517575405,
       "tag": "0001_syntropy_seeds",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778530967377,
+      "tag": "0002_edo_columns",
+      "breakpoints": true
     }
   ]
 }
