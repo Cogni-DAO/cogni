@@ -188,12 +188,12 @@ No edit, no delete, no row-detail Sheet in v0. The grid is read + register only.
 
 Base domains (operator's set):
 
-| id               | Purpose                                                                   |
-| ---------------- | ------------------------------------------------------------------------- |
-| `meta`           | Knowledge about the knowledge system itself                               |
-| `nodes`          | Registry / lifecycle facts about other nodes in the Cogni network         |
-| `infrastructure` | Runtime, deploy, observability                                            |
-| `governance`     | DAO formation, attribution, voting                                        |
+| id               | Purpose                                                           |
+| ---------------- | ----------------------------------------------------------------- |
+| `meta`           | Knowledge about the knowledge system itself                       |
+| `nodes`          | Registry / lifecycle facts about other nodes in the Cogni network |
+| `infrastructure` | Runtime, deploy, observability                                    |
+| `governance`     | DAO formation, attribution, voting                                |
 
 **Per-node domain sets are per-node, not operator-wide.** Each node has its own Doltgres database; each node's migrator owns its own `BASE_DOMAIN_SEEDS`. Operator does NOT seed `prediction-market` (poly's domain) or `reservations` (resy's domain); those are seeded by `nodes/poly/.../migrate-doltgres.mjs` and `nodes/resy/.../migrate-doltgres.mjs` respectively when those nodes ship parallel registry surfaces (out of this PR's scope; see Phase 2 § Registry Node and `Rd-PORTABLE`).
 
