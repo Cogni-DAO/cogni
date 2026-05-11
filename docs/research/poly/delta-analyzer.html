@@ -118,7 +118,13 @@
         <!-- OUR WALLET -->
         <rect class="box box-us" x="740" y="40" width="140" height="60" rx="6" />
         <text class="node-label" x="810" y="70" text-anchor="middle">WALLET</text>
-        <text class="sub-label" x="810" y="86" text-anchor="middle">cogni</text>
+        <text class="sub-label" x="810" y="86" text-anchor="middle">cogni · BUY only</text>
+
+        <!-- REDEEM exit — chain resolution, only way out (NO_SELL_IN_MIRROR) -->
+        <line class="flow-line ok" x1="810" y1="100" x2="810" y2="125" marker-end="url(#arrow-ok)" />
+        <rect class="box" x="740" y="125" width="140" height="42" rx="5" stroke="var(--target)" />
+        <text class="node-label" x="810" y="143" text-anchor="middle">REDEEM</text>
+        <text class="micro-label" x="810" y="157" text-anchor="middle">on chain resolve</text>
 
         <!-- top-row flow lines -->
         <line class="flow-line ok" x1="160" y1="70" x2="200" y2="70" marker-end="url(#arrow-ok)" />
@@ -152,7 +158,10 @@
         <text class="sub-label" x="440" y="280" text-anchor="middle">target side-fractions</text>
         <text class="micro-label" x="440" y="298" text-anchor="middle">minority → skip · master switch</text>
 
-        <line class="flow-line ok" x1="440" y1="310" x2="440" y2="338" marker-end="url(#arrow-ok)" />
+        <!-- dominance fans out to all 3 branches -->
+        <path class="flow-line ok" d="M 440 310 L 440 325 L 300 325 L 300 338" marker-end="url(#arrow-ok)" />
+        <path class="flow-line ok" d="M 440 310 L 440 338" marker-end="url(#arrow-ok)" />
+        <path class="flow-line ok" d="M 440 310 L 440 325 L 580 325 L 580 338" marker-end="url(#arrow-ok)" />
 
         <!-- BRANCH ROUTING -->
         <rect class="box" x="240" y="340" width="120" height="50" rx="5" stroke="var(--ok)" />
@@ -212,12 +221,12 @@
         <line class="flow-line skip" x1="600" y1="275" x2="320" y2="540" marker-end="url(#arrow-skip)" />
         <line class="flow-line skip" x1="560" y1="445" x2="340" y2="540" marker-end="url(#arrow-skip)" />
 
-        <!-- OPTION C warn callout -->
-        <rect class="box box-warn" x="640" y="430" width="160" height="60" rx="6" />
-        <text class="node-label" x="720" y="453" text-anchor="middle">OPTION C</text>
-        <text class="sub-label" x="720" y="469" text-anchor="middle">wrong-side leg</text>
-        <text class="micro-label" x="720" y="483" text-anchor="middle">counter + WARN</text>
-        <line class="flow-line side" x1="640" y1="460" x2="600" y2="365" marker-end="url(#arrow-side)" />
+        <!-- OPTION C warn callout — side-channel from new_entry when we held wrong-side leg -->
+        <rect class="box box-warn" x="20" y="340" width="160" height="60" rx="6" />
+        <text class="node-label" x="100" y="363" text-anchor="middle">OPTION C</text>
+        <text class="sub-label" x="100" y="379" text-anchor="middle">wrong-side leg</text>
+        <text class="micro-label" x="100" y="393" text-anchor="middle">counter + WARN</text>
+        <path class="flow-line side" d="M 240 365 L 180 370" marker-end="url(#arrow-side)" />
       </svg>
 
       <div class="panel-side">

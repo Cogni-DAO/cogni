@@ -105,7 +105,7 @@ export const MIRROR_PIPELINE_METRICS = {
   decisionsTotal: "poly_mirror_decisions_total",
   /** `poly_mirror_placement_errors_total` — `placeIntent` throw after pending insert. */
   placementErrorsTotal: "poly_mirror_placement_errors_total",
-  /** bug.5048 — `poly_mirror_wrong_side_holding_total{target_id, condition_id}` fires when option C is taken (wallet held a non-dominant leg from cross-target activity at decision time). Alertable. */
+  /** bug.5048 — `poly_mirror_wrong_side_holding_total{target_id}` fires when option C is taken (wallet held a non-dominant leg from cross-target activity at decision time). Bounded by tracked-targets table. Per-condition forensics live on the co-emitted WARN log (`market_id` field), not in the metric label. Alertable. */
   wrongSideHoldingTotal: "poly_mirror_wrong_side_holding_total",
 } as const;
 
@@ -359,13 +359,13 @@ async function processFill(
   });
 
   // bug.5048 — fire the wrong-side counter + WARN log when option C taken.
+  // Counter labels are bounded by tracked-targets table (target_id only); the
+  // co-emitted WARN log carries market_id for per-condition forensics. Keeping
+  // condition_id off the metric prevents Prometheus cardinality from growing
+  // with the universe of Polymarket conditions.
   if (wrongSideHoldingDetected) {
     deps.metrics.incr(MIRROR_PIPELINE_METRICS.wrongSideHoldingTotal, {
       target_id: deps.target.target_id,
-      condition_id:
-        typeof fill.attributes?.condition_id === "string"
-          ? fill.attributes.condition_id
-          : fill.market_id,
     });
     log.warn(
       {
