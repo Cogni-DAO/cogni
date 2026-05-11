@@ -30,31 +30,7 @@ import {
   ContributionStateError,
   type KnowledgeContributionPort,
 } from "../../port/contribution.port.js";
-
-// ---------------------------------------------------------------------------
-// SQL helpers — must mirror the working pattern from DoltgresKnowledgeStoreAdapter.
-// ---------------------------------------------------------------------------
-
-function escapeValue(val: unknown): string {
-  if (val === null || val === undefined) return "NULL";
-  if (typeof val === "number") {
-    if (!Number.isFinite(val)) throw new Error("Non-finite number");
-    return String(val);
-  }
-  if (typeof val === "boolean") return val ? "TRUE" : "FALSE";
-  if (val instanceof Date) return `'${val.toISOString()}'`;
-  if (Array.isArray(val) || typeof val === "object") {
-    return `'${JSON.stringify(val).replace(/\0/g, "").replace(/'/g, "''")}'::jsonb`;
-  }
-  return `'${String(val).replace(/\0/g, "").replace(/'/g, "''")}'`;
-}
-
-function escapeRef(ref: string): string {
-  if (!/^[a-zA-Z0-9_./~^-]+$/.test(ref)) {
-    throw new Error(`Invalid Dolt ref: ${ref}`);
-  }
-  return `'${ref}'`;
-}
+import { assertDomainRegistered, escapeRef, escapeValue } from "./util.js";
 
 function principalSlug(p: Principal): string {
   return (p.name ?? p.id)
@@ -139,6 +115,14 @@ export class DoltgresKnowledgeContributionAdapter
     const contributionId = `contrib-${slug}-${sid}`;
     const branch = `contrib/${slug}-${sid}`;
     const sourceRef = `agent:${input.principal.id}:${contributionId}`;
+
+    // Pre-check FK on main (DOMAIN_FK_ENFORCED_AT_WRITE). A branch is always
+    // created from main HEAD, so its `domains` table is identical at branch
+    // time — checking before branch creation avoids leaking an empty branch
+    // on rejection.
+    for (const entry of input.entries) {
+      await assertDomainRegistered(this.sql, entry.domain);
+    }
 
     return await withReserved(this.sql, async (conn) => {
       // 1. Create branch from main HEAD

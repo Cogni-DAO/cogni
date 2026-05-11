@@ -19,6 +19,7 @@ import {
   ContributionNotFoundError,
   ContributionQuotaError,
   ContributionStateError,
+  DomainNotRegisteredError,
   type PrincipalAuthSource,
   sessionUserToPrincipal,
 } from "@cogni/knowledge-store";
@@ -63,6 +64,8 @@ function mapError(e: unknown): NextResponse {
     return NextResponse.json({ error: e.message }, { status: 409 });
   if (e instanceof ContributionQuotaError)
     return NextResponse.json({ error: e.message }, { status: 429 });
+  if (e instanceof DomainNotRegisteredError)
+    return NextResponse.json({ error: e.message }, { status: 400 });
   throw e;
 }
 

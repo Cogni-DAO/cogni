@@ -55,7 +55,69 @@ function hashOfMigration(sqlText) {
 function isAlreadyAppliedError(err) {
   const msg = err instanceof Error ? err.message : String(err);
   const cause = err?.cause instanceof Error ? err.cause.message : "";
-  return /already exists/i.test(`${msg} ${cause}`);
+  const combined = `${msg} ${cause}`;
+  // "already exists" — DDL collision when a schema migration replays.
+  // "duplicate key value" — DML collision when a data-only migration replays
+  //   (e.g. INSERT INTO domains with PK conflict on second run after the
+  //   first run's drizzle-tracking INSERT was rejected by Doltgres's
+  //   extended-protocol gap). Same signal: migration body already applied;
+  //   reconcile tracking via sql.unsafe.
+  return (
+    /already exists/i.test(combined) || /duplicate key value/i.test(combined)
+  );
+}
+
+// Base domains seeded as reference data (DOMAIN_REGISTRY_EXTENDS_VIA_UI per
+// docs/spec/knowledge-domain-registry.md). Cannot ride a drizzle-kit migration
+// SQL file: drizzle-orm wraps migrations in a transaction and the parameterized
+// INSERT into drizzle.__drizzle_migrations rolls back the whole tx on Doltgres
+// 0.56, taking the seed rows with it (CREATE TABLE auto-commits past rollback,
+// data DML doesn't). Sidestep via sql.unsafe with idempotent SELECT-then-INSERT,
+// same pattern the reconcileTracking shim uses.
+// Operator-scoped base domains. Per-node concerns (prediction-market, reservations)
+// live in the respective node's own Doltgres DB and ship via that node's migrator
+// — operator never has them. `validate_candidate` was dropped: validation writes
+// should target `meta` (knowledge about the knowledge system) instead of carving
+// out a test-only domain.
+const BASE_DOMAIN_SEEDS = [
+  {
+    id: "meta",
+    name: "Meta",
+    description: "Knowledge about the knowledge system itself.",
+  },
+  {
+    id: "nodes",
+    name: "Nodes",
+    description:
+      "Registry / lifecycle facts about other nodes in the Cogni network — formation, contracts, status.",
+  },
+  {
+    id: "infrastructure",
+    name: "Infrastructure",
+    description:
+      "Runtime, deploy, observability, and capacity knowledge for Cogni nodes.",
+  },
+  {
+    id: "governance",
+    name: "Governance",
+    description:
+      "DAO formation, attribution, voting, and operator/node contracts.",
+  },
+];
+
+async function seedBaseDomains(sql) {
+  const sqlEscape = (v) => `'${String(v).replace(/'/g, "''")}'`;
+  const existing = await sql.unsafe(`SELECT id FROM domains`);
+  const have = new Set(existing.map((r) => r.id));
+  let inserted = 0;
+  for (const s of BASE_DOMAIN_SEEDS) {
+    if (have.has(s.id)) continue;
+    await sql.unsafe(
+      `INSERT INTO domains (id, name, description) VALUES (${sqlEscape(s.id)}, ${sqlEscape(s.name)}, ${sqlEscape(s.description)})`
+    );
+    inserted += 1;
+  }
+  return inserted;
 }
 
 async function reconcileTracking(sql, folder) {
@@ -114,11 +176,13 @@ try {
   const stampedRows = await withConnection((sql) =>
     reconcileTracking(sql, migrationsFolder)
   );
+  const seededDomains = await withConnection((sql) => seedBaseDomains(sql));
   await withConnection(
-    (sql) => sql`SELECT dolt_commit('-Am', 'migration: drizzle-orm batch')`
+    (sql) =>
+      sql`SELECT dolt_commit('-Am', 'migration: drizzle-orm batch + base domain seeds')`
   );
   console.log(
-    `✅ ${NODE} migrations ${migrateThrewAlreadyApplied ? "already-applied" : "applied"} + ${stampedRows} tracking row(s) reconciled + dolt_commit stamped in ${Date.now() - t0}ms`
+    `✅ ${NODE} migrations ${migrateThrewAlreadyApplied ? "already-applied" : "applied"} + ${stampedRows} tracking row(s) reconciled + ${seededDomains} base domain(s) seeded + dolt_commit stamped in ${Date.now() - t0}ms`
   );
 } catch (err) {
   console.error(`FATAL(${NODE}): migrate failed:`, err);

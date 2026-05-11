@@ -23,36 +23,13 @@ import type {
   Knowledge,
   NewKnowledge,
 } from "../../domain/schemas.js";
-import type { KnowledgeStorePort } from "../../port/knowledge-store.port.js";
-
-// ---------------------------------------------------------------------------
-// SQL escaping (Doltgres requires literal values, not parameterized queries)
-// ---------------------------------------------------------------------------
-
-function escapeValue(val: unknown): string {
-  if (val === null || val === undefined) return "NULL";
-  if (typeof val === "number") {
-    if (!Number.isFinite(val)) throw new Error("Non-finite number");
-    return String(val);
-  }
-  if (typeof val === "boolean") return val ? "TRUE" : "FALSE";
-  if (val instanceof Date) return `'${val.toISOString()}'`;
-  if (Array.isArray(val) || typeof val === "object") {
-    return `'${JSON.stringify(val).replace(/\0/g, "").replace(/'/g, "''")}'::jsonb`;
-  }
-  // SECURITY: Strip NUL bytes and escape single quotes.
-  // Doltgres uses standard_conforming_strings (backslashes are literal).
-  // Only internal agents call this port — harden further before external exposure (x402).
-  return `'${String(val).replace(/\0/g, "").replace(/'/g, "''")}'`;
-}
-
-/** Escape a Dolt ref for use in dolt_diff/dolt_log. Only allows safe characters. */
-function escapeRef(ref: string): string {
-  if (!/^[a-zA-Z0-9_./~^-]+$/.test(ref)) {
-    throw new Error(`Invalid Dolt ref: ${ref}`);
-  }
-  return `'${ref}'`;
-}
+import {
+  type Domain,
+  DomainAlreadyRegisteredError,
+  type KnowledgeStorePort,
+  type NewDomain,
+} from "../../port/knowledge-store.port.js";
+import { assertDomainRegistered, escapeRef, escapeValue } from "./util.js";
 
 // ---------------------------------------------------------------------------
 // Row mapping
@@ -65,6 +42,7 @@ function rowToKnowledge(row: Record<string, unknown>): Knowledge {
     entityId: (row.entity_id as string) ?? null,
     title: row.title as string,
     content: row.content as string,
+    entryType: row.entry_type as string,
     confidencePct:
       row.confidence_pct != null ? Number(row.confidence_pct) : null,
     sourceType: row.source_type as Knowledge["sourceType"],
@@ -153,9 +131,74 @@ export class DoltgresKnowledgeStoreAdapter implements KnowledgeStorePort {
     return rows.map((r) => (r as Record<string, unknown>).domain as string);
   }
 
+  // --- Domain registry (DOMAIN_FK_ENFORCED_AT_WRITE) ---
+
+  async domainExists(id: string): Promise<boolean> {
+    const rows = await this.sql.unsafe(
+      `SELECT 1 FROM domains WHERE id = ${escapeValue(id)} LIMIT 1`
+    );
+    return rows.length > 0;
+  }
+
+  async listDomainsFull(): Promise<Domain[]> {
+    const rows = await this.sql.unsafe(
+      `SELECT d.id, d.name, d.description, d.confidence_pct, d.created_at, COUNT(k.id) AS entry_count FROM domains d LEFT JOIN knowledge k ON k.domain = d.id GROUP BY d.id, d.name, d.description, d.confidence_pct, d.created_at ORDER BY d.id`
+    );
+    return rows.map((r) => {
+      const row = r as Record<string, unknown>;
+      const created = row.created_at;
+      return {
+        id: row.id as string,
+        name: row.name as string,
+        description: (row.description as string) ?? null,
+        confidencePct: Number(row.confidence_pct ?? 40),
+        entryCount: Number(row.entry_count ?? 0),
+        createdAt:
+          created instanceof Date
+            ? created.toISOString()
+            : String(created ?? ""),
+      };
+    });
+  }
+
+  async registerDomain(input: NewDomain): Promise<Domain> {
+    try {
+      await this.sql.unsafe(
+        `INSERT INTO domains (id, name, description) VALUES (${escapeValue(input.id)}, ${escapeValue(input.name)}, ${escapeValue(input.description ?? null)})`
+      );
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.toLowerCase().includes("duplicate")) {
+        throw new DomainAlreadyRegisteredError(input.id);
+      }
+      throw e;
+    }
+    await this.sql.unsafe(
+      `SELECT dolt_commit('-Am', ${escapeValue(`register domain ${input.id}`)})`
+    );
+    const rows = await this.sql.unsafe(
+      `SELECT d.id, d.name, d.description, d.confidence_pct, d.created_at, COUNT(k.id) AS entry_count FROM domains d LEFT JOIN knowledge k ON k.domain = d.id WHERE d.id = ${escapeValue(input.id)} GROUP BY d.id, d.name, d.description, d.confidence_pct, d.created_at LIMIT 1`
+    );
+    if (rows.length === 0) {
+      throw new Error(`domain ${input.id} not found after register`);
+    }
+    const row = rows[0] as Record<string, unknown>;
+    const created = row.created_at;
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      description: (row.description as string) ?? null,
+      confidencePct: Number(row.confidence_pct ?? 40),
+      entryCount: Number(row.entry_count ?? 0),
+      createdAt:
+        created instanceof Date ? created.toISOString() : String(created ?? ""),
+    };
+  }
+
   // --- Write ---
 
   async upsertKnowledge(entry: NewKnowledge): Promise<Knowledge> {
+    await assertDomainRegistered(this.sql, entry.domain);
     const cols = [
       "id",
       "domain",
@@ -205,6 +248,7 @@ export class DoltgresKnowledgeStoreAdapter implements KnowledgeStorePort {
   }
 
   async addKnowledge(entry: NewKnowledge): Promise<Knowledge> {
+    await assertDomainRegistered(this.sql, entry.domain);
     const cols = [
       "id",
       "domain",
@@ -238,6 +282,9 @@ export class DoltgresKnowledgeStoreAdapter implements KnowledgeStorePort {
     id: string,
     update: Partial<NewKnowledge>
   ): Promise<Knowledge> {
+    if (update.domain !== undefined) {
+      await assertDomainRegistered(this.sql, update.domain);
+    }
     const setClauses: string[] = [];
     const fieldMap: Record<string, keyof NewKnowledge> = {
       domain: "domain",

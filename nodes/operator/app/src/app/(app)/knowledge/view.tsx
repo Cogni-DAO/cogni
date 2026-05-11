@@ -19,7 +19,11 @@
 
 "use client";
 
-import type { ContributionRecord, KnowledgeRow } from "@cogni/node-contracts";
+import type {
+  ContributionRecord,
+  DomainRow,
+  KnowledgeRow,
+} from "@cogni/node-contracts";
 import {
   DataGrid,
   DataGridContainer,
@@ -40,24 +44,27 @@ import {
   useReactTable,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { GitMerge, Library, Settings2 } from "lucide-react";
+import { GitMerge, Library, Plus, Settings2, Tags } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 
 import { Button, Input } from "@/components";
 
 import { fetchContributions } from "./_api/fetchContributions";
+import { fetchDomains } from "./_api/fetchDomains";
 import { fetchKnowledge } from "./_api/fetchKnowledge";
 import { mergeContribution } from "./_api/mergeContribution";
+import { AddDomainSheet } from "./_components/AddDomainSheet";
 import { ContributionDetail } from "./_components/ContributionDetail";
 import { knowledgeColumns } from "./_components/columns";
 import { buildContributionColumns } from "./_components/contribution-columns";
+import { domainColumns } from "./_components/domain-columns";
 import { KnowledgeDetail } from "./_components/KnowledgeDetail";
 
-type ViewMode = "browse" | "inbox";
+type ViewMode = "browse" | "domains" | "inbox";
 
 function isMode(v: string | null): v is ViewMode {
-  return v === "browse" || v === "inbox";
+  return v === "browse" || v === "domains" || v === "inbox";
 }
 
 export function KnowledgeDashboardView() {
@@ -88,6 +95,12 @@ export function KnowledgeDashboardView() {
     staleTime: 30_000,
   });
 
+  const domainsQuery = useQuery({
+    queryKey: ["knowledge", "domains"],
+    queryFn: fetchDomains,
+    staleTime: 30_000,
+  });
+
   const contributionsQuery = useQuery({
     queryKey: ["knowledge", "contributions", "open"],
     queryFn: () => fetchContributions("open"),
@@ -103,6 +116,8 @@ export function KnowledgeDashboardView() {
     },
   });
 
+  const [addDomainOpen, setAddDomainOpen] = useState(false);
+
   return (
     <div className="flex flex-col gap-4 p-5 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -117,30 +132,58 @@ export function KnowledgeDashboardView() {
           </span>
         </div>
 
-        <div className="inline-flex items-center rounded-lg border border-border/60 bg-muted/40 p-0.5">
-          <ModeButton
-            active={mode === "browse"}
-            onClick={() => setModeUrl("browse")}
-            label="Browse"
-            icon={<Library className="size-3.5" />}
-          />
-          <ModeButton
-            active={mode === "inbox"}
-            onClick={() => setModeUrl("inbox")}
-            label="Inbox"
-            icon={<GitMerge className="size-3.5" />}
-            {...(openCount > 0 ? { badge: openCount } : {})}
-          />
+        <div className="flex items-center gap-2">
+          {mode === "domains" && (
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 gap-1.5"
+              onClick={() => setAddDomainOpen(true)}
+            >
+              <Plus className="size-3.5" />
+              Add domain
+            </Button>
+          )}
+          <div className="inline-flex items-center rounded-lg border border-border/60 bg-muted/40 p-0.5">
+            <ModeButton
+              active={mode === "browse"}
+              onClick={() => setModeUrl("browse")}
+              label="Browse"
+              icon={<Library className="size-3.5" />}
+            />
+            <ModeButton
+              active={mode === "domains"}
+              onClick={() => setModeUrl("domains")}
+              label="Domains"
+              icon={<Tags className="size-3.5" />}
+            />
+            <ModeButton
+              active={mode === "inbox"}
+              onClick={() => setModeUrl("inbox")}
+              label="Inbox"
+              icon={<GitMerge className="size-3.5" />}
+              {...(openCount > 0 ? { badge: openCount } : {})}
+            />
+          </div>
         </div>
       </div>
 
-      {mode === "browse" ? (
+      {mode === "browse" && (
         <BrowsePanel
           rows={knowledgeQuery.data?.items ?? []}
           isLoading={knowledgeQuery.isLoading}
           error={knowledgeQuery.error}
         />
-      ) : (
+      )}
+      {mode === "domains" && (
+        <DomainsPanel
+          rows={domainsQuery.data?.domains ?? []}
+          isLoading={domainsQuery.isLoading}
+          error={domainsQuery.error}
+          onAddDomain={() => setAddDomainOpen(true)}
+        />
+      )}
+      {mode === "inbox" && (
         <InboxPanel
           rows={contributionsQuery.data?.contributions ?? []}
           isLoading={contributionsQuery.isLoading}
@@ -151,6 +194,14 @@ export function KnowledgeDashboardView() {
           onMerge={(r) => mergeMutation.mutate(r.contributionId)}
         />
       )}
+
+      <AddDomainSheet
+        open={addDomainOpen}
+        onOpenChange={setAddDomainOpen}
+        onCreated={() => {
+          queryClient.invalidateQueries({ queryKey: ["knowledge", "domains"] });
+        }}
+      />
     </div>
   );
 }
@@ -228,6 +279,7 @@ function BrowsePanel({
         d.title.toLowerCase().includes(q) ||
         d.content.toLowerCase().includes(q) ||
         d.domain.toLowerCase().includes(q) ||
+        d.entryType.toLowerCase().includes(q) ||
         (d.entityId?.toLowerCase().includes(q) ?? false)
       );
     },
@@ -241,7 +293,7 @@ function BrowsePanel({
         hasActiveFilters={columnFilters.length > 0}
         onClearFilters={() => setColumnFilters([])}
         table={table}
-        searchPlaceholder="Search id, title, content, domain…"
+        searchPlaceholder="Search id, title, content, domain, type…"
       />
       {error ? (
         <p className="py-8 text-center text-destructive">
@@ -464,6 +516,119 @@ function InboxEmptyState() {
         a Bearer token; the contributions land here for any signed-in user to
         review and merge.
       </p>
+    </div>
+  );
+}
+
+function DomainsPanel({
+  rows,
+  isLoading,
+  error,
+  onAddDomain,
+}: {
+  readonly rows: DomainRow[];
+  readonly isLoading: boolean;
+  readonly error: unknown;
+  readonly onAddDomain: () => void;
+}) {
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "id", desc: false },
+  ]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [globalFilter, setGlobalFilter] = useState("");
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+
+  const table = useReactTable({
+    data: rows,
+    columns: domainColumns,
+    state: { sorting, columnFilters, globalFilter, columnVisibility },
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onGlobalFilterChange: setGlobalFilter,
+    onColumnVisibilityChange: setColumnVisibility,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
+    globalFilterFn: (row, _id, filterValue: string) => {
+      const q = filterValue.toLowerCase();
+      const d = row.original;
+      return (
+        d.id.toLowerCase().includes(q) ||
+        d.name.toLowerCase().includes(q) ||
+        (d.description?.toLowerCase().includes(q) ?? false)
+      );
+    },
+  });
+
+  return (
+    <>
+      <Toolbar
+        globalFilter={globalFilter}
+        onGlobalFilterChange={setGlobalFilter}
+        hasActiveFilters={columnFilters.length > 0}
+        onClearFilters={() => setColumnFilters([])}
+        table={table}
+        searchPlaceholder="Search id, name, description…"
+      />
+      {error ? (
+        <p className="py-8 text-center text-destructive">
+          Failed to load domains.
+        </p>
+      ) : rows.length === 0 && !isLoading ? (
+        <DomainsEmptyState onAddDomain={onAddDomain} />
+      ) : (
+        <DataGrid
+          table={table}
+          recordCount={rows.length}
+          isLoading={isLoading}
+          loadingMode="skeleton"
+          tableLayout={{
+            headerSticky: true,
+            headerBackground: true,
+            rowBorder: true,
+            dense: true,
+          }}
+          emptyMessage="No domains match these filters."
+        >
+          <DataGridContainer className="overflow-x-auto">
+            <DataGridTable />
+          </DataGridContainer>
+          <DataGridPagination sizes={[25, 50, 100]} />
+        </DataGrid>
+      )}
+    </>
+  );
+}
+
+function DomainsEmptyState({
+  onAddDomain,
+}: {
+  readonly onAddDomain: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-lg border border-border/60 bg-muted/20 px-6 py-16 text-center">
+      <Tags className="size-8 text-muted-foreground/60" />
+      <p className="font-medium text-sm">No domains registered.</p>
+      <p className="max-w-md text-muted-foreground text-xs leading-relaxed">
+        Operator base domains (<code className="font-mono">meta</code>,{" "}
+        <code className="font-mono">nodes</code>,{" "}
+        <code className="font-mono">infrastructure</code>,{" "}
+        <code className="font-mono">governance</code>) ship in the migrator — if
+        you see this screen, it hasn't run. Otherwise register an extension
+        domain.
+      </p>
+      <Button
+        type="button"
+        size="sm"
+        className="mt-2 h-9 gap-1.5"
+        onClick={onAddDomain}
+      >
+        <Plus className="size-3.5" />
+        Add domain
+      </Button>
     </div>
   );
 }

@@ -26,6 +26,24 @@ export const SourceTypeSchema = z.enum([
 export type SourceType = z.infer<typeof SourceTypeSchema>;
 
 // ---------------------------------------------------------------------------
+// Entry type — what KIND of knowledge a row represents within its domain.
+// The DB column is plain `text` (default 'finding'); this enum is the
+// recommended set per docs/spec/knowledge-syntropy.md § Seed Schema. Adding
+// values here is a doc + UI change, not a schema migration.
+// ---------------------------------------------------------------------------
+
+export const EntryTypeSchema = z.enum([
+  "observation",
+  "finding",
+  "conclusion",
+  "rule",
+  "scorecard",
+  "skill",
+  "guide",
+]);
+export type EntryType = z.infer<typeof EntryTypeSchema>;
+
+// ---------------------------------------------------------------------------
 // Knowledge
 // ---------------------------------------------------------------------------
 
@@ -35,6 +53,7 @@ export const KnowledgeSchema = z.object({
   entityId: z.string().nullable().optional(),
   title: z.string().min(1),
   content: z.string().min(1),
+  entryType: z.string().min(1).optional(),
   confidencePct: z.number().int().min(0).max(100).nullable().optional(),
   sourceType: SourceTypeSchema,
   sourceRef: z.string().nullable().optional(),
