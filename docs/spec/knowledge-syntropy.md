@@ -137,7 +137,7 @@ The atomic unit of what the node believes. Each row is a single assertion with p
 | `content`        | text        | NOT NULL                  | Full knowledge body — the actual assertion                                    |
 | `entry_type`     | text        | NOT NULL                  | `event`, `hypothesis`, `decision`, `outcome` (see § The EDO Loop) + `observation`, `finding`, `conclusion`, `rule`, `scorecard`, `skill`, `guide` |
 | `status`         | text        | NOT NULL, default `draft` | `draft` → `candidate` → `established` → `canonical` → `deprecated`            |
-| `confidence_pct` | integer     |                           | 0–100, computed from citations (null = not applicable)                        |
+| `confidence_pct` | integer     | NOT NULL, default 40      | 0–100, computed from citations. Default 40 matches `analysis_signal` baseline; agents may write lower (30 for draft) or higher per § Confidence Defaults. |
 | `source_type`    | text        | NOT NULL                  | `human`, `agent`, `analysis_signal`, `external`, `derived`                    |
 | `source_ref`     | text        |                           | Pointer to origin (URL, signal ID, commit hash)                               |
 | `source_node`    | text        |                           | Which AI node/agent created this                                              |
@@ -515,12 +515,29 @@ Existing types (`supports`, `contradicts`, `extends`, `supersedes`) remain for n
 
 `hypothesis` rows MUST set `evaluate_at` (timestamptz). It is the appointment with truth. Orphan hypotheses are surfaced by `pendingResolutions(now)` — they cannot rot silently.
 
-A scheduled job (`resolveDueHypotheses`) reads pending resolutions and either:
+**Resolution strategy in v0: opt-in via `tags.resolve`.** Every hypothesis sets a `resolve` key in its `tags` JSONB with one of two values:
 
-1. **Resolves automatically** — the outcome is observable (market resolved, deadline passed, deploy finished, metric crossed threshold). The job calls `core__edo_record_outcome` directly.
-2. **Hands off to an agent** — the outcome requires interpretation. The job opens a small resolution graph that gathers evidence and files the outcome.
+| `tags.resolve` | Resolver behavior                                                                                                       |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `manual` (default) | Cron does nothing. Hypothesis surfaces in the operator `/knowledge` inbox alongside open contributions for human resolution. |
+| `agent`        | Cron hands off to a single resolver graph that gathers evidence and files the outcome via `core__edo_record_outcome`.   |
 
-Either way, the outcome row + `validates`/`invalidates` citation lands on `main` with a Dolt commit. The same `recomputeConfidence` walk then runs on the cited hypothesis.
+This keeps v0 cost-bounded — LLM cost only fires when an agent explicitly opts in. Richer resolver kinds (`market:<id>`, `metric:<query>`, `http:<url>`) are filed when v1 data justifies them. The tags-key convention adds zero columns; new kinds become new values, not new schema.
+
+Either resolution path lands the outcome row + `validates`/`invalidates` citation on `main` with a Dolt commit, and triggers `recomputeConfidence` on the cited hypothesis.
+
+### Enforcement Points
+
+Invariants live at the adapter layer — the universal choke point — mirroring `DOMAIN_FK_ENFORCED_AT_WRITE` from [knowledge-domain-registry](./knowledge-domain-registry.md). Tools and capabilities are convenience wrappers; the adapter is law.
+
+| Invariant                          | Adapter check                                                                                                          |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `HYPOTHESIS_HAS_EVALUATE_AT`       | `addKnowledge` / `upsertKnowledge` rejects rows where `entry_type='hypothesis'` and `evaluate_at` is null              |
+| `CITATION_TARGET_EXISTS_AT_WRITE`  | `addCitation` rejects rows whose `cited_id` is not present in `knowledge` (port adds `knowledgeExists(id)` for the check) |
+| `OUTCOME_CITES_HYPOTHESIS`         | `addKnowledge` for `entry_type='outcome'` requires the atomic `core__edo_record_outcome` path (raw write rejects)      |
+| `DECISION_CITES_HYPOTHESIS`        | `addKnowledge` for `entry_type='decision'` requires the atomic `core__edo_decide` path (raw write rejects)             |
+
+Bypass paths (`core__knowledge_write` with an EDO entry_type) get rejected with a typed error mapped to HTTP 400. Agents must use the atomic tools for the four EDO beats.
 
 ### Computation Surface
 
@@ -681,9 +698,11 @@ The librarian's retrieval contract (same `KnowledgeSearchHit` shape) is the x402
 | DOMAIN_FK_ENFORCED_AT_WRITE                | Every write to `knowledge` verifies `domain` exists in `domains` before INSERT. Unregistered → `DomainNotRegisteredError` → HTTP 400. Contract: [knowledge-domain-registry](./knowledge-domain-registry.md).                                  |
 | DOMAIN_REGISTRY_EXTENDS_VIA_UI             | Base domains are seeded by the schema migrator (reference data); UI extends beyond the base via cookie-session POST. `NODES_BOOT_EMPTY` scopes to content tables only. Contract: [knowledge-domain-registry](./knowledge-domain-registry.md). |
 | EDO_FOUR_BEATS_VIA_ENTRY_TYPE              | Event / Hypothesis / Decision / Outcome are `entry_type` values on `knowledge`, not separate tables. The four beats are content roles, structure lives in the citation DAG.                                                                  |
-| HYPOTHESIS_HAS_EVALUATE_AT                 | Every `entry_type='hypothesis'` row MUST set `evaluate_at` (timestamptz). `evaluate_at` is null for all other entry_types. Resolver cron reads pending rows on `evaluate_at <= now()`.                                                        |
-| OUTCOME_CITES_HYPOTHESIS                   | Every `entry_type='outcome'` row MUST have ≥1 `validates` OR `invalidates` citation edge to the hypothesis it resolves.                                                                                                                       |
-| DECISION_CITES_HYPOTHESIS                  | Every `entry_type='decision'` row MUST have ≥1 `derives_from` citation edge to a hypothesis. Decisions without a falsifiable prediction get filed as `finding` or `conclusion` instead.                                                       |
+| HYPOTHESIS_HAS_EVALUATE_AT                 | Every `entry_type='hypothesis'` row MUST set `evaluate_at` (timestamptz). Enforced at the **adapter layer** (`addKnowledge`/`upsertKnowledge` rejects null `evaluate_at` for hypothesis rows). `evaluate_at` is null for all other entry_types. Resolver cron reads pending rows on `evaluate_at <= now()`. |
+| CITATION_TARGET_EXISTS_AT_WRITE            | Every `citations.cited_id` MUST reference an existing `knowledge.id` at write time. Enforced at the adapter layer via `port.knowledgeExists(id)` before INSERT. Mirrors `DOMAIN_FK_ENFORCED_AT_WRITE`.                                       |
+| OUTCOME_CITES_HYPOTHESIS                   | Every `entry_type='outcome'` row MUST have ≥1 `validates` OR `invalidates` citation edge. Enforced by routing all `outcome` writes through `core__edo_record_outcome` (raw `core__knowledge_write` rejects EDO entry_types).                  |
+| DECISION_CITES_HYPOTHESIS                  | Every `entry_type='decision'` row MUST have ≥1 `derives_from` citation edge to a hypothesis. Enforced by routing all `decision` writes through `core__edo_decide`. Decisions without a falsifiable prediction get filed as `finding` instead. |
+| RESOLUTION_HINT_OPT_IN                     | v0: every hypothesis sets `tags.resolve` ∈ `{manual, agent}`. Default `manual` — cron is a no-op; row surfaces in operator inbox. `agent` opts into the resolver graph. Bounds LLM cost; new resolver kinds added as new tag values.            |
 | EDO_RECURSION_VIA_CITATIONS                | EDO chain depth is emergent from the citation DAG. No `parent_id`, no `chain_id`, no chain table. To walk a chain, follow citation edges.                                                                                                     |
 | CONFIDENCE_RECOMPUTE_ON_RESOLVE            | `validates` / `invalidates` writes trigger a 1-hop `recomputeConfidence` on the cited row. Multi-hop transitive propagation is deferred until v1 data shows the need.                                                                          |
 | RESOLVER_IDEMPOTENT                        | `resolveDueHypotheses` MUST be idempotent on hypothesis id. Double-firing a resolution is a no-op (already-resolved hypotheses are skipped).                                                                                                  |
