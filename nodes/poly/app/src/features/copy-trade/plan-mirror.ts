@@ -3,15 +3,20 @@
 
 /**
  * Module: `@features/copy-trade/plan-mirror`
- * Purpose: Pure copy-trade planning function — given a normalized Fill, the target config, and a runtime-state snapshot, return either `place` with a concrete OrderIntent or `skip` with a bounded reason code.
- * Scope: Pure function. Does not perform I/O, does not read env, does not import adapters. All runtime state (idempotency set) is supplied by the caller.
+ * Purpose: Pure copy-trade planning function — given a normalized Fill, the target config, and a runtime-state snapshot, return either `place` with a concrete OrderIntent or `skip` with a bounded reason code. Branch selection is target-dominance-driven: target's per-condition cost fractions decide entry/layer/hedge first, then our position state routes within (bug.5048).
+ * Scope: Pure function. Does not perform I/O, does not read env, does not import adapters. All runtime state (idempotency set + per-condition target/our position snapshots) is supplied by the caller.
+ * Exports: `planMirrorFromFill()` (planner), `analyzeTargetDominance()` (per-condition side-fraction analyzer), `targetVwapForToken()` (per-token VWAP from target_position), `applySizingPolicy()` (sizing helper).
  * Invariants:
  *   - IDEMPOTENT_BY_CLIENT_ID — repeat of the same `(target_id, fill_id)` is silently dropped via `already_placed_ids`. Matches the DB PK on `poly_copy_trade_fills`.
  *   - PLAN_IS_PURE — no side effects; same input → same output.
  *   - CAPS_LIVE_IN_GRANT — daily / hourly USDC caps are enforced downstream by `PolyTraderWalletPort.authorizeIntent` against the tenant's `poly_wallet_grants` row. `planMirrorFromFill` is intentionally unaware of caps so a single cap decision lives in one place (the authorize boundary).
  *   - NO_KILL_SWITCH (bug.0438): there is no per-tenant kill-switch gate. The active-target / active-grant chain in the cross-tenant enumerator is the only gate; an explicit POST of a target IS the user's opt-in.
+ *   - TARGET_DOMINANCE_DRIVES_BRANCH (bug.5048): when `config.min_target_side_fraction` is set + target_position is available, `decideMirrorBranch` computes target's dominant side first, then routes by our position state per the spec branch table. Below-threshold (minority) fills always skip as `target_dominant_other_side` — master switch covering entry, layer, AND hedge. When disabled (threshold unset / no target data), legacy our-position routing applies for backward-compat.
+ *   - NEVER_PAY_ABOVE_TARGET_VWAP (bug.5048): when `config.vwap_tolerance` is set, `applyVwapGate` skips `vwap_floor_breach` if `fill.price > target_vwap_for_fill_token + tolerance`. Asymmetric upward gate; fails open when target VWAP is unknown.
+ *   - HEDGE_PREDICATE_NOOPS_ON_UNKNOWN_OPPOSITE: hedge branch fires only when `state.position.opposite_token_id` is known from prior aggregation. No inference from condition structure alone.
+ * Skip-reason precedence (first match wins): already_placed → market_past_end_date → price_outside_clob_bounds → target_dominant_other_side → vwap_floor_breach → sizing-reason skip (below_target_percentile / below_market_min / position_cap_reached / target_position_below_threshold / followup_position_too_small / followup_not_needed) → place.
  * Side-effects: none
- * Links: docs/spec/poly-tenant-and-collateral.md, work/items/task.0318, work/items/task.5005, work/items/bug.5045
+ * Links: docs/spec/poly-copy-trade-execution.md, docs/spec/poly-tenant-and-collateral.md, work/items/bug.5048, work/items/task.0318
  * @public
  */
 
@@ -171,10 +176,21 @@ function applyMarketFloors(
  *   1. already placed (PK+cid)        → skip/already_placed
  *   2. market past Gamma `end_date`   → skip/market_past_end_date  (bug.5043)
  *   3. price outside CLOB tick grid   → skip/price_outside_clob_bounds
- *   4. position-followup policy       → skip/place (layer | hedge)
- *   5. sizing below market min        → skip/below_market_min
- *   6. mode === 'paper'               → place (paper adapter)
- *   7. otherwise                      → place (live)
+ *   4. `decideMirrorBranch`           → skip/target_dominant_other_side (bug.5048)
+ *                                       OR place-branch selection (new_entry / layer / hedge)
+ *                                       with pre-computed `SizingResult`
+ *   5. VWAP gate                      → skip/vwap_floor_breach (bug.5048)
+ *   6. sizing.ok check                → skip/below_target_percentile | below_market_min |
+ *                                       position_cap_reached | target_position_below_threshold |
+ *                                       followup_position_too_small | followup_not_needed
+ *   7. mode === 'paper'               → place (paper adapter)
+ *   8. otherwise                      → place (live), reason ∈ {ok, layer_scale_in, hedge_followup}
+ *
+ * Branch selection is target-dominance-driven (TARGET_DOMINANCE_DRIVES_BRANCH):
+ * `state.target_position.tokens[].cost_usdc` gives per-side fractions; the
+ * incoming fill's token is classified minority/dominant against
+ * `config.min_target_side_fraction`. Minority fills always skip (master
+ * switch). See spec branch table in `poly-copy-trade-execution.md`.
  *
  * Daily / hourly caps are NOT checked here — those live on the tenant's
  * `poly_wallet_grants` row and are enforced by `authorizeIntent` at the

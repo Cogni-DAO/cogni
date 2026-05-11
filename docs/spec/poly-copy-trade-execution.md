@@ -10,7 +10,7 @@ read_when: Implementing or reviewing any copy-trade placement, mirror policy, or
 implements: proj.poly-copy-trading
 owner: derekg1729
 created: 2026-05-10
-verified: 2026-05-10
+verified: 2026-05-11
 tags:
   [poly, polymarket, copy-trading, lifecycle, state-machine, redeem, position]
 replaces:
