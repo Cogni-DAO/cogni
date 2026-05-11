@@ -51,7 +51,7 @@ Designed in **[docs/spec/knowledge-syntropy.md § The EDO Loop](../../docs/spec/
 | `resolveDueHypotheses` cron in `scheduler-worker` — idempotent on hypothesis id; honors `RESOLVER_MAX_BATCH_PER_TICK` (v0: N=10) + `RESOLVER_SINGLE_LEADER_PER_NODE` | Not Started | 2   | (create at P1 start)   |
 | Small resolver graph (LangGraph) for `resolution_strategy='agent'` hypotheses         | Not Started | 2   | (create at P1 start)   |
 | Brain prompt update — teaches hypothesis-loop discipline. Acceptance bar: brain stack test asserts `core__edo_hypothesize` is called before `core__knowledge_write` when a prediction is being made | Not Started | 1   | (create at P1 start)   |
-| **EHDO calibration view** — SQL view (or scorecard knowledge row refreshed by the cron) aggregating `validates`/`invalidates` counts + hit-rate by `source_node` and `resolution_strategy` over a rolling 30d window. Makes loop health measurable; Karpathy's discipline isn't "agents predict" — it's "we measure whether they're calibrated" | Not Started | 2   | (create at P1 start)   |
+| **EHDO calibration view** — SQL view aggregating `validates`/`invalidates` counts + hit-rate by `source_node` and `resolution_strategy` over a rolling 30d window. Read-side only; no cron write path. Makes loop health measurable; Karpathy's discipline isn't "agents predict" — it's "we measure whether they're calibrated" | Not Started | 2   | (create at P1 start)   |
 
 ### Run (P2+) — Visualize + Compound
 
