@@ -439,6 +439,8 @@ export interface OrderLedger {
    * filled/partial with size_usdc > 0). Avoids the LIMIT-truncation bug
    * that hits when an account has more recent rows than the listTenantPositions
    * cap can return (bug.5012 pattern; cf. wallet-analysis-service.ts daily-counts).
+   * Throws on DB error — caller wraps with the existing
+   * `positions_read_model_unavailable` warning.
    */
   dailyTradeCounts(opts: {
     billing_account_id: string;

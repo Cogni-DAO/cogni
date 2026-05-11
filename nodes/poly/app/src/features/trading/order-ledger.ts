@@ -589,50 +589,33 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
       capturedAt: Date;
       windowDays: number;
     }): Promise<Array<{ day: string; n: number }>> {
-      try {
-        const rows = (await deps.db.execute(sql`
-          SELECT
-            to_char(date_trunc('day', ${polyCopyTradeFills.observedAt} AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
-            COUNT(*)::int AS n
-          FROM ${polyCopyTradeFills}
-          WHERE ${polyCopyTradeFills.billingAccountId} = ${opts.billing_account_id}
-            AND ${polyCopyTradeFills.observedAt} >= now() - make_interval(days => ${opts.windowDays})
-            AND (
-              COALESCE((${polyCopyTradeFills.attributes}->>'filled_size_usdc')::numeric, 0) > 0
-              OR (
-                ${polyCopyTradeFills.status} IN ('filled','partial')
-                AND COALESCE((${polyCopyTradeFills.attributes}->>'size_usdc')::numeric, 0) > 0
-              )
+      const rows = (await deps.db.execute(sql`
+        SELECT
+          to_char(date_trunc('day', ${polyCopyTradeFills.observedAt} AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
+          COUNT(*)::int AS n
+        FROM ${polyCopyTradeFills}
+        WHERE ${polyCopyTradeFills.billingAccountId} = ${opts.billing_account_id}
+          AND ${polyCopyTradeFills.observedAt} >= now() - (${opts.windowDays} || ' days')::interval
+          AND (
+            COALESCE((${polyCopyTradeFills.attributes}->>'filled_size_usdc')::numeric, 0) > 0
+            OR (
+              ${polyCopyTradeFills.status} IN ('filled','partial')
+              AND COALESCE((${polyCopyTradeFills.attributes}->>'size_usdc')::numeric, 0) > 0
             )
-          GROUP BY 1
-          ORDER BY 1
-        `)) as unknown as { rows?: Array<Record<string, unknown>> };
-        const list =
-          rows.rows ?? (rows as unknown as Array<Record<string, unknown>>);
-        const byDay = new Map<string, number>();
-        for (const r of list as Array<Record<string, unknown>>) {
-          byDay.set(String(r.day ?? ""), Number(r.n ?? 0));
-        }
-        return buildUtcDayWindow(opts.capturedAt, opts.windowDays).map(
-          (day) => ({
-            day,
-            n: byDay.get(day) ?? 0,
-          })
-        );
-      } catch (err) {
-        log.warn(
-          {
-            event: EVENT_NAMES.ADAPTER_ORDER_LEDGER_SNAPSHOT_ERROR,
-            errorCode: "daily_trade_counts_fail_open",
-            billing_account_id: opts.billing_account_id,
-            err: err instanceof Error ? err.message : String(err),
-          },
-          "order-ledger dailyTradeCounts failed; returning zero-filled window"
-        );
-        return buildUtcDayWindow(opts.capturedAt, opts.windowDays).map(
-          (day) => ({ day, n: 0 })
-        );
+          )
+        GROUP BY 1
+        ORDER BY 1
+      `)) as unknown as { rows?: Array<Record<string, unknown>> };
+      const list =
+        rows.rows ?? (rows as unknown as Array<Record<string, unknown>>);
+      const byDay = new Map<string, number>();
+      for (const r of list as Array<Record<string, unknown>>) {
+        byDay.set(String(r.day ?? ""), Number(r.n ?? 0));
       }
+      return buildUtcDayWindow(opts.capturedAt, opts.windowDays).map((day) => ({
+        day,
+        n: byDay.get(day) ?? 0,
+      }));
     },
 
     async listOpenOrPending(
