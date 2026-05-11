@@ -55,7 +55,7 @@ last_commit: 27db31327ed5fb6aace76550f8d9b1fb4854ccff
 
 | File / Resource                                                                                                                    | Why it matters                                                              |
 | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| [PR #922](https://github.com/Cogni-DAO/cogni/pull/922)                                                                     | Merge commit `27db31327`. Full diff + validation comment.                   |
+| [PR #922](https://github.com/Cogni-DAO/cogni/pull/922)                                                                             | Merge commit `27db31327`. Full diff + validation comment.                   |
 | [task.0280 body](../items/task.0280.per-node-worker-db-isolation.md)                                                               | Design: Option B, per-node queues, rollout semantics.                       |
 | [bug.0322](../items/bug.0322.cross-node-runs-visibility.md)                                                                        | Symptom this closes.                                                        |
 | [services/scheduler-worker/src/worker.ts](../../services/scheduler-worker/src/worker.ts)                                           | N+1 Worker spin-up; UUID filter; legacy drain.                              |
@@ -66,5 +66,5 @@ last_commit: 27db31327ed5fb6aace76550f8d9b1fb4854ccff
 | [docs/spec/scheduler.md](../../docs/spec/scheduler.md)                                                                             | Updated for HTTP delegation + per-node queues.                              |
 | [scripts/ci/smoke-candidate.sh](../../scripts/ci/smoke-candidate.sh)                                                               | bug.0322 regression check (copy to preview smoke if not already symlinked). |
 | `/Users/derek/dev/cogni-template/.local/preview-vm-key` + `…-ip`                                                                   | SSH access to preview VM (84.32.110.92) for read-only validation.           |
-| [GH Actions run 24633902426](https://github.com/Cogni-DAO/cogni/actions/runs/24633902426)                                  | The in-progress promote that should land task.0280 on preview.              |
+| [GH Actions run 24633902426](https://github.com/Cogni-DAO/cogni/actions/runs/24633902426)                                          | The in-progress promote that should land task.0280 on preview.              |
 | [task.0326](../items/task.0326.ledger-worker-db-isolation.md) / [task.0327](../items/task.0327.queue-drain-and-circuit-breaker.md) | Follow-ups: ledger env rename, queue drain + circuit breaker.               |

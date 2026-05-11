@@ -56,8 +56,8 @@ last_commit: abc704da
 | `apps/operator/next.config.ts:11-21`                                     | `serverExternalPackages` — why standalone traces codex-sdk and codex but not the platform dep |
 | `node_modules/.pnpm/@openai+codex-sdk@0.116.0/.../dist/index.js:368-430` | `findCodexPath()` — the 3-step createRequire resolution chain                                 |
 | `.env.docker.example`                                                    | Container-internal URL overrides for `docker:dev:stack`                                       |
-| [PR #648](https://github.com/Cogni-DAO/cogni/pull/648)           | Attempt 1: COPY to /opt/codex (failed — symlinks + missing platform dep)                      |
-| [PR #650](https://github.com/Cogni-DAO/cogni/pull/650)           | Attempt 2: pnpm add -g + shim (failed — broken CAS symlinks)                                  |
-| [PR #654](https://github.com/Cogni-DAO/cogni/pull/654)           | Attempt 4: serverExternalPackages (partial — SDK loads but platform dep still missing)        |
-| [PR #661](https://github.com/Cogni-DAO/cogni/pull/661)           | Attempt 5: COPY from builder (codex worked but broke preview by deleting ENV PATH)            |
-| [PR #662](https://github.com/Cogni-DAO/cogni/pull/662)           | Hotfix: restore original + additive COPY only                                                 |
+| [PR #648](https://github.com/Cogni-DAO/cogni/pull/648)                   | Attempt 1: COPY to /opt/codex (failed — symlinks + missing platform dep)                      |
+| [PR #650](https://github.com/Cogni-DAO/cogni/pull/650)                   | Attempt 2: pnpm add -g + shim (failed — broken CAS symlinks)                                  |
+| [PR #654](https://github.com/Cogni-DAO/cogni/pull/654)                   | Attempt 4: serverExternalPackages (partial — SDK loads but platform dep still missing)        |
+| [PR #661](https://github.com/Cogni-DAO/cogni/pull/661)                   | Attempt 5: COPY from builder (codex worked but broke preview by deleting ENV PATH)            |
+| [PR #662](https://github.com/Cogni-DAO/cogni/pull/662)                   | Hotfix: restore original + additive COPY only                                                 |

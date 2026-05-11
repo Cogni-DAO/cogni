@@ -75,4 +75,4 @@ last_commit: be07f605
 | `infra/compose/runtime/docker-compose.dev.yml:69`        | `COGNI_REPO_PATH=${COGNI_REPO_PATH:-/repo/current}` default              |
 | `apps/operator/next.config.ts`                           | `outputFileTracingRoot`, `turbopack.resolveAlias` for thread-stream stub |
 | `work/items/bug.0157.walletconnect-pino-ssr-bundling.md` | Real fix for thread-stream (ssr: false)                                  |
-| PR #547                                                  | https://github.com/Cogni-DAO/cogni/pull/547                      |
+| PR #547                                                  | https://github.com/Cogni-DAO/cogni/pull/547                              |

@@ -56,11 +56,11 @@ Define a phased path from "single monorepo with all nodes" to "private/sovereign
 
 ### Repo Topology
 
-| Repo                          | Visibility | Contains                                                 | Forking it means                                                                                                       |
-| ----------------------------- | ---------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| **`Cogni-DAO/cogni`**         | Public     | Operator + resy + node-template fixture + all rails      | Active Cogni development. Self-host the entire Cogni platform.                                                         |
-| **`Cogni-DAO/cogni-poly`**    | Private    | Poly only (single-node mono with full rails)             | Cogni's own production node — internal-only, sovereign of the open monorepo.                                           |
-| **`Cogni-DAO/cogni`** | Public     | Minimal node skeleton + full rails (no operator, no biz) | "I want a sovereign Cogni node. My own VMs. My own secrets. Optionally opt into Cogni's AI engineering manager later." |
+| Repo                       | Visibility | Contains                                                 | Forking it means                                                                                                       |
+| -------------------------- | ---------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **`Cogni-DAO/cogni`**      | Public     | Operator + resy + node-template fixture + all rails      | Active Cogni development. Self-host the entire Cogni platform.                                                         |
+| **`Cogni-DAO/cogni-poly`** | Private    | Poly only (single-node mono with full rails)             | Cogni's own production node — internal-only, sovereign of the open monorepo.                                           |
+| **`Cogni-DAO/cogni`**      | Public     | Minimal node skeleton + full rails (no operator, no biz) | "I want a sovereign Cogni node. My own VMs. My own secrets. Optionally opt into Cogni's AI engineering manager later." |
 
 `Cogni-DAO/cogni` is the rename of the current `Cogni-DAO/cogni`. The `node-template` slug is then released by GitHub and reused for the new minimal quickstart fork.
 
@@ -69,7 +69,7 @@ Define a phased path from "single monorepo with all nodes" to "private/sovereign
 | Path                                                 | When                                          | Sovereignty                                | Cost                              |
 | ---------------------------------------------------- | --------------------------------------------- | ------------------------------------------ | --------------------------------- |
 | Add `nodes/<name>/` in `Cogni-DAO/cogni`             | Cogni-internal nodes, no privacy needs        | Shares Cogni's VMs, secrets, CI            | Lowest — default                  |
-| Fork `Cogni-DAO/cogni`                       | External orgs / privacy-needing nodes         | Own VMs, own secrets, own CI               | 3 VMs (cand/preview/prod) + ops   |
+| Fork `Cogni-DAO/cogni`                               | External orgs / privacy-needing nodes         | Own VMs, own secrets, own CI               | 3 VMs (cand/preview/prod) + ops   |
 | Fork `node-template` + install Cogni Operator GH App | Same as above, plus AI engineering management | Own infra, opt-in to operator capabilities | + GH App install (Phase 2 onward) |
 | Cogni-hosted node tenancy                            | vNext (Phase 3)                               | None at infra layer                        | Pay Cogni                         |
 
@@ -109,16 +109,16 @@ The operator agent today hardcodes one target repo (`Cogni-DAO/cogni`, soon `Cog
 | Step | Task                                                                                                                                                                                                           |
 | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0.1  | Land this spec                                                                                                                                                                                                 |
-| 0.2  | Rename `Cogni-DAO/cogni` → `Cogni-DAO/cogni`                                                                                                                                                           |
+| 0.2  | Rename `Cogni-DAO/cogni` → `Cogni-DAO/cogni`                                                                                                                                                                   |
 | 0.3  | Update Argo `repoURL` in `infra/k8s/**/Application*.yaml`                                                                                                                                                      |
-| 0.4  | Update hardcoded `Cogni-DAO/cogni` strings in scripts/docs (only where trivial)                                                                                                                        |
+| 0.4  | Update hardcoded `Cogni-DAO/cogni` strings in scripts/docs (only where trivial)                                                                                                                                |
 | 0.5  | Confirm GHCR refs unaffected (org-scoped — verified)                                                                                                                                                           |
 | 0.6  | Wait for GH redirect to settle; create `Cogni-DAO/cogni-poly` (private, full history)                                                                                                                          |
 | 0.7  | Strip `cogni-poly` to single-node: remove `nodes/{operator,resy,node-template}/`, prune root `packages/` to poly's transitive deps, vendor any cross-node packages, drop their catalog/overlay/secrets entries |
 | 0.8  | Strip `cogni`: remove `nodes/poly/`, `infra/catalog/poly.yaml`, `infra/k8s/overlays/*/poly/`, `infra/k8s/secrets/*/poly*`, root `packages/poly-*` if any                                                       |
 | 0.9  | Provision `cogni-poly`'s own VMs via existing `provision-test-vm.sh`                                                                                                                                           |
 | 0.10 | Install `cogni-node-template` GH App on `cogni-poly`; set `GH_REVIEW_APP_*` env secrets in cogni-poly's environments                                                                                           |
-| 0.11 | Wait for GH to release the `node-template` slug (~24h post-rename); create new `Cogni-DAO/cogni` (public, minimal fork of `cogni` stripped to node-template fixture + rails)                           |
+| 0.11 | Wait for GH to release the `node-template` slug (~24h post-rename); create new `Cogni-DAO/cogni` (public, minimal fork of `cogni` stripped to node-template fixture + rails)                                   |
 
 Phase 0 is **decoupling, not platform-building.** Zero new platform code; the only edits are repo renames, file moves, and string updates.
 
@@ -153,13 +153,13 @@ Phase 0 is **decoupling, not platform-building.** Zero new platform code; the on
 
 GitHub auto-redirects all references from old → new slug after rename. The redirect occupies the old slug, but GitHub releases it after a brief settle period (empirically ~minutes to a few hours; budget 24h to be safe before reusing).
 
-| Step | Action                                                                                                                                         |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Step | Action                                                                                                                                 |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | R.1  | UI rename `Cogni-DAO/cogni` → `Cogni-DAO/cogni`                                                                                        |
-| R.2  | PR in `cogni` updating Argo `Application.spec.source.repoURL` to `Cogni-DAO/cogni`                                                             |
+| R.2  | PR in `cogni` updating Argo `Application.spec.source.repoURL` to `Cogni-DAO/cogni`                                                     |
 | R.3  | Audit + update hardcoded `Cogni-DAO/cogni` strings in scripts, docs, env-config                                                        |
-| R.4  | Update PR/branch references in any pinned GitHub Actions URLs                                                                                  |
-| R.5  | Re-test candidate-flight + promote-and-deploy on `cogni`                                                                                       |
+| R.4  | Update PR/branch references in any pinned GitHub Actions URLs                                                                          |
+| R.5  | Re-test candidate-flight + promote-and-deploy on `cogni`                                                                               |
 | R.6  | After settle, attempt to create `Cogni-DAO/cogni`. If blocked, escalate via GH support or use interim name `node-template-quickstart`. |
 
 GHCR image refs are org-scoped (`ghcr.io/cogni-dao/<image>`), unaffected by repo rename. ✅

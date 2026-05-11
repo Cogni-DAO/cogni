@@ -20,7 +20,7 @@ tags: [github, webhooks, ingestion, review, setup]
 | ----------- | ----------------------------- | ----------------------------------------------------------- | ----------------------------- |
 | Local dev   | `cogni-review-dev-<yourname>` | smee.io proxy (see below)                                   | your personal test repo       |
 | Preview     | `cogni-review-preview`        | `https://preview.cognidao.org/api/internal/webhooks/github` | `Cogni-DAO/preview-test-repo` |
-| Production  | `cogni-review-production`     | `https://cognidao.org/api/internal/webhooks/github`         | `Cogni-DAO/cogni`     |
+| Production  | `cogni-review-production`     | `https://cognidao.org/api/internal/webhooks/github`         | `Cogni-DAO/cogni`             |
 
 ## Create a GitHub App
 
@@ -28,13 +28,13 @@ tags: [github, webhooks, ingestion, review, setup]
 
 2. Fill in:
 
-| Field          | Value                                        |
-| -------------- | -------------------------------------------- |
-| App name       | See table above                              |
+| Field          | Value                                |
+| -------------- | ------------------------------------ |
+| App name       | See table above                      |
 | Homepage URL   | `https://github.com/Cogni-DAO/cogni` |
-| Webhook URL    | See table above                              |
-| Webhook secret | Generate below                               |
-| Webhook active | Checked                                      |
+| Webhook URL    | See table above                      |
+| Webhook secret | Generate below                       |
+| Webhook active | Checked                              |
 
 3. **Permissions (Repository):**
 

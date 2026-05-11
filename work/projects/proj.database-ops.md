@@ -137,13 +137,13 @@ Already tracked in DATABASE_RLS_SPEC.md P1:
 
 **Goal:** Each node owns its DB schema — no cross-node table leak, no shared migration numbering.
 
-| Deliverable                                                                                       | Status       | Est | Work Item                                                                    |
-| ------------------------------------------------------------------------------------------------- | ------------ | --- | ---------------------------------------------------------------------------- |
+| Deliverable                                                                                       | Status       | Est | Work Item                                                            |
+| ------------------------------------------------------------------------------------------------- | ------------ | --- | -------------------------------------------------------------------- |
 | Per-node drizzle configs + per-node migrator images + legacy purge                                | done         | 2   | task.0324 ([PR #916](https://github.com/Cogni-DAO/cogni/pull/916))   |
 | Migrator rebased on runtime image (`FROM runner AS migrator` + drizzle-orm programmatic migrator) | done         | 2   | task.0370 ([PR #1041](https://github.com/Cogni-DAO/cogni/pull/1041)) |
 | Migrations as Deployment initContainer + retire `cogni-template-migrate` GHCR build               | in-review    | 2   | task.0371 ([PR #1043](https://github.com/Cogni-DAO/cogni/pull/1043)) |
-| Un-no-op prod poly/resy migration Jobs (gated on DB inspection)                                   | obviated     | —   | superseded by task.0371 — Jobs deleted entirely                              |
-| **Future:** Atlas + GitOps migrations (declarative schema, CRD)                                   | needs_design | 5   | task.0325                                                                    |
+| Un-no-op prod poly/resy migration Jobs (gated on DB inspection)                                   | obviated     | —   | superseded by task.0371 — Jobs deleted entirely                      |
+| **Future:** Atlas + GitOps migrations (declarative schema, CRD)                                   | needs_design | 5   | task.0325                                                            |
 
 **As-shipped state after task.0371:**
 

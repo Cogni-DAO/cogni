@@ -60,8 +60,8 @@ last_commit: fa6b4c404b2be6d7ce9c5c85f5be4358e4a2586b
 
 | File / Resource                                                         | Why it matters                                                                                            |
 | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| [PR #1062](https://github.com/Cogni-DAO/cogni/pull/1062)        | task.0376 implementation — primary review target                                                          |
-| [PR #1061](https://github.com/Cogni-DAO/cogni/pull/1061)        | Docs-only follow-ups (task.0375 + bug.0377 + bug.0379 + Cutover State)                                    |
+| [PR #1062](https://github.com/Cogni-DAO/cogni/pull/1062)                | task.0376 implementation — primary review target                                                          |
+| [PR #1061](https://github.com/Cogni-DAO/cogni/pull/1061)                | Docs-only follow-ups (task.0375 + bug.0377 + bug.0379 + Cutover State)                                    |
 | `work/items/task.0376.preview-production-matrix-cutover.md`             | Outcome contract — review #1062 against THIS, not invented requirements                                   |
 | `work/items/task.0372.candidate-flight-matrix-cutover.md`               | Proven primitive, design history, dogfood evidence on candidate-a                                         |
 | `work/projects/proj.cicd-services-gitops.md` `## Cutover State`         | Cold-reload anchor                                                                                        |

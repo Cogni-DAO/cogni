@@ -53,8 +53,8 @@ last_commit: 06fc35170
 
 | File / Resource                                                                                     | Why it matters                                                                                           |
 | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| [PR #1167](https://github.com/Cogni-DAO/cogni/pull/1167)                                    | This branch's PR; full diff + CI history                                                                 |
-| [PR #1164](https://github.com/Cogni-DAO/cogni/pull/1164)                                    | Original task.5001; shipped + verified on candidate-a/preview/prod                                       |
+| [PR #1167](https://github.com/Cogni-DAO/cogni/pull/1167)                                            | This branch's PR; full diff + CI history                                                                 |
+| [PR #1164](https://github.com/Cogni-DAO/cogni/pull/1164)                                            | Original task.5001; shipped + verified on candidate-a/preview/prod                                       |
 | [`task.5001` (Cogni API)](https://preview.cognidao.org/api/v1/work/items/task.5001)                 | Design v3.1 lives in `summary` field; `status: done` per PR #1164 merge                                  |
 | `nodes/poly/app/src/adapters/server/db/migrations/0037_poly_copy_trade_market_id.sql`               | Race-safe DO-block migration                                                                             |
 | `nodes/poly/app/src/features/trading/order-ledger.ts`                                               | `cumulativeIntentForMarket` (FOK-only error inclusion) + `insertPending` (persist placement attr)        |

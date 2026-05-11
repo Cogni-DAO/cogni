@@ -63,19 +63,19 @@ These are all called out in the guide's troubleshooting section and the future-s
 
 ## Repo locations to know
 
-| WHAT                                                       | WHERE                                                                                              |
-| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Skill (locked-format scorecard)                            | `.claude/skills/validate-candidate/SKILL.md`                                                       |
-| Auth bootstrap guide                                       | `docs/guides/candidate-auth-bootstrap.md`                                                          |
-| Capture script                                             | `scripts/dev/capture-authed-state.mjs`                                                             |
-| Smoke verifier                                             | `scripts/dev/smoke-authed-state.mjs`                                                               |
-| Captured state (gitignored)                                | `.local-auth/candidate-a-<node>.storageState.json`                                                 |
-| Loki query helper (used by skill)                          | `scripts/loki-query.sh`                                                                            |
-| The hack to retire                                         | `scripts/ci/smoke-candidate.sh` lines 58–114                                                       |
-| Existing E2E roadmap                                       | `proj.agent-dev-testing.md` Run (P2+)                                                              |
-| Existing CI E2E gap                                        | `proj.cicd-services-gitops.md` row 15                                                              |
+| WHAT                                                       | WHERE                                                                                      |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Skill (locked-format scorecard)                            | `.claude/skills/validate-candidate/SKILL.md`                                               |
+| Auth bootstrap guide                                       | `docs/guides/candidate-auth-bootstrap.md`                                                  |
+| Capture script                                             | `scripts/dev/capture-authed-state.mjs`                                                     |
+| Smoke verifier                                             | `scripts/dev/smoke-authed-state.mjs`                                                       |
+| Captured state (gitignored)                                | `.local-auth/candidate-a-<node>.storageState.json`                                         |
+| Loki query helper (used by skill)                          | `scripts/loki-query.sh`                                                                    |
+| The hack to retire                                         | `scripts/ci/smoke-candidate.sh` lines 58–114                                               |
+| Existing E2E roadmap                                       | `proj.agent-dev-testing.md` Run (P2+)                                                      |
+| Existing CI E2E gap                                        | `proj.cicd-services-gitops.md` row 15                                                      |
 | First successful skill run                                 | [PR #1033 scorecard](https://github.com/Cogni-DAO/cogni/pull/1033#issuecomment-4316368629) |
-| QA-agent graph (eventual replacement for the manual skill) | `work/items/task.0309.qa-agent-e2e-validation.md`                                                  |
+| QA-agent graph (eventual replacement for the manual skill) | `work/items/task.0309.qa-agent-e2e-validation.md`                                          |
 
 ## What I'd do first if I were picking this up
 

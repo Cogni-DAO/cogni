@@ -56,7 +56,7 @@ last_commit: a3082f3a3
 
 | File / Resource                                                                                                                                      | Why it matters                                                                                |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| [PR #1237](https://github.com/Cogni-DAO/cogni/pull/1237)                                                                                     | The active PR — read body for TLDR + validation plan                                          |
+| [PR #1237](https://github.com/Cogni-DAO/cogni/pull/1237)                                                                                             | The active PR — read body for TLDR + validation plan                                          |
 | [`docs/spec/development-lifecycle.md`](../../docs/spec/development-lifecycle.md)                                                                     | Merged spec (this PR's edit). Source of truth for lifecycle + interaction graph + invariants. |
 | [`docs/design/operator-dev-lifecycle-coordinator.md`](../../docs/design/operator-dev-lifecycle-coordinator.md)                                       | Coordinator design — Phase 1 done, Phase 2/3 deferred                                         |
 | [`nodes/operator/app/src/features/work-item-sessions/session-policy.ts`](../../nodes/operator/app/src/features/work-item-sessions/session-policy.ts) | The policy edited this PR. `nextActionForWorkItem` is the function under test                 |

@@ -60,7 +60,7 @@ last_commit: e4b9d37d
 | File / Resource                                                  | Why it matters                                                    |
 | ---------------------------------------------------------------- | ----------------------------------------------------------------- |
 | `scripts/db/seed.mts`                                            | The seed script — all epoch/event/allocation data definitions     |
-| `scripts/_seed-reference-data.json`                              | Real GitHub data from Cogni-DAO/cogni used to model seed  |
+| `scripts/_seed-reference-data.json`                              | Real GitHub data from Cogni-DAO/cogni used to model seed          |
 | `src/app/api/v1/attribution/epochs/[id]/allocations/route.ts`    | GET + PATCH handlers for epoch allocations                        |
 | `src/app/api/v1/attribution/epochs/[id]/statement/route.ts`      | GET handler for epoch payout statements                           |
 | `src/features/governance/hooks/useCurrentEpoch.ts`               | Hook showing exact API endpoints the UI fetches                   |

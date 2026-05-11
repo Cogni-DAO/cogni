@@ -69,4 +69,4 @@ last_commit: b423a97d
 | `apps/operator/src/shared/ai/model-catalog.server.ts:300-360`                | The `CHATGPT_MODEL_IDS` hacks to delete                   |
 | `apps/operator/src/features/ai/components/ModelPicker.tsx:41-82`             | The `CHATGPT_MODELS` hardcoded array to delete            |
 | `packages/ai-core/src/billing/source-system.ts`                              | `SourceSystem` enum — needs `"codex"                      | "ollama"` |
-| https://github.com/Cogni-DAO/cogni/pull/612                          | PR with all crawl + walk implementation                   |
+| https://github.com/Cogni-DAO/cogni/pull/612                                  | PR with all crawl + walk implementation                   |

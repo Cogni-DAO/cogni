@@ -60,4 +60,4 @@ last_commit: "218903946"
 | `nodes/operator/app/src/adapters/server/vcs/github-vcs.adapter.ts` | Real VCS adapter                                                                   |
 | `docs/spec/agentic-contribution-loop.md`                           | As-built spec for the full agent contribution loop                                 |
 | `docs/guides/agent-api-validation.md`                              | How to exercise API features after flight                                          |
-| PR #1021                                                           | https://github.com/Cogni-DAO/cogni/pull/1021                               |
+| PR #1021                                                           | https://github.com/Cogni-DAO/cogni/pull/1021                                       |
