@@ -50,7 +50,7 @@ import {
   coalesceWalletExecutionPositions,
   DASHBOARD_LEDGER_POSITION_LIMIT,
   DASHBOARD_LEDGER_POSITION_STATUSES,
-  summarizeDailyTradeCounts,
+  DASHBOARD_TRADE_COUNT_WINDOW_DAYS,
   toWalletExecutionPosition,
 } from "../_lib/ledger-positions";
 
@@ -148,18 +148,25 @@ export const GET = wrapRouteHandlerWithLogging(
     const warnings: Array<{ code: string; message: string }> = [];
     let livePositions: PolyWalletExecutionOutput["live_positions"] = [];
     let closedPositions: PolyWalletExecutionOutput["closed_positions"] = [];
-    let dailyTradeCounts: ReturnType<typeof summarizeDailyTradeCounts> = [];
+    let dailyTradeCounts: Array<{ day: string; n: number }> = [];
     const ledgerLiveByAsset = new Map<
       string,
       PolyWalletExecutionOutput["live_positions"][number]
     >();
     try {
-      const rows = await container.orderLedger.listTenantPositions({
-        billing_account_id: account.id,
-        statuses: [...DASHBOARD_LEDGER_POSITION_STATUSES],
-        limit: DASHBOARD_LEDGER_POSITION_LIMIT,
-      });
-      dailyTradeCounts = summarizeDailyTradeCounts(rows, capturedAt);
+      const [rows, dailyCountsFromDb] = await Promise.all([
+        container.orderLedger.listTenantPositions({
+          billing_account_id: account.id,
+          statuses: [...DASHBOARD_LEDGER_POSITION_STATUSES],
+          limit: DASHBOARD_LEDGER_POSITION_LIMIT,
+        }),
+        container.orderLedger.dailyTradeCounts({
+          billing_account_id: account.id,
+          capturedAt,
+          windowDays: DASHBOARD_TRADE_COUNT_WINDOW_DAYS,
+        }),
+      ]);
+      dailyTradeCounts = dailyCountsFromDb;
       const positions = rows.map((row) =>
         toWalletExecutionPosition(row, capturedAt)
       );

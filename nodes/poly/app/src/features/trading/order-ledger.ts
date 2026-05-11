@@ -77,6 +77,21 @@ function parseLimitPrice(raw: string | null): number | null {
 }
 
 const DEFAULT_LIST_LIMIT = 50;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** Fixed-width UTC day window ending at `capturedAt`, oldest → newest. */
+function buildUtcDayWindow(capturedAt: Date, windowDays: number): string[] {
+  const todayUtc = Date.UTC(
+    capturedAt.getUTCFullYear(),
+    capturedAt.getUTCMonth(),
+    capturedAt.getUTCDate()
+  );
+  const days: string[] = [];
+  for (let i = windowDays - 1; i >= 0; i--) {
+    days.push(new Date(todayUtc - i * MS_PER_DAY).toISOString().slice(0, 10));
+  }
+  return days;
+}
 const nonTerminalPositionLifecycle = sql`(${polyCopyTradeFills.positionLifecycle} IS NULL OR ${polyCopyTradeFills.positionLifecycle} NOT IN ('closed','redeemed','loser','dust','abandoned'))`;
 const activeRestingPositionLifecycle = sql`(${polyCopyTradeFills.positionLifecycle} IS NULL OR ${polyCopyTradeFills.positionLifecycle} IN ('unresolved','open','closing'))`;
 const notPositionTerminal = sql`${nonTerminalPositionLifecycle} AND ${polyCopyTradeFills.attributes}->>'closed_at' IS NULL`;
@@ -567,6 +582,40 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
         .limit(limit);
 
       return rows.map(mapLedgerRow);
+    },
+
+    async dailyTradeCounts(opts: {
+      billing_account_id: string;
+      capturedAt: Date;
+      windowDays: number;
+    }): Promise<Array<{ day: string; n: number }>> {
+      const rows = (await deps.db.execute(sql`
+        SELECT
+          to_char(date_trunc('day', ${polyCopyTradeFills.observedAt} AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
+          COUNT(*)::int AS n
+        FROM ${polyCopyTradeFills}
+        WHERE ${polyCopyTradeFills.billingAccountId} = ${opts.billing_account_id}
+          AND ${polyCopyTradeFills.observedAt} >= now() - (${opts.windowDays} || ' days')::interval
+          AND (
+            COALESCE((${polyCopyTradeFills.attributes}->>'filled_size_usdc')::numeric, 0) > 0
+            OR (
+              ${polyCopyTradeFills.status} IN ('filled','partial')
+              AND COALESCE((${polyCopyTradeFills.attributes}->>'size_usdc')::numeric, 0) > 0
+            )
+          )
+        GROUP BY 1
+        ORDER BY 1
+      `)) as unknown as { rows?: Array<Record<string, unknown>> };
+      const list =
+        rows.rows ?? (rows as unknown as Array<Record<string, unknown>>);
+      const byDay = new Map<string, number>();
+      for (const r of list as Array<Record<string, unknown>>) {
+        byDay.set(String(r.day ?? ""), Number(r.n ?? 0));
+      }
+      return buildUtcDayWindow(opts.capturedAt, opts.windowDays).map((day) => ({
+        day,
+        n: byDay.get(day) ?? 0,
+      }));
     },
 
     async listOpenOrPending(
