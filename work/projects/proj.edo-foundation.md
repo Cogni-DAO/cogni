@@ -7,7 +7,7 @@ state: Active
 priority: 1
 estimate: 5
 summary: Close the data → hypothesis → action → data loop. Four entry_type values (event, hypothesis, decision, outcome) + four citation types (evidence_for, derives_from, validates, invalidates) + evaluate_at column + EdoResolverPort + atomic agent tools + resolver cron + brain prompt + chain UI. Recursion via citation DAG; no new tables.
-outcome: An agent files a hypothesis with evaluate_at, takes a decision citing it, the resolver cron files the outcome on schedule with a validates/invalidates edge, and confidence recomputes — visible end-to-end as a chain in /knowledge?mode=chains.
+outcome: An agent files a hypothesis with evaluate_at, takes a decision citing it, the resolver cron files the outcome on schedule with a validates/invalidates edge, and confidence recomputes — observable end-to-end as commits in dolt_log + rows in the `citations` table (chain UI is Run-tier polish, not a success precondition).
 assignees: derekg1729
 created: 2026-05-11
 updated: 2026-05-11
@@ -34,20 +34,24 @@ Designed in **[docs/spec/knowledge-syntropy.md § The EDO Loop](../../docs/spec/
 
 | Deliverable                                                          | Status      | Est | Work Item |
 | -------------------------------------------------------------------- | ----------- | --- | --------- |
-| Schema extension: `evaluate_at` column + widen entry_type enum + widen citation_type enum (`EntryTypeSchema`, `CitationTypeSchema`) | Not Started | 1   | —         |
-| `EdoResolverPort` + Doltgres adapter + 1-hop `recomputeConfidence`   | Not Started | 2   | —         |
+| Schema extension: add `evaluate_at` + `resolution_strategy` columns to `knowledge`; widen `EntryTypeSchema` enum (+`event`,`hypothesis`,`decision`,`outcome`); add `CitationTypeSchema` Zod enum (8 values total); add `'agent'` to `SourceTypeSchema` (fixes shipped drift) | Not Started | 1   | —         |
+| Define `Citation` + `NewCitation` Zod schemas in `packages/knowledge-store/src/domain/schemas.ts` (forward-ref from the port) | Not Started | 1   | —         |
+| Port additions on `KnowledgeStorePort`: `addCitation`, `knowledgeExists` (canonical surface lives in `knowledge-data-plane.md`) | Not Started | 1   | —         |
+| Adapter enforcement: `HYPOTHESIS_HAS_EVALUATE_AT`, `CITATION_TARGET_EXISTS_AT_WRITE`, `EDGE_TYPE_MATCHES_CITED_ENTRY_TYPE`, `RAW_WRITE_REJECTS_TYPES`. Typed errors mapped to HTTP 400 | Not Started | 2   | —         |
+| `EdoResolverPort` + Doltgres adapter + 1-hop `recomputeConfidence` (pure-from-citations per `RECOMPUTE_IS_PURE_FROM_CITATIONS`) | Not Started | 2   | —         |
 | `createEdoCapability(knowledgePort, resolverPort)` — atomic write+cite+commit | Not Started | 1   | —         |
-| Three tools: `core__edo_hypothesize`, `core__edo_decide`, `core__edo_record_outcome` (registered in `TOOL_CATALOG`) | Not Started | 2   | —         |
+| Three tools (committed permanently): `core__edo_hypothesize`, `core__edo_decide`, `core__edo_record_outcome` (registered in `TOOL_CATALOG`) | Not Started | 2   | —         |
 
 ### Walk (P1) — Close the Loop
 
-**Goal:** Resolution runs on a schedule. Outcomes file themselves and confidence recomputes. The loop is closed end-to-end without an agent in the seat.
+**Goal:** Resolution runs on a schedule. Outcomes file themselves and confidence recomputes. The loop is closed end-to-end without an agent in the seat — and we can MEASURE whether it's working.
 
 | Deliverable                                                                          | Status      | Est | Work Item              |
 | ------------------------------------------------------------------------------------ | ----------- | --- | ---------------------- |
-| `resolveDueHypotheses` cron in `scheduler-worker` (idempotent on hypothesis id)       | Not Started | 2   | (create at P1 start)   |
-| Small resolver graph (LangGraph) for hypotheses needing interpretation                | Not Started | 2   | (create at P1 start)   |
-| Brain prompt update — teaches EDO discipline (recall + hypothesize + cite outcomes)   | Not Started | 1   | (create at P1 start)   |
+| `resolveDueHypotheses` cron in `scheduler-worker` — idempotent on hypothesis id; honors `RESOLVER_MAX_BATCH_PER_TICK` (v0: N=10) + `RESOLVER_SINGLE_LEADER_PER_NODE` | Not Started | 2   | (create at P1 start)   |
+| Small resolver graph (LangGraph) for `resolution_strategy='agent'` hypotheses         | Not Started | 2   | (create at P1 start)   |
+| Brain prompt update — teaches hypothesis-loop discipline. Acceptance bar: brain stack test asserts `core__edo_hypothesize` is called before `core__knowledge_write` when a prediction is being made | Not Started | 1   | (create at P1 start)   |
+| **EHDO calibration view** — SQL view (or scorecard knowledge row refreshed by the cron) aggregating `validates`/`invalidates` counts + hit-rate by `source_node` and `resolution_strategy` over a rolling 30d window. Makes loop health measurable; Karpathy's discipline isn't "agents predict" — it's "we measure whether they're calibrated" | Not Started | 2   | (create at P1 start)   |
 
 ### Run (P2+) — Visualize + Compound
 
@@ -65,7 +69,7 @@ Designed in **[docs/spec/knowledge-syntropy.md § The EDO Loop](../../docs/spec/
 - **App-layer confidence only.** Doltgres 0.56 has no PL/pgSQL. `recomputeConfidence` runs in the adapter.
 - **1-hop in v1.** Multi-hop transitive propagation is filed when v1 data shows the need.
 - **Scheduler-worker, not Temporal.** The resolver cron matches the existing pattern (review, order-reconciler).
-- **Type-narrow tools (revisit in P0).** Three distinct tools shipped first for model accuracy; consolidation to a single `core__edo_write({beat, citations[]})` reconsidered if/when 3-tool usage shows redundancy. Decision deferred to P0 implementation.
+- **Three tools, committed.** `core__edo_hypothesize` / `core__edo_decide` / `core__edo_record_outcome` ship and stay. Type-narrow tools beat polymorphic ones for model accuracy; consolidation is not on the table for v0 or v1.
 - **Per-node sovereignty bounds EDO chains.** `DOLTGRES_PER_NODE_DATABASE` means an outcome on poly cannot cite a hypothesis on operator. Cross-node EDO compounding waits on Dolt remotes (🔴 in [KNOWLEDGE charter](../charters/KNOWLEDGE.md)). Within-node compounding is the v1 goal.
 - **Resolution opt-in by default.** `resolution_strategy IS NULL` is the default; cron skips. Non-null values are namespaced text (`agent` in v0; future kinds like `market:<id>` add values, not columns). Bounds LLM cost. See spec § `evaluate_at`: The Loop Closer.
 - **One canonical port surface.** `KnowledgeStorePort` lives in `knowledge-data-plane.md § Port Interface`; this project contributes `addCitation` + `knowledgeExists` to that surface. Other specs never redefine the interface.
@@ -104,10 +108,14 @@ User clarification 2026-05-11: EDO = event → decision → outcome, with recurs
 - **Causal traceability** — `derives_from` makes every decision traceable to a prediction; absent prediction → file as `finding`/`conclusion` instead
 - **Mechanical promotion** — `validates`/`invalidates` writes trigger `recomputeConfidence`; status moves through draft → candidate → established without prompt engineering
 
-### Open questions (tracked in spec § Open Questions)
+### Resolved by this round of review
+
+- Concurrency on `recomputeConfidence` — resolved by `RECOMPUTE_IS_PURE_FROM_CITATIONS`. Recompute reads all relevant citations and computes from scratch; never increments. Order-independent; no locks needed.
+- Tool granularity (3 vs 1) — committed to three permanently; see Constraints.
+- Bypass-rejection scope — `RAW_WRITE_REJECTS_TYPES = {hypothesis, decision, outcome}`. Events flow through `core__knowledge_write` unchanged.
+
+### Still open (track in spec § Open Questions)
 
 - Resolver graph shape: one generic graph that dispatches by `resolution_strategy` namespace prefix, or per-domain resolvers? Start with one; split when domains diverge.
-- Concurrency on `recomputeConfidence`: two simultaneous outcome writes against the same hypothesis race. v0: serialize via reserved-conn per cited_id; revisit if measurable contention.
-- Brain prompt acceptance: minimum bar is a brain stack test that asserts the tool-call sequence (`core__edo_hypothesize` before `core__knowledge_write` when a prediction is being made). To be added with the prompt change in P1.
 - Chain UI library (P2): no graph-viz dep installed today. Start with an indented text view in the existing DataGrid; pick a library (react-flow vs cytoscape vs dagre) only if the text view proves insufficient.
-- Embedding model selection (BGE-M3 vs voyage) — still open in knowledge-syntropy; orthogonal to EDO.
+- Embedding model selection (BGE-M3 vs voyage) — still open in knowledge-syntropy; orthogonal to the hypothesis loop.

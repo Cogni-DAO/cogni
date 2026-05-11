@@ -468,9 +468,11 @@ At these scales, Dolt direct queries remain fast (< 10ms for indexed lookups). T
 
 ---
 
-## The EDO Loop — Event → Hypothesis → Decision → Outcome
+## The Hypothesis Loop — Event → Hypothesis → Decision → Outcome
 
-> Knowledge that doesn't predict, decide, and resolve is just a filing cabinet. The EDO loop turns the knowledge plane into a self-evaluating reasoning system. It is the foundation for self-improving agentic loops: agents form falsifiable predictions, act, observe, and update.
+> Knowledge that doesn't predict, decide, and resolve is just a filing cabinet. The hypothesis loop turns the knowledge plane into a self-evaluating reasoning system. It is the foundation for self-improving agentic loops: agents form falsifiable predictions, act, observe, and update.
+>
+> **Codename `EDO`.** The project + tool prefix (`proj.edo-foundation`, `core__edo_*`) is shorthand. The accurate beat count is four — Hypothesis is the falsifiability bridge between Event and Decision and is structurally required, not optional.
 
 ### The Four Beats
 
@@ -539,6 +541,7 @@ Invariants live at the adapter layer — the universal choke point — mirroring
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `HYPOTHESIS_HAS_EVALUATE_AT`       | `addKnowledge` / `upsertKnowledge` rejects rows where `entry_type='hypothesis'` and `evaluate_at` is null              |
 | `CITATION_TARGET_EXISTS_AT_WRITE`  | `addCitation` rejects rows whose `cited_id` is not present in `knowledge` (port adds `knowledgeExists(id)` for the check) |
+| `EDGE_TYPE_MATCHES_CITED_ENTRY_TYPE` | `addCitation` verifies the cited row's `entry_type` against the citation_type: `derives_from`, `validates`, `invalidates` require `cited.entry_type='hypothesis'`. `evidence_for` accepts any cited entry_type (events, observations, findings can all be evidence). Without this check the falsifiability gates below are bypassable. |
 | `OUTCOME_CITES_HYPOTHESIS`         | `addKnowledge` for `entry_type='outcome'` requires the atomic `core__edo_record_outcome` path (raw write rejects)      |
 | `DECISION_CITES_HYPOTHESIS`        | `addKnowledge` for `entry_type='decision'` requires the atomic `core__edo_decide` path (raw write rejects)             |
 
@@ -723,6 +726,10 @@ The librarian's retrieval contract (same `KnowledgeSearchHit` shape) is the x402
 | CONFIDENCE_RECOMPUTE_ON_RESOLVE            | `validates` / `invalidates` writes trigger a 1-hop `recomputeConfidence` on the cited row. Multi-hop transitive propagation is deferred until v1 data shows the need.                                                                          |
 | RESOLVER_IDEMPOTENT                        | `resolveDueHypotheses` MUST be idempotent on hypothesis id. Double-firing a resolution is a no-op (already-resolved hypotheses are skipped).                                                                                                  |
 | EDO_TOOLS_ATOMIC                           | `core__edo_hypothesize` / `core__edo_decide` / `core__edo_record_outcome` each write entry + edges + commit in one capability call. No partial-loop writes.                                                                                   |
+| EDGE_TYPE_MATCHES_CITED_ENTRY_TYPE         | `addCitation` verifies the cited row's `entry_type` matches the citation_type's contract: `derives_from`/`validates`/`invalidates` require `cited.entry_type='hypothesis'`; `evidence_for` accepts any. Without this check, falsifiability gates are bypassable. |
+| RECOMPUTE_IS_PURE_FROM_CITATIONS           | `recomputeConfidence` reads ALL relevant `citations` rows for the target and recomputes from scratch — never increments, never reads prior `confidence_pct`. Concurrent recomputes converge regardless of order; no locks needed.            |
+| RESOLVER_MAX_BATCH_PER_TICK                | The resolver cron processes at most N hypotheses per tick (v0: N=10) across all `resolution_strategy` namespaces, with a per-strategy sub-budget. Bounds LLM cost under fan-out spikes (e.g. 100 hypotheses due at the same minute).         |
+| RESOLVER_SINGLE_LEADER_PER_NODE            | At most one `resolveDueHypotheses` worker per node runs at a time. If `scheduler-worker` scales horizontally, only the elected leader fires the cron. Combined with `RESOLVER_IDEMPOTENT`, double-firing is structurally safe but bounded.   |
 
 ---
 

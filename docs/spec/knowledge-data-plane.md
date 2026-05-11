@@ -267,6 +267,8 @@ interface KnowledgeStorePort {
   // Write — rows
   addKnowledge(entry: NewKnowledge): Promise<Knowledge>; // insert-only
   upsertKnowledge(entry: NewKnowledge): Promise<Knowledge>; // insert-or-update by id
+  updateKnowledge(id: string, update: Partial<NewKnowledge>): Promise<Knowledge>;
+  deleteKnowledge(id: string): Promise<void>; // admin/cleanup only; agents use DEPRECATE_NOT_DELETE
 
   // Write — edges (knowledge-syntropy)
   addCitation(edge: NewCitation): Promise<Citation>;
@@ -277,7 +279,7 @@ interface KnowledgeStorePort {
   // Doltgres versioning
   commit(message: string): Promise<string>; // returns commit hash
   log(limit?: number): Promise<DoltCommit[]>;
-  diff(from: string, to: string, table?: string): Promise<DoltDiffEntry[]>;
+  diff(fromRef: string, toRef: string): Promise<DoltDiffEntry[]>;
   currentCommit(): Promise<string>;
 }
 ```
