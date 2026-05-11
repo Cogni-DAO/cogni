@@ -34,7 +34,7 @@ import { useTheme } from "next-themes";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { type State, WagmiProvider } from "wagmi";
-import { wagmiConfig } from "@/shared/web3/wagmi.config";
+import { wagmiConfigClient } from "@/shared/web3/wagmi.config.client";
 
 function RainbowKitThemeProvider({
   children,
@@ -67,7 +67,7 @@ export function Providers({
   readonly initialState?: State | undefined;
 }): ReactNode {
   return (
-    <WagmiProvider config={wagmiConfig} initialState={initialState}>
+    <WagmiProvider config={wagmiConfigClient} initialState={initialState}>
       <AuthProvider>
         <QueryProvider>
           <RainbowKitSiweNextAuthProvider

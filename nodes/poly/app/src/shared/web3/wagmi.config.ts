@@ -3,31 +3,27 @@
 
 /**
  * Module: `@shared/web3/wagmi.config`
- * Purpose: Static wagmi configuration for wallet connections with SSR support.
- * Scope: Server-importable. Built directly with `wagmi.createConfig` (no
- *   RainbowKit imports) so the server `layout.tsx` can import this module
- *   to compute `cookieToInitialState` without poisoning the RSC server
- *   module graph.
+ * Purpose: SSR-safe minimal wagmi config used ONLY for `cookieToInitialState`
+ *   in the server `layout.tsx`. The actual wallet UI runs against the
+ *   RainbowKit-tagged config in `./wagmi.config.client.ts`.
+ * Scope: Server-importable. Built directly with `wagmi.createConfig` and bare
+ *   `wagmi/connectors` so the server `layout.tsx` can import this module
+ *   without poisoning the RSC server module graph (RainbowKit and its
+ *   `/wallets` subpath are both flagged `"use client"`).
  * Invariants:
- *   - MUST NOT import from `@rainbow-me/rainbowkit` — that package is
- *     flagged `"use client"` and would break Next 15 static-page-data
- *     collection of framework routes (e.g. `/_not-found`).
- *   - SSR enabled with cookieStorage; single active chain (CHAIN);
- *     WalletConnect projectId from env (optional).
- * Side-effects: none (config creation only)
- * Notes: RainbowKit consumes this config inside the client `Providers`
- *   boundary via `<RainbowKitProvider>` — see `app/providers.client.tsx`.
- *   Pattern follows the canonical wagmi App Router SSR guide:
- *   https://wagmi.sh/react/guides/ssr and
- *   https://github.com/rainbow-me/rainbowkit/tree/main/examples/with-next-app
- * Follow-up: connectors registered here are `injected` + optional
- *   `walletConnect`. Coinbase Smart Wallet (`coinbaseWallet`) and Safe
- *   (`safe`) connectors from `wagmi/connectors` can be added when we have
- *   project credentials — see task.0402 §"Connector roster follow-up".
- *   `walletConnect({ showQrModal: true })` is intentional in this
- *   non-`getDefaultConfig` path: RainbowKit's modal only renders the QR
- *   when `rkDetails` flags are set (which only `getDefaultConfig` sets),
- *   so we let WC's own Web3Modal handle QR display.
+ *   - MUST NOT import from `@rainbow-me/rainbowkit` or `/wallets` — see PR #1119.
+ *   - SSR enabled with cookieStorage; chains/transports MUST match
+ *     `./wagmi.config.client.ts`.
+ *   - WalletConnect projectId from env (optional).
+ * Side-effects: none (config creation only).
+ * Notes: Connectors here are rendered via the desktop "Installed" detection
+ *   path in RainbowKit (which reads `injected()` directly). The mobile
+ *   rendering path requires `rkDetails`-tagged connectors and only works via
+ *   the client-only config sibling. See `./wagmi.config.client.ts` for the
+ *   rationale and the curated wallet roster.
+ * Links:
+ *   - ./wagmi.config.client.ts (the connectors users actually see)
+ *   - https://wagmi.sh/react/guides/ssr
  * @public
  */
 
@@ -45,11 +41,9 @@ const connectors = [
 ];
 
 /**
- * Static wagmi configuration for wallet connections.
- *
- * SSR-enabled with cookieStorage to prevent IndexedDB hydration errors.
- * WalletConnect projectId is optional — app degrades to injected wallet
- * (MetaMask, etc.) if missing.
+ * SSR-safe wagmi configuration consumed by `layout.tsx` for
+ * `cookieToInitialState`. The client `Providers` tree uses
+ * `wagmiConfigClient` from `./wagmi.config.client.ts` instead.
  */
 export const wagmiConfig = createConfig({
   chains: [CHAIN],
