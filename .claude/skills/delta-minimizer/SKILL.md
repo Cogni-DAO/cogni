@@ -1,213 +1,129 @@
 ---
 name: delta-minimizer
-description: "Drive |Δ| (variance from copy-target positions) on the Polymarket dashboard toward zero by classifying high-|Δ| markets into a fixed taxonomy of mirror-loop failure modes, emitting an actionable scorecard, and filing follow-up work items for unattributed patterns. Use this skill whenever the user asks to 'minimize delta', 'rank copy-trade gaps', 'why is our delta high', 'optimize tracking error', 'loop the delta study', or runs '/delta-minimizer' (with or without a time window). Also use when the user asks how close we are to RN1's or swisstony's compounding rate, or wants the failure-mode matrix updated. The skill is the executable wrapper around the goal contract — ideal mean |Δ| under 1%, target under 10%; anything else needs a named root cause and a tracked work item."
+description: "Investigate ONE specific discrepancy between our wallet's position and a copy-trade target's position on Polymarket. Use whenever the user says 'why are we on the wrong side', 'why is our VWAP off', 'why didn't we mirror that fill', 'delta on market X', 'minimize delta', 'investigate copy-trade gap', '/delta-minimizer', or points at a single market/event on the dashboard and asks what happened. The copy-trade algorithm is known to have fundamental bugs; the skill's job is to find ONE bug, prove it with cited evidence, and stop."
 ---
 
 # Δ-Minimizer
 
-Variance from a tracked copy-target's positions is alpha leaking. Per-position |Δ| = |our*share% − target_share%| of total market position. Average |Δ| = 0 ⇒ we ride their compounding rate (modulo absolute capital). Today we don't — and the dashboard surfaces per-market Δ but not a \_systemic* read on dispersion or its causes.
+We copy-trade a target wallet (e.g. `swisstony`) on Polymarket. Our positions should match theirs. Every divergence is a bug. The algorithm has known fundamental issues — your job is to find ONE, prove it, file it, move on.
 
-This skill is the loop that closes that gap.
+## Required reading BEFORE you query anything
 
-## Goal contract
+You are expected to already understand the system. If you don't, read these — they are short and load-bearing:
 
-| State         | Mean \|Δ\| | Action                                                                  |
-| ------------- | ---------- | ----------------------------------------------------------------------- |
-| 🟢 ideal      | < 1%       | continue; surface what's working                                        |
-| 🟡 acceptable | 1–10%      | classify outliers; file targeted bugs                                   |
-| 🔴 broken     | > 10%      | mean is dominated by a systemic failure mode — find it, file it, fix it |
+- `docs/spec/poly-copy-trade-execution.md` — mirror-side rules, decision-ledger contract, `MirrorPositionView` (per-condition cache; `our_token_id` = OUR dominant side), error codes, lifecycle, sizing surfaces. **Branch decision (post-bug.5048) is target-dominance-driven** — see the "Branch decision" table + skip-precedence + `TARGET_DOMINANCE_DRIVES_BRANCH` / `NEVER_PAY_ABOVE_TARGET_VWAP` / `NO_SELL_IN_MIRROR` / `OPTION_C_TOLERATES_MULTI_TARGET` invariants. When investigating wrong-side / wrong-size Δ, always check `state.target_position` side fractions, not just our position. The dashboard reads `current-position-read-model.ts` (chain-classified by `poly_market_outcomes`), NOT `MirrorPositionView` — never claim UI behavior without verifying the actual read model.
+- `docs/spec/poly-tenant-and-collateral.md` — per-tenant wallets, USDC.e (deposit) vs pUSD (the ONLY currency the CLOB spends), `authorizeIntent` pre-place gate (grants/caps, NOT balance), v0 default caps. `errorCode=insufficient_balance` ≠ "we ran out of money"; it specifically means the wallet has USDC.e but not pUSD (TEN:712).
+- `nodes/poly/app/src/features/copy-trade/plan-mirror.ts` + `types.ts` — the `MirrorReason` enum (`below_target_percentile`, `followup_position_too_small`, `position_cap_reached`, `already_resting`, `layer_scale_in`, `target_dominant_other_side`, `vwap_floor_breach`, etc.) is in code, not the spec. `decideMirrorBranch` + `analyzeTargetDominance` + `targetVwapForToken` are the load-bearing helpers.
 
-The goal is not to eliminate variance entirely — capital constraint guarantees we miss bets the target makes. The goal is **every non-zero |Δ| has a named cause we are working on**.
+Canonical CLOB `errorCode` enum (EXEC:693): `insufficient_balance | insufficient_allowance | stale_api_key | invalid_signature | invalid_price_or_tick | below_min_order_size | empty_response | http_error | unknown`.
 
-### VWAP-floor invariant (load-bearing)
+## Discipline (read this twice)
 
-|Δ| minimization is the headline metric, but it has one explicit exception: **never close |Δ| by paying worse VWAP than the target's average fill price.** A cancel-and-replace (or a fresh layer) that would worsen our VWAP vs the target's avg fill on this (token, side) by more than 0.5pp is classified `vwap_floor_held`, not recommended for action, and counted toward the goal-contract denominator as legitimate residual variance. Capital scarcity (`capital_constrained`) and one-sided books (`orderbook_one_side`) stay dominant explanations _before_ execution-quality regression. We do not chase. The headline goal is "|Δ| → 0 _given_ same-or-better VWAP than target." If the only path to |Δ|=0 is to lift offers past the target's entry, the headline goal has been met to the floor; further closure would be alpha leakage of a different shape.
+1. **One discrepancy per pass.** Not three. Not a top-K list. The user names ONE market, ONE token, ONE side — you investigate that. If they hand you several, ask which one first.
+2. **Every claim must be backed by a specific DB row or a specific Loki log line, pasted in your response.** No "likely cause." No "probably." No agent-summarized narrative — those hallucinate conditionIds and event titles. If you can't paste the evidence, you don't make the claim.
+3. **Verify the basics before theorizing.** Confirm the conditionId. Confirm the tokenId. Confirm whose wallet. Confirm timestamps.
+4. **Drive through to logs in the same pass — never stop on a Postgres-only read.** Decision rows with `outcome='error', receipt=null` tell you NOTHING about why. The actual `errorCode` lives on the pino log line, not the DB row. A pass is not complete until you have both: the decisions/fills row AND the matching Loki line(s) for any non-`placed` outcome. If Loki retention has aged out (>7d), say so explicitly — don't infer.
+5. **One verifiable finding per pass.** End the pass with: (a) the question, (b) the evidence rows/lines, (c) the conclusion, (d) the next narrower question. ONE finding does not mean ONE query — it means you keep digging until the finding is provable, then stop.
+6. **Never theorize about UI behavior.** If the answer depends on what the dashboard shows or hides, read `nodes/poly/app/src/.../current-position-read-model.ts` (and the API route serving the panel) and paste the relevant code. Don't speculate that the UI "collapses" or "hides" anything.
 
-## When to load
+## Evidence sources — these are the ONLY ones allowed
 
-- User runs `/delta-minimizer` (with or without a window)
-- User asks anything about delta, tracking error, copy-trade variance, why we under/over-perform a target
-- `/loop /delta-minimizer 6h` (or any cadence) — recurring research mode
-- User asks to update the failure-mode matrix or the scorecard
-- Reviewing why mean |Δ| moved between two snapshots
+### Postgres (via Grafana proxy)
 
-## The failure-mode taxonomy (v0)
+Datasource UID for prod: `cogni-production-poly-postgres`. Helper: `scripts/grafana-postgres-query.sh '<SQL>' --env production --node poly`. Read-only (SELECT/WITH/SHOW/EXPLAIN).
 
-Every high-|Δ| market is bucketed into exactly one of these. The taxonomy is the load-bearing artifact: bugs are filed against the buckets, not against individual markets.
+**Schema gotchas to know up front:**
 
-| Bucket                    | Detection signal                                                                                            | Action class                                                       |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `capital_constrained`     | target's mirrored size > our remaining bankroll for that target                                             | by-design (we don't have their bank)                               |
-| `position_cap_reached`    | `poly_copy_trade_decisions.reason='position_cap_reached'` for that (target, market)                         | tune cap upward if persistent                                      |
-| `already_resting_in_band` | `reason='already_resting'` AND new intent's price is within ±3pp of resting                                 | by-design (post-bug.5035 — same-band skip is intentional)          |
-| `cancel_failed`           | `reason='cancel_failed'` (post-bug.5035 cancel-replace path threw)                                          | active bug if rate climbing                                        |
-| `mirror.dropped`          | target fill in `poly_trader_fills` with no decision row in `poly_copy_trade_decisions` for the same fill_id | bug.5032 territory — file follow-up if seen                        |
-| `latency_skipped`         | decision recorded, but target's market price moved ≥3pp between target fill and our place                   | spike — measure latency distribution                               |
-| `liquidity_capped`        | order placed but `filled_size_usdc < size_usdc` and the orderbook on our side was thin                      | spike — escalation candidate                                       |
-| `orderbook_one_side`      | our side of the binary has ~zero depth at target's price (neg-risk markets)                                 | research — known structural issue                                  |
-| `vwap_floor_held`         | closing the gap requires paying ≥0.5pp worse VWAP than target's avg fill on this (token, side)              | by-design (VWAP-floor invariant)                                   |
-| `unattributed`            | doesn't match any of the above                                                                              | **always file a `spike.NNNN`** so the bucket gets a name next loop |
+- `poly_copy_trade_decisions.decided_at` (NOT `created_at`) is the timestamp column, **`timestamp with time zone`** — compare with `to_timestamp(<seconds>)`, not bare epoch ints.
+- `poly_copy_trade_decisions.target_id` is a UUIDv5 derived from `(billing_account_id, target_wallet)` and does NOT FK to `poly_copy_trade_targets.id`. Joining the two tables on `target_id` returns zero rows. To find decisions for swisstony, filter by `intent->>'target_wallet'` or grab the v5 id from a sample row first.
+- `intent->>'market_id'` has the form `prediction-market:polymarket:0xCONDITION_ID`, not the bare condition_id. `intent->>'position_token_id'` is often null on `new_entry` decisions; the actual token_id is in the `fill_id` string after the second `:`.
+- `poly_trader_wallets.kind`: `copy_target` for the wallets we mirror, `cogni_wallet` for our own.
 
-`unattributed` is the safety valve. Anything that lands here means the taxonomy is incomplete and a human needs to look. The skill files the spike automatically and includes the market id + reason patterns observed.
+Most relevant tables (schemas in `nodes/poly/packages/db-schema/src/`):
 
-## The loop
+| Table                       | What it holds                                                                                                                                           | Key cols                                                                                                                                   |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `poly_copy_trade_targets`   | Targets we mirror                                                                                                                                       | `id`, `target_wallet`, `mirror_filter_percentile`, `mirror_max_usdc_per_trade`, `created_at`, `disabled_at`                                |
+| `poly_trader_wallets`       | Wallet directory with labels (swisstony, RN1, our cogni_wallet)                                                                                         | `id`, `wallet_address`, `kind`, `label`                                                                                                    |
+| `poly_trader_fills`         | Every fill we've seen for any tracked wallet (target's AND ours)                                                                                        | `id`, `trader_wallet_id`, `source`, `native_id`, `condition_id`, `token_id`, `side`, `price`, `shares`, `size_usdc`, `observed_at`         |
+| `poly_copy_trade_decisions` | One row per (target fill → our decision). The truth of what the mirror chose to do. `receipt=null` is normal on `outcome='error'` — the WHY is in Loki. | `id`, `target_id` (UUIDv5), `fill_id`, `outcome` (`placed`/`skipped`/`error`), `reason`, `intent` (jsonb), `receipt` (jsonb), `decided_at` |
+| `poly_copy_trade_fills`     | Our placed orders                                                                                                                                       | PK `(target_id, fill_id)`, `market_id`, `client_order_id`, `order_id`, `status`, `attributes` (jsonb)                                      |
+| `poly_market_outcomes`      | Market resolution (chain-authoritative)                                                                                                                 | `(condition_id, token_id)`, `outcome`, `payout`, `resolved_at`                                                                             |
 
-### Step 1 — Snapshot dispersion
+SQL templates:
 
-Read the live |Δ| distribution off the dashboard's data source:
+```sql
+-- 0. Find swisstony's deterministic target_id (sample one of its decisions)
+select target_id, count(*) from poly_copy_trade_decisions
+where intent->>'target_wallet' = '0x204f72f35326db932158cba6adff0b9a1da95e14'
+group by target_id;
+
+-- 1. All fills on a condition with wallet labels
+select w.label, w.kind, f.side, f.token_id, f.price, f.shares, f.size_usdc, f.observed_at, f.native_id
+from poly_trader_fills f join poly_trader_wallets w on w.id = f.trader_wallet_id
+where f.condition_id = '0xCONDITION_ID_HERE'
+order by f.observed_at asc;
+
+-- 2. Every decision the mirror made for one target on one market (note the prefix on market_id)
+select d.decided_at, d.fill_id, d.outcome, d.reason,
+       d.intent->>'outcome' as outc, d.intent->>'side' as side,
+       d.intent->>'fill_price_target' as p, d.intent->>'fill_size_usdc_target' as sz,
+       d.intent->>'position_branch' as branch
+from poly_copy_trade_decisions d
+where d.target_id = '<UUIDv5 from query 0>'
+  and d.intent->>'market_id' = 'prediction-market:polymarket:0xCONDITION_ID_HERE'
+order by d.decided_at asc;
+
+-- 3. Recent non-placed decisions, grouped by (reason, intent.outcome)
+select reason, outcome, intent->>'outcome' as outc_name, count(*) as n
+from poly_copy_trade_decisions
+where decided_at > now() - interval '24 hours' and outcome != 'placed'
+group by 1, 2, 3
+order by n desc;
+```
+
+### Loki (literal history tracing)
+
+Helper: `scripts/loki-query.sh '<logql>' [minutes_back=30] [limit=200]`. Standard selector for prod poly node: `{env="production",service="app",pod=~"poly-node-app-.*"}`. **Retention is ~7 days** — if your incident is older, say so and don't fabricate.
+
+`component` labels (pino) you'll actually use:
+
+- `component="mirror-pipeline"` — the decision engine. Every non-`placed` decision row has a matching `level=50` log here carrying the real `errorCode` (which is NEVER in `decisions.receipt`).
+- `component="copy-trade-executor"` — the CLOB place call. Look here for raw CLOB rejection bodies.
+- `component="polymarket-ws-source"` — wallet-watch ingestion (target's fills entering our system).
+- `component="order-reconciler"` — order-status sync back to DB.
+- `component="mirror-job"` — outer scheduler.
+
+Queries that actually return something:
 
 ```bash
-source .env.cogni
-curl -sf -H "Authorization: Bearer $COGNI_API_KEY_PROD" \
-  "https://poly.cognidao.org/api/v1/poly/wallet/execution" \
-  | jq '.marketGroups | map(select(.status=="live") | .edgeGapPct) | map(select(. != null) | (. * 100) | fabs)'
+# What did mirror-pipeline say for a given fill_id? (substring match on the fill_id)
+scripts/loki-query.sh '{env="production",service="app"} | json | component="mirror-pipeline" |~ "FILL_HEX_PREFIX"' 1440 200
+
+# Every place attempt on a tokenId in the last day
+scripts/loki-query.sh '{env="production",service="app"} | json | component="copy-trade-executor" |~ "TOKEN_ID_HERE"' 1440 200
+
+# Recent placement errors with their errorCode (most useful)
+scripts/loki-query.sh '{env="production",service="app"} |~ "placement_failed"' 1440 50
 ```
 
-Compute: `mean`, `median`, `p90`, `p99`, `count_under_1pct`, `count_under_10pct`. The histogram component (`MarketsDeltaDistribution.tsx`) renders these on the dashboard already; this step is the agent-readable mirror.
+## Example walkthrough — one pass
 
-### Step 2 — Identify outliers
+**User**: "Our wallet shows UNDER 41 sh on Chelsea v Nott Forest O/U 3.5 while swisstony shows OVER 31k sh. Why are we on the wrong side?"
 
-Top-K markets by |Δ| (default K=10). For each, capture: `groupKey`, `eventTitle`, `ourValueUsdc`, `targetValueUsdc`, `edgeGapPct`, `pnlUsd`. These are the rows the rest of the loop investigates.
+**Step 1 — verify the basics.** Look up wallets in `poly_trader_wallets` (label = swisstony / our cogni_wallet). Find our 41.28-sh position via `poly_trader_fills` aggregation (group by `condition_id, token_id`, filter on share count + vwap). Pull the exact `condition_id` and `token_id`. Cross-check: did the target trade BOTH outcomes on this condition? `select … where condition_id=? group by token_id` — many "wrong-side" appearances are the target having scalped both sides; the apparent inversion is then a sizing/execution issue, not a side-flip.
 
-### Step 3 — Classify each outlier
+**Step 2 — pull every decision the mirror made for that target on that condition.** Use query template #2. Read them in time order. Categorize each by `outcome` + `reason`. If all `placed` decisions are on token X and the target's actual fills are on token X, the mirror's side-selection is fine. If you see a meaningful number of `outcome='error'` rows, **that is the central failure**, not whichever side won.
 
-For each outlier market, run the detection signals from the taxonomy. The order matters — first match wins:
+**Step 3 — drive through to Loki in the SAME pass.** `decisions.receipt` is `null` on errors; the `errorCode` only lives on the Pino line. Paste the JSON line and read the `errorCode`. Cross-reference against the CLOB enum and the collateral spec. Only then write up.
 
-1. `mirror.dropped` first (most damaging — silent data loss).
-2. `cancel_failed` (active bug class — never let this hide).
-3. `position_cap_reached` (configurable, common cause).
-4. `latency_skipped` (subtle, easy to mis-bucket).
-5. `liquidity_capped` / `orderbook_one_side` (structural).
-6. `already_resting_in_band` (by-design, last because it's a fallback explanation).
-7. `capital_constrained` (the residual — explains everything else if no signal matched but our share is just smaller).
-8. `unattributed` (must-file).
+**Step 4 — write up.** Question, 3–5 rows/lines of raw evidence, conclusion grounded in those rows, next narrower question. Do not theorize about UI behavior — if the UI is in play, read the read-model code.
 
-The decisions table is reachable via the operator API today **only** through the order-ledger view (`/api/v1/poly/copy-trade/orders`). The decisions table itself is not yet exposed; for now, classifications that need the decisions table fall back to `unattributed` with a note. **Filing `task` to expose `/api/v1/poly/research/decisions/<market_id>` is in scope of any first run that hits this gap.**
+## What this skill does NOT do
 
-### Step 4 — Emit the scorecard
-
-The scorecard format is locked. Every run posts the same shape so deltas-of-deltas are mechanical:
-
-```markdown
-## /delta-minimizer · <ISO-timestamp> · 🟢 IDEAL | 🟡 ACCEPTABLE | 🔴 BROKEN
-
-| METRIC       | VALUE          | GOAL  |
-| ------------ | -------------- | ----- |
-| mean \|Δ\|   | X.X%           | < 1%  |
-| median \|Δ\| | X.X%           | < 1%  |
-| p90 \|Δ\|    | X.X%           | < 10% |
-| markets <1%  | N / TOTAL (P%) | ≥ 80% |
-| markets <10% | N / TOTAL (P%) | ≥ 95% |
-
-FAILURE-MODE MATRIX
-
-| BUCKET                  | COUNT | Σ\|Δ\| pp | Δ vs prev run | STATUS / WORK ITEM          |
-| ----------------------- | ----- | --------- | ------------- | --------------------------- |
-| mirror.dropped          | N     | X.X       | +/- N         | active bug.5032 / 🔴 active |
-| cancel_failed           | N     | X.X       | +/- N         | post-bug.5035 / 🟡 watching |
-| position_cap_reached    | N     | X.X       | +/- N         | task.NNNN tune / 🟡 active  |
-| latency_skipped         | N     | X.X       | +/- N         | spike.NNNN / 🟡 measuring   |
-| liquidity_capped        | N     | X.X       | +/- N         | structural / 🟢 known       |
-| orderbook_one_side      | N     | X.X       | +/- N         | structural / 🟢 known       |
-| already_resting_in_band | N     | X.X       | +/- N         | by-design / —               |
-| capital_constrained     | N     | X.X       | +/- N         | by-design / —               |
-| unattributed            | N     | X.X       | +/- N         | spike.NNNN filed / 🔴 new   |
-
-TOP OUTLIERS
-
-| MARKET             | OUR $ | TGT $ | \|Δ\| | BUCKET   |
-| ------------------ | ----- | ----- | ----- | -------- |
-| <eventTitle short> | $X    | $Y    | X.X%  | <bucket> |
-
-...
-
-NEXT ACTIONS <bullet list, max 3 — what changes in the codebase, with item refs>
-```
-
-The verdict in the heading:
-
-- 🟢 IDEAL: mean < 1% AND no `unattributed` AND no 🔴 active buckets
-- 🔴 BROKEN: mean > 10% OR any new `unattributed` OR a bucket trending sharply up
-- 🟡 ACCEPTABLE: anything in between
-
-### Step 5 — File follow-ups
-
-For every `unattributed` outlier, file a spike via the operator API. Do not batch — one spike per distinct unattributed pattern is fine, but never let a market sit unattributed across two consecutive runs:
-
-```bash
-source .env.cogni
-curl -sf -X POST "https://cognidao.org/api/v1/work/items" \
-  -H "Authorization: Bearer $COGNI_API_KEY_PROD" \
-  -H "content-type: application/json" \
-  -d '{
-    "type":"spike",
-    "title":"poly: |Δ| outlier on <eventTitle> — unattributed",
-    "node":"poly",
-    "summary":"<market_id> currently |Δ|=<X>% with our $<Y> vs target $<Z>. Decision-table signals don't match any taxonomy bucket. Investigate."
-  }'
-```
-
-For active buckets that are climbing, PATCH a heartbeat note onto the existing tracking item rather than filing a new one (anti-sprawl per the `/contribute-to-cogni` contract).
-
-### Step 6 — Persist (markdown today; knowledge `entry_type='scorecard'` once PR #1133 lands)
-
-Persistence target: per-node Doltgres `knowledge` table, `domain='poly_delta_minimizer'`, three entry types: `scorecard`, `rule`, `finding`. The HTTP wrapper for internal writes is **in design — PR #1133** (knowledge contribution API), with PR #1143 (operator first knowledge migration) as the dependency. Once both land, `core__knowledge_write` is reachable from a shell `curl` for $0 LLM cost.
-
-Until then, write to disk. The markdown is the durable artifact and the migration contract — when the API ships, a one-shot `git ls-files` walk lifts every file into a `knowledge` row without re-authoring (see `data-research` skill §"Persisting research as knowledge" for the field mapping).
-
-```bash
-# v0 — write to disk + commit
-SCORECARD_PATH="docs/research/$(date -u +%Y-%m-%dT%H%MZ)-delta-minimizer.md"
-echo "$SCORECARD_MD" > "$SCORECARD_PATH"
-git add "$SCORECARD_PATH" && git commit -m "research(delta-minimizer): scorecard $(date -u +%Y-%m-%dT%H%MZ)"
-
-# v1 — once PR #1133 lands, swap the disk write for an API call
-# curl -sS -X POST "https://poly.cognidao.org/api/v1/poly/knowledge/contributions" \
-#   -H "Authorization: Bearer $COGNI_API_KEY_PROD" \
-#   -d '{"domain":"poly_delta_minimizer","entryType":"scorecard","title":"...","content":"...","tags":["scorecard"],"workItemRefs":["bug.5032","bug.5035"]}'
-```
-
-Δ-vs-prev-run reads the prior scorecard. v0: `ls -t docs/research/*-delta-minimizer.md | sed -n 2p`. v1: `core__knowledge_search` `domain='poly_delta_minimizer' entry_type='scorecard'` ordered by `created_at desc`.
-
-**Rule promotion.** When a bucket's count is flat-or-shrinking across the last 3 scorecards AND the bucket is owned by an active work item, write a new `entry_type='rule'` markdown at `docs/research/rules/<bucket>.md`, citing the 3 supporting scorecards + the tracking work item. Each promotion is a fresh file with a `[supersedes](path)` link to the prior version — never overwrite, never delete. v1 = `entry_type='rule'` knowledge row at `confidence_pct` 60+.
-
-**Findings.** When an `unattributed` spike resolves into a fix, write `docs/research/findings/<spike_id>.md` citing the spike, the merged PR, and the first scorecard where the bucket dropped to zero. v1 = `entry_type='finding'` knowledge row.
-
-## Cost discipline
-
-- One `/wallet/execution` GET per run (already cached server-side).
-- One `/copy-trade/orders` GET per outlier classified (≤K = 10 calls).
-- Operator-API writes are bounded by `unattributed` count — never auto-file more than 5 spikes per run without human confirmation.
-- LLM cost: the loop is pure shell + jq + simple arithmetic. No LLM calls required for classification at v0; the failure-mode taxonomy is deterministic. Reserve LLM cycles for `unattributed` triage only.
-
-## Anti-patterns
-
-- **Don't compute |Δ| from upstream.** Read `wallet/execution` only — it's already aggregated server-side per `PAGE_LOAD_DB_ONLY` (data-research skill). Do not add a Polymarket Data API call to this loop.
-- **Don't extend the taxonomy mid-run.** New buckets land in `unattributed` first, become named buckets after the spike triages and fixes the detection. Skipping that step makes the matrix unauditable.
-- **Don't auto-tune caps or thresholds.** This skill _recommends_, never _enforces_. Cap changes go through code review.
-- **Don't conflate green Δ with success.** `edgeGapPct` is signed; we filter to `|edgeGapPct|`. A market where we beat the target by 50% is +50% variance just like one where we lost by 50%. Both are tracking error.
-- **Don't suppress `unattributed` to keep the scorecard 🟢.** That's how the failure-mode taxonomy goes stale.
-
-## Verification
-
-The scorecard from a successful run satisfies:
-
-1. Total of all bucket counts = total live markets with non-null `edgeGapPct`.
-2. `unattributed` count ⇒ exactly that many spikes filed in the operator API this run.
-3. Mean / median / percentile agree with the dashboard histogram (`MarketsDeltaDistribution`) within 0.1pp.
-4. Every `🔴 active` row in the matrix has a real, currently-open work item linked.
-
-If any of those four fail, the run is invalid — fix and re-run rather than posting.
-
-## Reference incidents and patterns
-
-- **bug.5032** — mirror coordinator silently dropped 76% of target fills (fixed). The detection signal `mirror.dropped` exists because of this. Run on its first day post-merge to confirm count drops.
-- **bug.5035** — cancel-then-place stale resting BUYs (fixed today, 2026-05-07). Pre-fix: `already_resting` bucket would dominate. Post-fix: `already_resting_in_band` (by-design) only.
-- **task.0376** — single-node-scope CI gate. The histogram + this skill ship in one PR; the dashboard chart is poly-scoped, the skill is repo-tooling.
-
-## Out of scope
-
-- **Auto-tuning of trading thresholds.** Recommendations only.
-- **Cross-target weighted aggregation.** v0 treats every active target's |Δ| equally. Capital-weighted is a vNext when more than one target is funded.
-- **Backtesting.** This skill measures the _current_ dispersion; it is not a research-bench for "what if we'd raised the cap last week."
-- **UI changes.** The histogram component (`MarketsDeltaDistribution`) is the only visualization; deeper drill-down lives on a future Research tab, not here.
+- No aggregate scorecards, no |Δ| histograms, no failure-mode taxonomies until a single case is fully proven.
+- No auto-filing of work items. After a proven finding, the user (or you on explicit ask) files a concrete bug with evidence pasted inline.
+- No reading from `/api/v1/poly/wallet/execution` — it aggregates server-side and obscures the underlying rows.
+- No subagent reports as primary evidence. Subagents can fetch raw rows/lines; you read them yourself.
+- **No claims about what the dashboard "shows" or "hides" without reading the read-model file.** `MirrorPositionView` has a dominant-side selection; the dashboard read model may or may not — find out by reading code, not by guessing.
+- **No ending a pass with "Postgres said X, want me to check Loki?"** If Loki is the next step, just run it. Pareto baby step = one finding, not one query.
