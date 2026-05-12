@@ -1,7 +1,7 @@
 {
   "name": "ride-along: poly node files + poly manager skill + single-node-scope policy maintenance",
   "paths": [
-    "nodes/poly/app/src/foo.ts",
+    "nodes/node-template/app/src/foo.ts",
     ".claude/skills/poly-dev-manager/SKILL.md",
     ".github/workflows/ci.yaml",
     "docs/design/poly-bet-sizer-v1.md",
@@ -14,7 +14,7 @@
     "tests/unit/packages/repo-spec/accessors.test.ts"
   ],
   "expected": {
-    "domains": ["poly"],
+    "domains": ["node-template"],
     "pass": true,
     "rideAlongApplied": true
   }

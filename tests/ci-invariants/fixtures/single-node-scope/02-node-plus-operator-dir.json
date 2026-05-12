@@ -1,8 +1,8 @@
 {
   "name": "node + operator dir: poly + nodes/operator",
-  "paths": ["nodes/poly/app/foo.ts", "nodes/operator/app/x.ts"],
+  "paths": ["nodes/node-template/app/foo.ts", "nodes/operator/app/x.ts"],
   "expected": {
-    "domains": ["operator", "poly"],
+    "domains": ["operator", "node-template"],
     "pass": false,
     "rideAlongApplied": false
   }

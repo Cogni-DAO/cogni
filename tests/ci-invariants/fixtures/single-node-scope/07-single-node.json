@@ -1,8 +1,8 @@
 {
   "name": "single non-operator node: poly only",
-  "paths": ["nodes/poly/app/foo.ts", "nodes/poly/graphs/y.ts"],
+  "paths": ["nodes/node-template/app/foo.ts", "nodes/node-template/graphs/y.ts"],
   "expected": {
-    "domains": ["poly"],
+    "domains": ["node-template"],
     "pass": true,
     "rideAlongApplied": false
   }

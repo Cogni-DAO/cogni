@@ -1,8 +1,8 @@
 {
   "name": "cross-node: poly + resy",
-  "paths": ["nodes/poly/app/foo.ts", "nodes/resy/app/bar.ts"],
+  "paths": ["nodes/node-template/app/foo.ts", "nodes/resy/app/bar.ts"],
   "expected": {
-    "domains": ["poly", "resy"],
+    "domains": ["node-template", "resy"],
     "pass": false,
     "rideAlongApplied": false
   }
