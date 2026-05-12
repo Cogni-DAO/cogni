@@ -95,11 +95,11 @@ When you push the strip branch, expect:
 
 The strip PR removes the node from cogni's source tree. Argo CD on each cluster keeps the node's Application + pods alive until each ApplicationSet is re-applied. Argo's `prune: true` then evicts the orphan Application.
 
-| Env | Cleanup trigger | Manual? |
-|---|---|---|
-| **preview** | `flight-preview.yml` auto-fires on merge → calls `promote-and-deploy.yml` (preview) → `deploy-infra` job re-applies AS to preview's argocd ns | ✅ automatic |
-| **candidate-a** | `gh workflow run candidate-flight-infra.yml --repo Cogni-DAO/cogni` | 🔴 manual |
-| **production** | `gh workflow run promote-and-deploy.yml --repo Cogni-DAO/cogni -f environment=production -f source_sha=<merged-main-sha>` | 🔴 manual |
+| Env             | Cleanup trigger                                                                                                                               | Manual?      |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| **preview**     | `flight-preview.yml` auto-fires on merge → calls `promote-and-deploy.yml` (preview) → `deploy-infra` job re-applies AS to preview's argocd ns | ✅ automatic |
+| **candidate-a** | `gh workflow run candidate-flight-infra.yml --repo Cogni-DAO/cogni`                                                                           | 🔴 manual    |
+| **production**  | `gh workflow run promote-and-deploy.yml --repo Cogni-DAO/cogni -f environment=production -f source_sha=<merged-main-sha>`                     | 🔴 manual    |
 
 ### Verification (per env)
 
@@ -117,6 +117,7 @@ kubectl -n cogni-<env> get pods -l app=<NODE>-node-app  # should say "No resourc
 ```
 
 VM IPs (cogni's clusters):
+
 - production: `84.32.110.202` (key: `~/dev/cogni-template/.local/production-vm-key`, user: root)
 - preview: `84.32.110.92` (key: `~/dev/cogni-template/.local/preview-vm-key`)
 - candidate-a: `84.32.109.160` (key: `~/dev/cogni-template/.local/canary-vm-key` — candidate-a inherited the retired canary VM)
