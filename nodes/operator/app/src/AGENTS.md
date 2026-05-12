@@ -6,6 +6,7 @@
 
 - **Owners:** @derekg1729
 - **Status:** draft
+- **Last reviewed:** 2026-05-12 (post-strip rebuild touch)
 
 ## Purpose
 
