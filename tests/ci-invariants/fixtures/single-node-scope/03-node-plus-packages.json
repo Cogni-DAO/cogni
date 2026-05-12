@@ -1,8 +1,8 @@
 {
   "name": "node + infra: poly + packages/",
-  "paths": ["nodes/poly/app/foo.ts", "packages/repo-spec/src/x.ts"],
+  "paths": ["nodes/node-template/app/foo.ts", "packages/repo-spec/src/x.ts"],
   "expected": {
-    "domains": ["operator", "poly"],
+    "domains": ["node-template", "operator"],
     "pass": false,
     "rideAlongApplied": false
   }

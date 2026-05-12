@@ -21,7 +21,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const NODES = ["poly", "operator", "resy", "node-template"] as const;
+const NODES = ["operator", "resy", "node-template"] as const;
 
 const FACTORY_FILES = NODES.map(
   (node) => `nodes/${node}/app/src/bootstrap/ai/tool-source.factory.ts`

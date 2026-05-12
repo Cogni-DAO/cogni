@@ -1,12 +1,12 @@
 {
   "name": "ride-along is bounded: work/items/ + .github/foo defeats it",
   "paths": [
-    "nodes/poly/app/src/foo.ts",
+    "nodes/node-template/app/src/foo.ts",
     "work/items/wi.poly-feature.md",
     ".github/workflows/foo.yml"
   ],
   "expected": {
-    "domains": ["operator", "poly"],
+    "domains": ["node-template", "operator"],
     "pass": false,
     "rideAlongApplied": false
   }

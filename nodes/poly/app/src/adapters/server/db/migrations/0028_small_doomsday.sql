@@ -1,2 +1,0 @@
-ALTER TABLE "poly_copy_trade_fills" ADD COLUMN "synced_at" timestamp with time zone;--> statement-breakpoint
-CREATE INDEX "idx_poly_copy_trade_fills_synced_at" ON "poly_copy_trade_fills" USING btree ("synced_at");

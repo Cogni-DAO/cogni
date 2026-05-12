@@ -1,8 +1,8 @@
 {
   "name": "ride-along: poly node files + work/items/wi.foo.md",
-  "paths": ["nodes/poly/app/src/foo.ts", "work/items/wi.poly-feature.md"],
+  "paths": ["nodes/node-template/app/src/foo.ts", "work/items/wi.poly-feature.md"],
   "expected": {
-    "domains": ["poly"],
+    "domains": ["node-template"],
     "pass": true,
     "rideAlongApplied": true
   }

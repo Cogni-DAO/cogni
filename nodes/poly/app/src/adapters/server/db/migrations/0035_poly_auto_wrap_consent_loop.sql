@@ -1,9 +1,0 @@
-ALTER TABLE "poly_wallet_connections" ADD COLUMN "auto_wrap_consent_at" timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "poly_wallet_connections" ADD COLUMN "auto_wrap_consent_actor_kind" text;--> statement-breakpoint
-ALTER TABLE "poly_wallet_connections" ADD COLUMN "auto_wrap_consent_actor_id" text;--> statement-breakpoint
-ALTER TABLE "poly_wallet_connections" ADD COLUMN "auto_wrap_floor_usdce_6dp" bigint DEFAULT 1000000 NOT NULL;--> statement-breakpoint
-ALTER TABLE "poly_wallet_connections" ADD COLUMN "auto_wrap_revoked_at" timestamp with time zone;--> statement-breakpoint
-CREATE INDEX "poly_wallet_connections_auto_wrap_eligible_idx" ON "poly_wallet_connections" USING btree ("billing_account_id") WHERE "poly_wallet_connections"."revoked_at" IS NULL AND "poly_wallet_connections"."auto_wrap_consent_at" IS NOT NULL AND "poly_wallet_connections"."auto_wrap_revoked_at" IS NULL;--> statement-breakpoint
-ALTER TABLE "poly_wallet_connections" ADD CONSTRAINT "poly_wallet_connections_auto_wrap_consent_actor_kind" CHECK ("poly_wallet_connections"."auto_wrap_consent_actor_kind" IS NULL OR "poly_wallet_connections"."auto_wrap_consent_actor_kind" IN ('user', 'agent'));--> statement-breakpoint
-ALTER TABLE "poly_wallet_connections" ADD CONSTRAINT "poly_wallet_connections_auto_wrap_consent_trio" CHECK (("poly_wallet_connections"."auto_wrap_consent_at" IS NULL AND "poly_wallet_connections"."auto_wrap_consent_actor_kind" IS NULL AND "poly_wallet_connections"."auto_wrap_consent_actor_id" IS NULL) OR ("poly_wallet_connections"."auto_wrap_consent_at" IS NOT NULL AND "poly_wallet_connections"."auto_wrap_consent_actor_kind" IS NOT NULL AND "poly_wallet_connections"."auto_wrap_consent_actor_id" IS NOT NULL));--> statement-breakpoint
-ALTER TABLE "poly_wallet_connections" ADD CONSTRAINT "poly_wallet_connections_auto_wrap_floor_positive" CHECK ("poly_wallet_connections"."auto_wrap_floor_usdce_6dp" > 0);

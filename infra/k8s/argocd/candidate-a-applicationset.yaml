@@ -17,11 +17,6 @@ spec:
           - path: "infra/catalog/operator.yaml"
     - git:
         repoURL: https://github.com/cogni-dao/cogni.git
-        revision: deploy/candidate-a-poly
-        files:
-          - path: "infra/catalog/poly.yaml"
-    - git:
-        repoURL: https://github.com/cogni-dao/cogni.git
         revision: deploy/candidate-a-resy
         files:
           - path: "infra/catalog/resy.yaml"

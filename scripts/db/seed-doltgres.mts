@@ -47,15 +47,6 @@ try {
   console.warn("⚠️  Could not load @cogni/node-template-knowledge seeds");
 }
 
-try {
-  const polyMod = await import("@cogni/poly-knowledge");
-  if (polyMod.POLY_KNOWLEDGE_SEEDS) {
-    seeds.push(...polyMod.POLY_KNOWLEDGE_SEEDS);
-  }
-} catch {
-  // Not a poly node or package not available — skip
-}
-
 if (seeds.length === 0) {
   console.log("   No seeds found.");
   await client.end();

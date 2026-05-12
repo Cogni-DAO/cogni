@@ -31,13 +31,6 @@
     { "path": "./packages/node-shared" },
     { "path": "./packages/knowledge-store" },
     { "path": "./nodes/node-template/packages/knowledge" },
-    { "path": "./nodes/poly/packages/ai-tools" },
-    { "path": "./nodes/poly/packages/knowledge" },
-    { "path": "./nodes/poly/packages/db-schema" },
-    { "path": "./nodes/poly/packages/doltgres-schema" },
-    { "path": "./nodes/poly/packages/market-provider" },
-    { "path": "./nodes/poly/packages/node-contracts" },
-    { "path": "./nodes/poly/packages/wallet" },
     { "path": "./nodes/operator/packages/doltgres-schema" }
   ]
 }
