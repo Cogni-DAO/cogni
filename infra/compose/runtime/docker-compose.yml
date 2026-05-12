@@ -600,7 +600,7 @@ services:
       # REQUIRED — the worker derives per-node Temporal task queues from UUID
       # entries (slugs are convenience aliases only). UUIDs must match each
       # node's .cogni/repo-spec.yaml node_id.
-      - COGNI_NODE_ENDPOINTS=operator=http://app:3000,poly=http://poly:3100,resy=http://resy:3300,4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://app:3000,5ed2d64f-2745-4676-983b-2fb7e05b2eba=http://poly:3100,f6d2a17d-b7f6-4ad1-a86b-f0ad2380999e=http://resy:3300
+      - COGNI_NODE_ENDPOINTS=operator=http://app:3000,resy=http://resy:3300,4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://app:3000,f6d2a17d-b7f6-4ad1-a86b-f0ad2380999e=http://resy:3300
       - SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN}
       # GitHub App credentials (optional — required only for GitHub ingestion)
       # Bare passthrough: passes empty string "" when var is unset in host env.

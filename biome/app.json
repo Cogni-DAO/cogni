@@ -27,30 +27,6 @@
     },
     {
       "includes": [
-        "nodes/poly/app/src/**/*.{ts,tsx}",
-        "!nodes/poly/app/src/bootstrap/capabilities/poly-trade.ts",
-        "!nodes/poly/app/src/bootstrap/capabilities/poly-clob-creds.ts",
-        "!nodes/poly/app/src/bootstrap/capabilities/poly-trade-executor.ts",
-        "!nodes/poly/app/src/adapters/server/wallet/privy-poly-trader-wallet.adapter.ts"
-      ],
-      "linter": {
-        "rules": {
-          "style": {
-            "noRestrictedImports": {
-              "level": "error",
-              "options": {
-                "paths": {
-                  "@polymarket/clob-client": "Legacy V1 SDK — use only from a legal importer. Provisioning CLOB API-key creation is isolated in poly-clob-creds.ts because the manual green chain still requires v1.",
-                  "@polymarket/clob-client-v2": "Import only from poly-trade.ts, poly-clob-creds.ts, poly-trade-executor.ts, or privy-poly-trader-wallet.adapter.ts. Placement goes through PolyTradeCapability/Executor (task.0315 CP4.25)."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "includes": [
         "nodes/*/app/src/app/**/page.tsx",
         "nodes/*/app/src/app/**/layout.tsx",
         "nodes/*/app/src/app/**/loading.tsx",

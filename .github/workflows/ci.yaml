@@ -102,20 +102,17 @@ jobs:
           list-files: json # exposes <filter>_files so we can inspect which paths matched
           # Required so the operator filter's `**` + `!nodes/<X>/**` negations
           # actually subtract. Default `some` quantifier OR's the rules, so
-          # `**` matches everything and the negations are dead — a poly-only PR
-          # would (incorrectly) classify as poly + operator. Per-node filters
+          # `**` matches everything and the negations are dead — a resy-only PR
+          # would (incorrectly) classify as resy + operator. Per-node filters
           # have a single rule each, so the quantifier is a no-op for them.
           predicate-quantifier: "every"
           filters: |
-            poly:
-              - 'nodes/poly/**'
             resy:
               - 'nodes/resy/**'
             node-template:
               - 'nodes/node-template/**'
             operator:
               - '**'
-              - '!nodes/poly/**'
               - '!nodes/resy/**'
               - '!nodes/node-template/**'
 
