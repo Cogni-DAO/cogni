@@ -2,7 +2,7 @@
   "name": "node + operator dir: poly + nodes/operator",
   "paths": ["nodes/node-template/app/foo.ts", "nodes/operator/app/x.ts"],
   "expected": {
-    "domains": ["operator", "node-template"],
+    "domains": ["node-template", "operator"],
     "pass": false,
     "rideAlongApplied": false
   }

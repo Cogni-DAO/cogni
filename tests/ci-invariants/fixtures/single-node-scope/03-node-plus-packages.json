@@ -2,7 +2,7 @@
   "name": "node + infra: poly + packages/",
   "paths": ["nodes/node-template/app/foo.ts", "packages/repo-spec/src/x.ts"],
   "expected": {
-    "domains": ["operator", "node-template"],
+    "domains": ["node-template", "operator"],
     "pass": false,
     "rideAlongApplied": false
   }

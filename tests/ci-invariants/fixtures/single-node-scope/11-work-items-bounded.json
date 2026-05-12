@@ -6,7 +6,7 @@
     ".github/workflows/foo.yml"
   ],
   "expected": {
-    "domains": ["operator", "node-template"],
+    "domains": ["node-template", "operator"],
     "pass": false,
     "rideAlongApplied": false
   }
