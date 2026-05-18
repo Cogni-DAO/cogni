@@ -1,7 +1,11 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
 /**
  * Module: `@cogni/knowledge-base/seeds/base`
  * Purpose: Base knowledge seeds inherited by all nodes.
- * Scope: Seed data definitions only. No I/O — the provisioning script applies these.
+ * Scope: Seed data definitions only. Does not perform I/O — the provisioning script applies these.
+ * Invariants: Append-only catalogue; IDs are stable. Per-node domain seeds live in their own packages, not here.
  * Side-effects: none
  * Links: docs/spec/knowledge-data-plane.md, docs/spec/knowledge-syntropy.md
  * @public

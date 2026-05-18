@@ -1,12 +1,14 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
 /**
  * Module: `@cogni/knowledge-base/schema`
- * Purpose: Base knowledge Drizzle tables (the syntropy seed bundle) inherited
- *   by every knowledge-capable node. Per-node packages re-export these tables
- *   through their own doltgres-schema entry points; drizzle-kit reads each
+ * Purpose: Base knowledge Drizzle tables (the syntropy seed bundle) inherited by every knowledge-capable node.
+ *   Per-node packages re-export these tables through their own doltgres-schema entry points; drizzle-kit reads each
  *   per-node config and emits node-local migrations.
- * Scope: Drizzle table definitions only. Targets Doltgres (pg wire).
+ * Scope: Drizzle table definitions only. Does not own migrations, runtime adapters, or per-node companion tables — those live elsewhere.
  * Invariants:
- *   - SCHEMA_GENERIC_CONTENT_SPECIFIC: Domain specificity in `domain` column + `tags` JSONB. Companion tables added per-node only when shape genuinely differs.
+ *   - SCHEMA_GENERIC_CONTENT_SPECIFIC: domain specificity lives in row content (`domain` column + `tags` JSONB), not columns.
  *   - AWARENESS_HOT_KNOWLEDGE_COLD: Separate from awareness tables in Postgres.
  *   - DOLT_IS_SOURCE_OF_TRUTH (knowledge-syntropy): all knowledge data lives here. Postgres search index is derived and rebuildable.
  *   - ENTRY_HAS_PROVENANCE: every `knowledge` row has `source_type` + `source_ref`.

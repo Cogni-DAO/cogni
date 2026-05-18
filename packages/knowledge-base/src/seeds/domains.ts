@@ -1,10 +1,12 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
 /**
  * Module: `@cogni/knowledge-base/seeds/domains`
- * Purpose: Base `domains` registry rows. Every knowledge entry's `domain`
- *   column references one of these; new domains can be added per-node by
- *   inserting additional rows + Dolt commit (per knowledge-syntropy spec).
- * Scope: Seed data definitions only. No I/O — the migrator (or first-write
- *   path on candidate-a) applies these.
+ * Purpose: Base `domains` registry rows. Every knowledge entry's `domain` column references one of these.
+ *   New domains can be added per-node by inserting additional rows + Dolt commit (per knowledge-syntropy spec).
+ * Scope: Seed data definitions only. Does not perform I/O — the migrator (or first-write path on candidate-a) applies these.
+ * Invariants: Domain `id`s are stable identifiers. New domains are append-only and registered explicitly per knowledge-syntropy.
  * Side-effects: none
  * Links: docs/spec/knowledge-syntropy.md
  * @public
