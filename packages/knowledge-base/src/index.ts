@@ -1,6 +1,6 @@
 /**
- * Module: `@cogni/node-template-knowledge`
- * Purpose: Base knowledge Drizzle schema (the syntropy seed bundle) + seeds for the node-template.
+ * Module: `@cogni/knowledge-base`
+ * Purpose: Base knowledge Drizzle schema (the syntropy seed bundle) + seeds inherited by every knowledge-capable node.
  * Scope: Schema definitions and seed data. No I/O.
  * Invariants: Nodes inherit this base. Domain-specific extensions go in the node's own package.
  * Side-effects: none

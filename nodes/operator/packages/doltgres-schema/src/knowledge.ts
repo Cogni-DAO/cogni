@@ -4,8 +4,8 @@
 /**
  * Module: `@cogni/operator-doltgres-schema/knowledge`
  * Purpose: Operator's Doltgres knowledge schema. Re-exports the syntropy seed
- *   bundle from @cogni/node-template-knowledge so operator inherits the
- *   identical knowledge shape every other knowledge-capable node uses.
+ *   bundle from @cogni/knowledge-base so operator inherits the identical
+ *   knowledge shape every other knowledge-capable node uses.
  *   Operator-specific companion tables (e.g. operator-only audit views) land
  *   here when needed.
  * Scope: Drizzle table definitions only. Targets Doltgres via pg wire protocol (dialect: postgresql).
@@ -18,14 +18,14 @@
  * @public
  */
 
-// Syntropy seed bundle — inherited from node-template. Identical across all
-// knowledge-capable nodes until per-node schema divergence is needed.
+// Syntropy seed bundle — shared base. Identical across all knowledge-capable
+// nodes until per-node schema divergence is needed.
 export {
   citations,
   domains,
   knowledge,
   knowledgeContributions,
   sources,
-} from "@cogni/node-template-knowledge";
+} from "@cogni/knowledge-base";
 
 // Operator-specific companion tables go here as they're needed.

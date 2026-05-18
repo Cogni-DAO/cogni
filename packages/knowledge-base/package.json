@@ -1,5 +1,5 @@
 {
-  "name": "@cogni/node-template-knowledge",
+  "name": "@cogni/knowledge-base",
   "private": true,
   "version": "0.0.0",
   "type": "module",

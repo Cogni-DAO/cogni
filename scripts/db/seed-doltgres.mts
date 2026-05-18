@@ -37,14 +37,14 @@ const client = buildDoltgresClient({
 const adapter = new DoltgresKnowledgeStoreAdapter({ sql: client });
 const capability = createKnowledgeCapability(adapter);
 
-// Load seeds — base seeds from node-template, domain seeds from node packages
+// Load seeds — base seeds from the shared knowledge-base package; domain seeds from node packages.
 const seeds: NewKnowledge[] = [];
 
 try {
-  const baseMod = await import("@cogni/node-template-knowledge");
+  const baseMod = await import("@cogni/knowledge-base");
   seeds.push(...baseMod.BASE_KNOWLEDGE_SEEDS);
 } catch {
-  console.warn("⚠️  Could not load @cogni/node-template-knowledge seeds");
+  console.warn("⚠️  Could not load @cogni/knowledge-base seeds");
 }
 
 if (seeds.length === 0) {

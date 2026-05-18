@@ -1,5 +1,5 @@
 /**
- * Module: `@cogni/node-template-knowledge/seeds/domains`
+ * Module: `@cogni/knowledge-base/seeds/domains`
  * Purpose: Base `domains` registry rows. Every knowledge entry's `domain`
  *   column references one of these; new domains can be added per-node by
  *   inserting additional rows + Dolt commit (per knowledge-syntropy spec).

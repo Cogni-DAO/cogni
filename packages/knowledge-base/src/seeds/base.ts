@@ -1,5 +1,5 @@
 /**
- * Module: `@cogni/node-template-knowledge/seeds/base`
+ * Module: `@cogni/knowledge-base/seeds/base`
  * Purpose: Base knowledge seeds inherited by all nodes.
  * Scope: Seed data definitions only. No I/O — the provisioning script applies these.
  * Side-effects: none

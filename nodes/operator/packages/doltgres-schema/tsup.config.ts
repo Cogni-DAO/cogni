@@ -20,7 +20,7 @@ export const tsupConfig = defineConfig({
   clean: false,
   sourcemap: true,
   platform: "node",
-  external: ["drizzle-orm", "@cogni/node-template-knowledge"],
+  external: ["drizzle-orm", "@cogni/knowledge-base"],
 });
 
 // biome-ignore lint/style/noDefaultExport: required by tsup

@@ -29,8 +29,8 @@
     { "path": "./packages/node-contracts" },
     { "path": "./packages/node-streams" },
     { "path": "./packages/node-shared" },
+    { "path": "./packages/knowledge-base" },
     { "path": "./packages/knowledge-store" },
-    { "path": "./nodes/node-template/packages/knowledge" },
     { "path": "./nodes/operator/packages/doltgres-schema" }
   ]
 }

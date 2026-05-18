@@ -149,13 +149,12 @@ Cross-node packages â€” anything imported by two or more nodes' `app`/`graphs` â
 
 Folder is the bare name (no `<node>-` prefix in the path); package name is `@cogni/<node>-<bare-name>`:
 
-| Folder                                    | Package name                                   |
-| ----------------------------------------- | ---------------------------------------------- |
-| `nodes/poly/packages/wallet/`             | `@cogni/poly-wallet`                           |
-| `nodes/poly/packages/market-provider/`    | `@cogni/poly-market-provider`                  |
-| `nodes/poly/packages/node-contracts/`     | `@cogni/poly-node-contracts`                   |
-| `nodes/poly/packages/ai-tools/`           | `@cogni/poly-ai-tools`                         |
-| `nodes/node-template/packages/knowledge/` | `@cogni/node-template-knowledge` (when carved) |
+| Folder                                 | Package name                  |
+| -------------------------------------- | ----------------------------- |
+| `nodes/poly/packages/wallet/`          | `@cogni/poly-wallet`          |
+| `nodes/poly/packages/market-provider/` | `@cogni/poly-market-provider` |
+| `nodes/poly/packages/node-contracts/`  | `@cogni/poly-node-contracts`  |
+| `nodes/poly/packages/ai-tools/`        | `@cogni/poly-ai-tools`        |
 
 The `<node>-` prefix on the package name is what makes ownership visible in `package.json` / lockfile / npm registry views; the path makes it visible in grep / file tree. Both signals point the same way.
 

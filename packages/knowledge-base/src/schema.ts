@@ -1,5 +1,5 @@
 /**
- * Module: `@cogni/node-template-knowledge/schema`
+ * Module: `@cogni/knowledge-base/schema`
  * Purpose: Base knowledge Drizzle tables (the syntropy seed bundle) inherited
  *   by every knowledge-capable node. Per-node packages re-export these tables
  *   through their own doltgres-schema entry points; drizzle-kit reads each
@@ -109,7 +109,7 @@ export const knowledge = pgTable(
     index("idx_knowledge_source_type").on(table.sourceType),
     index("idx_knowledge_status").on(table.status),
     index("idx_knowledge_source_node").on(table.sourceNode),
-  ],
+  ]
 );
 
 /**
@@ -138,9 +138,9 @@ export const citations = pgTable(
     uniqueIndex("uniq_citations_edge").on(
       table.citingId,
       table.citedId,
-      table.citationType,
+      table.citationType
     ),
-  ],
+  ]
 );
 
 /**
@@ -182,7 +182,7 @@ export const knowledgeContributions = pgTable(
     index("idx_kc_principal").on(table.principalId, table.state),
     uniqueIndex("uniq_kc_idempotency").on(
       table.principalId,
-      table.idempotencyKey,
+      table.idempotencyKey
     ),
-  ],
+  ]
 );
