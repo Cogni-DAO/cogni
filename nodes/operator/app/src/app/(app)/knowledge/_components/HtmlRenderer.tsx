@@ -22,10 +22,7 @@ interface HtmlRendererProps {
   readonly title: string;
 }
 
-export function HtmlRenderer({
-  html,
-  title,
-}: HtmlRendererProps): ReactElement {
+export function HtmlRenderer({ html, title }: HtmlRendererProps): ReactElement {
   return (
     <iframe
       title={title}

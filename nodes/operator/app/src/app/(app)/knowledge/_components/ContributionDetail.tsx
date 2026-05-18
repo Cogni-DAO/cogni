@@ -92,7 +92,9 @@ export function ContributionDetail({
   }, [open, item]);
 
   const hasHtmlEntry = (diff ?? []).some(
-    (d) => ((d.after ?? d.before) as { entryType?: string } | null)?.entryType === "html"
+    (d) =>
+      ((d.after ?? d.before) as { entryType?: string } | null)?.entryType ===
+      "html"
   );
 
   return (
