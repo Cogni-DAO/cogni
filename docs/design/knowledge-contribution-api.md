@@ -340,25 +340,37 @@ head update succeeded.
 
 ## Contracts
 
-`packages/node-contracts/src/knowledge.contributions.v1.contract.ts` — HTTP request/response wrappers; reuses domain types from `@cogni/knowledge-store`:
+`packages/knowledge-store/src/domain/contribution-schemas.ts` is the
+authoritative source for contribution domain schemas:
+
+- `KnowledgeEntryInputSchema`
+- `KnowledgeContributionEditSchema`
+- `ContributionRecordSchema`
+- `ContributionCommitRecordSchema`
+- `ContributionDiffEntrySchema`
+
+`packages/node-contracts/src/knowledge.contributions.v1.contract.ts` imports
+those schemas from `@cogni/knowledge-store/contribution-schemas` and only owns
+HTTP request/response envelopes:
 
 ```typescript
 import { z } from "zod";
 import {
-  ContributionRecord,
-  KnowledgeContributionEdit,
-  KnowledgeEntryInput,
-} from "@cogni/knowledge-store";
+  ContributionCommitRecordSchema,
+  ContributionDiffEntrySchema,
+  ContributionRecordSchema,
+  KnowledgeContributionEditSchema,
+} from "@cogni/knowledge-store/contribution-schemas";
 
 export const ContributionsCreateRequest = z.object({
   message: z.string().min(1).max(512),
-  edits: z.array(KnowledgeContributionEdit).min(1).max(50).optional(),
+  edits: z.array(KnowledgeContributionEditSchema).min(1).max(50).optional(),
   idempotencyKey: z.string().min(8).max(64).optional(),
 });
 
 export const ContributionAppendCommitRequest = z.object({
   message: z.string().min(1).max(512),
-  edits: z.array(KnowledgeContributionEdit).min(1).max(50),
+  edits: z.array(KnowledgeContributionEditSchema).min(1).max(50),
 });
 
 export const ContributionsListQuery = z.object({
@@ -376,7 +388,7 @@ export const ContributionCloseRequest = z.object({
 });
 ```
 
-`packages/knowledge-store/src/domain/contribution.schema.ts`:
+`packages/knowledge-store/src/domain/contribution-schemas.ts`:
 
 ```typescript
 export const KnowledgeEntryInput = z.object({

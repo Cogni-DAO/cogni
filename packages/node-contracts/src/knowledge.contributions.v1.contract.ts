@@ -16,34 +16,13 @@
  * @internal
  */
 
+import {
+  ContributionCommitRecordSchema,
+  ContributionDiffEntrySchema,
+  ContributionRecordSchema,
+  KnowledgeContributionEditSchema,
+} from "@cogni/knowledge-store/contribution-schemas";
 import { z } from "zod";
-
-const KnowledgeEntryInputSchema = z.object({
-  id: z.string().min(1).max(256).optional(),
-  domain: z.string().min(1).max(64),
-  entityId: z.string().max(128).optional(),
-  title: z.string().min(1).max(256),
-  content: z.string().min(1).max(65536),
-  entryType: z.string().min(1).max(64).optional(),
-  tags: z.array(z.string().max(64)).max(32).optional(),
-  confidencePct: z.number().int().min(0).max(100).optional(),
-});
-
-const KnowledgeContributionEditSchema = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("insert"), entry: KnowledgeEntryInputSchema }),
-  z.object({
-    op: z.literal("update"),
-    targetRowId: z.string().min(1).max(256),
-    entry: KnowledgeEntryInputSchema,
-  }),
-  z.object({
-    op: z.literal("deprecate"),
-    targetRowId: z.string().min(1).max(256),
-    reason: z.string().min(1).max(512),
-  }),
-]);
-
-const ContributionStateSchema = z.enum(["open", "merged", "closed"]);
 
 export const ContributionsCreateRequestSchema = z.object({
   message: z.string().min(1).max(512),
@@ -85,47 +64,12 @@ export type ContributionCloseRequest = z.infer<
   typeof ContributionCloseRequestSchema
 >;
 
-export const ContributionRecordSchema = z.object({
-  contributionId: z.string(),
-  branch: z.string(),
-  baseCommit: z.string(),
-  headCommit: z.string().nullable(),
-  commitCount: z.number().int(),
-  state: ContributionStateSchema,
-  principalKind: z.enum(["agent", "user"]),
-  principalId: z.string(),
-  message: z.string(),
-  mergedCommit: z.string().nullable(),
-  closedReason: z.string().nullable(),
-  idempotencyKey: z.string().nullable(),
-  createdAt: z.string(),
-  resolvedAt: z.string().nullable(),
-  resolvedBy: z.string().nullable(),
-});
 export type ContributionRecord = z.infer<typeof ContributionRecordSchema>;
 
-export const ContributionCommitRecordSchema = z.object({
-  contributionId: z.string(),
-  seq: z.number().int(),
-  commitHash: z.string(),
-  principalKind: z.enum(["agent", "user"]),
-  principalId: z.string(),
-  authSource: z.enum(["bearer", "session"]),
-  message: z.string(),
-  editCount: z.number().int(),
-  sourceRef: z.string(),
-  createdAt: z.string(),
-});
 export type ContributionCommitRecord = z.infer<
   typeof ContributionCommitRecordSchema
 >;
 
-export const ContributionDiffEntrySchema = z.object({
-  changeType: z.enum(["added", "modified", "removed"]),
-  rowId: z.string(),
-  before: z.record(z.string(), z.unknown()).nullable(),
-  after: z.record(z.string(), z.unknown()).nullable(),
-});
 export type ContributionDiffEntry = z.infer<typeof ContributionDiffEntrySchema>;
 
 export const ContributionsListResponseSchema = z.object({
