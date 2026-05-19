@@ -266,10 +266,25 @@ log_info "All secrets loaded from .env.${DEPLOY_ENV}"
 # ══════════════════════════════════════════════════════════════
 log_step "Phase 3: Provision VM"
 
+# Cherry SSH-key labels (and VM hostnames) derive from $GH_REPO so that
+# multiple forks on the same Cherry account don't collide on the fixed
+# `cogni-<env>-deploy` label. Earlier canary (v0 incident, 2026-05-17)
+# deleted what looked like an orphan key but was actually load-bearing
+# for a VM in a sibling project — Cherry SSH keys are ACCOUNT-scoped,
+# not project-scoped. Per-fork namespacing eliminates the collision class.
+# Ported verbatim from node-template PR #19.
+#
+# Cogni-DAO/cogni               → cogni-dao-cogni
+# Cogni-DAO/node-template       → cogni-dao-node-template
+# i-am-coco/cogni-node-20260517 → i-am-coco-cogni-node-20260517
+GH_REPO="${GH_REPO:-$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo "Cogni-DAO/cogni")}"
+VM_NAME_PREFIX=$(echo "${GH_REPO//\//-}" | tr '[:upper:]' '[:lower:]')
+log_info "VM/SSH-key prefix: ${VM_NAME_PREFIX} (from \$GH_REPO=${GH_REPO})"
+
 TFVARS="$PROVISION_DIR/terraform.${WORKSPACE}.tfvars"
 cat > "$TFVARS" << EOF
 environment          = "${DEPLOY_ENV}"
-vm_name_prefix       = "cogni"
+vm_name_prefix       = "${VM_NAME_PREFIX}"
 project_id           = "${CHERRY_PROJECT_ID}"
 plan                 = "B1-6-6gb-100s-shared"
 region               = "LT-Siauliai"
@@ -541,6 +556,7 @@ APP_IMAGE=placeholder:not-started
 APP_BASE_URL=https://${DOMAIN}
 COGNI_REPO_URL=${COGNI_REPO_URL}
 COGNI_REPO_REF=${COGNI_REPO_REF}
+LITELLM_IMAGE=cogni-litellm:latest
 ENVEOF"
 
 # Start services
@@ -564,8 +580,8 @@ done
 log_info "Starting edge stack (Caddy)..."
 ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-edge --env-file /opt/cogni-template-edge/.env -f /opt/cogni-template-edge/docker-compose.yml up -d'
 
-log_info "Starting infra services (postgres, temporal, litellm, redis)..."
-ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml up -d --no-build postgres temporal-postgres temporal redis litellm autoheal'
+log_info "Starting infra services (postgres, temporal, litellm, redis, doltgres)..."
+ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml up -d --no-build postgres temporal-postgres temporal redis litellm autoheal doltgres'
 
 # Wait for postgres
 log_info "Waiting for postgres to become healthy..."
@@ -590,6 +606,35 @@ ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-runtime --env-f
 log_info "Ensuring Temporal namespace exists..."
 scp $SSH_OPTS "$REPO_ROOT/scripts/ci/ensure-temporal-namespace.sh" root@"$VM_IP":/tmp/ensure-temporal-namespace.sh
 ssh $SSH_OPTS root@"$VM_IP" "TEMPORAL_NAMESPACE=cogni-${DEPLOY_ENV} TEMPORAL_CONTAINER=cogni-runtime-temporal-1 TEMPORAL_TIMEOUT=60 bash /tmp/ensure-temporal-namespace.sh"
+
+# Doltgres bootstrap: roles + per-node DBs via the canonical compose bootstrap
+# profile (same path deploy-infra.sh uses on preview/production).
+log_info "Provisioning doltgres roles + per-node DBs..."
+ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml --profile bootstrap run --rm doltgres-provision'
+
+# Doltgres schema seeding workaround. The operator pod's migrate-doltgres
+# initContainer cannot bootstrap an empty DB cleanly: its "already applied"
+# recovery path swallows the partial-apply state from the Doltgres
+# parameterized-INSERT gap on `drizzle.__drizzle_migrations` and abandons
+# subsequent migrations (the work_items CREATE TABLE succeeds, the journal
+# INSERT fails, the next attempt sees work_items as "already exists" and
+# never advances to 0001 which creates `domains`). seedBaseDomains then
+# errors `table not found: domains`. Apply the SQL files from this repo
+# directly so the first initContainer run finds the schema already in
+# place. Remove this block when the migrator is robust against empty DBs.
+DOLT_MIGRATIONS_LOCAL="$REPO_ROOT/nodes/operator/app/src/adapters/server/db/doltgres-migrations"
+if [[ -d "$DOLT_MIGRATIONS_LOCAL" ]]; then
+  log_info "Seeding knowledge_operator schema from $DOLT_MIGRATIONS_LOCAL"
+  ssh $SSH_OPTS root@"$VM_IP" 'rm -rf /tmp/dolt-mig && mkdir -p /tmp/dolt-mig'
+  for sql in "$DOLT_MIGRATIONS_LOCAL"/*.sql; do
+    fname=$(basename "$sql")
+    scp $SSH_OPTS "$sql" root@"$VM_IP":/tmp/dolt-mig/"$fname"
+    ssh $SSH_OPTS root@"$VM_IP" "docker cp /tmp/dolt-mig/$fname cogni-runtime-doltgres-1:/tmp/$fname && docker exec cogni-runtime-doltgres-1 sh -c 'PGPASSWORD=\"\${DOLTGRES_PASSWORD:-doltgres}\" psql -U postgres -h 127.0.0.1 -p 5432 -d knowledge_operator -f /tmp/$fname' 2>&1 | grep -E 'ERROR|CREATE|INSERT' | tail -10 || true"
+  done
+  log_info "knowledge_operator schema seeded"
+else
+  log_warn "Skipping doltgres schema seed — $DOLT_MIGRATIONS_LOCAL not found"
+fi
 
 # ══════════════════════════════════════════════════════════════
 # Phase 6: Create k8s secrets directly on cluster
