@@ -205,6 +205,15 @@ jobs:
       - name: Architecture check
         run: pnpm arch:check
 
+      # Schema-migration guards (task: doltgres-migration-safety):
+      #   1. immutable .sql / *_snapshot.json on origin/main (drizzle-orm runtime
+      #      migrator skips by `folderMillis`, never by hash — modifying an
+      #      applied migration silently no-ops on deployed DBs)
+      #   2. strict-monotonic `when` in _journal.json (silent-skip variant)
+      #   3. drizzle-kit's own snapshot-chain check
+      - name: Database migration guards
+        run: pnpm db:check
+
       # bug.0344 — structural guardrail on image-updater scope. Positive
       # allowlist: only ApplicationSets named in ALLOWLIST inside the
       # script are permitted to carry argocd-image-updater annotations.
@@ -287,6 +296,14 @@ jobs:
 
       - name: Component tests (testcontainers)
         run: pnpm test:component
+
+      # Doltgres-migrator regression: boots dolthub/doltgresql:latest in its
+      # own container (separate from the Postgres globalSetup the rest of
+      # test:component uses) and exercises migrate-doltgres.mjs + verifier
+      # end-to-end. Proves the silent-skip drift gap is caught at runtime,
+      # complementing the static CI guard in `db:check:immutable`.
+      - name: Doltgres migrator regression (testcontainers)
+        run: pnpm test:doltgres-migrate
 
       - name: CI Telemetry
         if: always()

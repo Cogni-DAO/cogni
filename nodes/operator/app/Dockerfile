@@ -116,6 +116,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/scripts/db/migrate.mjs /app/nodes
 # lands in dolt_log.
 COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/src/adapters/server/db/doltgres-migrations /app/nodes/operator/app/doltgres-migrations
 COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/src/adapters/server/db/migrate-doltgres.mjs /app/nodes/operator/app/migrate-doltgres.mjs
+# Verifier module is sibling-imported by migrate-doltgres.mjs and runs the
+# post-migrate schema check before any tracking-row stamping (closes the
+# silent-skip gap from drizzle-orm's folderMillis-only "applied?" check).
+COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/src/adapters/server/db/verify-doltgres-schema.mjs /app/nodes/operator/app/verify-doltgres-schema.mjs
 
 EXPOSE 3000
 

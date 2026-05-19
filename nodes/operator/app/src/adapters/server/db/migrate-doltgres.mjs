@@ -2,26 +2,32 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 //
 // Operator Doltgres migrator: drizzle-orm/postgres-js/migrator against
-// `knowledge_operator`, plus a Doltgres-specific recovery path for the
-// parameterized-INSERT gap on `drizzle.__drizzle_migrations` and the
-// trailing dolt_commit so DDL lands in dolt_log (Dolt DDL doesn't
-// auto-commit per dolt#4843).
+// `knowledge_operator`. Three surgical deltas from scripts/db/migrate.mjs,
+// each driven by an upstream Doltgres 0.56 gap that has no Postgres analogue:
 //
-// Why the recovery path: against `knowledge_operator` on Doltgres 0.56,
-// drizzle-kit's `INSERT INTO drizzle.__drizzle_migrations VALUES ($1, $2)`
-// raises XX000 ("table with name work_items already exists" surfaces on the
-// next restart) — the parameterized INSERT is rejected even though plain
-// CREATE TABLE succeeds. Empirical: poly's tracking row exists from an
-// earlier Doltgres point release, so the gap is real today.
+//   1. Recovery shim for the parameterized-INSERT gap on
+//      `drizzle.__drizzle_migrations`. Drizzle's tracking-row INSERT uses
+//      extended protocol; Doltgres 0.56 rejects it with XX000. We catch
+//      "already exists" / "duplicate key" and reconcile via sql.unsafe
+//      (simple protocol) — but ONLY after schema verification proves the
+//      expected end-state is actually present.
 //
-// Recovery: catch "already exists", then INSERT the journal-derived hash via
-// sql.unsafe (simple protocol, bypasses the gap) so future runs see the
-// migration as applied and skip cleanly. Hash uses sha256 of raw .sql text
-// to match the same algorithm drizzle-orm uses for migration tracking.
+//   2. Post-migrate schema verification against the latest snapshot. drizzle-
+//      orm's runtime migrator decides "applied?" by `lastDbMigration.created_at
+//      < migration.folderMillis` — it NEVER checks file hash. So a migration
+//      modified after deploy silently no-ops. Verification closes that gap:
+//      if the live shape doesn't match the snapshot, we throw before anything
+//      stamps as applied. Paired with scripts/db/check-migrations-immutable.mjs
+//      (CI guard) to make the failure mode unreachable, not just diagnosable.
 //
-// 1% delta from scripts/db/migrate.mjs by intent: postgres path needs no
-// recovery shim; doltgres does. Removable when Doltgres closes the gap or
-// when we adopt a doltgres-native migrator.
+//   3. Trailing `dolt_commit` so DDL lands in `dolt_log` — Dolt DDL doesn't
+//      auto-commit per dolt#4843. Postgres has no equivalent step.
+//
+// BASE_DOMAIN_SEEDS run via sql.unsafe (idempotent SELECT-then-INSERT) rather
+// than riding a drizzle-kit migration: drizzle-orm wraps migrations in a
+// transaction, and the parameterized INSERT into __drizzle_migrations rolls
+// back the whole tx on Doltgres 0.56 — taking seed rows with it (CREATE TABLE
+// auto-commits past rollback, DML doesn't).
 //
 // biome-ignore-all lint/suspicious/noConsole: standalone Node script invoked as initContainer CMD; stdout is the only log surface
 // biome-ignore-all lint/style/noProcessEnv: container entry point reads DATABASE_URL directly; no env wrapper to hide behind
@@ -33,6 +39,8 @@ import path from "node:path";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
+
+import { verifyDoltgresSchema } from "./verify-doltgres-schema.mjs";
 
 const NODE = "operator-doltgres";
 
@@ -56,29 +64,15 @@ function isAlreadyAppliedError(err) {
   const msg = err instanceof Error ? err.message : String(err);
   const cause = err?.cause instanceof Error ? err.cause.message : "";
   const combined = `${msg} ${cause}`;
-  // "already exists" — DDL collision when a schema migration replays.
-  // "duplicate key value" — DML collision when a data-only migration replays
-  //   (e.g. INSERT INTO domains with PK conflict on second run after the
-  //   first run's drizzle-tracking INSERT was rejected by Doltgres's
-  //   extended-protocol gap). Same signal: migration body already applied;
-  //   reconcile tracking via sql.unsafe.
   return (
     /already exists/i.test(combined) || /duplicate key value/i.test(combined)
   );
 }
 
-// Base domains seeded as reference data (DOMAIN_REGISTRY_EXTENDS_VIA_UI per
-// docs/spec/knowledge-domain-registry.md). Cannot ride a drizzle-kit migration
-// SQL file: drizzle-orm wraps migrations in a transaction and the parameterized
-// INSERT into drizzle.__drizzle_migrations rolls back the whole tx on Doltgres
-// 0.56, taking the seed rows with it (CREATE TABLE auto-commits past rollback,
-// data DML doesn't). Sidestep via sql.unsafe with idempotent SELECT-then-INSERT,
-// same pattern the reconcileTracking shim uses.
-// Operator-scoped base domains. Per-node concerns (prediction-market, reservations)
-// live in the respective node's own Doltgres DB and ship via that node's migrator
-// — operator never has them. `validate_candidate` was dropped: validation writes
-// should target `meta` (knowledge about the knowledge system) instead of carving
-// out a test-only domain.
+// Operator-scoped base domains. Per-node concerns (prediction-market,
+// reservations) live in the respective node's own Doltgres DB. `validate_candidate`
+// was dropped: validation writes should target `meta` instead of carving out
+// a test-only domain.
 const BASE_DOMAIN_SEEDS = [
   {
     id: "meta",
@@ -170,9 +164,20 @@ try {
     if (!isAlreadyAppliedError(err)) throw err;
     migrateThrewAlreadyApplied = true;
     console.warn(
-      `⚠️  ${NODE} drizzle-migrate hit "already exists" — schema in place; reconciling __drizzle_migrations via sql.unsafe`
+      `⚠️  ${NODE} drizzle-migrate hit "already exists" — schema in place; will verify before reconciling`
     );
   }
+
+  // VERIFICATION GATE — must pass before any tracking-row stamping or seed write.
+  // If the live shape doesn't match the latest snapshot, throw; do NOT pretend
+  // the schema is applied just because the SQL files happen to live on disk.
+  const verifyResult = await withConnection((sql) =>
+    verifyDoltgresSchema(sql, migrationsFolder)
+  );
+  console.log(
+    `✓ ${NODE} schema verified against snapshot ${verifyResult.latestTag} (${verifyResult.tablesChecked} table(s))`
+  );
+
   const stampedRows = await withConnection((sql) =>
     reconcileTracking(sql, migrationsFolder)
   );
@@ -182,7 +187,7 @@ try {
       sql`SELECT dolt_commit('-Am', 'migration: drizzle-orm batch + base domain seeds')`
   );
   console.log(
-    `✅ ${NODE} migrations ${migrateThrewAlreadyApplied ? "already-applied" : "applied"} + ${stampedRows} tracking row(s) reconciled + ${seededDomains} base domain(s) seeded + dolt_commit stamped in ${Date.now() - t0}ms`
+    `✅ ${NODE} migrations ${migrateThrewAlreadyApplied ? "already-applied" : "applied"} + verified + ${stampedRows} tracking row(s) reconciled + ${seededDomains} base domain(s) seeded + dolt_commit stamped in ${Date.now() - t0}ms`
   );
 } catch (err) {
   console.error(`FATAL(${NODE}): migrate failed:`, err);
