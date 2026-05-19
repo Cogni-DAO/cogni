@@ -580,8 +580,8 @@ done
 log_info "Starting edge stack (Caddy)..."
 ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-edge --env-file /opt/cogni-template-edge/.env -f /opt/cogni-template-edge/docker-compose.yml up -d'
 
-log_info "Starting infra services (postgres, temporal, litellm, redis)..."
-ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml up -d --no-build postgres temporal-postgres temporal redis litellm autoheal'
+log_info "Starting infra services (postgres, temporal, litellm, redis, doltgres)..."
+ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml up -d --no-build postgres temporal-postgres temporal redis litellm autoheal doltgres'
 
 # Wait for postgres
 log_info "Waiting for postgres to become healthy..."
@@ -606,6 +606,45 @@ ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-runtime --env-f
 log_info "Ensuring Temporal namespace exists..."
 scp $SSH_OPTS "$REPO_ROOT/scripts/ci/ensure-temporal-namespace.sh" root@"$VM_IP":/tmp/ensure-temporal-namespace.sh
 ssh $SSH_OPTS root@"$VM_IP" "TEMPORAL_NAMESPACE=cogni-${DEPLOY_ENV} TEMPORAL_CONTAINER=cogni-runtime-temporal-1 TEMPORAL_TIMEOUT=60 bash /tmp/ensure-temporal-namespace.sh"
+
+# Doltgres knowledge_operator bootstrap. The operator overlay's
+# migrate-doltgres initContainer assumes the DB exists and the schema is at
+# least partially in place — drizzle-migrate's "already applied" recovery path
+# leaves an empty DB on first run (Doltgres parameterized-INSERT gap on
+# __drizzle_migrations; the migrator catches + flags "applied" without
+# actually creating tables). Apply 0000+0001 SQL directly here so the
+# operator pod's initContainer finds the schema on first boot.
+log_info "Bootstrapping doltgres knowledge_operator..."
+for i in $(seq 1 30); do
+  if ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml ps doltgres --format "{{.Health}}"' 2>/dev/null | grep -q "healthy"; then
+    log_info "Doltgres is healthy"
+    break
+  fi
+  if [[ $i -eq 30 ]]; then
+    log_error "Doltgres did not become healthy after 60s"
+    ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml logs doltgres --tail 30'
+    exit 1
+  fi
+  sleep 2
+done
+
+DOLTGRES_PWD="${DOLTGRES_PASSWORD:-doltgres}"
+ssh $SSH_OPTS root@"$VM_IP" "docker exec cogni-runtime-doltgres-1 sh -c 'PGPASSWORD=${DOLTGRES_PWD} psql -U postgres -h 127.0.0.1 -p 5432 -d postgres -c \"CREATE DATABASE knowledge_operator;\" 2>&1' || true"
+
+# Extract migrations from the operator image baked into main's candidate-a
+# overlay digest, apply them. Idempotent: doltgres errors on re-creation are
+# benign and the schema is version-tracked in dolt_log.
+SEED_DIGEST=$(yq '.images[0].digest' "$REPO_ROOT/infra/k8s/overlays/${OVERLAY_DIR}/operator/kustomization.yaml" | tr -d '"')
+log_info "Pulling operator image $SEED_DIGEST on VM for migrations extraction..."
+ssh $SSH_OPTS root@"$VM_IP" "echo '${GHCR_TOKEN}' | docker login ghcr.io -u '${GHCR_USERNAME}' --password-stdin >/dev/null && \
+  docker pull ghcr.io/cogni-dao/cogni-template@${SEED_DIGEST} >/dev/null 2>&1 && \
+  rm -rf /tmp/cogni-mig && mkdir -p /tmp/cogni-mig && \
+  for f in 0000_init_work_items.sql 0001_syntropy_seeds.sql; do
+    docker run --rm ghcr.io/cogni-dao/cogni-template@${SEED_DIGEST} cat /app/nodes/operator/app/doltgres-migrations/\$f > /tmp/cogni-mig/\$f
+    docker cp /tmp/cogni-mig/\$f cogni-runtime-doltgres-1:/tmp/\$f
+    docker exec cogni-runtime-doltgres-1 sh -c \"PGPASSWORD=${DOLTGRES_PWD} psql -U postgres -h 127.0.0.1 -p 5432 -d knowledge_operator -f /tmp/\$f >/dev/null 2>&1 || true\"
+  done && \
+  echo 'doltgres knowledge_operator schema applied'"
 
 # ══════════════════════════════════════════════════════════════
 # Phase 6: Create k8s secrets directly on cluster
