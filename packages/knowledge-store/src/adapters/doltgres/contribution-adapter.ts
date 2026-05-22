@@ -107,14 +107,14 @@ function mapRecord(row: Record<string, unknown>): ContributionRecord {
   return {
     contributionId: String(row.id),
     branch: String(row.branch),
-    baseCommit: String(row.base_commit),
-    headCommit: optionalString(row.head_commit),
+    baseCommit: normalizeDoltCommitRef(String(row.base_commit)),
+    headCommit: normalizeOptionalDoltCommitRef(row.head_commit),
     commitCount: Number(row.commit_count),
     state: row.state as ContributionState,
     principalKind: row.principal_kind as "agent" | "user",
     principalId: String(row.principal_id),
     message: String(row.message),
-    mergedCommit: optionalString(row.merged_commit),
+    mergedCommit: normalizeOptionalDoltCommitRef(row.merged_commit),
     closedReason: optionalString(row.closed_reason),
     idempotencyKey: optionalString(row.idempotency_key),
     createdAt: dateString(row.created_at),
@@ -129,7 +129,7 @@ function mapCommitRecord(
   return {
     contributionId: String(row.contribution_id),
     seq: Number(row.seq),
-    commitHash: String(row.commit_hash),
+    commitHash: normalizeDoltCommitRef(String(row.commit_hash)),
     principalKind: row.principal_kind as "agent" | "user",
     principalId: String(row.principal_id),
     authSource: row.auth_source as "bearer" | "session",
@@ -152,6 +152,11 @@ function parseDoltResult(
 
 function normalizeDoltCommitRef(ref: string): string {
   return ref.startsWith("{") && ref.endsWith("}") ? ref.slice(1, -1) : ref;
+}
+
+function normalizeOptionalDoltCommitRef(value: unknown): string | null {
+  const ref = optionalString(value);
+  return ref ? normalizeDoltCommitRef(ref) : null;
 }
 
 async function withReserved<T>(

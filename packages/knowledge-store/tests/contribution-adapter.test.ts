@@ -140,6 +140,20 @@ describe("DoltgresKnowledgeContributionAdapter", () => {
     );
   });
 
+  it("normalizes persisted brace-wrapped refs before building diff refs", async () => {
+    const fake = new FakeSql({
+      ...record,
+      base_commit: "{base123}",
+      head_commit: "{head123}",
+    });
+
+    await adapterFor(fake).diff("contrib-agent-1-abc123");
+
+    expect(fake.queries.at(-1)).toContain(
+      "dolt_diff('base123', 'head123', 'knowledge')"
+    );
+  });
+
   it("commits merge metadata before deleting the contribution branch", async () => {
     const fake = new FakeSql();
 
