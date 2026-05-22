@@ -214,6 +214,17 @@ Do not build:
 - rebase UI
 - comments/review threads
 - generalized file explorer
+- per-commit clickable diff timeline in the UI (see vNext)
+
+### vNext (explicitly out of MVP)
+
+- **Per-commit clickable diff timeline.** MVP surfaces commit count and the
+  cumulative branch diff (`base_commit → head_commit`). Reviewers cannot click
+  individual commits to inspect a per-commit row diff. The data is already
+  available through `GET /knowledge/contributions/:id/commits` and Dolt's commit
+  graph; the UI work is deliberately deferred. Add this when a reviewer reports
+  a real case where cumulative diff was insufficient. Do not build a DoltHub
+  clone.
 
 ## Acceptance
 

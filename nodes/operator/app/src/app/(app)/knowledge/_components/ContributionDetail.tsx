@@ -193,9 +193,14 @@ export function ContributionDetail({
                             <span className="font-mono text-muted-foreground">
                               {d.rowId}
                             </span>
+                            {row?.entryType && (
+                              <span className="font-mono text-muted-foreground/70 text-xs">
+                                {row.entryType}
+                              </span>
+                            )}
                           </div>
                           {row?.title && (
-                            <p className="mt-1 line-clamp-2 text-sm">
+                            <p className="mt-1 line-clamp-2 font-medium text-sm">
                               {String(row.title)}
                             </p>
                           )}
@@ -206,6 +211,11 @@ export function ContributionDetail({
                                 title={row.title ?? "preview"}
                               />
                             </div>
+                          )}
+                          {!isHtml && row?.content && (
+                            <pre className="mt-2 max-h-96 overflow-y-auto whitespace-pre-wrap break-words rounded bg-background/60 px-2 py-1.5 text-xs leading-snug">
+                              {String(row.content)}
+                            </pre>
                           )}
                         </div>
                       );
