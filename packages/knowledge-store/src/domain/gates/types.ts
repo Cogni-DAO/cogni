@@ -3,13 +3,13 @@
 
 /**
  * Module: `@cogni/knowledge-store/domain/gates/types`
- * Purpose: Type contract for the knowledge write gate chain — the Dolt-side
- *   equivalent of CI/CD gates that decide whether a write may merge to trunk.
- * Scope: Pure types + structural Zod schemas. No I/O.
+ * Purpose: Type contract for the knowledge write gate chain — the Dolt-side equivalent of CI/CD gates that decide whether a write may merge to trunk.
+ * Scope: Pure type declarations + structured error class. Does not perform I/O, side effects, or any actual validation logic.
  * Invariants:
  *   - GATES_FAIL_CLOSED: a gate returns ok:false → write rejected at API/tool boundary.
  *   - CONFIDENCE_OUTSIDE_GATES: gates decide accept/reject only; they do not promote.
- * Links: work/projects/proj.knowledge-write-pipeline.md
+ * Side-effects: none
+ * Links: work/projects/proj.knowledge-write-pipeline.md, docs/spec/knowledge-syntropy.md
  * @public
  */
 

@@ -3,9 +3,12 @@
 
 /**
  * Module: `@cogni/knowledge-store/domain/gates`
- * Purpose: Public entry point for the knowledge write gate chain — types,
- *   chain runner, and the v0 deterministic gate set.
- * Scope: Re-exports only.
+ * Purpose: Public entry point for the knowledge write gate chain — exposes types, chain runner, individual gate implementations, and the v0 deterministic gate set composition.
+ * Scope: Re-exports + the canonical v0 gate set composition. Does not implement gates or run them; consumers compose their own sets if they need to opt out of defaults.
+ * Invariants:
+ *   - V0_DETERMINISTIC_GATES is the canonical baseline; per-node forks may extend but should not regress.
+ * Side-effects: none
+ * Links: work/projects/proj.knowledge-write-pipeline.md
  * @public
  */
 

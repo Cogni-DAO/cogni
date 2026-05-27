@@ -3,12 +3,12 @@
 
 /**
  * Module: `@cogni/knowledge-store/domain/gates/shape`
- * Purpose: Structural shape gate — enforces id slug pattern, title length,
- *   content non-empty, tag count. The knowledge equivalent of commitlint.
- * Scope: Pure validation; uses Zod under the hood for primitive checks.
+ * Purpose: Structural shape gate — enforces id slug pattern, title length, content non-empty, tag count. The knowledge equivalent of commitlint, applied uniformly at every write boundary.
+ * Scope: Pure per-field validation + canonical trimming on success. Does not perform I/O, hit external systems, or cross-validate fields against each other (cross-field checks live in sibling gates).
  * Invariants:
- *   - SHAPE_IS_THE_FLOOR: every accepted write satisfies these constraints
- *     uniformly across HTTP and tool entry points.
+ *   - SHAPE_IS_THE_FLOOR: every accepted write satisfies these constraints uniformly across HTTP and tool entry points.
+ * Side-effects: none
+ * Links: work/projects/proj.knowledge-write-pipeline.md, docs/spec/knowledge-syntropy.md
  * @public
  */
 

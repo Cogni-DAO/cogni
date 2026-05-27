@@ -3,15 +3,13 @@
 
 /**
  * Module: `@cogni/knowledge-store/domain/gates/chain`
- * Purpose: Runs a sequence of gates against a candidate. Collects all errors
- *   from the first failing gate's tier; gates within a tier run in parallel
- *   for richer error reporting; gates short-circuit between tiers.
- * Scope: Pure orchestrator. No I/O.
+ * Purpose: Runs a sequence of gates against a candidate. Collects all errors from the first failing gate's tier; gates within a tier run in parallel for richer error reporting; gates short-circuit between tiers.
+ * Scope: Pure orchestration logic over the KnowledgeGate interface. Does not perform I/O, instantiate gates, or know about specific gate implementations.
  * Invariants:
  *   - GATES_FAIL_CLOSED: first failing tier stops the chain.
- *   - SAME_TIER_PARALLEL: gates within one tier run together so users see all
- *     fixable issues at once (don't make them play whack-a-mole).
+ *   - SAME_TIER_PARALLEL: gates within one tier run together so users see all fixable issues at once (don't make them play whack-a-mole).
  * Side-effects: none
+ * Links: work/projects/proj.knowledge-write-pipeline.md
  * @public
  */
 
