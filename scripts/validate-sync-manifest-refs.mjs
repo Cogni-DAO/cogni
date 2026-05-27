@@ -5,9 +5,10 @@
 /**
  * Module: `@scripts/validate-sync-manifest-refs`
  * Purpose: Cross-reference validation for .cogni/sync-manifest.yaml. Asserts every divergences[].path matches some scope[] glob and every divergences[].repos[] is a declared artifact.
- * Scope: The cross-array references JSON Schema 2020-12 cannot express; structural validation is delegated to check-jsonschema against .cogni/sync-manifest.schema.json.
+ * Scope: Cross-array references in .cogni/sync-manifest.yaml; does NOT validate structure or types — those are delegated to check-jsonschema against .cogni/sync-manifest.schema.json.
  * Invariants: spec.repo-sync-contract DECLARED_DIVERGENCE — undeclared paths cannot be marked as divergences.
- * Side-effects: process.exit(1) on validation failure.
+ * Side-effects: IO
+ * Notes: Exits with non-zero code on validation failure.
  * Links: docs/spec/repo-sync-contract.md, .github/workflows/pr-build.yml
  * @public
  */
