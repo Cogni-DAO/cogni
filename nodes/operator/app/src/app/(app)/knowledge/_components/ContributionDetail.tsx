@@ -27,6 +27,7 @@ import {
   SheetTitle,
 } from "@/components";
 import { HtmlRenderer } from "./HtmlRenderer";
+import { RelativeTime } from "./RelativeTime";
 
 interface ContributionDetailProps {
   readonly item: ContributionRecord | null;
@@ -109,9 +110,23 @@ export function ContributionDetail({
         {item && (
           <>
             <SheetHeader>
-              <span className="font-mono text-muted-foreground text-xs">
-                {item.principalKind} · {item.principalId}
-              </span>
+              <div className="flex items-center gap-2 text-muted-foreground text-xs">
+                <span
+                  className="inline-flex rounded-md bg-muted px-1.5 py-0.5 font-medium uppercase tracking-wider"
+                  title={item.principalId}
+                >
+                  {item.principalKind}
+                </span>
+                <span aria-hidden="true">·</span>
+                <RelativeTime iso={item.createdAt} />
+                <span aria-hidden="true">·</span>
+                <span
+                  className="font-mono"
+                  title={`${item.commitCount} commits @ ${(item.headCommit ?? item.baseCommit).slice(0, 7)}`}
+                >
+                  {item.commitCount} commit{item.commitCount === 1 ? "" : "s"}
+                </span>
+              </div>
               <SheetTitle className="text-lg leading-snug">
                 {item.message}
               </SheetTitle>
@@ -121,11 +136,8 @@ export function ContributionDetail({
             </SheetHeader>
 
             <div className="mt-6 flex flex-col gap-5 px-1">
-              <div className="flex items-center justify-between gap-3">
-                <Field label="Branch">
-                  <span className="font-mono text-xs">{item.branch}</span>
-                </Field>
-                {item.state === "open" && (
+              {item.state === "open" && (
+                <div className="flex justify-end">
                   <Button
                     type="button"
                     size="sm"
@@ -136,20 +148,8 @@ export function ContributionDetail({
                     <GitMerge className="size-3.5" />
                     {busy ? "Merging…" : "Merge to main"}
                   </Button>
-                )}
-              </div>
-
-              <Field label="Head Commit">
-                <span className="font-mono text-muted-foreground text-xs">
-                  {item.headCommit ?? item.baseCommit}
-                </span>
-              </Field>
-
-              <Field label="Contribution Commits">
-                <span className="font-mono text-muted-foreground text-xs">
-                  {item.commitCount}
-                </span>
-              </Field>
+                </div>
+              )}
 
               <Field label="Entries">
                 {diffError && (
