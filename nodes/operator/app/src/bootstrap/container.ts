@@ -40,6 +40,7 @@ import {
   createDoltgresPusher,
   DoltgresKnowledgeContributionAdapter,
   DoltgresKnowledgeStoreAdapter,
+  wrapPushSafe,
 } from "@cogni/knowledge-store/adapters/doltgres";
 import { parseMcpConfigFromEnv } from "@cogni/langgraph-graphs";
 import {
@@ -620,25 +621,20 @@ function createContainer(): Container {
     // Bootstrap: see docs/runbooks/dolthub-remote-bootstrap.md (one-time
     // Dolt keypair generation + DoltHub registration, then DOLT_CREDS_JWK +
     // DOLT_CREDS_KEYID flow into the doltgres container entrypoint).
-    const pushMainOnMerge = env.DOLTHUB_REMOTE_URL
-      ? (() => {
-          const pusher = createDoltgresPusher({
+    const remoteUrl = env.DOLTHUB_REMOTE_URL;
+    const pushMainOnMerge = remoteUrl
+      ? wrapPushSafe(
+          createDoltgresPusher({
             sql: doltClient,
             remoteName: "origin",
-            remoteUrl: env.DOLTHUB_REMOTE_URL as string,
-          });
-          return async () => {
-            try {
-              await pusher.pushBranch();
-              log.info({ remote: env.DOLTHUB_REMOTE_URL }, "dolthub_push_ok");
-            } catch (err) {
-              log.warn(
-                { err, remote: env.DOLTHUB_REMOTE_URL },
-                "dolthub_push_failed"
-              );
-            }
-          };
-        })()
+            remoteUrl,
+          }),
+          {
+            onSuccess: () => log.info({ remote: remoteUrl }, "dolthub_push_ok"),
+            onFailure: (err) =>
+              log.warn({ err, remote: remoteUrl }, "dolthub_push_failed"),
+          }
+        )
       : undefined;
     knowledgeContributionService = createContributionService({
       port: contributionPort,

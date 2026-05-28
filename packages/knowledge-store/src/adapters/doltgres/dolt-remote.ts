@@ -71,3 +71,37 @@ export function createDoltgresPusher(
     },
   };
 }
+
+/**
+ * Callbacks fired at the end of `wrapPushSafe`'s attempt. The caller supplies
+ * its own logger bindings here — this keeps the adapter framework-agnostic
+ * (no Pino/Winston import) while still letting the operator container surface
+ * push outcomes structurally to Loki.
+ */
+export interface PushOutcomeListener {
+  onSuccess: () => void;
+  onFailure: (err: unknown) => void;
+}
+
+/**
+ * Convert a `DoltgresPusher` into a fire-and-forget function suitable for
+ * `ContributionServiceDeps.pushMainOnMerge`. Catches every error so it never
+ * bubbles up to the merge response; routes outcomes to the listener.
+ *
+ * This is the only wiring layer in the push job that knows about
+ * success-vs-failure observability semantics — keeping it pure + injectable
+ * means it can be tested without spinning up Pino, postgres.js, or Doltgres.
+ */
+export function wrapPushSafe(
+  pusher: DoltgresPusher,
+  listener: PushOutcomeListener
+): () => Promise<void> {
+  return async () => {
+    try {
+      await pusher.pushBranch();
+      listener.onSuccess();
+    } catch (err) {
+      listener.onFailure(err);
+    }
+  };
+}

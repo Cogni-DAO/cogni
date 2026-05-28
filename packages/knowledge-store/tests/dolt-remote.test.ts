@@ -13,7 +13,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createDoltgresPusher } from "../src/adapters/doltgres/dolt-remote.js";
+import {
+  createDoltgresPusher,
+  type DoltgresPusher,
+  wrapPushSafe,
+} from "../src/adapters/doltgres/dolt-remote.js";
 
 type FakeSql = {
   unsafe: (query: string) => Promise<unknown>;
@@ -125,5 +129,84 @@ describe("createDoltgresPusher", () => {
     await pusher.pushBranch();
     expect(sql.calls[1]).toContain("'release'");
     expect(sql.calls[1]).not.toContain("'main'");
+  });
+});
+
+describe("wrapPushSafe", () => {
+  function fakePusher(opts?: { failWith?: string }): DoltgresPusher & {
+    calls: number;
+  } {
+    const state = { calls: 0 };
+    return {
+      get calls() {
+        return state.calls;
+      },
+      set calls(_: number) {
+        state.calls = _;
+      },
+      async pushBranch() {
+        state.calls++;
+        if (opts?.failWith) throw new Error(opts.failWith);
+      },
+    };
+  }
+
+  it("invokes onSuccess after a clean pushBranch", async () => {
+    const pusher = fakePusher();
+    let successes = 0;
+    let failures = 0;
+    const safe = wrapPushSafe(pusher, {
+      onSuccess: () => {
+        successes++;
+      },
+      onFailure: () => {
+        failures++;
+      },
+    });
+
+    await safe();
+    expect(pusher.calls).toBe(1);
+    expect(successes).toBe(1);
+    expect(failures).toBe(0);
+  });
+
+  it("invokes onFailure (not onSuccess) when pushBranch throws, and never re-throws", async () => {
+    const pusher = fakePusher({ failWith: "permission denied" });
+    let successes = 0;
+    const caughtErrors: unknown[] = [];
+    const safe = wrapPushSafe(pusher, {
+      onSuccess: () => {
+        successes++;
+      },
+      onFailure: (err) => {
+        caughtErrors.push(err);
+      },
+    });
+
+    // Fire-and-forget contract: this must not throw, even though the underlying push did.
+    await expect(safe()).resolves.toBeUndefined();
+    expect(pusher.calls).toBe(1);
+    expect(successes).toBe(0);
+    expect(caughtErrors).toHaveLength(1);
+    expect((caughtErrors[0] as Error).message).toBe("permission denied");
+  });
+
+  it("re-runs the pusher on each invocation (no internal memoisation of outcome)", async () => {
+    const pusher = fakePusher();
+    let successes = 0;
+    const safe = wrapPushSafe(pusher, {
+      onSuccess: () => {
+        successes++;
+      },
+      onFailure: () => {
+        /* noop */
+      },
+    });
+
+    await safe();
+    await safe();
+    await safe();
+    expect(pusher.calls).toBe(3);
+    expect(successes).toBe(3);
   });
 });

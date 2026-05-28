@@ -392,4 +392,6 @@ export {
   createDoltgresPusher,
   type DoltgresPushConfig,
   type DoltgresPusher,
+  type PushOutcomeListener,
+  wrapPushSafe,
 } from "./dolt-remote.js";
