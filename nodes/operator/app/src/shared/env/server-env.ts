@@ -145,6 +145,14 @@ export const serverSchema = z.object({
   // Required when on-chain governance signal execution is enabled.
   ALCHEMY_WEBHOOK_SECRET: optionalString,
 
+  // DoltHub OAuth app credentials — for service-side push of knowledge hubs to
+  // DoltHub remote (cogni-dao/knowledge-<node>). One OAuth app on the operator
+  // owns push for all nodes' hubs. Optional: knowledge-remote sync is disabled
+  // when not configured (writes still work; they just don't push). Per
+  // proj.knowledge-write-pipeline.
+  DOLTHUB_OAUTH_CLIENT_ID: optionalString,
+  DOLTHUB_OAUTH_CLIENT_SECRET: optionalString,
+
   // GitHub Review App credentials - for PR review Check Runs + comments.
   // Optional: PR review feature is disabled when not configured.
   // These are the same env vars used by scheduler-worker for ingestion.
