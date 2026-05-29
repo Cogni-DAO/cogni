@@ -5,6 +5,13 @@
  * Module: `@cogni/knowledge-store/tests/edo-loop`
  * Purpose: EDO Foundation stack test proving the hypothesis loop closes end-to-end with all four adapter invariants enforced.
  * Scope: Tests only. Does not contain runtime code, ports, or adapters.
+ *   This test exercises `EdoCapability` direct-to-store — the path used by
+ *   (a) session-cookie human callers of `POST /api/v1/edo/*` and (b) internal
+ *   langgraph `core__edo_*` tools. Bearer-authenticated HTTP callers are
+ *   routed through `ContributionService.createEdo*Contribution` (W2 federation
+ *   gate, EDO_BEARER_VIA_CONTRIB_BRANCH) and are covered by
+ *   `tests/contribution-service.test.ts` — those writes land on `contrib/*`,
+ *   not main.
  * Invariants: parity with DoltgresKnowledgeStoreAdapter on every enforcement gate exercised here.
  * Side-effects: none (in-memory fakes)
  * Links: docs/spec/knowledge-syntropy.md

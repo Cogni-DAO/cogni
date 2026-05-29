@@ -77,6 +77,9 @@ export {
   ContributionNotFoundError,
   ContributionQuotaError,
   ContributionStateError,
+  type CreateEdoDecisionInput,
+  type CreateEdoHypothesisInput,
+  type CreateEdoOutcomeInput,
   type KnowledgeContributionPort,
 } from "./port/contribution.port.js";
 // EDO resolver port (hypothesis loop)
@@ -105,6 +108,9 @@ export {
   type ContributionService,
   type ContributionServiceDeps,
   type CreateBody,
+  type CreateEdoDecisionBody,
+  type CreateEdoHypothesisBody,
+  type CreateEdoOutcomeBody,
   createContributionService,
   defaultCanMergeKnowledge,
   type ListQuery,

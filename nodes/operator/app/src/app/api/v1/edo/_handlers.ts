@@ -5,17 +5,25 @@
  * Module: `@app/api/v1/edo/_handlers`
  * Purpose: HTTP handlers for the external-agent EDO hypothesis-loop surface.
  *   Mirrors the bearer-auth + principal-derivation pattern from
- *   `knowledge/contributions/_handlers.ts`. Pulls `EdoCapability` from the
- *   container; principal is derived from the auth path (bearer = agent,
- *   session = human). All adapter invariants enforced by the capability /
- *   adapter — handlers map known typed errors to HTTP status codes.
+ *   `knowledge/contributions/_handlers.ts`. Pulls `EdoCapability` and
+ *   `ContributionService` from the container; principal is derived from the
+ *   auth path. All adapter invariants enforced by the capability/adapter —
+ *   handlers map known typed errors to HTTP status codes.
  * Scope: Operator-side wiring for `POST /api/v1/edo/{hypothesize,decide,record-outcome}`.
- * Invariants: VALIDATE_IO, AUTH_VIA_GETSESSIONUSER, PRINCIPAL_DERIVES_SOURCE
- *   (caller MUST NOT supply sourceType/sourceRef/sourceNode — those are
- *   bound from the authenticated principal so external agents cannot forge
- *   identity).
+ * Invariants:
+ *   - VALIDATE_IO, AUTH_VIA_GETSESSIONUSER, PRINCIPAL_DERIVES_SOURCE
+ *     (caller MUST NOT supply sourceType/sourceRef/sourceNode — those are
+ *     bound from the authenticated principal so external agents cannot forge
+ *     identity).
+ *   - EDO_BEARER_VIA_CONTRIB_BRANCH (W2 federation gate): bearer-authenticated
+ *     EDO writes route through `ContributionService.createEdo*Contribution`,
+ *     landing on a fresh `contrib/<id>` branch. Session-cookie callers keep
+ *     the direct-to-main path via `edoCapability.*` — trusted humans, v0.
+ *     Mirrors the same auth-routed branching rule as
+ *     `POST /api/v1/knowledge/contributions`. See
+ *     `docs/spec/knowledge-syntropy.md` § Write Protocol.
  * Side-effects: IO (HTTP response, Doltgres write via container capability)
- * Links: docs/spec/knowledge-syntropy.md § The Hypothesis Loop
+ * Links: docs/spec/knowledge-syntropy.md § The Hypothesis Loop, packages/knowledge-store
  * @internal
  */
 
@@ -27,9 +35,15 @@ import {
 import {
   CitationTargetNotFoundError,
   CitationTypeMismatchError,
+  ContributionConflictError,
+  ContributionForbiddenError,
+  ContributionNotFoundError,
+  ContributionQuotaError,
+  ContributionStateError,
   DomainNotRegisteredError,
   EdoEntryTypeRequiresAtomicToolError,
   HypothesisMissingEvaluateAtError,
+  KnowledgeGateError,
   type PrincipalAuthSource,
   sessionUserToPrincipal,
 } from "@cogni/knowledge-store";
@@ -59,7 +73,44 @@ function mapError(e: unknown): NextResponse {
     return NextResponse.json({ error: e.message }, { status: 400 });
   if (e instanceof EdoEntryTypeRequiresAtomicToolError)
     return NextResponse.json({ error: e.message }, { status: 400 });
+  // Contribution-service typed errors (bearer path via ContributionService).
+  if (e instanceof ContributionForbiddenError)
+    return NextResponse.json({ error: e.message }, { status: 403 });
+  if (e instanceof ContributionNotFoundError)
+    return NextResponse.json({ error: e.message }, { status: 404 });
+  if (e instanceof ContributionStateError)
+    return NextResponse.json({ error: e.message }, { status: 409 });
+  if (e instanceof ContributionConflictError)
+    return NextResponse.json({ error: e.message }, { status: 409 });
+  if (e instanceof ContributionQuotaError)
+    return NextResponse.json({ error: e.message }, { status: 429 });
+  if (e instanceof KnowledgeGateError)
+    return NextResponse.json(
+      { error: "knowledge gate rejected write", issues: e.errors },
+      { status: 400 }
+    );
   throw e;
+}
+
+/**
+ * Standard 201 payload shape for the bearer/contribution path. Mirrors
+ * `POST /api/v1/knowledge/contributions` so any downstream tooling that
+ * understands "open contribution" responses can poll / merge identically.
+ */
+function contributionResponse(record: {
+  contributionId: string;
+  branch: string;
+  state: string;
+  baseCommit: string;
+  headCommit: string | null;
+}) {
+  return {
+    contributionId: record.contributionId,
+    branch: record.branch,
+    state: record.state,
+    baseCommit: record.baseCommit,
+    headCommit: record.headCommit,
+  };
 }
 
 /**
@@ -132,12 +183,68 @@ export async function handleHypothesize(
       { status: 400 }
     );
 
+  const auth = authSource(request);
+  const principal = sessionUserToPrincipal(sessionUser, auth);
+  const log = getContainer().log;
+
+  // EDO_BEARER_VIA_CONTRIB_BRANCH: bearer agents route through the
+  // contribution service onto a fresh contrib/* branch. Session users keep
+  // the direct-to-main path — humans are trusted in v0.
+  if (auth === "bearer") {
+    const svc = getContainer().knowledgeContributionService;
+    if (!svc)
+      return NextResponse.json(
+        { error: "knowledge contribution service not configured" },
+        { status: 503 }
+      );
+    try {
+      const record = await svc.createEdoHypothesisContribution({
+        principal,
+        body: {
+          message: `edo: hypothesize '${parsed.data.id}'`,
+          entry: {
+            id: parsed.data.id,
+            domain: parsed.data.domain,
+            title: parsed.data.title,
+            content: parsed.data.content,
+            evaluateAt: new Date(parsed.data.evaluateAt),
+            resolutionStrategy:
+              parsed.data.resolutionStrategy === "manual" ||
+              parsed.data.resolutionStrategy === undefined
+                ? null
+                : parsed.data.resolutionStrategy,
+            ...(parsed.data.tags !== undefined
+              ? { tags: parsed.data.tags }
+              : {}),
+            ...(parsed.data.confidencePct !== undefined
+              ? { confidencePct: parsed.data.confidencePct }
+              : {}),
+          },
+          ...(parsed.data.evidenceForIds !== undefined
+            ? { evidenceForIds: parsed.data.evidenceForIds }
+            : {}),
+        },
+      });
+      log.info(
+        {
+          route: "edo.hypothesize",
+          contributionId: record.contributionId,
+          branch: record.branch,
+          authSource: "bearer",
+        },
+        "edo.hypothesize.contribution_open"
+      );
+      return NextResponse.json(contributionResponse(record), { status: 201 });
+    } catch (e) {
+      return mapError(e);
+    }
+  }
+
   const { sourceType, sourceRef, sourceNode } = deriveSource(
     sessionUser,
     request
   );
   const edo = getContainer().edoCapability;
-  const log = getContainer().log;
   try {
     const entry = await edo.hypothesize({
       id: parsed.data.id,
@@ -162,7 +269,12 @@ export async function handleHypothesize(
         : {}),
     });
     log.info(
-      { route: "edo.hypothesize", entryId: entry.id, sourceRef },
+      {
+        route: "edo.hypothesize",
+        entryId: entry.id,
+        sourceRef,
+        authSource: "session",
+      },
       "edo.hypothesize.success"
     );
     return NextResponse.json(
@@ -189,12 +301,58 @@ export async function handleDecide(
       { status: 400 }
     );
 
+  const auth = authSource(request);
+  const principal = sessionUserToPrincipal(sessionUser, auth);
+  const log = getContainer().log;
+
+  if (auth === "bearer") {
+    const svc = getContainer().knowledgeContributionService;
+    if (!svc)
+      return NextResponse.json(
+        { error: "knowledge contribution service not configured" },
+        { status: 503 }
+      );
+    try {
+      const record = await svc.createEdoDecisionContribution({
+        principal,
+        body: {
+          message: `edo: decide '${parsed.data.id}' from '${parsed.data.derivesFromHypothesisId}'`,
+          entry: {
+            id: parsed.data.id,
+            domain: parsed.data.domain,
+            title: parsed.data.title,
+            content: parsed.data.content,
+            ...(parsed.data.tags !== undefined
+              ? { tags: parsed.data.tags }
+              : {}),
+            ...(parsed.data.confidencePct !== undefined
+              ? { confidencePct: parsed.data.confidencePct }
+              : {}),
+          },
+          derivesFromHypothesisId: parsed.data.derivesFromHypothesisId,
+        },
+      });
+      log.info(
+        {
+          route: "edo.decide",
+          contributionId: record.contributionId,
+          branch: record.branch,
+          authSource: "bearer",
+          derivesFromHypothesisId: parsed.data.derivesFromHypothesisId,
+        },
+        "edo.decide.contribution_open"
+      );
+      return NextResponse.json(contributionResponse(record), { status: 201 });
+    } catch (e) {
+      return mapError(e);
+    }
+  }
+
   const { sourceType, sourceRef, sourceNode } = deriveSource(
     sessionUser,
     request
   );
   const edo = getContainer().edoCapability;
-  const log = getContainer().log;
   try {
     const entry = await edo.decide({
       id: parsed.data.id,
@@ -215,6 +373,7 @@ export async function handleDecide(
         route: "edo.decide",
         entryId: entry.id,
         sourceRef,
+        authSource: "session",
         derivesFromHypothesisId: parsed.data.derivesFromHypothesisId,
       },
       "edo.decide.success"
@@ -240,12 +399,60 @@ export async function handleRecordOutcome(
       { status: 400 }
     );
 
+  const auth = authSource(request);
+  const principal = sessionUserToPrincipal(sessionUser, auth);
+  const log = getContainer().log;
+
+  if (auth === "bearer") {
+    const svc = getContainer().knowledgeContributionService;
+    if (!svc)
+      return NextResponse.json(
+        { error: "knowledge contribution service not configured" },
+        { status: 503 }
+      );
+    try {
+      const record = await svc.createEdoOutcomeContribution({
+        principal,
+        body: {
+          message: `edo: record_outcome '${parsed.data.id}' ${parsed.data.edge} '${parsed.data.hypothesisId}'`,
+          entry: {
+            id: parsed.data.id,
+            domain: parsed.data.domain,
+            title: parsed.data.title,
+            content: parsed.data.content,
+            ...(parsed.data.tags !== undefined
+              ? { tags: parsed.data.tags }
+              : {}),
+            ...(parsed.data.confidencePct !== undefined
+              ? { confidencePct: parsed.data.confidencePct }
+              : {}),
+          },
+          hypothesisId: parsed.data.hypothesisId,
+          edge: parsed.data.edge,
+        },
+      });
+      log.info(
+        {
+          route: "edo.record_outcome",
+          contributionId: record.contributionId,
+          branch: record.branch,
+          authSource: "bearer",
+          hypothesisId: parsed.data.hypothesisId,
+          edge: parsed.data.edge,
+        },
+        "edo.record_outcome.contribution_open"
+      );
+      return NextResponse.json(contributionResponse(record), { status: 201 });
+    } catch (e) {
+      return mapError(e);
+    }
+  }
+
   const { sourceType, sourceRef, sourceNode } = deriveSource(
     sessionUser,
     request
   );
   const edo = getContainer().edoCapability;
-  const log = getContainer().log;
   try {
     const result = await edo.recordOutcome({
       id: parsed.data.id,
