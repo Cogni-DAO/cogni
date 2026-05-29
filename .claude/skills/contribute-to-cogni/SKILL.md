@@ -93,3 +93,9 @@ At each phase: search the resource roots below for the relevant guides, specs, a
 ---
 
 **PRs are never "ready for review" before Phase 3 is complete.**
+
+---
+
+## Orthogonal: filing predictions as EDO chains
+
+`/contribute-to-cogni` owns _intent + execution state_ (work-items + PR lifecycle). For predictions about how a shipped change will behave over time — falsifiable, session-separated, compounding — see the [`edo-loop`](../edo-loop/SKILL.md) skill. EDO is rare (≤20% of agent work); the PR description is the right home for everything else.

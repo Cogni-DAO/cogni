@@ -477,6 +477,8 @@ At these scales, Dolt direct queries remain fast (< 10ms for indexed lookups). T
 
 ## The Hypothesis Loop — Event → Hypothesis → Decision → Outcome
 
+> **Agent contract:** see [`.claude/skills/edo-loop/SKILL.md`](../../.claude/skills/edo-loop/SKILL.md) for the recipe agents follow when filing a chain (action hierarchy, the three gates, refine-vs-create, PR linkage, confidence reading).
+
 > Knowledge that doesn't predict, decide, and resolve is just a filing cabinet. The hypothesis loop turns the knowledge plane into a self-evaluating reasoning system. It is the foundation for self-improving agentic loops: agents form falsifiable predictions, act, observe, and update.
 >
 > **Codename `EDO`.** The project + tool prefix (`proj.edo-foundation`, `core__edo_*`) is shorthand. The accurate beat count is four — Hypothesis is the falsifiability bridge between Event and Decision and is structurally required, not optional.

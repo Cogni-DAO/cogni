@@ -139,9 +139,7 @@ export interface KnowledgeContributionPort {
    * agent compounds onto one branch (one human merge gates the whole loop)
    * instead of sprawling into N parallel branches.
    */
-  findOpenForPrincipal(
-    principalId: string
-  ): Promise<ContributionRecord | null>;
+  findOpenForPrincipal(principalId: string): Promise<ContributionRecord | null>;
 
   /**
    * Append a hypothesis + N evidence_for citations + single Dolt commit to
