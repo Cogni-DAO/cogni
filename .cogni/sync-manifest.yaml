@@ -1,0 +1,86 @@
+# spec.repo-sync-contract — SSOT for what is operator-scope across hub + artifacts.
+#
+# Inverse-manifest form: everything is shared by default; this file enumerates
+# (a) global excludes that NO repo cares about, and (b) per-artifact divergences
+# in two flavors — paths the artifact omits, paths the artifact adds.
+#
+# Validated by .cogni/sync-manifest.schema.json (check-jsonschema in ci.yaml)
+# + scripts/validate-sync-manifest-refs.mjs (cross-reference checks).
+# Drift surfaced by scripts/ci/detect-sync-drift.mjs + sync-drift-detector.yml.
+
+schema: 2
+hub: Cogni-DAO/cogni
+artifacts:
+  - repo: Cogni-DAO/node-template
+    visibility: public
+  - repo: Cogni-DAO/cogni-poly
+    visibility: private # detector skips until v0.2 (needs PAT)
+
+# Global excludes — never propagated to or from any artifact. Junk / caches /
+# build outputs / git internals. Default-deny-divergence applies BELOW this set.
+exclude:
+  - ".git/**"
+  - "node_modules/**"
+  - ".next/**"
+  - "dist/**"
+  - "build/**"
+  - ".turbo/**"
+  - "coverage/**"
+  - ".playwright/**"
+  - ".local-auth/**"
+  - "**/*.tsbuildinfo"
+
+# Per-artifact divergences. Two shapes:
+#   omit_from_artifact: paths the hub has that the artifact intentionally lacks.
+#   artifact_only:      paths the artifact has that the hub intentionally lacks.
+# Anything NOT covered by exclude[] or these lists MUST match across hub + artifact.
+divergences:
+  - artifact: Cogni-DAO/node-template
+    reason: "OSS public quickstart — sovereign-fork story extends operator-scope with OpenBao/ESO; omits hub-only nodes + canary env."
+    omit_from_artifact:
+      - "nodes/operator/**" # hub-only node
+      - "nodes/resy/**" # hub-only node
+      - "nodes/scheduler-worker/**" # hub-only node (if it exists)
+      - "infra/catalog/operator.yaml"
+      - "infra/catalog/resy.yaml"
+      - "infra/catalog/scheduler-worker.yaml"
+      - ".github/workflows/release.yml" # no production env
+      - "infra/k8s/overlays/canary/**" # no canary env
+      - "tests/ci-invariants/**" # hub-only CI structural tests
+      - "scripts/experiments/**" # hub-only research scripts
+    artifact_only:
+      - "infra/fork.yaml"
+      - "infra/k8s/argocd/openbao-application.yaml"
+      - "infra/k8s/argocd/openbao/**"
+      - "infra/k8s/argocd/external-secrets-application.yaml"
+      - "infra/k8s/argocd/external-secrets/**"
+      - "infra/k8s/secrets/external-secrets/**"
+      - "infra/k8s/overlays/_template/node-template/**"
+      - "infra/k8s/overlays/candidate-a/node-template/**"
+      - "infra/k8s/overlays/preview/node-template/**"
+      - "infra/k8s/overlays/production/node-template/**"
+      - "docs/spec/secrets-management.md"
+      - "docs/guides/secrets-add-new.md"
+      - "docs/guides/secrets-rotate.md"
+      - "docs/runbooks/fork-quickstart.md"
+      - "docs/spec/agentic-fork-bootstrap.md"
+      - "infra/catalog/node-template.yaml"
+      - "scripts/secrets/**"
+      - "scripts/dev/worktree-setup.sh"
+      - "scripts/rename-node.sh"
+      - "scripts/setup/bootstrap.sh"
+      - "scripts/bootstrap/install/install-bash.sh"
+      - ".claude/skills/cicd-secrets-expert/**"
+      - ".env.bootstrap.example"
+
+  - artifact: Cogni-DAO/cogni-poly
+    reason: "Private per-node fork; carries the poly node, omits the template node + other hub nodes."
+    omit_from_artifact:
+      - "nodes/operator/**"
+      - "nodes/resy/**"
+      - "nodes/node-template/**"
+      - "infra/catalog/operator.yaml"
+      - "infra/catalog/resy.yaml"
+      - "infra/catalog/scheduler-worker.yaml"
+    artifact_only:
+      - "nodes/poly/**"
