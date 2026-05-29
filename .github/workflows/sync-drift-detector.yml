@@ -76,6 +76,9 @@ jobs:
         run: |
           set -euo pipefail
           TITLE="sync-drift: ${DRIFT_COUNT} item(s) across artifact repos"
+          # gh issue create --label X fails if the label doesn't exist yet.
+          # Ensure it exists; `|| true` covers the already-exists case.
+          gh label create sync-drift --color "d76d76" --description "Drift surfaced by sync-drift-detector.yml" || true
           # Find existing open issue by label
           EXISTING=$(gh issue list --label sync-drift --state open --limit 1 --json number --jq '.[0].number // empty')
           # Build body (truncate to 60KB to stay under GitHub's 65536-char body limit)
