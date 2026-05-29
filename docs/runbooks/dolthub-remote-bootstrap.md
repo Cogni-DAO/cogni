@@ -103,16 +103,9 @@ Capture **both**:
 
 This pubkey is the **service identity** for the operator-app's push job. It is not Derek's personal cred; it belongs to the operator service for as long as v0 lives. Rotation = repeat Steps 2–3 with a new keypair and update the secrets.
 
-## Step 4 — Set the GitHub Environment Secrets
+## Step 4 — Set the GitHub Environment Secrets (prod-only writer)
 
-Three secrets per environment (candidate-a, preview, production). Same values across envs for v0 (one service identity); v1+ may split per env.
-
-```bash
-# Convenience: use pnpm setup:secrets --only DOLT,DOLTHUB
-pnpm setup:secrets --only DOLTHUB_REMOTE_URL,DOLT_CREDS_JWK,DOLT_CREDS_KEYID
-```
-
-Or by hand:
+**`DOLTHUB_REMOTE_URL` is set ONLY in `production`.** The DoltHub mirror is a public canonical history — test and preview must never push to it (their commit graphs would diverge from prod, and contributor attribution would be wrong). `DOLT_CREDS_JWK` and `DOLT_CREDS_KEYID` can safely live in all three envs (they're inert without the URL); keeping them everywhere matches the rest of the secret-rotation surface and avoids special-casing later.
 
 ```bash
 REPO=Cogni-DAO/cogni
@@ -120,12 +113,18 @@ KEYID=<keyid from step 2>
 JWK=$(cat ~/.dolt/creds/$KEYID.jwk)
 URL=https://doltremoteapi.dolthub.com/cogni-dao/knowledge-operator
 
+# URL only in production — the writer-guard
+gh secret set DOLTHUB_REMOTE_URL --repo $REPO --env production --body "$URL"
+
+# Creds in all three so the doltgres entrypoint wrapper writes the file
+# uniformly (no environment-conditional infra paths to maintain).
 for ENV in candidate-a preview production; do
-  gh secret set DOLTHUB_REMOTE_URL --repo $REPO --env $ENV --body "$URL"
-  gh secret set DOLT_CREDS_JWK     --repo $REPO --env $ENV --body "$JWK"
-  gh secret set DOLT_CREDS_KEYID   --repo $REPO --env $ENV --body "$KEYID"
+  gh secret set DOLT_CREDS_JWK   --repo $REPO --env $ENV --body "$JWK"
+  gh secret set DOLT_CREDS_KEYID --repo $REPO --env $ENV --body "$KEYID"
 done
 ```
+
+Defense-in-depth: even if `DOLTHUB_REMOTE_URL` accidentally gets set on candidate-a or preview, the operator code gates push on `DEPLOY_ENVIRONMENT === 'production'` and logs `dolthub_push_disabled_non_prod` instead of pushing. Two layers (secret absence + code gate) protect the public mirror.
 
 The bootstrap host can now delete its local `~/.dolt/creds/<keyid>.jwk` — the cluster has the only authoritative copy.
 
