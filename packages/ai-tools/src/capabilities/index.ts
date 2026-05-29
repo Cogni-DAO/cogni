@@ -14,6 +14,15 @@
  * @public
  */
 
+// Hypothesis-loop capability (per knowledge-syntropy spec § The Hypothesis Loop)
+export type {
+  DecideParams,
+  EdoCapability,
+  EdoSourceType,
+  HypothesizeParams,
+  RecordOutcomeParams,
+  RecordOutcomeResult,
+} from "./edo";
 // Knowledge capability (per knowledge-data-plane spec)
 export type {
   KnowledgeCapability,
