@@ -52,3 +52,4 @@ poll_ready() {
 poll_ready operator "https://${DOMAIN}"
 poll_ready poly "https://poly-${DOMAIN}"
 poll_ready resy "https://resy-${DOMAIN}"
+poll_ready node-template "https://node-template-${DOMAIN}"
