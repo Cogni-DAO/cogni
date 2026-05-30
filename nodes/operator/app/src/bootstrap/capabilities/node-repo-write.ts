@@ -15,7 +15,7 @@ import {
   type CommitFileAndOpenPrInput,
   type CommitFileAndOpenPrResult,
   GitHubRepoWriter,
-} from "@/adapters/server/vcs/github-repo-write";
+} from "@/adapters/server";
 import type { ServerEnv } from "@/shared/env";
 
 export type { CommitFileAndOpenPrInput, CommitFileAndOpenPrResult };

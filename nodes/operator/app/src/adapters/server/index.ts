@@ -104,6 +104,11 @@ export { ViemTreasuryAdapter } from "./onchain/viem-treasury.adapter";
 export { UserDrizzlePaymentAttemptRepository } from "./payments/drizzle-payment-attempt.adapter";
 export { EvmRpcOnChainVerifierAdapter } from "./payments/evm-rpc-onchain-verifier.adapter";
 export { PonderOnChainVerifierAdapter } from "./payments/ponder-onchain-verifier.adapter";
+// Server-side Privy wallet provisioner (task.5083) — operator-only.
+export {
+  type ProvisionedOperatorWallet,
+  provisionOperatorWallet,
+} from "./privy/operator-wallet-provisioner";
 export {
   GitLsFilesAdapter,
   type GitLsFilesAdapterConfig,
@@ -122,6 +127,13 @@ export {
   type TemporalScheduleControlConfig,
 } from "./temporal";
 export { SystemClock } from "./time/system.adapter";
+// Single-file commit + open-PR helper (task.5083) — operator-only.
+export {
+  type CommitFileAndOpenPrInput,
+  type CommitFileAndOpenPrResult,
+  GitHubRepoWriter,
+  type GitHubRepoWriterConfig,
+} from "./vcs/github-repo-write";
 // VCS capability (GitHub App adapter)
 export {
   GitHubVcsAdapter,

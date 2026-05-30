@@ -14,7 +14,7 @@
 import {
   type ProvisionedOperatorWallet,
   provisionOperatorWallet,
-} from "@/adapters/server/privy/operator-wallet-provisioner";
+} from "@/adapters/server";
 import type { ServerEnv } from "@/shared/env";
 
 export type { ProvisionedOperatorWallet };
