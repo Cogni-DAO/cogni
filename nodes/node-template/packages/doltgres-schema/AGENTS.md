@@ -10,9 +10,9 @@
 
 ## Purpose
 
-Drizzle ORM table definitions for **node-template-local Doltgres** tables (`knowledge_node_template` database). Owned by and namespaced to the node-template node. Mirrors `@cogni/operator-doltgres-schema` shape verbatim so every fork starts with the same versioned knowledge plane + work-items source-of-truth.
+Pure re-exports of the Drizzle table definitions from `@cogni/knowledge-base`, scoped to the node-template `knowledge_node_template` database. Owned by and namespaced to the node-template node. Mirrors `@cogni/operator-doltgres-schema` shape verbatim so every fork starts with the same versioned knowledge plane + work-items source-of-truth.
 
-Contents: syntropy seed re-exports from `@cogni/knowledge-base` (knowledge, domains, citations, sources) + the `work_items` table (task.0423-shape parity) + `knowledge_contributions` + `knowledge_contribution_commits` (task.0425 external-agent contribution flow).
+Contents: re-exports from `@cogni/knowledge-base` of the 6 syntropy-seed tables (citations, domains, knowledge, sources, knowledge_contributions, knowledge_contribution_commits — task.0425 contribution flow promoted to base in spike.5004) + the `work_items` table (task.0423-shape parity, also promoted to base in spike.5004). No local table definitions — `SCHEMA_GENERIC_CONTENT_SPECIFIC` makes column-shape divergence between nodes an anti-pattern.
 
 ## Pointers
 
