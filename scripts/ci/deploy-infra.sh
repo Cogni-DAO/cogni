@@ -806,22 +806,53 @@ if ! $EDGE_COMPOSE ps -q caddy 2>/dev/null | grep -q .; then
   $EDGE_COMPOSE up -d
 else
   log_info "Edge stack already running"
-  # Check for Caddyfile changes and restart if needed
+  # Check for Caddyfile changes and recreate the container if needed.
+  #
+  # task.5078: previously this did `caddy reload || restart`. Reload re-reads
+  # the Caddyfile but Caddy's runtime env stays whatever was set at the
+  # original `docker compose up -d`. When deploy-infra adds a new site env
+  # var to /opt/cogni-template-edge/.env (e.g., NODE_TEMPLATE_DOMAIN), reload
+  # substitutes `{$NODE_TEMPLATE_DOMAIN}` to empty, the new server block is
+  # silently absent, no cert gets provisioned, and TLS handshake errors out
+  # for the new hostname. `docker compose up -d` (without --force-recreate)
+  # detects the env_file delta and recreates the container with the new env
+  # — fully covers the new-domain case without disturbing Caddy when only
+  # existing-site Caddyfile lines changed.
   HASH_DIR="/var/lib/cogni"
   CADDYFILE="/opt/cogni-template-edge/configs/Caddyfile.tmpl"
+  EDGE_ENV_FILE="/opt/cogni-template-edge/.env"
   CADDY_HASH_FILE="$HASH_DIR/caddyfile.sha256"
+  EDGE_ENV_HASH_FILE="$HASH_DIR/edge.env.sha256"
+
+  mkdir -p "$HASH_DIR"
+  caddyfile_changed=false
+  edge_env_changed=false
 
   if [[ -f "$CADDYFILE" ]]; then
-    mkdir -p "$HASH_DIR"
-    NEW_HASH=$(hash_file "$CADDYFILE")
-    OLD_HASH=$(cat "$CADDY_HASH_FILE" 2>/dev/null || echo "none")
-
-    if [[ "$NEW_HASH" != "$OLD_HASH" && "$NEW_HASH" != "no-hash-tool" ]]; then
-      log_info "Caddyfile changed (hash: ${NEW_HASH:0:12}...), reloading Caddy..."
-      $EDGE_COMPOSE exec -T caddy caddy reload --config /etc/caddy/Caddyfile || $EDGE_COMPOSE restart caddy
-      echo "$NEW_HASH" > "$CADDY_HASH_FILE"
-      log_info "Caddy reloaded with new config"
+    NEW_CADDY_HASH=$(hash_file "$CADDYFILE")
+    OLD_CADDY_HASH=$(cat "$CADDY_HASH_FILE" 2>/dev/null || echo "none")
+    if [[ "$NEW_CADDY_HASH" != "$OLD_CADDY_HASH" && "$NEW_CADDY_HASH" != "no-hash-tool" ]]; then
+      caddyfile_changed=true
     fi
+  fi
+  if [[ -f "$EDGE_ENV_FILE" ]]; then
+    NEW_EDGE_ENV_HASH=$(hash_file "$EDGE_ENV_FILE")
+    OLD_EDGE_ENV_HASH=$(cat "$EDGE_ENV_HASH_FILE" 2>/dev/null || echo "none")
+    if [[ "$NEW_EDGE_ENV_HASH" != "$OLD_EDGE_ENV_HASH" && "$NEW_EDGE_ENV_HASH" != "no-hash-tool" ]]; then
+      edge_env_changed=true
+    fi
+  fi
+
+  if [[ "$caddyfile_changed" == "true" || "$edge_env_changed" == "true" ]]; then
+    log_info "Edge stack config changed (caddyfile=${caddyfile_changed} env=${edge_env_changed}), recreating Caddy..."
+    # --force-recreate guarantees the container restarts even when compose's
+    # delta detector doesn't classify env_file content as a change (which is
+    # its default — env_file additions only trigger recreate via the explicit
+    # flag). Belt-and-suspenders for the new-site-env-var case from task.5078.
+    $EDGE_COMPOSE up -d --force-recreate caddy
+    [[ "$caddyfile_changed" == "true" ]] && echo "$NEW_CADDY_HASH" > "$CADDY_HASH_FILE"
+    [[ "$edge_env_changed" == "true" ]] && echo "$NEW_EDGE_ENV_HASH" > "$EDGE_ENV_HASH_FILE"
+    log_info "Caddy recreated; new env_file values + Caddyfile in effect"
   fi
 fi
 

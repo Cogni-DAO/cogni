@@ -49,6 +49,13 @@ poll_ready() {
   return 1
 }
 
-poll_ready operator "https://${DOMAIN}"
-poll_ready poly "https://poly-${DOMAIN}"
-poll_ready resy "https://resy-${DOMAIN}"
+# Catalog-driven: iterate NODE_TARGETS from infra/catalog/ and resolve each
+# host via host_for_node() (which honours the `is_primary_host` catalog
+# field). Adding a new node = one catalog edit, no script edit.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./lib/image-tags.sh
+. "$SCRIPT_DIR/lib/image-tags.sh"
+
+for node in "${NODE_TARGETS[@]}"; do
+  poll_ready "$node" "https://$(host_for_node "$node" "$DOMAIN")"
+done
