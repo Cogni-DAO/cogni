@@ -46,6 +46,13 @@ git config user.email "github-actions[bot]@users.noreply.github.com"
 per_node_shas=()
 declare -A per_node_maps=()
 for node in "${ALL_TARGETS[@]}"; do
+  # Overlay-presence filter (bug.5078): a target with no per-env overlay
+  # doesn't deploy to this env, so its per-node branch is not expected
+  # to exist. Mirrors promote-and-deploy.yml `Resolve target node list`.
+  if [ ! -d "$repo_root/infra/k8s/overlays/${ENV}/${node}" ]; then
+    echo "ℹ️  Skipping ${node}: no ${ENV} overlay"
+    continue
+  fi
   per_branch="deploy/${ENV}-${node}"
   sha=$(git ls-remote "$REPO_URL" "refs/heads/${per_branch}" | cut -f1)
   if [ -z "$sha" ]; then
