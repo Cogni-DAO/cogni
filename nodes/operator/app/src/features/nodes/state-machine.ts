@@ -16,6 +16,9 @@ import type { NodeStatus } from "@/shared/db/nodes";
 export type NodeEvent =
   | { type: "dao_verified" }
   | { type: "spec_published" }
+  | { type: "wallet_provisioned" }
+  | { type: "payments_configured" }
+  | { type: "activation_published" }
   | { type: "fail"; reason: string };
 
 export type TransitionResult =
@@ -27,9 +30,10 @@ const TRANSITIONS: Record<
   Partial<Record<NodeEvent["type"], NodeStatus>>
 > = {
   dao_pending: { dao_verified: "dao_formed", fail: "failed" },
-  dao_formed: { spec_published: "active", fail: "failed" },
-  wallet_ready: { fail: "failed" },
-  payments_ready: { fail: "failed" },
+  dao_formed: { spec_published: "published", fail: "failed" },
+  published: { wallet_provisioned: "wallet_ready", fail: "failed" },
+  wallet_ready: { payments_configured: "payments_ready", fail: "failed" },
+  payments_ready: { activation_published: "active", fail: "failed" },
   active: {},
   failed: {},
 };
@@ -49,26 +53,39 @@ export function transition(
 }
 
 /**
- * Ordered milestones for the progress bar. Each entry is the state reached once that
- * milestone is complete. `failed` is not a milestone — it is rendered as an error overlay.
+ * Ordered milestones for the visual wizard. `active` is terminal completion of
+ * the Payments step, not an extra visible milestone.
  */
 export const NODE_PROGRESS_STEPS: ReadonlyArray<{
-  status: NodeStatus;
   label: string;
 }> = [
-  { status: "dao_pending", label: "Register" },
-  { status: "dao_formed", label: "DAO" },
-  { status: "active", label: "Published" },
+  { label: "Register" },
+  { label: "DAO" },
+  { label: "Publish" },
+  { label: "Wallet" },
+  { label: "Payments" },
 ];
 
 /**
- * Index of the node's current state within `NODE_PROGRESS_STEPS`. A step is "complete"
- * when its index is <= this. Returns the last completed index for `failed` (where the
- * failure happened is not tracked, so we surface the furthest-reached milestone as -1-safe 0).
+ * Current visual milestone index. A registry row means registration is complete.
  */
 export function progressIndexForStatus(status: NodeStatus): number {
-  const idx = NODE_PROGRESS_STEPS.findIndex((s) => s.status === status);
-  return idx; // -1 for `failed` (no milestone) — the bar renders all steps as not-complete
+  switch (status) {
+    case "dao_pending":
+      return 1;
+    case "dao_formed":
+      return 2;
+    case "published":
+      return 3;
+    case "wallet_ready":
+      return 4;
+    case "payments_ready":
+      return 4;
+    case "active":
+      return 5;
+    case "failed":
+      return 0;
+  }
 }
 
 /**
@@ -78,8 +95,8 @@ export function progressIndexForStatus(status: NodeStatus): number {
 export function wizardUrlForStatus(nodeId: string, status: NodeStatus): string {
   switch (status) {
     case "dao_pending":
-      return `/setup/dao?nodeId=${nodeId}`;
     case "dao_formed":
+    case "published":
     case "wallet_ready":
     case "payments_ready":
     case "active":

@@ -19,9 +19,15 @@ import {
 import { NODE_STATUSES, type NodeStatus } from "@/shared/db/nodes";
 
 describe("transition — happy path", () => {
-  it("walks dao_pending → dao_formed → active", () => {
+  it("walks dao_pending → dao_formed → published → wallet_ready → payments_ready → active", () => {
     let s: NodeStatus = "dao_pending";
-    for (const ev of ["dao_verified", "spec_published"] as const) {
+    for (const ev of [
+      "dao_verified",
+      "spec_published",
+      "wallet_provisioned",
+      "payments_configured",
+      "activation_published",
+    ] as const) {
       const r = transition(s, { type: ev });
       expect(r.ok).toBe(true);
       if (r.ok) s = r.nextStatus;
@@ -34,6 +40,7 @@ describe("transition — failure escape", () => {
   it.each([
     "dao_pending",
     "dao_formed",
+    "published",
     "wallet_ready",
     "payments_ready",
   ] as const)("%s can transition to failed via fail event", (s) => {
@@ -73,6 +80,9 @@ describe("transition — totality", () => {
     const events: NodeEvent[] = [
       { type: "dao_verified" },
       { type: "spec_published" },
+      { type: "wallet_provisioned" },
+      { type: "payments_configured" },
+      { type: "activation_published" },
       { type: "fail", reason: "test" },
     ];
     for (const s of NODE_STATUSES) {
@@ -87,10 +97,9 @@ describe("transition — totality", () => {
 describe("wizardUrlForStatus", () => {
   it("routes each status to the canonical wizard page", () => {
     const id = "abc-123";
-    expect(wizardUrlForStatus(id, "dao_pending")).toBe(
-      `/setup/dao?nodeId=${id}`
-    );
+    expect(wizardUrlForStatus(id, "dao_pending")).toBe(`/setup/nodes/${id}`);
     expect(wizardUrlForStatus(id, "dao_formed")).toBe(`/setup/nodes/${id}`);
+    expect(wizardUrlForStatus(id, "published")).toBe(`/setup/nodes/${id}`);
     expect(wizardUrlForStatus(id, "wallet_ready")).toBe(`/setup/nodes/${id}`);
     expect(wizardUrlForStatus(id, "payments_ready")).toBe(`/setup/nodes/${id}`);
     expect(wizardUrlForStatus(id, "active")).toBe(`/setup/nodes/${id}`);

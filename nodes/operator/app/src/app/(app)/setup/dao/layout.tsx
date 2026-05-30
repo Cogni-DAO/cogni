@@ -14,7 +14,6 @@
 "use client";
 
 import { CreditCard, Shield } from "lucide-react";
-import { useSearchParams } from "next/navigation";
 import type { ReactElement, ReactNode } from "react";
 
 import { NavigationLink } from "@/components";
@@ -39,13 +38,6 @@ export default function SetupDaoLayout({
 }: {
   children: ReactNode;
 }): ReactElement {
-  const searchParams = useSearchParams();
-  const nodeId = searchParams?.get("nodeId");
-
-  if (nodeId) {
-    return <>{children}</>;
-  }
-
   return (
     <div className="flex flex-col gap-6 p-5 md:p-6">
       <nav

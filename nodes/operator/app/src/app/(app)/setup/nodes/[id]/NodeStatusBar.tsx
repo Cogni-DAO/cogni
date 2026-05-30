@@ -14,6 +14,7 @@
 import { cn } from "@cogni/node-ui-kit/util/cn";
 import type { ReactElement } from "react";
 
+import { Progress } from "@/components";
 import {
   NODE_PROGRESS_STEPS,
   progressIndexForStatus,
@@ -27,84 +28,65 @@ interface Props {
 export function NodeStatusBar({ status }: Props): ReactElement {
   const currentIndex = progressIndexForStatus(status);
   const failed = status === "failed";
+  const maxIndex = NODE_PROGRESS_STEPS.length - 1;
+  const progressValue = (Math.min(currentIndex, maxIndex) / maxIndex) * 100;
 
   return (
-    <nav
-      aria-label="Node setup progress"
-      className="flex w-full items-start justify-between"
-    >
-      {NODE_PROGRESS_STEPS.map((step, i) => {
-        const isComplete = !failed && i < currentIndex;
-        const isCurrent = !failed && i === currentIndex;
-        const isLast = i === NODE_PROGRESS_STEPS.length - 1;
+    <nav aria-label="Node setup progress" className="w-full">
+      <div className="relative px-2 pt-3">
+        <Progress
+          value={failed ? 0 : progressValue}
+          className="absolute top-5 right-2 left-2 h-px rounded-none bg-border"
+        />
+        <ol
+          className="relative z-10 grid gap-2"
+          style={{
+            gridTemplateColumns: `repeat(${NODE_PROGRESS_STEPS.length}, minmax(0, 1fr))`,
+          }}
+        >
+          {NODE_PROGRESS_STEPS.map((step, i) => {
+            const isComplete = !failed && i < currentIndex;
+            const isCurrent = !failed && i === currentIndex;
 
-        return (
-          <div
-            key={step.status}
-            className="flex flex-1 flex-col items-center last:flex-none"
-          >
-            <div className="flex w-full items-center">
-              {/* leading line (hidden on first) */}
-              {i > 0 ? (
-                <span
-                  aria-hidden
-                  className={cn(
-                    "h-px flex-1",
-                    i <= currentIndex && !failed ? "bg-primary" : "bg-border"
-                  )}
-                />
-              ) : (
-                <span aria-hidden className="flex-1" />
-              )}
-
-              {/* dot — current step wears a token-tinted halo (no ring utilities) */}
-              <span
-                aria-current={isCurrent ? "step" : undefined}
-                className={cn(
-                  "flex shrink-0 items-center justify-center rounded-full",
-                  isCurrent ? "bg-primary/20 p-1" : "p-0"
-                )}
+            return (
+              <li
+                key={step.label}
+                className="flex min-w-0 flex-col items-center text-center"
               >
                 <span
+                  aria-current={isCurrent ? "step" : undefined}
                   className={cn(
-                    "h-3 w-3 rounded-full border transition-colors",
-                    isComplete && "border-primary bg-primary",
-                    isCurrent && "border-primary bg-primary",
-                    !isComplete && !isCurrent && "border-border bg-muted",
-                    failed && i === 0 && "border-destructive bg-destructive"
+                    "flex h-4 w-4 items-center justify-center rounded-full bg-background",
+                    isCurrent && "bg-primary/20"
                   )}
-                />
-              </span>
-
-              {/* trailing line (hidden on last) */}
-              {!isLast ? (
+                >
+                  <span
+                    className={cn(
+                      "block h-3 w-3 rounded-full border transition-colors",
+                      isComplete && "border-primary bg-primary",
+                      isCurrent && "border-primary bg-primary",
+                      !isComplete && !isCurrent && "border-border bg-muted",
+                      failed && i === 0 && "border-destructive bg-destructive"
+                    )}
+                  />
+                </span>
                 <span
-                  aria-hidden
                   className={cn(
-                    "h-px flex-1",
-                    i < currentIndex && !failed ? "bg-primary" : "bg-border"
+                    "mt-2 w-full min-w-0 text-xs leading-tight",
+                    isCurrent
+                      ? "font-medium text-foreground"
+                      : isComplete
+                        ? "text-foreground/70"
+                        : "text-muted-foreground"
                   )}
-                />
-              ) : (
-                <span aria-hidden className="flex-1" />
-              )}
-            </div>
-
-            <span
-              className={cn(
-                "mt-2 text-center text-xs",
-                isCurrent
-                  ? "font-medium text-foreground"
-                  : isComplete
-                    ? "text-foreground/70"
-                    : "text-muted-foreground"
-              )}
-            >
-              {step.label}
-            </span>
-          </div>
-        );
-      })}
+                >
+                  {step.label}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
     </nav>
   );
 }

@@ -12,7 +12,6 @@
 
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactElement, useState } from "react";
 
@@ -51,9 +50,9 @@ export function NodeActionPanel({ nodeId, status }: Props): ReactElement {
   switch (status) {
     case "dao_pending":
       action = (
-        <Link href={`/setup/dao?nodeId=${nodeId}`}>
-          <Button>Form DAO via wallet</Button>
-        </Link>
+        <p className="text-muted-foreground text-sm">
+          Use the DAO formation form on this page to continue.
+        </p>
       );
       break;
     case "dao_formed":
@@ -62,25 +61,47 @@ export function NodeActionPanel({ nodeId, status }: Props): ReactElement {
           disabled={submitting}
           onClick={() => postAction(`/api/v1/nodes/${nodeId}/publish`)}
         >
-          {submitting ? "Opening PR…" : "Open repo-spec PR on target repo"}
+          {submitting ? "Opening PR…" : "Open node repo-spec PR"}
         </Button>
       );
       break;
-    case "payments_ready":
+    case "published":
+      action = (
+        <div className="space-y-2 text-sm">
+          <p className="text-muted-foreground">
+            Governance repo-spec PR opened. The next step is operator wallet
+            provisioning.
+          </p>
+          <p className="text-muted-foreground">
+            Blocked for design: v0 monorepo nodes may allow operator-custodial
+            wallet provisioning, but that exception needs an explicit custody
+            decision before this button can mint or store a wallet.
+          </p>
+          <Button disabled>Provision operator wallet</Button>
+        </div>
+      );
+      break;
     case "wallet_ready":
       action = (
+        <div className="space-y-2 text-sm">
+          <p className="text-muted-foreground">
+            Operator wallet is ready. Activate payment rails next.
+          </p>
+          <Button disabled>Activate payments</Button>
+        </div>
+      );
+      break;
+    case "payments_ready":
+      action = (
         <p className="text-muted-foreground text-sm">
-          This legacy wizard state is no longer active. Re-register the node to
-          publish a governance-only repo-spec.
+          Payment activation is ready to publish. Opening the activation PR is
+          the final step before this node becomes active.
         </p>
       );
       break;
     case "active":
       action = (
-        <p className="text-muted-foreground text-sm">
-          Bootstrap complete. Merge the repo-spec PR in your target repo to
-          finish.
-        </p>
+        <p className="text-muted-foreground text-sm">Node setup is active.</p>
       );
       break;
     case "failed":

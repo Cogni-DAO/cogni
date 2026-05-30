@@ -4,7 +4,7 @@
 /**
  * Module: `@app/api/v1/nodes/[id]/publish`
  * Purpose: Build the governance-only repo-spec YAML and open a PR against the target repo via the GitHub App.
- * Scope: Owner-gated. Advances dao_formed → active when the PR is opened. Idempotent: re-opening
+ * Scope: Owner-gated. Advances dao_formed → published when the PR is opened. Idempotent: re-opening
  *   yields the existing PR.
  * Invariants: GH_APP_INSTALL_REQUIRED, NODE_SOVEREIGNTY (PR only; never force-push), STATE_MACHINE_TOTAL.
  * Side-effects: IO (GitHub REST API, Postgres)
@@ -68,7 +68,12 @@ export async function POST(_request: Request, ctx: RouteParams) {
   }
 
   // Idempotent: if already published, return the existing PR.
-  if (node.status === "active" && node.publishPrUrl) {
+  if (
+    ["published", "wallet_ready", "payments_ready", "active"].includes(
+      node.status
+    ) &&
+    node.publishPrUrl
+  ) {
     return NextResponse.json({ node, alreadyPublished: true });
   }
 

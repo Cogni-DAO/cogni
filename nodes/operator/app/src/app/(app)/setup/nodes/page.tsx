@@ -26,6 +26,10 @@ import { NewNodeForm } from "./NewNodeForm.client";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+function shortNodeId(id: string): string {
+  return id.slice(0, 8);
+}
+
 export default async function SetupNodesPage(): Promise<ReactElement> {
   const session = await getServerSessionUser();
   if (!session) {
@@ -75,7 +79,14 @@ export default async function SetupNodesPage(): Promise<ReactElement> {
                   className="block rounded border border-border p-3 hover:bg-muted"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-sm">{n.repoUrl}</span>
+                    <div className="min-w-0">
+                      <span className="block truncate font-semibold text-sm">
+                        {n.slug}
+                      </span>
+                      <span className="block truncate text-muted-foreground text-xs">
+                        node_id {shortNodeId(n.id)} · scope default
+                      </span>
+                    </div>
                     <span className="text-muted-foreground text-xs uppercase">
                       {n.status}
                     </span>

@@ -28,6 +28,7 @@ import {
 export const NODE_STATUSES = [
   "dao_pending",
   "dao_formed",
+  "published",
   "wallet_ready",
   "payments_ready",
   "active",
@@ -78,7 +79,7 @@ export const nodes = pgTable(
   (t) => [
     check(
       "nodes_status_check",
-      sql`${t.status} IN ('dao_pending','dao_formed','wallet_ready','payments_ready','active','failed')`
+      sql`${t.status} IN ('dao_pending','dao_formed','published','wallet_ready','payments_ready','active','failed')`
     ),
     check(
       "nodes_repo_visibility_check",

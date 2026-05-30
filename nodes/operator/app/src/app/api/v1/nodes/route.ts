@@ -131,7 +131,6 @@ export async function POST(request: Request) {
   );
 
   if (inserted.length === 0) {
-    // Slug already taken — return the existing row if this user owns it.
     const existing = await withTenantScope(
       db,
       userActor(session.id as UserId),
@@ -142,13 +141,14 @@ export async function POST(request: Request) {
           .where(eq(nodes.slug, parsedSlug.value.slug))
           .limit(1)
     );
-    if (existing.length === 0) {
-      return NextResponse.json(
-        { error: "slug already taken by another user" },
-        { status: 409 }
-      );
-    }
-    return NextResponse.json({ node: existing[0] }, { status: 200 });
+    const reason =
+      existing.length > 0
+        ? "A node with this slug already exists. Open it from Your nodes or choose another slug."
+        : "Slug already taken by another user.";
+    return NextResponse.json(
+      { error: "slug already taken", reason },
+      { status: 409 }
+    );
   }
 
   return NextResponse.json({ node: inserted[0] }, { status: 201 });
