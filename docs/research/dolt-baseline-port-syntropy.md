@@ -4,7 +4,7 @@ type: research
 title: "Dolt knowledge + work_items baseline before node-template port lands (PR #1377)"
 status: draft
 trust: draft
-summary: "PR #1377 byte-copies operator's knowledge_contributions, knowledge_contribution_commits, and work_items tables into node-template's new doltgres-schema package. Per syntropy doctrine SCHEMA_GENERIC_CONTENT_SPECIFIC, this institutionalizes per-node table drift before the second node even ships. Recommendation: promote the two contribution tables to @cogni/knowledge-base with operator's (newer, more complete) shape; defer work_items promotion pending the corpus-as-knowledge question (PR #1175 draft) — possibly work_items collapses into knowledge entries rather than getting a shared base."
+summary: "PR #1377 byte-copies operator's knowledge_contributions, knowledge_contribution_commits, and work_items tables into node-template's new doltgres-schema package — institutionalizes per-node table drift before the second node even ships. This PR (#1378) promotes all 3 tables to @cogni/knowledge-base using operator's shape (base_commit + head_commit + commit_count + workItems) and refactors operator's doltgres-schema package to pure re-exports. Drizzle-kit generates ZERO new migrations post-move (byte-equivalent verified locally). Node-template port (#1377) now adopts the shared base via re-export — no new schema definitions on the artifact side."
 read_when: Reviewing PR #1377 (node-template doltgres substrate port), deciding whether contribution tables belong in @cogni/knowledge-base, evaluating whether work_items should be promoted, or designing the second-node baseline for any future fork.
 owner: derekg1729
 created: 2026-05-30
@@ -26,6 +26,11 @@ external_refs:
 # Research: Dolt knowledge + work_items baseline before node-template port lands
 
 > spike: spike.5004 | date: 2026-05-30 | written under `/knowledge-syntropy-expert` lens
+
+## Revision history (most recent first)
+
+- **rev 2 (current, implemented in this PR)** — `/review-design` strengthened the rev-1 recommendation: promote ALL 3 tables (contributions + contribution_commits + work_items), not just 2. PR scope expanded from research-only to **research + operator refactor + work_items promotion + drizzle-kit verification**. Drizzle-kit confirms zero new migrations post-move (`No schema changes, nothing to migrate 😴`) — byte-equivalent against the existing 0004 snapshot. Node-template port (#1377) now needs to adopt the shared base via re-export instead of duplicating definitions.
+- **rev 1** (superseded on work_items scope) — recommended promoting contributions + contribution_commits, leaving work_items duplicated for v0 pending PR #1175 (corpus-as-knowledge draft). Self-review found this inconsistent with the same `SCHEMA_GENERIC_CONTENT_SPECIFIC` rule it cited for contributions; if PR #1175 ever lands and dissolves work_items into knowledge entries, removing the shared table at that point is trivial.
 
 ## Question
 
