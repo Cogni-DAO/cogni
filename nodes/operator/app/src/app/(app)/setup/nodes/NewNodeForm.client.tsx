@@ -19,16 +19,8 @@ import { type ReactElement, useState } from "react";
 import { Button, Input } from "@/components";
 import { CHAINS as CHAIN_CONFIG_MAP } from "@/shared/web3";
 
-const CHAIN_OPTIONS: ReadonlyArray<{ id: number; label: string }> = [
-  {
-    id: CHAIN_CONFIG_MAP.BASE.chainId,
-    label: `Base mainnet (${CHAIN_CONFIG_MAP.BASE.chainId})`,
-  },
-  {
-    id: CHAIN_CONFIG_MAP.SEPOLIA.chainId,
-    label: `Sepolia (${CHAIN_CONFIG_MAP.SEPOLIA.chainId})`,
-  },
-];
+// v0 supports Base mainnet only. Keep chain fixed to reduce axes of freedom.
+const CHAIN_ID = CHAIN_CONFIG_MAP.BASE.chainId;
 
 const SLUG_RE = /^[a-z][a-z0-9-]{1,31}$/;
 
@@ -36,7 +28,6 @@ export function NewNodeForm(): ReactElement {
   const router = useRouter();
   const [target, setTarget] = useState<"monorepo" | "external">("monorepo");
   const [slug, setSlug] = useState("");
-  const [chainId, setChainId] = useState<number>(CHAIN_CONFIG_MAP.BASE.chainId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,7 +40,7 @@ export function NewNodeForm(): ReactElement {
       const res = await fetch("/api/v1/nodes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug, chainId }),
+        body: JSON.stringify({ slug, chainId: CHAIN_ID }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -109,22 +100,11 @@ export function NewNodeForm(): ReactElement {
         ) : null}
       </div>
 
-      <div className="space-y-2">
-        <label className="font-medium text-sm" htmlFor="chainId">
-          Chain
-        </label>
-        <select
-          id="chainId"
-          className="block rounded border border-border bg-background px-3 py-2 text-sm"
-          value={chainId}
-          onChange={(e) => setChainId(Number(e.target.value))}
-        >
-          {CHAIN_OPTIONS.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.label}
-            </option>
-          ))}
-        </select>
+      <div className="space-y-1">
+        <span className="font-medium text-sm">Chain</span>
+        <p className="text-muted-foreground text-sm">
+          Base mainnet ({CHAIN_ID}) — the only supported chain in v0.
+        </p>
       </div>
 
       {error ? <p className="text-destructive text-sm">{error}</p> : null}

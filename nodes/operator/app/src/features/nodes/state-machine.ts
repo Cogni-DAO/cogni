@@ -51,6 +51,31 @@ export function transition(
 }
 
 /**
+ * Ordered milestones for the progress bar. Each entry is the state reached once that
+ * milestone is complete. `failed` is not a milestone — it is rendered as an error overlay.
+ */
+export const NODE_PROGRESS_STEPS: ReadonlyArray<{
+  status: NodeStatus;
+  label: string;
+}> = [
+  { status: "dao_pending", label: "Register" },
+  { status: "dao_formed", label: "DAO" },
+  { status: "wallet_ready", label: "Wallet" },
+  { status: "payments_ready", label: "Payments" },
+  { status: "active", label: "Published" },
+];
+
+/**
+ * Index of the node's current state within `NODE_PROGRESS_STEPS`. A step is "complete"
+ * when its index is <= this. Returns the last completed index for `failed` (where the
+ * failure happened is not tracked, so we surface the furthest-reached milestone as -1-safe 0).
+ */
+export function progressIndexForStatus(status: NodeStatus): number {
+  const idx = NODE_PROGRESS_STEPS.findIndex((s) => s.status === status);
+  return idx; // -1 for `failed` (no milestone) — the bar renders all steps as not-complete
+}
+
+/**
  * Returns the canonical wizard URL for a node at its current status — used by
  * page-level `redirect()` calls so reload always lands at the right step.
  */

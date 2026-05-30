@@ -20,18 +20,17 @@ import { getServerSessionUser } from "@/lib/auth/server";
 import { type NodeStatus, nodes } from "@/shared/db/nodes";
 
 import { NodeActionPanel } from "./NodeActionPanel.client";
+import { NodeStatusBar } from "./NodeStatusBar";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const STATUS_DESCRIPTION: Record<NodeStatus, string> = {
-  dao_pending: "Step 1 of 5 — form the DAO via the wallet-signed wizard.",
-  dao_formed:
-    "Step 2 of 5 — operator will provision the Privy wallet on your behalf.",
-  wallet_ready: "Step 3 of 5 — sign the Split deploy via the payments wizard.",
-  payments_ready:
-    "Step 4 of 5 — operator will open the repo-spec PR on your repo.",
-  active: "Step 5 of 5 — repo-spec PR opened; merge it to complete bootstrap.",
+  dao_pending: "Form the DAO via the wallet-signed wizard.",
+  dao_formed: "Operator will provision the Privy wallet on your behalf.",
+  wallet_ready: "Sign the Split deploy via the payments wizard.",
+  payments_ready: "Operator will open the repo-spec PR on your repo.",
+  active: "Repo-spec PR opened; merge it to complete bootstrap.",
   failed: "This bootstrap run failed. Re-register the node to start over.",
 };
 
@@ -70,6 +69,9 @@ export default async function NodeDashboardPage({
   return (
     <PageContainer>
       <SectionCard title={node.repoUrl}>
+        <div className="mb-5">
+          <NodeStatusBar status={status} />
+        </div>
         <p className="mb-3 text-muted-foreground text-sm">
           {STATUS_DESCRIPTION[status]}
         </p>
