@@ -133,16 +133,42 @@ export function extractPaymentConfig(
   };
 }
 
+/** Charter that routes a schedule to CollectEpochWorkflow (epoch ingest/roll). */
+const LEDGER_INGEST_CHARTER = "LEDGER_INGEST";
+/**
+ * Cron for the synthesized ledger-ingest schedule. Daily — the cron controls how often
+ * collection runs, NOT the epoch length (the window is derived from epoch_length_days by
+ * CollectEpochWorkflow). Daily ingest + timely roll at window boundaries.
+ */
+const LEDGER_INGEST_CRON = "0 0 * * *";
+
 /**
  * Extract governance config including schedules and optional ledger config.
  * Ledger config is only included when activity_ledger + scope identity are both present.
+ *
+ * When an activity ledger is configured but no LEDGER_INGEST charter is declared, a
+ * ledger-ingest schedule is SYNTHESIZED from activity_ledger. This makes any node with an
+ * activity ledger self-sufficient for epochs — no separate `governance.schedules` entry to
+ * declare or keep in sync with `epoch_length_days`.
  */
 export function extractGovernanceConfig(spec: RepoSpec): GovernanceConfig {
-  const config: GovernanceConfig = {
-    schedules: spec.governance?.schedules ?? [],
-  };
-
+  const declared = spec.governance?.schedules ?? [];
   const ledger = extractLedgerConfig(spec);
+
+  const schedules = [...declared];
+  const hasLedgerSchedule = declared.some(
+    (s) => s.charter.toUpperCase() === LEDGER_INGEST_CHARTER
+  );
+  if (ledger && !hasLedgerSchedule) {
+    schedules.push({
+      charter: LEDGER_INGEST_CHARTER,
+      cron: LEDGER_INGEST_CRON,
+      timezone: "UTC",
+      entrypoint: LEDGER_INGEST_CHARTER,
+    });
+  }
+
+  const config: GovernanceConfig = { schedules };
   if (ledger) {
     config.ledger = ledger;
   }
