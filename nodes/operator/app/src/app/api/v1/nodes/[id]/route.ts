@@ -30,7 +30,6 @@ const PatchInput = z.object({
   event: z
     .discriminatedUnion("type", [
       z.object({ type: z.literal("dao_verified") }),
-      z.object({ type: z.literal("split_deployed") }),
       z.object({ type: z.literal("fail"), reason: z.string().min(1) }),
     ])
     .optional(),

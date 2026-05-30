@@ -19,14 +19,9 @@ import {
 import { NODE_STATUSES, type NodeStatus } from "@/shared/db/nodes";
 
 describe("transition — happy path", () => {
-  it("walks dao_pending → dao_formed → wallet_ready → payments_ready → active", () => {
+  it("walks dao_pending → dao_formed → active", () => {
     let s: NodeStatus = "dao_pending";
-    for (const ev of [
-      "dao_verified",
-      "wallet_provisioned",
-      "split_deployed",
-      "spec_published",
-    ] as const) {
+    for (const ev of ["dao_verified", "spec_published"] as const) {
       const r = transition(s, { type: ev });
       expect(r.ok).toBe(true);
       if (r.ok) s = r.nextStatus;
@@ -50,12 +45,12 @@ describe("transition — failure escape", () => {
 
 describe("transition — invalid transitions", () => {
   it("rejects skipping the dao_verified step", () => {
-    const r = transition("dao_pending", { type: "wallet_provisioned" });
+    const r = transition("dao_pending", { type: "spec_published" });
     expect(r.ok).toBe(false);
   });
 
   it("rejects events from terminal states (active)", () => {
-    for (const ev of ["dao_verified", "wallet_provisioned", "fail"] as const) {
+    for (const ev of ["dao_verified", "spec_published", "fail"] as const) {
       const r = transition("active", { type: ev, reason: "x" } as NodeEvent);
       expect(r.ok).toBe(false);
     }
@@ -67,7 +62,7 @@ describe("transition — invalid transitions", () => {
   });
 
   it("returns a stable reason string on invalid transitions", () => {
-    const r = transition("dao_pending", { type: "split_deployed" });
+    const r = transition("payments_ready", { type: "spec_published" });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toMatch(/Invalid transition/);
   });
@@ -77,8 +72,6 @@ describe("transition — totality", () => {
   it("returns a defined result for every (status, event) pair", () => {
     const events: NodeEvent[] = [
       { type: "dao_verified" },
-      { type: "wallet_provisioned" },
-      { type: "split_deployed" },
       { type: "spec_published" },
       { type: "fail", reason: "test" },
     ];
@@ -97,15 +90,9 @@ describe("wizardUrlForStatus", () => {
     expect(wizardUrlForStatus(id, "dao_pending")).toBe(
       `/setup/dao?nodeId=${id}`
     );
-    expect(wizardUrlForStatus(id, "dao_formed")).toBe(
-      `/setup/nodes/${id}/wallet`
-    );
-    expect(wizardUrlForStatus(id, "wallet_ready")).toBe(
-      `/setup/dao/payments?nodeId=${id}`
-    );
-    expect(wizardUrlForStatus(id, "payments_ready")).toBe(
-      `/setup/nodes/${id}/publish`
-    );
+    expect(wizardUrlForStatus(id, "dao_formed")).toBe(`/setup/nodes/${id}`);
+    expect(wizardUrlForStatus(id, "wallet_ready")).toBe(`/setup/nodes/${id}`);
+    expect(wizardUrlForStatus(id, "payments_ready")).toBe(`/setup/nodes/${id}`);
     expect(wizardUrlForStatus(id, "active")).toBe(`/setup/nodes/${id}`);
     expect(wizardUrlForStatus(id, "failed")).toBe(`/setup/nodes/${id}`);
   });

@@ -104,11 +104,6 @@ export { ViemTreasuryAdapter } from "./onchain/viem-treasury.adapter";
 export { UserDrizzlePaymentAttemptRepository } from "./payments/drizzle-payment-attempt.adapter";
 export { EvmRpcOnChainVerifierAdapter } from "./payments/evm-rpc-onchain-verifier.adapter";
 export { PonderOnChainVerifierAdapter } from "./payments/ponder-onchain-verifier.adapter";
-// Server-side Privy wallet provisioner (task.5083) — operator-only.
-export {
-  type ProvisionedOperatorWallet,
-  provisionOperatorWallet,
-} from "./privy/operator-wallet-provisioner";
 export {
   GitLsFilesAdapter,
   type GitLsFilesAdapterConfig,

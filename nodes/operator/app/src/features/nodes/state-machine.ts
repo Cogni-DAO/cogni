@@ -15,8 +15,6 @@ import type { NodeStatus } from "@/shared/db/nodes";
 
 export type NodeEvent =
   | { type: "dao_verified" }
-  | { type: "wallet_provisioned" }
-  | { type: "split_deployed" }
   | { type: "spec_published" }
   | { type: "fail"; reason: string };
 
@@ -29,9 +27,9 @@ const TRANSITIONS: Record<
   Partial<Record<NodeEvent["type"], NodeStatus>>
 > = {
   dao_pending: { dao_verified: "dao_formed", fail: "failed" },
-  dao_formed: { wallet_provisioned: "wallet_ready", fail: "failed" },
-  wallet_ready: { split_deployed: "payments_ready", fail: "failed" },
-  payments_ready: { spec_published: "active", fail: "failed" },
+  dao_formed: { spec_published: "active", fail: "failed" },
+  wallet_ready: { fail: "failed" },
+  payments_ready: { fail: "failed" },
   active: {},
   failed: {},
 };
@@ -60,8 +58,6 @@ export const NODE_PROGRESS_STEPS: ReadonlyArray<{
 }> = [
   { status: "dao_pending", label: "Register" },
   { status: "dao_formed", label: "DAO" },
-  { status: "wallet_ready", label: "Wallet" },
-  { status: "payments_ready", label: "Payments" },
   { status: "active", label: "Published" },
 ];
 
@@ -84,11 +80,8 @@ export function wizardUrlForStatus(nodeId: string, status: NodeStatus): string {
     case "dao_pending":
       return `/setup/dao?nodeId=${nodeId}`;
     case "dao_formed":
-      return `/setup/nodes/${nodeId}/wallet`;
     case "wallet_ready":
-      return `/setup/dao/payments?nodeId=${nodeId}`;
     case "payments_ready":
-      return `/setup/nodes/${nodeId}/publish`;
     case "active":
     case "failed":
       return `/setup/nodes/${nodeId}`;

@@ -3,8 +3,8 @@
 
 /**
  * Module: `@app/api/v1/nodes/[id]/publish`
- * Purpose: Build the complete repo-spec YAML and open a PR against the target repo via the GitHub App.
- * Scope: Owner-gated. Advances payments_ready → active when the PR is opened. Idempotent: re-opening
+ * Purpose: Build the governance-only repo-spec YAML and open a PR against the target repo via the GitHub App.
+ * Scope: Owner-gated. Advances dao_formed → active when the PR is opened. Idempotent: re-opening
  *   yields the existing PR.
  * Invariants: GH_APP_INSTALL_REQUIRED, NODE_SOVEREIGNTY (PR only; never force-push), STATE_MACHINE_TOTAL.
  * Side-effects: IO (GitHub REST API, Postgres)
@@ -19,7 +19,7 @@ import { NextResponse } from "next/server";
 
 import { createNodeRepoWriter } from "@/bootstrap/capabilities/node-repo-write";
 import { resolveAppDb } from "@/bootstrap/container";
-import { buildCompleteRepoSpecYaml } from "@/features/nodes/repo-spec-builder";
+import { buildPendingActivationRepoSpecYaml } from "@/features/nodes/repo-spec-builder";
 import { transition } from "@/features/nodes/state-machine";
 import { getServerSessionUser } from "@/lib/auth/server";
 import { type NodeStatus, nodes } from "@/shared/db/nodes";
@@ -88,9 +88,7 @@ export async function POST(_request: Request, ctx: RouteParams) {
     !node.chainId ||
     !node.daoAddress ||
     !node.pluginAddress ||
-    !node.signalAddress ||
-    !node.operatorWalletAddress ||
-    !node.splitAddress
+    !node.signalAddress
   ) {
     return NextResponse.json(
       { error: "node row missing required addresses for repo-spec emission" },
@@ -98,14 +96,12 @@ export async function POST(_request: Request, ctx: RouteParams) {
     );
   }
 
-  const yamlContent = buildCompleteRepoSpecYaml({
+  const yamlContent = buildPendingActivationRepoSpecYaml({
     nodeId: node.id,
     chainId: node.chainId,
     daoAddress: node.daoAddress,
     pluginAddress: node.pluginAddress,
     signalAddress: node.signalAddress,
-    operatorWalletAddress: node.operatorWalletAddress,
-    splitAddress: node.splitAddress,
   });
 
   const writer = createNodeRepoWriter(env);
@@ -127,11 +123,12 @@ export async function POST(_request: Request, ctx: RouteParams) {
       prTitle: `cogni-operator: bootstrap node '${node.slug}'`,
       prBody:
         "This PR was opened by the Cogni operator setup wizard.\n\n" +
-        `It writes \`${specPath}\` containing the DAO, operator wallet, ` +
-        "and payments-Split addresses provisioned for this node.\n\n" +
+        `It writes \`${specPath}\` containing the verified DAO formation ` +
+        "addresses for this node. Payment activation remains pending and must " +
+        "run from the child node's own trust domain.\n\n" +
         `- DAO: \`${node.daoAddress}\`\n` +
-        `- Operator wallet: \`${node.operatorWalletAddress}\`\n` +
-        `- Payment Split: \`${node.splitAddress}\`\n` +
+        `- TokenVoting plugin: \`${node.pluginAddress}\`\n` +
+        `- CogniSignal: \`${node.signalAddress}\`\n` +
         `- Chain: \`${node.chainId}\`\n\n` +
         "Review and merge to register this node in the monorepo.",
     });

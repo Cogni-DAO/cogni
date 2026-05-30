@@ -27,9 +27,12 @@ export const runtime = "nodejs";
 
 const STATUS_DESCRIPTION: Record<NodeStatus, string> = {
   dao_pending: "Form the DAO via the wallet-signed wizard.",
-  dao_formed: "Operator will provision the Privy wallet on your behalf.",
-  wallet_ready: "Sign the Split deploy via the payments wizard.",
-  payments_ready: "Operator will open the repo-spec PR on your repo.",
+  dao_formed:
+    "Operator will open the governance-only repo-spec PR on your repo.",
+  wallet_ready:
+    "Legacy wallet-ready state; payment activation now belongs to the child node.",
+  payments_ready:
+    "Legacy payments-ready state; publish the governance-only repo-spec from a formed DAO.",
   active: "Repo-spec PR opened; merge it to complete bootstrap.",
   failed: "This bootstrap run failed. Re-register the node to start over.",
 };
@@ -85,14 +88,20 @@ export default async function NodeDashboardPage({
             <span className="break-all font-mono">
               {node.daoAddress ?? "—"}
             </span>
-            <span className="text-muted-foreground">Operator wallet</span>
-            <span className="break-all font-mono">
-              {node.operatorWalletAddress ?? "—"}
-            </span>
-            <span className="text-muted-foreground">Payment Split</span>
-            <span className="break-all font-mono">
-              {node.splitAddress ?? "—"}
-            </span>
+            {node.operatorWalletAddress ? (
+              <>
+                <span className="text-muted-foreground">Operator wallet</span>
+                <span className="break-all font-mono">
+                  {node.operatorWalletAddress}
+                </span>
+              </>
+            ) : null}
+            {node.splitAddress ? (
+              <>
+                <span className="text-muted-foreground">Payment Split</span>
+                <span className="break-all font-mono">{node.splitAddress}</span>
+              </>
+            ) : null}
             {node.publishPrUrl ? (
               <>
                 <span className="text-muted-foreground">repo-spec PR</span>

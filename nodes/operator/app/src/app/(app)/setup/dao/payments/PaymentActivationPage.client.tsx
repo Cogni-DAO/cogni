@@ -4,7 +4,7 @@
 /**
  * Module: `@app/(app)/setup/dao/payments/PaymentActivationPage.client`
  * Purpose: Client-side payment activation — deploy Split contract via user's connected wallet.
- * Scope: Reads operator wallet + DAO treasury from server props (repo-spec), deploys Split via wagmi. Does not handle Privy provisioning.
+ * Scope: Reads operator wallet + DAO treasury from server props (repo-spec), deploys Split via wagmi. Does not handle Privy provisioning or node-registry state.
  * Invariants: SPLIT_CONTROLLER_IS_ADMIN — user's wallet is the Split controller. Addresses from repo-spec, not user input.
  * Side-effects: IO (wagmi wallet transactions)
  * Links: docs/spec/node-formation.md
@@ -27,9 +27,8 @@ import {
   Loader2,
   XCircle,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Address } from "viem";
 import { decodeEventLog, getAddress } from "viem";
 import {
@@ -52,22 +51,17 @@ type ActivationPhase =
   | "ERROR";
 
 interface Props {
-  /** From repo-spec operator_wallet.address (legacy flow) or nodes.operator_wallet_address (wizard flow) — null if not configured */
+  /** From repo-spec operator_wallet.address — null if not configured */
   operatorWalletAddress: string | null;
-  /** From repo-spec cogni_dao.dao_contract (legacy flow) or nodes.dao_address (wizard flow) — null if not configured */
+  /** From repo-spec cogni_dao.dao_contract — null if not configured */
   daoTreasuryAddress: string | null;
-  /** When invoked via the external-node wizard (`?nodeId=...`), persist the Split address back to the node row on success. */
-  nodeId?: string | null;
 }
 
 export function PaymentActivationPageClient({
   operatorWalletAddress,
   daoTreasuryAddress,
-  nodeId,
 }: Props): ReactElement {
   const { address: walletAddress } = useAccount();
-  const router = useRouter();
-  const patchedRef = useRef(false);
 
   const [confirmed, setConfirmed] = useState(false);
   const [phase, setPhase] = useState<ActivationPhase>("IDLE");
@@ -200,31 +194,6 @@ export function PaymentActivationPageClient({
       setPhase("ERROR");
     }
   }, [receiptError, phase]);
-
-  // When invoked from the external-node wizard, PATCH the Split address back to
-  // the node row and redirect to the dashboard. No-op when nodeId is absent.
-  useEffect(() => {
-    if (!nodeId) return;
-    if (phase !== "SUCCESS" || !splitAddress) return;
-    if (patchedRef.current) return;
-    patchedRef.current = true;
-
-    void (async () => {
-      try {
-        await fetch(`/api/v1/nodes/${nodeId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            event: { type: "split_deployed" },
-            splitAddress,
-            splitTxHash: txHash,
-          }),
-        });
-      } finally {
-        router.push(`/setup/nodes/${nodeId}`);
-      }
-    })();
-  }, [nodeId, phase, splitAddress, txHash, router]);
 
   const handleReset = () => {
     resetWrite();
