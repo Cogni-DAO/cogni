@@ -4,7 +4,7 @@
 
 ## Metadata
 
-- **Owners:** @derek @core-dev
+- **Owners:** @derekg1729
 - **Last reviewed:** 2026-05-30
 - **Status:** draft
 
@@ -17,11 +17,26 @@ admin-only surfaces in one role-gated shell.
 
 ## Pointers
 
-- [Root AGENTS.md](../../../../../AGENTS.md)
 - [App AGENTS.md](../AGENTS.md)
 - [Approver guard pattern (API)](../api/v1/attribution/_lib/approver-guard.ts)
 - [Repo-spec accessor](../../shared/config/repoSpec.server.ts)
 - [Multi-tenant + route-group research](../../../../../docs/research/node-scaling-multitenant-strategy.md)
+
+## Boundaries
+
+```json
+{
+  "layer": "app",
+  "may_import": ["features", "shared", "components", "contracts"],
+  "must_not_import": ["adapters", "core", "ports"]
+}
+```
+
+## Public Surface
+
+- **Exports:** none
+- **Routes:** `/admin` (index linking to admin-only surfaces such as `/gov/review`)
+- **Files considered API:** `layout.tsx`, `admin/page.tsx`
 
 ## Auth contract
 
@@ -46,7 +61,7 @@ admin-only surfaces in one role-gated shell.
 1. Drop a `page.tsx` (server component preferred) under `(admin)/<feature>/`.
 2. Trust the layout's gate — do **not** re-check `getLedgerApprovers()` per
    page unless the page handles non-admin states intentionally.
-3. Link from `(admin)/page.tsx` so the admin index discovers it.
+3. Link from `(admin)/admin/page.tsx` so the admin index discovers it.
 4. If the page needs an API mutation, ensure the corresponding API route
    uses `checkApprover()` from
    `@/app/api/v1/attribution/_lib/approver-guard`.
@@ -64,3 +79,11 @@ admin-only surfaces in one role-gated shell.
 - Bump **Last reviewed** date.
 - Update `(app)/AGENTS.md` "Route Group Conventions" if adding a new group
   semantic.
+
+## Notes
+
+- `(admin)/page.tsx` would collide with `(public)/page.tsx` (both resolve to
+  `/`). The admin index lives at `(admin)/admin/page.tsx` → `/admin`.
+- `AdminShell` mirrors `(app)/layout.tsx` so admin and app routes share
+  the same sidebar + topbar visuals; the auth guard is the only
+  meaningful divergence.
