@@ -100,6 +100,10 @@ export const GET = wrapRouteHandlerWithLogging(
       zipInput[file.path] = encoder.encode(file.content);
     }
     const zipped = zipSync(zipInput, { level: 6 });
+    // Copy into a fresh ArrayBuffer: fflate returns Uint8Array<ArrayBufferLike>,
+    // which the DOM `BodyInit` type does not accept directly.
+    const body = new ArrayBuffer(zipped.byteLength);
+    new Uint8Array(body).set(zipped);
 
     ctx.log.info(
       {
@@ -114,7 +118,7 @@ export const GET = wrapRouteHandlerWithLogging(
     const suffix = parsed.data.domain
       ? parsed.data.domain.replace(/[^a-zA-Z0-9_-]+/g, "-")
       : "vault";
-    return new NextResponse(zipped, {
+    return new NextResponse(body, {
       status: 200,
       headers: {
         "content-type": "application/zip",
