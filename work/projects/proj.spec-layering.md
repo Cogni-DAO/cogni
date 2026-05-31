@@ -27,32 +27,32 @@ Anchored to MVP reality: ship the cheap clarity now, defer the scope-overlay mac
 
 **Goal:** one home per node for identity/governance; no hand-synced duplication; tiers named in schema + spec.
 
-| Deliverable | Status | Notes |
-| ----------- | ------ | ----- |
-| Verify what `cogni-git-review` reads from root `.cogni/repo-spec.yaml` (gates only? dao/approvers for monorepo review context?) | Not Started | Gates the field-removal below. Runtime app already loads `nodes/<n>/.cogni` per `nodes/operator/app/Dockerfile:83-84`. |
-| Strip operator-node identity (`node_id`, `scope_id`, `cogni_dao`, `operator_wallet`, `payments`) from **root** `.cogni/repo-spec.yaml`; keep only monorepo concerns (`gates`, `fail_on_error`, review config) + node registry | Not Started | Operator identity stays in `nodes/operator/.cogni/repo-spec.yaml` only (`SINGLE_HOME`). |
-| Node registry SSOT decision: `nodes:[]` cites `infra/catalog/*.yaml` or is removed in favor of it (`CATALOG_IS_SSOT`) | Not Started | Three registries today: `nodes:[]`, `infra/catalog`, filesystem. Pick one; the billing-ingest endpoints are the only thing `nodes:[]` uniquely carries. |
-| `# TIER:` field-grouping banners in `@cogni/repo-spec` Zod schema + `repoSpec.server.ts` | Not Started | Documents the layering at the schema, no behavior change. |
-| Refine `identity-model.md` — Spec File Layering + Lineage sections | **Done** | Landed in this branch. |
-| Update `.cogni/sync-manifest.yaml` divergences if root field set changes | Not Started | Root repo-spec is per-artifact divergent; any restructure must reconcile node-template + cogni-poly. |
+| Deliverable                                                                                                                                                                                                                   | Status      | Notes                                                                                                                                                   |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Verify what `cogni-git-review` reads from root `.cogni/repo-spec.yaml` (gates only? dao/approvers for monorepo review context?)                                                                                               | Not Started | Gates the field-removal below. Runtime app already loads `nodes/<n>/.cogni` per `nodes/operator/app/Dockerfile:83-84`.                                  |
+| Strip operator-node identity (`node_id`, `scope_id`, `cogni_dao`, `operator_wallet`, `payments`) from **root** `.cogni/repo-spec.yaml`; keep only monorepo concerns (`gates`, `fail_on_error`, review config) + node registry | Not Started | Operator identity stays in `nodes/operator/.cogni/repo-spec.yaml` only (`SINGLE_HOME`).                                                                 |
+| Node registry SSOT decision: `nodes:[]` cites `infra/catalog/*.yaml` or is removed in favor of it (`CATALOG_IS_SSOT`)                                                                                                         | Not Started | Three registries today: `nodes:[]`, `infra/catalog`, filesystem. Pick one; the billing-ingest endpoints are the only thing `nodes:[]` uniquely carries. |
+| `# TIER:` field-grouping banners in `@cogni/repo-spec` Zod schema + `repoSpec.server.ts`                                                                                                                                      | Not Started | Documents the layering at the schema, no behavior change.                                                                                               |
+| Refine `identity-model.md` — Spec File Layering + Lineage sections                                                                                                                                                            | **Done**    | Landed in this branch.                                                                                                                                  |
+| Update `.cogni/sync-manifest.yaml` divergences if root field set changes                                                                                                                                                      | Not Started | Root repo-spec is per-artifact divergent; any restructure must reconcile node-template + cogni-poly.                                                    |
 
 ### PR-2 — File-optional scope overlay in `@cogni/repo-spec` (build when a 2nd scope is real)
 
 **Goal:** multi-scope lights up with zero call-site churn; attribution's already-built `SCOPE_GATED_QUERIES` connects.
 
-| Deliverable | Status | Notes |
-| ----------- | ------ | ----- |
-| `parseRepoSpec` merges optional `.cogni/projects/<scope_key>.yaml` over the inlined default | Not Started | Pure logic in the package, not the server wrapper. |
+| Deliverable                                                                                             | Status      | Notes                                                         |
+| ------------------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------- |
+| `parseRepoSpec` merges optional `.cogni/projects/<scope_key>.yaml` over the inlined default             | Not Started | Pure logic in the package, not the server wrapper.            |
 | `extract{Dao,Wallet,Payment,Approvers}` resolve per-scope; accessor API (`getDaoConfig()`, …) unchanged | Not Started | Single-scope path identical → no churn across ~50 call sites. |
-| Spec'd now; **not built** until a second scope exists (one-tier-in-flight) | Not Started | Avoids over-building V0. |
+| Spec'd now; **not built** until a second scope exists (one-tier-in-flight)                              | Not Started | Avoids over-building V0.                                      |
 
 ### PR-3 — Merkle-join field (future, one column, when signing goes live)
 
 **Goal:** the governance signature is the cross-layer anchor.
 
-| Deliverable | Status | Notes |
-| ----------- | ------ | ----- |
-| Extend `APPROVERS_PINNED_AT_REVIEW` to also pin `scope_spec_git_sha` (+ content hash) on the epoch at `closeIngestion` | Not Started | Single column; the git↔ledger link. |
+| Deliverable                                                                                                                         | Status      | Notes                                         |
+| ----------------------------------------------------------------------------------------------------------------------------------- | ----------- | --------------------------------------------- |
+| Extend `APPROVERS_PINNED_AT_REVIEW` to also pin `scope_spec_git_sha` (+ content hash) on the epoch at `closeIngestion`              | Not Started | Single column; the git↔ledger link.          |
 | Extend EIP-712 typed data (`SIGNATURE_SCOPE_BOUND` → `SIGNATURE_BINDS_SOURCES`) to bind `scope_spec_git_sha + evidence_dolt_commit` | Not Started | Closes git ↔ dolt ↔ chain in one signature. |
 
 ## Constraints
@@ -66,7 +66,7 @@ Anchored to MVP reality: ship the cheap clarity now, defer the scope-overlay mac
 ## Dependencies
 
 - **task.0122** (operator NodeRegistryPort / multi-tenant repo resolution) — overlaps the node-registry SSOT decision in PR-1. Coordinate; do not create a competing registry.
-- **proj.node-registry / task.5083** (setup wizard, Postgres `nodes` state) — adjacent; that project *creates* nodes, this one *layers* their specs. Keep the catalog-is-SSOT line consistent across both.
+- **proj.node-registry / task.5083** (setup wizard, Postgres `nodes` state) — adjacent; that project _creates_ nodes, this one _layers_ their specs. Keep the catalog-is-SSOT line consistent across both.
 - **Incoming OpenBao / ESO work** (cicd-secrets-expert, backflowed from node-template) — touches the node-spec `secrets:` block (Tier 2). Settle secret-store field placement in the node-spec tier before that lands to avoid a re-edit.
 - **Attribution ledger** (`proj.transparent-credit-payouts`) — owns the `APPROVERS_PINNED_AT_REVIEW` and signing surfaces PR-3 extends.
 
