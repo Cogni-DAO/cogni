@@ -4,8 +4,8 @@
 /**
  * Module: `@app/api/v1/knowledge/export/route`
  * Purpose: GET /api/v1/knowledge/export?format=obsidian — stream a zipped Obsidian vault of the knowledge hub (one Markdown note per entry, domain folders, citations as `[[wikilinks]]`).
- * Scope: Cookie-session only (Bearer agents rejected). Reads via container.knowledgeStorePort, serializes with buildObsidianVault, zips with fflate.
- * Invariants: VALIDATE_IO, AUTH_VIA_GETSESSIONUSER, KNOWLEDGE_BROWSE_VIA_HTTP_REQUIRES_SESSION (export is a browse-class read).
+ * Scope: Dual-access (agents via Bearer + humans via session cookie — getSessionUser is agent-first). Reads via container.knowledgeStorePort, serializes with buildObsidianVault, zips with fflate.
+ * Invariants: VALIDATE_IO, AUTH_VIA_GETSESSIONUSER (resolveRequestIdentity: Bearer → cookie fallback). Export is a snapshot capability agents already hold at the tool layer, so unlike browse it is NOT session-gated.
  * Side-effects: IO (HTTP response, Doltgres reads via container port)
  * Links: ./_lib/obsidian-vault.ts, ../route.ts, docs/spec/knowledge-syntropy.md
  * @public
@@ -40,15 +40,10 @@ export const GET = wrapRouteHandlerWithLogging(
     if (!sessionUser) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
-    // Mirror the browse plane: Bearer-token agents must not export knowledge in
-    // v0 (KNOWLEDGE_BROWSE_VIA_HTTP_REQUIRES_SESSION). Cookie-session users only.
-    const authz = request.headers.get("authorization") ?? "";
-    if (authz.toLowerCase().startsWith("bearer ")) {
-      return NextResponse.json(
-        { error: "knowledge export requires a session cookie (v0)" },
-        { status: 403 }
-      );
-    }
+    // Dual-access by design: getSessionUser === resolveRequestIdentity is
+    // agent-first (Bearer token → session-cookie fallback), so both agents and
+    // humans can export. Unlike the browse dashboard, export is a snapshot
+    // capability agents already have at the tool layer (core__knowledge_*).
 
     const port = getContainer().knowledgeStorePort;
     if (!port) {
