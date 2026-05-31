@@ -130,9 +130,11 @@ Steps 1–5 land the rails; the node only becomes Healthy once each target env h
 
 ## What the Node Wizard (#1381) Automates
 
-Steps **1, 3, 4, 5** are pure functions of the catalog entry — the wizard generates them deterministically from a single `type: node` declaration, which makes the candidate-a-only trap structurally impossible. Step **6** (secrets/DB/DNS) is the imperative, side-effecting half the wizard's "Deploy Infrastructure" stage must drive. Steps **2, 7** shrink to nothing once `build_target()` and `APPS` become catalog-driven (task.5079).
+**Today (#1381):** the wizard deploys the web3 contracts (DAO + GovernanceERC20 + CogniSignal) and then auto-drafts a **repo-spec-only PR** — just `.cogni/repo-spec.yaml` (node identity). It stops at identity; the node is not yet a build target and has no deploy footprint.
 
-> **Contract for the wizard:** `catalog(type: node)` ⇒ `{ overlays × 3, AppSet generators × 3, deploy branches × 3 }` generated, then `{ secrets, DB, DNS } × 3` provisioned. Either the full matrix exists or the node is not deployable.
+**vNext:** the wizard spawns a full **node-app PR** that scaffolds `nodes/<node>/app` plus Steps **1, 3, 4, 5** of this guide — catalog entry, overlays × 3, AppSet generators × 3, deploy branches — so a newly-formed node starts life already wired for **test → preview → prod**. Those four steps are pure functions of the `type: node` catalog declaration, which is what makes the candidate-a-only trap structurally impossible to repeat. Step **6** (secrets/DB/DNS) stays imperative — the side-effecting half the wizard's "Deploy Infrastructure" stage drives after the PR merges. Steps **2, 7** shrink to nothing once `build_target()` and `APPS` become catalog-driven (task.5079).
+
+> **Contract for the vNext wizard:** `formation(web3 + repo-spec)` → `node-app PR { nodes/<node>/app, catalog(type:node), overlays × 3, AppSet generators × 3, deploy branches × 3 }` → provision `{ secrets, DB, DNS } × 3`. Either the full matrix is generated or the node is not deployable — no partial (candidate-a-only) enablement.
 
 ## Verification
 
