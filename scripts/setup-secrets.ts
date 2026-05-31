@@ -232,7 +232,9 @@ function isNodeSecret(secret: Secret, nodeName: string): boolean {
     return true;
   }
   // Capability fan-out: appliesTo matches one of the node's capabilities.
-  return r.appliesTo !== undefined && capabilitiesForNode(nodeName).has(r.appliesTo);
+  return (
+    r.appliesTo !== undefined && capabilitiesForNode(nodeName).has(r.appliesTo)
+  );
 }
 
 // ── Database DSN helpers ─────────────────────────────────────────────────────

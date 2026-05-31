@@ -8,7 +8,7 @@
  * Scope: Pure loader behaviour against an in-tmpdir fixture catalog.
  */
 
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -80,6 +80,8 @@ describe("secrets-catalog-loader · capability fan-out (v2)", () => {
     steps: ["auto"]
     generate: { kind: base64, bytes: 32 }
 `);
-    expect(() => loadSecretsCatalog({ repoRoot })).toThrow(/mutually exclusive/);
+    expect(() => loadSecretsCatalog({ repoRoot })).toThrow(
+      /mutually exclusive/
+    );
   });
 });
