@@ -45,7 +45,6 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table";
 import {
-  Download,
   GitBranch,
   GitMerge,
   Library,
@@ -148,14 +147,6 @@ export function KnowledgeDashboardView() {
         </div>
 
         <div className="flex items-center gap-2">
-          {(mode === "browse" || mode === "chains") && (
-            <Button asChild variant="outline" size="sm" className="h-9 gap-1.5">
-              <a href="/api/v1/knowledge/export?format=obsidian" download>
-                <Download className="size-3.5" />
-                Export vault
-              </a>
-            </Button>
-          )}
           {mode === "domains" && (
             <Button
               type="button"

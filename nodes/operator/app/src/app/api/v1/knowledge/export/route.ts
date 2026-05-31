@@ -7,6 +7,7 @@
  * Scope: Dual-access (agents via Bearer + humans via session cookie — getSessionUser is agent-first). Reads via container.knowledgeStorePort, serializes with buildObsidianVault, zips with fflate.
  * Invariants: VALIDATE_IO, AUTH_VIA_GETSESSIONUSER (resolveRequestIdentity: Bearer → cookie fallback). Export is a snapshot capability agents already hold at the tool layer, so unlike browse it is NOT session-gated.
  * Side-effects: IO (HTTP response, Doltgres reads via container port)
+ * Status: v0 prototype — agent-accessible API kept; human UI (Export button) deactivated pending refinement (story.5007: provenance-named archive, grouping, human-readable names, HTML handling, AI setup guide).
  * Links: ./_lib/obsidian-vault.ts, ../route.ts, docs/spec/knowledge-syntropy.md
  * @public
  */
