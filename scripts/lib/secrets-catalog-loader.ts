@@ -69,6 +69,20 @@ function deriveCogniNodeEndpoints(): string {
 
 const TierSchema = z.enum(["A1", "A2", "B", "D", "E", "F", "G"]);
 
+// Capability classes a secret can be gated to (design.secrets-catalog-per-node
+// §Amendment v2). An operator-domain entry uses `appliesTo:` instead of a
+// single `service:` — the loader fans it to every type:node whose node-spec
+// declares that capability. `all-nodes` = the genuine boot-floor.
+const CapabilitySchema = z.enum([
+  "all-nodes",
+  "web",
+  "database",
+  "llm",
+  "openclaw",
+  "payments",
+]);
+export type Capability = z.infer<typeof CapabilitySchema>;
+
 const GenerateSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("base64"), bytes: z.number().int().positive() }),
   z.object({ kind: z.literal("hex"), bytes: z.number().int().positive() }),
@@ -110,6 +124,12 @@ const CatalogEntrySchema = z
     name: z.string().regex(/^[A-Z_][A-Z0-9_]*$/),
     tier: TierSchema,
     service: z.string().optional(),
+    // Capability-gated fan-out (operator-domain, v2). Mutually exclusive with
+    // `service:` — `appliesTo` declares the secret ONCE and the write side fans
+    // it to every in-scope type:node. `shared: true` → one value at the
+    // `_shared` path; default (false) → distinct value per node at the node path.
+    appliesTo: CapabilitySchema.optional(),
+    shared: z.boolean().optional(),
     coConsumed: z.boolean().optional(),
     required: z.boolean(),
     category: z.string(),
@@ -124,6 +144,10 @@ const CatalogEntrySchema = z
   })
   .refine((e) => e.source !== "agent" || e.generate !== undefined, {
     message: "source: agent requires generate field",
+  })
+  .refine((e) => !(e.service !== undefined && e.appliesTo !== undefined), {
+    message:
+      "entry declares both service: and appliesTo: — they are mutually exclusive (service = one node; appliesTo = capability fan-out)",
   });
 
 type CatalogEntry = z.infer<typeof CatalogEntrySchema>;
@@ -154,6 +178,12 @@ export type Tier = z.infer<typeof TierSchema>;
 export interface SecretRouting {
   tier: Tier;
   service?: string;
+  /** Capability gate (v2). When set, the write side fans this secret to every
+   *  in-scope type:node instead of a single `service`. */
+  appliesTo?: Capability;
+  /** `true` → one value at `cogni/<env>/_shared/<KEY>` for all in-scope nodes;
+   *  default → distinct value per node at `cogni/<env>/<node>/<KEY>`. */
+  shared?: boolean;
   coConsumed?: boolean;
 }
 
@@ -220,16 +250,12 @@ export function loadSecretsCatalog(opts: LoadOptions): LoadResult {
     "node-template",
     "operator",
   ]);
+  // Capability-gated baseline entries declare `appliesTo:` instead of
+  // `service:` (v2) — they skip this allowlist (service is undefined). This set
+  // only validates entries that pin a single `service:`.
   const operatorServiceAllowlist = new Set<string>([
     "_shared",
     "_system",
-    // _node_baseline: the node-app A1 baseline every type:node runs (same
-    // NAME, distinct VALUE per node). Declared ONCE here; the write side
-    // (setup-secrets / OpenBao seed) fans it out over NODE_TARGETS, generating
-    // a distinct value per node at cogni/<env>/<node>/<KEY>. Differs from
-    // _shared (every node, SAME value). See design.secrets-catalog-per-node
-    // §Amendment 2026-05-31.
-    "_node_baseline",
     ...knownNodes,
     ...CANONICAL_FUTURE_DOMAINS,
   ]);
@@ -269,6 +295,8 @@ export function loadSecretsCatalog(opts: LoadOptions): LoadResult {
     secrets.push(catalogEntryToSecret(entry));
     const r: SecretRouting = { tier: entry.tier };
     if (entry.service !== undefined) r.service = entry.service;
+    if (entry.appliesTo !== undefined) r.appliesTo = entry.appliesTo;
+    if (entry.shared !== undefined) r.shared = entry.shared;
     if (entry.coConsumed !== undefined) r.coConsumed = entry.coConsumed;
     routing[entry.name] = r;
   }
