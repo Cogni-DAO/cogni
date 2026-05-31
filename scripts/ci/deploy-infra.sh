@@ -1197,6 +1197,13 @@ if command -v kubectl &>/dev/null; then
   # secret. poly is absent (own VM, not in catalog); scheduler-worker is a
   # service (own secret below). Hyphenated names map to underscored DB names.
   #   node="node-template" → DB="cogni_node_template" / "knowledge_node_template".
+  # Defense-in-depth: the local context already asserts non-empty before
+  # threading; refuse here too so a future threading regression can never
+  # silently create ZERO node-app-secrets and starve every node.
+  if [ -z "${NODE_APP_TARGETS}" ]; then
+    echo "[FATAL] NODE_APP_TARGETS empty — refusing to (re)create node-app-secrets" >&2
+    exit 1
+  fi
   for node in ${NODE_APP_TARGETS}; do
     db_node="${node//-/_}"
     # Doltgres URL points to this node's own DB (knowledge_<node>).
