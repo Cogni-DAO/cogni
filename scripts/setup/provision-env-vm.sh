@@ -368,11 +368,13 @@ for node in "${NODE_TARGETS[@]}"; do
   fi
   # Upstream-inheritance check: a fork running with upstream's UUID is also
   # running with upstream's DAO/wallet/payments — cross-tenant leak, not a
-  # usable deployment. Skip if origin IS Cogni-DAO/node-template (upstream's
-  # own canary deployment is the only legitimate user of this UUID).
+  # usable deployment. Legitimate owners of this UUID are the hub
+  # (Cogni-DAO/cogni — operator's node_id IS the canonical identity, not an
+  # inheritance) and the upstream template's own canary (Cogni-DAO/node-template).
+  # Only true downstream forks must mint their own via the DAO setup wizard.
   if [[ "$nid" == "$UPSTREAM_NODE_ID" ]]; then
     origin_url=$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || echo "")
-    if [[ "$origin_url" != *"Cogni-DAO/node-template"* ]]; then
+    if [[ "$origin_url" != *"Cogni-DAO/node-template"* && "$origin_url" != *"Cogni-DAO/cogni"* ]]; then
       log_error "node_id for '${node}' equals upstream's UUID — your fork inherited"
       log_error "upstream's IDENTITY (DAO contracts, operator wallet, approvers, payments_in)."
       log_error "Deploying as-is would route real value through upstream's contracts."
