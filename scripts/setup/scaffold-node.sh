@@ -85,8 +85,12 @@ for env in "${ENVS[@]}"; do
   ' "$appset"
 done
 
-echo "==> 7. build-and-push-images.sh — per-target case (until task.5079 makes it catalog-driven)"
-echo "    (manual: mirror the node-template case for $SLUG in scripts/ci/build-and-push-images.sh)"
+echo "==> 7. ci.yaml single-node-scope filters (enforced by single-node-scope-meta.spec)"
+SLUG="$SLUG" perl -0pi -e '
+  my $s=$ENV{SLUG};
+  s/(          filters: \|\n)/$1            $s:\n              - '"'"'nodes\/$s\/**'"'"'\n/;
+  s/(            operator:\n              - '"'"'\*\*'"'"'\n)/$1              - '"'"'!nodes\/$s\/**'"'"'\n/;
+' .github/workflows/ci.yaml
 
 echo "DONE. Scaffolded node '$SLUG' (port $PORT, nodePort $NODEPORT) across ${ENVS[*]}."
 echo "Next: verify kustomize build for all 3 envs; add the build-and-push case; flight."
