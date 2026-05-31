@@ -40,7 +40,7 @@ Walk top-to-bottom. **Stop at the first action that produces real value. Do NOT 
 2. **REFINE A LEAF** — pick a per-repo `finding` that is stale (info changed), incomplete (missing license / maturity / use-when), or muddy. `op: update` via the contribution API. **This is the most valuable move.**
 3. **REFINE THE MATRIX** — if a leaf's state changed (e.g., maturity went from beta to v1.0, or you discovered we use it more centrally than the row showed), `op: update` the matrix row.
 4. **ADD A LEAF** — only if RECALL confirmed a high-pareto repo is missing AND it passes the Pareto bar above. `op: insert` a new `finding`. Same iteration: `op: update` the matrix to reference it.
-5. **STOP.** One contribution branch, ≤3 commits, ≤500 net lines. Bigger = sprawl.
+5. **STOP** when the open branch is a coherent, reviewable unit — one theme a human can merge in one pass. Prefer REFINE over ADD; a sharper existing leaf compounds more than a new shallow one. Quality of the matrix, not commit count, is the bar.
 
 ## Forbidden in this loop
 
@@ -48,7 +48,7 @@ Walk top-to-bottom. **Stop at the first action that produces real value. Do NOT 
 - **Opening a new matrix entry** when `oss-ai-vs-cogni` already exists. Refine it.
 - **Filing predictions** via `edo-loop` from this skill. EDO is a separate beat; this loop is for refining a knowledge index, not making contestable predictions. If a genuine contestable forecast surfaces, file it via `/edo-loop` separately.
 - **Writing prose** in the matrix when a row + chip would do. Use `dolt-human-visuals` patterns.
-- **Single iteration > 3 commits.** Stop early. Next loop iteration picks up.
+- **Letting a branch sprawl past one reviewable theme.** Many tight, single-theme branches compound; one giant unreviewable branch devolves. Split themes, don't stack them.
 
 ## Mechanics
 
