@@ -4,13 +4,17 @@
 /**
  * Module: `@tests/external/money/openrouter-topup-e2e.external.money`
  * Purpose: End-to-end money test — creates a payment intent, sends real USDC on Base,
- *   submits the tx hash, polls until CONFIRMED, then asserts accounting in Postgres,
- *   TigerBeetle, and OpenRouter.
- * Scope: Black-box test against a running dev:stack. Uses the real on-chain payment path
- *   (intents → submit → poll), not the widget confirm endpoint.
- * Invariants: Spends ~$2.00 USDC per run (MIN_PAYMENT_CENTS). Requires funded test wallet.
- * Side-effects: Real on-chain USDC transfer, real OpenRouter charge, real DB writes.
- * Links: docs/spec/web3-openrouter-payments.md, docs/spec/financial-ledger.md, docs/spec/payments-design.md
+ *   submits the tx hash, polls until CONFIRMED, then asserts the OpenRouter credit delta.
+ *   Deep accounting assertions (Postgres provider_funding_attempts + TigerBeetle deltas)
+ *   run ONLY when DATABASE_SERVICE_URL + TIGERBEETLE_ADDRESS are reachable (local dev:stack).
+ * Scope: Black-box test against any running build via TEST_BASE_URL. Portable to a deployment:
+ *   the HTTP path (intent → submit → poll CONFIRMED) + OpenRouter credit delta always run;
+ *   the direct-DB/TB assertions are skipped when those endpoints aren't reachable.
+ * Invariants: Spends ~$2.00 USDC per run (MIN_PAYMENT_CENTS). Requires a funded test wallet.
+ *   To run against a deployment: set TEST_BASE_URL=https://<node-url> + OPENROUTER_API_KEY +
+ *   TEST_WALLET_PRIVATE_KEY + EVM_RPC_URL, and OMIT DATABASE_SERVICE_URL/TIGERBEETLE_ADDRESS.
+ * Side-effects: Real on-chain USDC transfer, real OpenRouter charge; real DB reads when DB present.
+ * Links: docs/spec/web3-openrouter-payments.md, docs/spec/financial-ledger.md, docs/design/node-payments-activation.md
  * @internal
  */
 
@@ -63,8 +67,11 @@ function requireEnv(name: string): string {
 const TEST_BASE_URL = (
   process.env.TEST_BASE_URL ?? "http://localhost:3000"
 ).replace(/\/$/, "");
-const DATABASE_SERVICE_URL = requireEnv("DATABASE_SERVICE_URL");
-const TIGERBEETLE_ADDRESS = requireEnv("TIGERBEETLE_ADDRESS");
+// Deep accounting assertions (Postgres + TigerBeetle) are local-stack only.
+// Against a deployment these endpoints aren't reachable from the runner — omit them
+// and the test still proves the loop via poll→CONFIRMED + OpenRouter credit delta.
+const DATABASE_SERVICE_URL = process.env.DATABASE_SERVICE_URL;
+const TIGERBEETLE_ADDRESS = process.env.TIGERBEETLE_ADDRESS;
 const OPENROUTER_API_KEY = requireEnv("OPENROUTER_API_KEY");
 const rawKey = requireEnv("TEST_WALLET_PRIVATE_KEY");
 const TEST_WALLET_PRIVATE_KEY = (
@@ -143,9 +150,13 @@ async function pollUntilTerminal(
 // ── Test ─────────────────────────────────────────────────────────────
 
 describe("OpenRouter top-up e2e (live money)", () => {
-  const db = createServiceDbClient(DATABASE_SERVICE_URL);
+  // Deep-assertion clients are wired only when their endpoints are reachable.
+  const db = DATABASE_SERVICE_URL
+    ? createServiceDbClient(DATABASE_SERVICE_URL)
+    : null;
+  const deep = Boolean(db && TIGERBEETLE_ADDRESS);
   const testWallet = privateKeyToAccount(TEST_WALLET_PRIVATE_KEY);
-  let testUserId = randomUUID();
+  let testUserId: string = randomUUID();
   let sessionCookie: NextAuthSessionCookie | null = null;
 
   function cookie(): string {
@@ -166,21 +177,30 @@ describe("OpenRouter top-up e2e (live money)", () => {
   // ── Setup ────────────────────────────────────────────────────────
 
   beforeAll(async () => {
-    // Find existing user by wallet (previous run may have left it) or create new
-    const existing = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.walletAddress, testWallet.address))
-      .limit(1);
+    if (!deep) {
+      console.log(
+        "[money] deep accounting assertions DISABLED (no DATABASE_SERVICE_URL/TIGERBEETLE_ADDRESS) — running deployment-portable HTTP + OpenRouter checks only"
+      );
+    }
 
-    if (existing[0]) {
-      testUserId = existing[0].id;
-    } else {
-      await db.insert(users).values({
-        id: testUserId,
-        walletAddress: testWallet.address,
-        name: "Money Test User",
-      });
+    // Local stack: ensure the wallet's user exists. Against a deployment, SIWE
+    // login mints the user on first contact, so this pre-insert is skipped.
+    if (db) {
+      const existing = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.walletAddress, testWallet.address))
+        .limit(1);
+
+      if (existing[0]) {
+        testUserId = existing[0].id;
+      } else {
+        await db.insert(users).values({
+          id: testUserId,
+          walletAddress: testWallet.address,
+          name: "Money Test User",
+        });
+      }
     }
 
     const domain = new URL(TEST_BASE_URL).host;
@@ -204,22 +224,24 @@ describe("OpenRouter top-up e2e (live money)", () => {
 
   // ── The test ─────────────────────────────────────────────────────
 
-  it("intent → USDC transfer → submit → poll CONFIRMED → assert TB + Postgres + OpenRouter", async () => {
-    // 1. Snapshot TigerBeetle balances BEFORE
-    const tb = createTigerBeetleAdapter(TIGERBEETLE_ADDRESS);
-    const [tbTreasuryBefore, tbOperatorBefore, tbProviderBefore] =
-      await Promise.all([
-        tb.getAccountBalance(ACCOUNT.ASSETS_TREASURY),
-        tb.getAccountBalance(ACCOUNT.ASSETS_OPERATOR_FLOAT),
-        tb.getAccountBalance(ACCOUNT.ASSETS_PROVIDER_FLOAT),
-      ]);
-    const tbBefore = {
-      treasury: tbTreasuryBefore,
-      operator: tbOperatorBefore,
-      provider: tbProviderBefore,
-    };
+  it("intent → USDC transfer → submit → poll CONFIRMED → OpenRouter credit delta (+ TB/Postgres when local)", async () => {
+    // 1. Snapshot TigerBeetle balances BEFORE (deep, local only)
+    const tb =
+      deep && TIGERBEETLE_ADDRESS
+        ? createTigerBeetleAdapter(TIGERBEETLE_ADDRESS)
+        : null;
+    const tbBefore = tb
+      ? await (async () => {
+          const [treasury, operator, provider] = await Promise.all([
+            tb.getAccountBalance(ACCOUNT.ASSETS_TREASURY),
+            tb.getAccountBalance(ACCOUNT.ASSETS_OPERATOR_FLOAT),
+            tb.getAccountBalance(ACCOUNT.ASSETS_PROVIDER_FLOAT),
+          ]);
+          return { treasury, operator, provider };
+        })()
+      : null;
 
-    // 2. Record OpenRouter credits BEFORE
+    // 2. Record OpenRouter credits BEFORE (always — the portable proof)
     const creditsBefore = await getOpenRouterCredits(OPENROUTER_API_KEY);
     console.log(`OpenRouter credits before: ${creditsBefore}`);
 
@@ -280,61 +302,61 @@ describe("OpenRouter top-up e2e (live money)", () => {
     // 6. Wait for post-credit funding to complete (runs inline but involves on-chain txs)
     await new Promise((r) => setTimeout(r, 15_000));
 
-    // 7. Assert Postgres: provider_funding_attempts row
-    // The funding key is ${chainId}:${txHash}
-    const fundingKey = `${intent.chainId}:${transferHash}`;
-    const fundingRows = await db
-      .select()
-      .from(providerFundingAttempts)
-      .where(eq(providerFundingAttempts.paymentIntentId, fundingKey));
+    // 7. Deep accounting (local only): Postgres provider_funding_attempts + TigerBeetle deltas
+    if (deep && db && tb && tbBefore) {
+      // The funding key is ${chainId}:${txHash}
+      const fundingKey = `${intent.chainId}:${transferHash}`;
+      const fundingRows = await db
+        .select()
+        .from(providerFundingAttempts)
+        .where(eq(providerFundingAttempts.paymentIntentId, fundingKey));
 
-    expect(fundingRows).toHaveLength(1);
-    const fundingRow = fundingRows[0];
-    console.log(
-      `Funding row: status=${fundingRow?.status}, chargeId=${fundingRow?.chargeId}, txHash=${fundingRow?.fundingTxHash}`
-    );
-    expect(fundingRow?.status).toBe("funded");
-    expect(fundingRow?.fundingTxHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+      expect(fundingRows).toHaveLength(1);
+      const fundingRow = fundingRows[0];
+      console.log(
+        `Funding row: status=${fundingRow?.status}, chargeId=${fundingRow?.chargeId}, txHash=${fundingRow?.fundingTxHash}`
+      );
+      expect(fundingRow?.status).toBe("funded");
+      expect(fundingRow?.fundingTxHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
 
-    // 8. Assert TigerBeetle: check exact deltas (before vs after)
-    //    Expected micro-USDC amounts:
-    //      SPLIT_DISTRIBUTE: cents × 10_000 = 200 × 10_000 = 2_000_000
-    //      PROVIDER_TOPUP:   Math.round(topUpUsd × 100) × 10_000
-    const expectedSplitDistribute = BigInt(MIN_PAYMENT_CENTS) * 10_000n;
-    const topUpUsd =
-      ((MIN_PAYMENT_CENTS / 100) * (1 + 0.75)) / (2.0 * (1 - 0.05));
-    const expectedProviderTopup = BigInt(Math.round(topUpUsd * 100)) * 10_000n;
+      //    Expected micro-USDC amounts:
+      //      SPLIT_DISTRIBUTE: cents × 10_000 = 200 × 10_000 = 2_000_000
+      //      PROVIDER_TOPUP:   Math.round(topUpUsd × 100) × 10_000
+      const expectedSplitDistribute = BigInt(MIN_PAYMENT_CENTS) * 10_000n;
+      const topUpUsd =
+        ((MIN_PAYMENT_CENTS / 100) * (1 + 0.75)) / (2.0 * (1 - 0.05));
+      const expectedProviderTopup =
+        BigInt(Math.round(topUpUsd * 100)) * 10_000n;
 
-    const [treasuryAfter, operatorAfter, providerAfter] = await Promise.all([
-      tb.getAccountBalance(ACCOUNT.ASSETS_TREASURY),
-      tb.getAccountBalance(ACCOUNT.ASSETS_OPERATOR_FLOAT),
-      tb.getAccountBalance(ACCOUNT.ASSETS_PROVIDER_FLOAT),
-    ]);
+      const [treasuryAfter, operatorAfter, providerAfter] = await Promise.all([
+        tb.getAccountBalance(ACCOUNT.ASSETS_TREASURY),
+        tb.getAccountBalance(ACCOUNT.ASSETS_OPERATOR_FLOAT),
+        tb.getAccountBalance(ACCOUNT.ASSETS_PROVIDER_FLOAT),
+      ]);
 
-    const treasuryDebitDelta =
-      treasuryAfter.debitsPosted - tbBefore.treasury.debitsPosted;
-    const operatorCreditDelta =
-      operatorAfter.creditsPosted - tbBefore.operator.creditsPosted;
-    const operatorDebitDelta =
-      operatorAfter.debitsPosted - tbBefore.operator.debitsPosted;
-    const providerCreditDelta =
-      providerAfter.creditsPosted - tbBefore.provider.creditsPosted;
+      const treasuryDebitDelta =
+        treasuryAfter.debitsPosted - tbBefore.treasury.debitsPosted;
+      const operatorCreditDelta =
+        operatorAfter.creditsPosted - tbBefore.operator.creditsPosted;
+      const operatorDebitDelta =
+        operatorAfter.debitsPosted - tbBefore.operator.debitsPosted;
+      const providerCreditDelta =
+        providerAfter.creditsPosted - tbBefore.provider.creditsPosted;
 
-    console.log(
-      `TB deltas: treasury debit=${treasuryDebitDelta}, operator credit=${operatorCreditDelta} debit=${operatorDebitDelta}, provider credit=${providerCreditDelta}`
-    );
+      console.log(
+        `TB deltas: treasury debit=${treasuryDebitDelta}, operator credit=${operatorCreditDelta} debit=${operatorDebitDelta}, provider credit=${providerCreditDelta}`
+      );
 
-    // Treasury debited exactly by SPLIT_DISTRIBUTE
-    expect(treasuryDebitDelta).toBe(expectedSplitDistribute);
+      // Treasury debited exactly by SPLIT_DISTRIBUTE
+      expect(treasuryDebitDelta).toBe(expectedSplitDistribute);
+      // OperatorFloat credited by SPLIT_DISTRIBUTE, debited by PROVIDER_TOPUP
+      expect(operatorCreditDelta).toBe(expectedSplitDistribute);
+      expect(operatorDebitDelta).toBe(expectedProviderTopup);
+      // ProviderFloat credited by PROVIDER_TOPUP
+      expect(providerCreditDelta).toBe(expectedProviderTopup);
+    }
 
-    // OperatorFloat credited by SPLIT_DISTRIBUTE, debited by PROVIDER_TOPUP
-    expect(operatorCreditDelta).toBe(expectedSplitDistribute);
-    expect(operatorDebitDelta).toBe(expectedProviderTopup);
-
-    // ProviderFloat credited by PROVIDER_TOPUP
-    expect(providerCreditDelta).toBe(expectedProviderTopup);
-
-    // 9. Assert OpenRouter: credit balance increased
+    // 8. Assert OpenRouter: credit balance increased (always — portable proof)
     const creditsAfter = await getOpenRouterCredits(OPENROUTER_API_KEY);
     console.log(
       `OpenRouter credits after: ${creditsAfter} (delta: ${creditsAfter - creditsBefore})`

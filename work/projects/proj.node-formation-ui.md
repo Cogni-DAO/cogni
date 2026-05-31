@@ -47,7 +47,7 @@ Full node lifecycle: DAO formation (done) -> zero-touch provisioning (this proje
 | `activate(nodeId)` — idempotent operator step: provision node wallet + deploy Split + write `nodes/<x>/.cogni/repo-spec.yaml` (replaces the 3 manual steps) | Not Started | 3   | (create at start)  |
 | Rename `operator_wallet` → `node_wallet` in node-spec + `@cogni/repo-spec` schema/accessors (kills the "operator bound?" confusion)                          | Not Started | 1   | (create at start)  |
 | Per-node Privy secret namespace so no shared key controls multiple nodes (the only real operator-binding risk)                                              | Not Started | 2   | `task.5081`        |
-| Make `test:external:money` deployment-portable — accounting assertions via HTTP, not direct Postgres/TigerBeetle, so the $2 test runs against a deployed build | Not Started | 2   | `task.0165`        |
+| Make `test:external:money` deployment-portable — deep PG/TigerBeetle assertions now optional; HTTP + OpenRouter proof always runs against any `TEST_BASE_URL` | **Done** | 2   | `task.0165`        |
 | Run the $2 live-money e2e against a deployed monorepo node (candidate/preview); post scorecard                                                              | Not Started | 1   | `task.0165`        |
 
 ### Walk (P1) — Zero-Touch Node Launch + Node Registration

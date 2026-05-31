@@ -73,14 +73,22 @@ The test already exists and spends **$2** (`MIN_PAYMENT_CENTS`): `nodes/<node>/a
 5. Run `pnpm -F <node> test:external:money`.
 6. Assert: funding row `funded`, TB deltas exact, OpenRouter credits up.
 
-### Tweak required — the test is local-stack-coupled
+### Tweak (DONE) — deployment-portable money test
 
-`vitest.external-money.config.mts` expects a running `dev:stack` and the test reads **Postgres + TigerBeetle directly** (`DATABASE_SERVICE_URL`, `TIGERBEETLE_ADDRESS`). The HTTP half (`intent/submit/poll`) works against any `TEST_BASE_URL`, but the **accounting assertions cannot reach a deployment's DB/TB** without either:
+The test was local-stack-coupled (read Postgres + TigerBeetle directly via `DATABASE_SERVICE_URL`/`TIGERBEETLE_ADDRESS`). Refactored so those become **optional**:
 
-- **(a)** tunneled/reachable connection strings to the deployed Postgres + TigerBeetle, or
-- **(b)** an **API surface** for the accounting reads (e.g. `GET /api/v1/payments/attempts/:id` already exists for status; add read access to the funding/ledger deltas) so the test asserts via HTTP only.
+- **Always runs** (portable, any `TEST_BASE_URL`): SIWE login → `intent` → real USDC transfer → `submit` → poll `CONFIRMED` → **OpenRouter credit delta**. SIWE login mints the user on first contact, so no DB pre-insert is needed against a deployment.
+- **Deep assertions** (Postgres `provider_funding_attempts` + exact TigerBeetle deltas) run **only when** `DATABASE_SERVICE_URL` + `TIGERBEETLE_ADDRESS` are reachable (local dev:stack).
 
-**(b) is the right tweak** — it makes the money test deployment-portable and removes the direct-DB coupling. This is the concrete change to `task.0165`.
+Chosen over adding a new read endpoint: zero new API surface, the loop is still proven end-to-end against a deployment by `CONFIRMED` + real OpenRouter credit increase. (Files: `nodes/operator/app/tests/external/money/openrouter-topup-e2e.external.money.test.ts`, `vitest.external-money.config.mts`.) A richer HTTP read of funding/ledger deltas is a future hardening, not required for the v0 live run.
+
+## 5. Privy multi-node custody — skip OpenBao (task.5081) for v0
+
+`@privy-io/node`, one Privy app (`PRIVY_APP_ID/SECRET/SIGNING_KEY`), `client.wallets().create()`. The operator node is **already activated**, so the first $2 e2e needs no multi-node Privy work. For the eventual multi-node case:
+
+- **Programmatic path (one app, N wallets, non-custodial):** the operator app creates each node's wallet, but assigns each wallet a **per-node owner / authorization key** (Privy key-quorum). Signing a node's txs then requires that node's owner key — the shared `PRIVY_APP_SECRET` alone cannot move node funds. This makes the operator non-custodial **without** per-node secret infrastructure.
+- **Skip task.5081 (OpenBao per-node namespace) for v0.** It is hardening — moving the per-node owner keys into an isolated secret store. The owner-key model already removes the "one app_secret = master key" binding; env-held per-node owner keys are acceptable until a node splits or scales. Graduate to OpenBao then.
+- **Net:** operator-not-bound is achievable in v0 via per-wallet owner keys; OpenBao is a later isolation upgrade, not a blocker. (Verify the exact `wallets().create({ owner })` shape against the pinned `@privy-io/node` version when multi-node activation is built.)
 
 ## Invariants
 
