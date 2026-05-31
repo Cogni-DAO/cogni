@@ -214,6 +214,9 @@ function isNodeSecret(secret: Secret, nodeName: string): boolean {
   return (
     r?.service === nodeName ||
     r?.service === "_shared" ||
+    // _node_baseline fans out to EVERY type:node (distinct value per node,
+    // generated at write time). design.secrets-catalog-per-node §Amendment.
+    r?.service === "_node_baseline" ||
     r?.service === "_system"
   );
 }

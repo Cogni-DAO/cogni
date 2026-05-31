@@ -223,6 +223,13 @@ export function loadSecretsCatalog(opts: LoadOptions): LoadResult {
   const operatorServiceAllowlist = new Set<string>([
     "_shared",
     "_system",
+    // _node_baseline: the node-app A1 baseline every type:node runs (same
+    // NAME, distinct VALUE per node). Declared ONCE here; the write side
+    // (setup-secrets / OpenBao seed) fans it out over NODE_TARGETS, generating
+    // a distinct value per node at cogni/<env>/<node>/<KEY>. Differs from
+    // _shared (every node, SAME value). See design.secrets-catalog-per-node
+    // §Amendment 2026-05-31.
+    "_node_baseline",
     ...knownNodes,
     ...CANONICAL_FUTURE_DOMAINS,
   ]);
