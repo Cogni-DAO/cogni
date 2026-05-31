@@ -174,15 +174,71 @@ describe("extractPaymentConfig", () => {
 });
 
 describe("extractGovernanceConfig", () => {
-  it("returns schedules and ledger config when fully specified", () => {
+  it("returns declared schedules plus a synthesized LEDGER_INGEST when an activity ledger is configured", () => {
     const config = extractGovernanceConfig(buildFullSpec());
-    expect(config.schedules).toHaveLength(1);
-    expect(config.schedules[0]?.charter).toBe("HEARTBEAT");
+    const charters = config.schedules.map((s) => s.charter);
+    expect(charters).toContain("HEARTBEAT");
+    expect(charters).toContain("LEDGER_INGEST");
     expect(config.ledger).toBeDefined();
     expect(config.ledger?.scopeId).toBe(TEST_SCOPE_ID);
   });
 
-  it("returns empty schedules when governance omitted", () => {
+  it("synthesizes a LEDGER_INGEST schedule (daily cron) from activity_ledger when none is declared", () => {
+    const config = extractGovernanceConfig(buildFullSpec());
+    const ledgerSchedule = config.schedules.find(
+      (s) => s.charter === "LEDGER_INGEST"
+    );
+    expect(ledgerSchedule).toMatchObject({
+      charter: "LEDGER_INGEST",
+      cron: "0 0 * * *",
+      timezone: "UTC",
+      entrypoint: "LEDGER_INGEST",
+    });
+  });
+
+  it("does not duplicate LEDGER_INGEST when it is already declared", () => {
+    const spec = parseRepoSpec({
+      node_id: TEST_NODE_ID,
+      scope_id: TEST_SCOPE_ID,
+      scope_key: "default",
+      cogni_dao: { chain_id: String(TEST_CHAIN_ID) },
+      payments_in: {
+        credits_topup: {
+          provider: "cogni-usdc-backend-v1",
+          receiving_address: "0x1111111111111111111111111111111111111111",
+        },
+      },
+      activity_ledger: {
+        epoch_length_days: 7,
+        approvers: [],
+        activity_sources: {
+          github: {
+            attribution_pipeline: "cogni-v0.0",
+            source_refs: ["cogni-dao/cogni-template"],
+          },
+        },
+      },
+      governance: {
+        schedules: [
+          {
+            charter: "LEDGER_INGEST",
+            cron: "0 6 * * *",
+            timezone: "UTC",
+            entrypoint: "LEDGER_INGEST",
+          },
+        ],
+      },
+    });
+    const config = extractGovernanceConfig(spec);
+    const ledgerSchedules = config.schedules.filter(
+      (s) => s.charter.toUpperCase() === "LEDGER_INGEST"
+    );
+    expect(ledgerSchedules).toHaveLength(1);
+    // declared cron is preserved (not overwritten by synthesis)
+    expect(ledgerSchedules[0]?.cron).toBe("0 6 * * *");
+  });
+
+  it("returns empty schedules and no ledger when neither governance nor activity_ledger is present", () => {
     const config = extractGovernanceConfig(buildSpec());
     expect(config.schedules).toEqual([]);
     expect(config.ledger).toBeUndefined();
