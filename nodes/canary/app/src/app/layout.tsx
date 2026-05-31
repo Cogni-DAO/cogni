@@ -34,8 +34,8 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "Cogni",
-  description: "Web3 Gov + Web2 AI",
+  title: "cogni/canary — Autonomous AI Node",
+  description: "An ai-only Cogni node. Governed on-chain, run by an AI.",
 };
 
 // See operator/app/src/app/layout.tsx for rationale — `headers()` in the

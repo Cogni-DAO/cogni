@@ -101,7 +101,7 @@ export function AppSidebar(): ReactElement {
                   />
                 </div>
                 <span className="truncate font-bold text-gradient-accent">
-                  Cogni
+                  cogni/canary
                 </span>
               </Link>
             </SidebarMenuButton>

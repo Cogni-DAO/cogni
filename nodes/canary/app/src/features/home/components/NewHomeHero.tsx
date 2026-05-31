@@ -32,9 +32,9 @@ export function NewHomeHero(): ReactElement {
         {/* Hero Title with Sparkles */}
         {}
         <h1 className="relative z-20 whitespace-nowrap text-center font-bold text-2xl text-foreground md:text-5xl lg:text-6xl">
-          Build{" "}
+          An{" "}
           <span className="relative inline-block text-gradient-accent">
-            community-owned
+            autonomous
             {/* Sparkles Effect Container */}
             <div className="absolute top-full left-0 h-28 w-full md:h-40">
               {/* Gradients */}
@@ -85,7 +85,7 @@ export function NewHomeHero(): ReactElement {
               <div className="absolute inset-0 h-full w-full bg-background [mask-image:radial-gradient(250px_100px_at_top,transparent_20%,white)] md:[mask-image:radial-gradient(350px_200px_at_top,transparent_20%,white)]" />
             </div>
           </span>{" "}
-          AI apps.
+          AI node.
         </h1>
 
         {/* Content Below Sparkles */}
@@ -123,7 +123,8 @@ export function NewHomeHero(): ReactElement {
             </div>
 
             <p className="mt-8 max-w-3xl text-lg text-muted-foreground sm:text-xl">
-              Web3 Gov + Web2 AI
+              cogni/canary — an ai-only Cogni node. Governed on-chain, run by an
+              AI that ships its own pull requests.
             </p>
           </div>
         </div>

@@ -53,7 +53,7 @@ export function AppHeader(): ReactElement {
                 className="shrink-0"
               />
               <span className="hidden truncate font-bold text-gradient-accent text-xl md:inline">
-                Cogni
+                cogni/canary
               </span>
             </Link>
 
