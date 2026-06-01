@@ -17,7 +17,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { extractOwningNode, type OwningNode } from "@cogni/repo-spec";
-import { buildTestRepoSpec, TEST_NODE_ENTRIES } from "@cogni/repo-spec/testing";
+import { buildTestRepoSpec } from "@cogni/repo-spec/testing";
 import { describe, expect, it } from "vitest";
 import { type ClassifyResult, classify } from "./classify";
 
@@ -49,6 +49,33 @@ function nonOperatorNodes(): string[] {
     .filter((d) => d.isDirectory() && d.name !== OPERATOR_NODE)
     .map((d) => d.name)
     .sort();
+}
+
+/** Deterministic test UUID per registry slot (format mirrors `TEST_NODE_IDS`). */
+function testNodeId(index: number): string {
+  return `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+}
+
+/**
+ * Registry DERIVED from the on-disk `nodes/` listing — including operator — so
+ * the resolver side sees the same node set as the classifier side's
+ * `nonOperatorNodes()`. Deriving (vs hardcoding) means a node birth — canary,
+ * and every future node — tracks automatically without the two sides drifting.
+ */
+function onDiskRegistry(): Array<{
+  node_id: string;
+  node_name: string;
+  path: string;
+}> {
+  return readdirSync(NODES_DIR, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .sort()
+    .map((name, i) => ({
+      node_id: testNodeId(i),
+      node_name: name,
+      path: `nodes/${name}`,
+    }));
 }
 
 describe("single-node-scope · CI gate side (reference classifier)", () => {
@@ -89,21 +116,10 @@ function toClassifyResult(o: OwningNode): ClassifyResult {
 describe("single-node-scope · runtime resolver side (task.0382)", () => {
   const fixtures = loadFixtures();
 
-  // Test registry mirrors the on-disk nodes/ listing. extractOwningNode requires
-  // the operator entry to be present (meta-test invariant).
-  const spec = buildTestRepoSpec({
-    nodes: [
-      TEST_NODE_ENTRIES.operator,
-      TEST_NODE_ENTRIES.poly,
-      TEST_NODE_ENTRIES.resy,
-      // node-template exists in nodes/ but is not referenced by any current fixture.
-      {
-        node_id: "00000000-0000-4000-8000-0000000000aa",
-        node_name: "Node Template",
-        path: "nodes/node-template",
-      },
-    ],
-  });
+  // Registry derived from the on-disk nodes/ listing (operator included, as
+  // extractOwningNode requires). Tracks node births without drifting from the
+  // classifier side.
+  const spec = buildTestRepoSpec({ nodes: onDiskRegistry() });
 
   for (const { file, data } of fixtures) {
     it(`${file}: ${data.name}`, () => {
