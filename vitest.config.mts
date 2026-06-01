@@ -78,6 +78,19 @@ export default defineConfig({
   resolve: {
     alias: {
       "@tests": path.resolve(__dirname, "./tests"),
+      react: path.resolve(__dirname, "./nodes/operator/app/node_modules/react"),
+      "react-dom": path.resolve(
+        __dirname,
+        "./nodes/operator/app/node_modules/react-dom"
+      ),
+      "react/jsx-dev-runtime": path.resolve(
+        __dirname,
+        "./nodes/operator/app/node_modules/react/jsx-dev-runtime.js"
+      ),
+      "react/jsx-runtime": path.resolve(
+        __dirname,
+        "./nodes/operator/app/node_modules/react/jsx-runtime.js"
+      ),
     },
   },
 });
