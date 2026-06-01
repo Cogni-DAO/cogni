@@ -2,10 +2,14 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: tests/unit/secrets-catalog-loader
- * Purpose: Unit-cover the capability-gated fan-out schema (appliesTo/shared)
- *   added in design.secrets-catalog-per-node §Amendment v2 (task.5094).
- * Scope: Pure loader behaviour against an in-tmpdir fixture catalog.
+ * Module: `@tests/unit/secrets-catalog-loader`
+ * Purpose: Asserts the capability-gated fan-out schema (appliesTo/shared) added in design.secrets-catalog-per-node §Amendment v2 loads into the routing record and rejects conflicting routing.
+ * Scope: Drives `loadSecretsCatalog` against in-tmpdir fixture catalogs. Does NOT exercise the real repo catalog, the write side, or `setup-secrets` resolution.
+ * Invariants:
+ *   - appliesTo + shared survive into the routing record
+ *   - an entry declaring both service: and appliesTo: is rejected at load
+ * Side-effects: IO (creates + removes temp catalog dirs under os.tmpdir())
+ * Links: docs/design/secrets-catalog-per-node.md, scripts/lib/secrets-catalog-loader.ts
  */
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
