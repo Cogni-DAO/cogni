@@ -78,8 +78,9 @@ class CogniNodeRouter(CustomLogger):
 
     Reads node_id (UUID) from spend_logs_metadata (set by each node's LLM adapter
     via x-litellm-spend-logs-metadata header). Routes to the matching node's
-    /api/internal/billing/ingest endpoint. Defaults to operator UUID if node_id
-    is missing (MISSING_NODE_ID_DEFAULTS_OPERATOR).
+    /api/internal/billing/ingest endpoint. On missing/unknown node_id, falls back
+    to COGNI_DEFAULT_NODE_ID if set (the primary-host node_id, repo-spec-derived),
+    else logs + skips — never a hardcoded identity (NO_SILENT_MISATTRIBUTION).
     """
 
     def __init__(self) -> None:
