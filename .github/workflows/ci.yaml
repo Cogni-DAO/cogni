@@ -155,6 +155,7 @@ jobs:
                or . == "tests/unit/packages/repo-spec/accessors.test.ts"
                or ($node != "" and (
                     . == ("infra/catalog/" + $node + ".yaml")
+                    or . == "infra/k8s/base/scheduler-worker/configmap.yaml"
                     or test("^infra/k8s/overlays/[^/]+/" + $node + "/")
                     or test("^infra/k8s/argocd/[^/]*applicationset[^/]*\\.ya?ml$")
                   ))
