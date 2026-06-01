@@ -413,6 +413,10 @@ wait_for_app() {
 
   echo "  ❌ ${app_name} timed out (rev=${REV:0:8} health=${HEALTH} phase=${SYNC_PHASE})"
   kubectl -n argocd get application "$app_name" -o jsonpath='{.status.sync.status} {.status.health.status} phase={.status.operationState.phase} msg={.status.operationState.message}{"\n"}' 2>/dev/null || true
+  echo "  ▸ Argo sync result resources:"
+  kubectl -n argocd get application "$app_name" \
+    -o jsonpath='{range .status.operationState.syncResult.resources[*]}{.kind}{"/"}{.namespace}{"/"}{.name}{" status="}{.status}{" hook="}{.hookPhase}{" msg="}{.message}{"\n"}{end}' \
+    2>&1 | sed 's/^/    /' || true
   dump_pod_diagnostics "$app_name" "$deployment"
   return 1
 }

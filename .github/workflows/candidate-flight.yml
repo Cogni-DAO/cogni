@@ -446,6 +446,7 @@ jobs:
         if: steps.ssh-setup.outputs.has_vm == 'true'
         env:
           DOMAIN: ${{ vars.DOMAIN }}
+          PROMOTED_APPS: ${{ matrix.node }}
           COGNI_CATALOG_ROOT: app-src/infra/catalog
         run: bash ci-src/scripts/ci/wait-for-candidate-ready.sh
 

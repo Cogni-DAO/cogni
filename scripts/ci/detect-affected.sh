@@ -95,6 +95,30 @@ add_all_targets() {
   done
 }
 
+catalog_target_from_path() {
+  local path="$1"
+  local file target existing
+
+  case "$path" in
+    infra/catalog/*.yaml | infra/catalog/*.yml)
+      file="${path##*/}"
+      target="${file%.*}"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  for existing in "${ALL_TARGETS[@]}"; do
+    if [ "$existing" = "$target" ]; then
+      printf '%s\n' "$target"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 is_global_build_input() {
   local path="$1"
 
@@ -109,7 +133,6 @@ is_global_build_input() {
     tsconfig.app.json | \
     tsconfig.scripts.json | \
     config/* | \
-    infra/catalog/* | \
     scripts/ci/build-and-push-images.sh | \
     scripts/ci/detect-affected.sh | \
     scripts/ci/lib/image-tags.sh | \
@@ -131,6 +154,12 @@ else
 
   while IFS= read -r path; do
     [ -z "$path" ] && continue
+
+    if catalog_target=$(catalog_target_from_path "$path"); then
+      add_target "$catalog_target"
+      selection_reason="catalog-target:${path}"
+      continue
+    fi
 
     if is_global_build_input "$path"; then
       add_all_targets
