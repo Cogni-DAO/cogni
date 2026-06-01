@@ -121,7 +121,7 @@ Do not block the rewrite on perfect black-box E2E maturity. For PRs explicitly s
 - affected-only static checks plus unit tests
 - successful image build for the exact PR SHA
 - **Argo CD reconciled to the deploy-branch tip SHA, the promoted Deployment resource is `Synced`, and app health is acceptable** for every app in `PROMOTED_APPS` (`scripts/ci/wait-for-argocd.sh`)
-- **`kubectl rollout status` clean** for every in-cluster Deployment (`scripts/ci/wait-for-in-cluster-services.sh`)
+- **new ReplicaSet available** for every promoted in-cluster Deployment (`scripts/ci/wait-for-in-cluster-services.sh`); routed node-apps also wait for Service endpoint cutover so public probes cannot hit an old pod
 - a prototype smoke pack passes:
   - `/readyz` returns `200` on operator, poly, and resy
   - `/livez` returns structured JSON on operator, poly, and resy
