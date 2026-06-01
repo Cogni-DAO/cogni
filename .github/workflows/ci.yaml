@@ -130,12 +130,18 @@ jobs:
           count=$(jq 'length' <<<"$MATCHED")
           if [ "$count" -le 1 ]; then exit 0; fi
 
-          # Ride-along exception: |S|=2, operator ∈ S, and every operator-
-          # matched path is in the whitelist. Whitelist must mirror
-          # RIDE_ALONG_PATTERNS in classify.ts.
+          # The single non-operator node (if exactly one), for the NODE_BIRTH
+          # wiring carve-out below.
+          NODE=$(jq -r 'map(select(. != "operator")) | if length == 1 then .[0] else "" end' <<<"$MATCHED")
+
+          # Ride-along exception: |S|=2, operator ∈ S, and every operator-matched
+          # path is in the whitelist OR is the node's OWN deploy wiring (bug.5086
+          # NODE_BIRTH — catalog/overlays/AppSet for the one node in S). Whitelist
+          # + isNodeWiring must mirror classify.ts (parity by convention; the
+          # parity spec covers the TS side only).
           if [ "$count" -eq 2 ] \
              && jq -e 'index("operator") != null' <<<"$MATCHED" >/dev/null \
-             && jq -e 'all(
+             && jq -e --arg node "$NODE" 'all(
                . == "pnpm-lock.yaml"
                or startswith("work/")
                or startswith("docs/")
@@ -147,6 +153,11 @@ jobs:
                or startswith("tests/ci-invariants/fixtures/single-node-scope/")
                or . == "tests/ci-invariants/single-node-scope-meta.spec.ts"
                or . == "tests/unit/packages/repo-spec/accessors.test.ts"
+               or ($node != "" and (
+                    . == ("infra/catalog/" + $node + ".yaml")
+                    or test("^infra/k8s/overlays/[^/]+/" + $node + "/")
+                    or test("^infra/k8s/argocd/[^/]*applicationset[^/]*\\.ya?ml$")
+                  ))
              )' <<<"$OPERATOR_FILES" >/dev/null; then
             echo "single-domain scope OK (ride-along applied)"
             exit 0
