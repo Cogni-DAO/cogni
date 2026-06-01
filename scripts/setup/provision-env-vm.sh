@@ -661,8 +661,8 @@ if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] && [[ -n "${CLOUDFLARE_ZONE_ID:-}" ]]; t
   # blocked iterating bootstrap across many provisions.
   #
   # Token needs Zone:Zone Settings:Edit scope (in addition to Zone:DNS:Edit
-  # the bootstrap floor already requires). Keep DNS provisioning usable when
-  # an older token lacks that newer scope; Caddy still handles the origin.
+  # the bootstrap floor already requires). Failure here surfaces the gap
+  # clearly rather than letting Caddy hit a downstream TLS error.
   SSL_RESP=$(curl -sS -X PATCH \
     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
     -H "Content-Type: application/json" \
@@ -670,10 +670,14 @@ if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] && [[ -n "${CLOUDFLARE_ZONE_ID:-}" ]]; t
     -d '{"value":"full"}')
   SSL_OK=$(echo "$SSL_RESP" | python3 -c 'import json,sys; r=json.load(sys.stdin); print("OK" if r.get("success") else r.get("errors",[{}])[0].get("message","FAIL"))' 2>/dev/null || echo "FAIL")
   if [[ "$SSL_OK" != "OK" ]]; then
-    log_warn "Could not set Cloudflare SSL mode to 'full': $SSL_OK"
-    log_warn "  Add Zone:Zone Settings:Edit to CLOUDFLARE_API_TOKEN to make this automatic."
+    log_error "Failed to set Cloudflare SSL mode to 'full': $SSL_OK"
+    log_error "Your CLOUDFLARE_API_TOKEN needs the Zone:Zone Settings:Edit scope."
+    log_error "Mint a token at https://dash.cloudflare.com/profile/api-tokens with:"
+    log_error "  Permissions: Zone:DNS:Edit + Zone:Zone Settings:Edit"
+    log_error "  Zone Resources: Include — Specific zone — <your zone>"
+    exit 1
   fi
-  [[ "$SSL_OK" == "OK" ]] && log_info "Cloudflare SSL mode → full (zone $CLOUDFLARE_ZONE_ID)"
+  log_info "Cloudflare SSL mode → full (zone $CLOUDFLARE_ZONE_ID)"
 
   # FQDNs come from two sources (B2):
   #   1. DOMAIN — the apex/operator-host (Caddy listens here for TLS)
