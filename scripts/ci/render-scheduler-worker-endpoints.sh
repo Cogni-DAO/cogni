@@ -15,6 +15,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/lib/image-tags.sh"
 
 CONFIGMAP_PATH="$REPO_ROOT/infra/k8s/base/scheduler-worker/configmap.yaml"
+DEPLOYMENT_PATH="$REPO_ROOT/infra/k8s/base/scheduler-worker/deployment.yaml"
 OVERLAY_ROOT="$REPO_ROOT/infra/k8s/overlays"
 
 render() {
@@ -22,7 +23,7 @@ render() {
 }
 
 check() {
-  local expected actual override_hits
+  local expected actual override_hits first_envfrom second_envfrom
   expected="$(render)"
   actual="$(yq -N '.data.COGNI_NODE_ENDPOINTS // ""' "$CONFIGMAP_PATH")"
   if [ "$actual" != "$expected" ]; then
@@ -38,6 +39,15 @@ check() {
   if [ -n "$override_hits" ]; then
     echo "[ERROR] scheduler-worker overlays must not override COGNI_NODE_ENDPOINTS; base config is catalog-rendered and env-invariant." >&2
     echo "$override_hits" >&2
+    exit 1
+  fi
+
+  first_envfrom="$(yq -N '.spec.template.spec.containers[] | select(.name == "scheduler-worker") | .envFrom[0] | keys | .[0]' "$DEPLOYMENT_PATH")"
+  second_envfrom="$(yq -N '.spec.template.spec.containers[] | select(.name == "scheduler-worker") | .envFrom[1] | keys | .[0]' "$DEPLOYMENT_PATH")"
+  if [ "$first_envfrom" != "secretRef" ] || [ "$second_envfrom" != "configMapRef" ]; then
+    echo "[ERROR] scheduler-worker envFrom order must be secretRef then configMapRef." >&2
+    echo "ConfigMap must be applied last so catalog-rendered COGNI_NODE_ENDPOINTS cannot be shadowed by stale Secret keys." >&2
+    echo "Actual first=$first_envfrom second=$second_envfrom" >&2
     exit 1
   fi
 }

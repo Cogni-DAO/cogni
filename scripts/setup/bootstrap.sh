@@ -149,30 +149,33 @@ SSL_PROBE_CODE=$(curl -sS -o /dev/null -w '%{http_code}' \
   -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
   "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/settings/ssl")
 if [[ "$SSL_PROBE_CODE" != "200" ]]; then
-  # Soft-fail, consistent with provision-env-vm.sh Phase 4b: the zone SSL
-  # mode is a ZONE-level setting (one per domain). On an already-serving zone
-  # (e.g. the hub's cognidao.org) it is already 'Full', so the PATCH is a
-  # no-op confirmation — lacking the scope just means we cannot re-assert it,
-  # not that anything is broken. For a FORK on a fresh zone where SSL mode is
-  # not yet 'Full', HTTPS-to-origin may fail until the scope is added; the
-  # warning below tells the operator how to fix it.
   cat <<EOF >&2
 
-⚠️  CLOUDFLARE_API_TOKEN lacks the Zone:Zone Settings:Edit scope.
+🛑 CLOUDFLARE_API_TOKEN is missing the Zone:Zone Settings:Edit scope.
    (HTTP ${SSL_PROBE_CODE} from GET /zones/${CLOUDFLARE_ZONE_ID}/settings/ssl)
 
-   Continuing — Phase 4b will skip the zone SSL-mode PATCH (warn, not fail).
-   If the zone is NOT already SSL mode 'Full', add the scope and re-run:
-     • Zone — DNS — Edit  +  Zone — Zone Settings — Edit
-     • Zone Resources: Include — Specific zone — ${CLOUDFLARE_ZONE_NAME}
-     gh secret set CLOUDFLARE_API_TOKEN --repo <owner>/<repo> --env ${DEPLOY_ENV:-candidate-a}
-   See Step 6.2 of docs/runbooks/fork-quickstart.md.
+Bootstrap PATCHes zone SSL mode to 'Full' at Phase 4b — that's the
+cloudflare-proxy + tls-internal architecture (see Step 6.2 of
+docs/runbooks/fork-quickstart.md).
+
+Fix (one-time):
+  1. Open https://dash.cloudflare.com/profile/api-tokens
+  2. Either edit the existing token, or create a new one ('Create Token'
+     → 'Get started' under 'Custom token').
+  3. Set permissions to BOTH:
+       • Zone — DNS — Edit
+       • Zone — Zone Settings — Edit
+  4. Zone Resources: Include — Specific zone — ${CLOUDFLARE_ZONE_NAME}
+  5. Save and copy the token.
+  6. Update the fork's GH env secret:
+       gh secret set CLOUDFLARE_API_TOKEN --repo <owner>/<repo> --env ${DEPLOY_ENV:-candidate-a}
+  7. Re-trigger provision-env.yml.
 
 EOF
-  warn "Cloudflare Zone Settings:Edit scope absent — skipping SSL-mode assertion (non-fatal)."
-else
-  log "Cloudflare token scope: DNS:Edit + Zone Settings:Edit ✓"
+  err "Cloudflare token scope check failed. Aborting before VM provisioning."
+  exit 2
 fi
+log "Cloudflare token scope: DNS:Edit + Zone Settings:Edit ✓"
 
 FORK_ROOT="${FORK_DOMAIN_ROOT:-}"
 if [[ -z "$FORK_ROOT" ]]; then
@@ -451,6 +454,17 @@ set_repo_secret CHERRY_AUTH_TOKEN          "$CHERRY_AUTH_TOKEN"
 set_repo_secret GHCR_DEPLOY_TOKEN          "$GITHUB_ADMIN_PAT"
 set_repo_secret ACTIONS_AUTOMATION_BOT_PAT "$GITHUB_ADMIN_PAT"
 set_repo_secret GIT_READ_TOKEN             "$GITHUB_ADMIN_PAT"
+
+# Provisioning floor consumed by provision-env.yml's env: block (Cloudflare,
+# Cherry project, GH-admin). Previously these had to be hand-set with
+# `gh secret set` per env — the seam. Push them from .env.bootstrap so it is
+# the single source for the whole minting floor (no manual gh).
+log "Env-level provisioning floor (provision-env.yml-consumed):"
+set_env_secret CLOUDFLARE_API_TOKEN "$CLOUDFLARE_API_TOKEN"
+set_env_secret CLOUDFLARE_ZONE_ID   "$CLOUDFLARE_ZONE_ID"
+set_env_secret CHERRY_PROJECT_ID    "$CHERRY_PROJECT_ID"
+set_env_secret GH_ADMIN_PAT         "$GITHUB_ADMIN_PAT"
+set_env_secret GH_ADMIN_USERNAME    "$GITHUB_ADMIN_USERNAME"
 
 log "Env-level agent-generated secrets:"
 for k in AUTH_SECRET LITELLM_MASTER_KEY OPENCLAW_GATEWAY_TOKEN OPENCLAW_GITHUB_RW_TOKEN \

@@ -76,8 +76,10 @@ The `provision-env.yml` path (ported in #1426) was first exercised end-to-end on
 
 - `scripts/bootstrap/install/install-age.sh` was missing entirely (workflow called it → exit 127).
 - `install-tofu.sh` only installed on macOS; its non-mac path warned-and-continued and checked the wrong binary name (`opentofu` vs `tofu`) → `missing prereq: tofu`. (Audit the other `install/*.sh` for the same laptop-only assumption.)
-- `bootstrap.sh` **hard-aborted** on a missing Cloudflare `Zone Settings:Edit` scope while `provision-env-vm.sh` soft-failed the same check — unified to soft-fail (the zone SSL mode is a one-per-zone setting, already `Full` on an established zone).
 - `provision-env-vm.sh` blocked on an interactive `read` for the optional OpenRouter key → EOF aborted the non-TTY runner. Now skipped under `CI`/non-TTY. (Audit remaining interactive `read`s for the same.)
+- **ESO webhook race** — Phase 5b.5 applied the ClusterSecretStore the instant the external-secrets Argo app reported Succeeded, before its admission webhook had ready endpoints → flaky `no endpoints available for service "external-secrets-webhook"`. Now waits for the webhook rollout + endpoints first (deterministic).
+
+**Cloudflare scope is a hard precondition (matches node-template — the proven impl).** `bootstrap.sh` Phase 1 + `provision-env-vm.sh` Phase 4b both **hard-fail** if `CLOUDFLARE_API_TOKEN` lacks `Zone:Zone Settings:Edit` (needed to set zone SSL mode → `Full`). A DNS:Edit-only token (HTTP 403 on `/settings/ssl`) aborts before the VM is touched. Mint a token with **DNS:Edit + Zone Settings:Edit** on the zone and set it as the env's `CLOUDFLARE_API_TOKEN` secret (fork-quickstart §6.2).
 
 **Open debt (not blocking, worth closing):**
 
