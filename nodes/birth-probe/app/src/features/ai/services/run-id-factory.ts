@@ -7,13 +7,15 @@
  * Scope: Creates RunIdentity for graph runs. Does NOT persist (P0) or allocate from store (P1).
  * Invariants:
  *   - P0_ATTEMPT_FREEZE: attempt is always 0 (no retry logic)
- *   - P0: runId = ingressRequestId = ctx.reqId (no persistence yet)
+ *   - P0: runId is process-allocated; ingressRequestId is ctx.reqId
  *   - P1: runId allocated from RunStore; ingressRequestId is delivery correlation only
  *   - RUNID_IS_CANONICAL: runId is execution identity; ingressRequestId is transport correlation
  * Side-effects: none
  * Links: ai_runtime.ts, GRAPH_EXECUTION.md
  * @public
  */
+
+import { randomUUID } from "node:crypto";
 
 import type { RequestContext } from "@/shared/observability";
 
@@ -33,17 +35,16 @@ export interface RunIdentity {
 /**
  * Create run identity for a new graph execution.
  *
- * P0 semantics: runId = ingressRequestId = ctx.reqId (no persistence).
+ * P0 semantics: runId is allocated in-process; no persistence.
  * P1 will allocate runId from RunStore for resume/retry support.
  *
  * @param ctx - Request context containing reqId for correlation
  * @returns Run identity with P0 semantics
  */
 export function createRunIdentity(ctx: RequestContext): RunIdentity {
-  // P0: runId equals ingressRequestId (no run persistence yet)
   // P1: runId will be allocated from RunStore; many ingressRequestIds per runId
   return {
-    runId: ctx.reqId,
+    runId: randomUUID(),
     attempt: 0, // P0_ATTEMPT_FREEZE
     ingressRequestId: ctx.reqId,
   };
