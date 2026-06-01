@@ -273,6 +273,12 @@ jobs:
             "deploy-branch/infra/k8s/overlays/candidate-a/${NODE}/"
           mkdir -p deploy-branch/infra/catalog
           cp "app-src/infra/catalog/${NODE}.yaml" "deploy-branch/infra/catalog/${NODE}.yaml"
+          if [ -d "app-src/nodes/${NODE}/k8s/external-secrets/candidate-a" ]; then
+            mkdir -p "deploy-branch/nodes/${NODE}/k8s/external-secrets/candidate-a"
+            rsync -a --delete \
+              "app-src/nodes/${NODE}/k8s/external-secrets/candidate-a/" \
+              "deploy-branch/nodes/${NODE}/k8s/external-secrets/candidate-a/"
+          fi
 
       - name: Promote this node's digest
         id: promote
