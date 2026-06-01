@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 
+# type:infra content-hash flight proof (#1437): editing this file changes the
+# litellm image content-hash, so CI rebuilds litellm-<hash> and deploy-infra
+# resolves the same tag — no manual build/pin. Harmless marker comment.
+
 """
 Module: infra/images/litellm/cogni_callbacks.py
 Purpose: Custom LiteLLM callback that routes billing callbacks to the correct
