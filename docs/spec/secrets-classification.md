@@ -82,6 +82,31 @@ Path resolution lives in `openBaoPathFor()` in `scripts/lib/secrets-catalog-load
 
 **Custody (firm, not best-effort):** a shared `AUTH_SECRET` enables cross-node session forgery; a shared `PRIVY_SIGNING_KEY` **moves every node's money**. Payment/wallet/signing keys MUST be `appliesTo: payments`, `shared: false`, **never baseline** — OpenBao isolates read (per-node path + reader role); per-wallet owner-keys (#1411) isolate signing.
 
+### `authRole` — value-distinctness is NOT the security axis (DECIDED, migration in `proj.secrets-substrate`)
+
+> Decided direction from two independent security reviews (task.5094, 2026-05-31). The `shared:` flag and the `_shared` pseudo-service below are the **current** model; this section is the **target**. The `PRIVY_SIGNING_KEY` custody carve-out above is the first instance of this rule — `authRole` generalizes it instead of special-casing each secret.
+
+`shared:` welds **two orthogonal axes** into one flag, and the weld is a bug class:
+
+- **Value-distinctness** (what `shared:` _means_): do all nodes get the same bytes? Harmless on its own.
+- **Identity boundary** (what actually owns blast radius): is the token presented to a service as **proof of who is calling**, or does it merely **unlock a resource** the caller could already reach?
+
+A shared value is fine for the second axis (one upstream account) but a **lateral-movement multiplier** for the first: if `LITELLM_MASTER_KEY` is the proxy admin key in every pod, one compromised pod controls the proxy for every node. So add one dimension + one CI gate, mirroring `custody:signing`:
+
+```
+authRole: caller-identity   # token IS the caller's identity to an internal service  → shared: true FORBIDDEN (CI gate)
+authRole: resource-unlock   # token only unlocks a shared upstream resource           → shared: true ALLOWED
+```
+
+- **caller-identity** (`LITELLM_MASTER_KEY`, `SCHEDULER_API_TOKEN`, `BILLING_INGEST_TOKEN`, `GH_REVIEW_APP_PRIVATE_KEY_BASE64`): sharing is forbidden. Replace with a **per-node identity** — LiteLLM per-node virtual key, k8s projected-ServiceAccount JWT (`aud=scheduler|billing-ingest`, node derived from `sub`), or a per-node minted token + server-side `token→node` map. The master/signing key lives **only in the provisioner**, never the data plane.
+- **resource-unlock** (`OPENROUTER_API_KEY`, `TAVILY_API_KEY`, `POSTHOG_*`, `LANGFUSE_*`, `EVM_RPC_URL`, `PROMETHEUS_READ_*`): sharing legal. Prefer **egress-proxy injection** (pods never hold the value — route node→LiteLLM→OpenRouter) and **scoped per-node sub-keys** for attribution + per-node revoke on one account.
+
+### Owner-scoped paths, not a `_shared` bucket
+
+`_shared` has **no owner** — no service mints/rotates it, so the seed can only pass it through from `.env` and **silently drops** a missing one (the task.5094 bug). The target: every secret lives at **`cogni/<env>/<owner>/<KEY>`** where the owner is the service that mints + rotates it (`litellm/`, `scheduler-worker/`, `grafana/`); the **owner's provision step generates-once**; consumers receive an **explicit OpenBao read grant** on that path (policy templating). "Shared" becomes a **derived property** (N consumers granted read), not a storage location. This (a) eliminates the pass-through-from-`.env` silent-skip class, and (b) replaces today's over-broad dual-extract (every node reads **all** of `_shared/*`) with least-privilege per-path grants + a single rotation owner + scoped revocation.
+
+`NEXT_PUBLIC_*` (e.g. `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`) ships to the browser — **not a secret**; remove from the substrate entirely.
+
 ### Co-consumed annotation (NOT a separate tier)
 
 When the same value is required by both a k8s app (A-tier) AND a Compose-infra container (B-tier) — e.g., `LITELLM_MASTER_KEY`, `BILLING_INGEST_TOKEN`, `APP_DB_*`, `METRICS_TOKEN`, `DOMAIN` — the script flags it with `coConsumed: true` on its routing entry. This is an **annotation, not a tier**: the primary tier remains whichever determines where the value originates from (usually A1 for application credentials, B for Compose-only).

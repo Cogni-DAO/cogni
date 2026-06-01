@@ -1035,6 +1035,12 @@ ENVEOF"
 # Function defined here; call at end of Phase 5c. No consumer between here and
 # Phase 5f — runtime services aren't started until deploy-infra.sh.
 write_runtime_env_on_vm() {
+  # Tolerate unset secrets: this heredoc intentionally writes placeholders for
+  # feature-gated keys (LITELLM/OPENCLAW/RPC/…) that may be empty at provision
+  # time (TRANSITION_SAFE — services not started here; compose just validates
+  # the file). Bare `${VAR}` under `set -u` would abort on the first unset one,
+  # so relax `nounset` for the heredoc expansion only.
+  set +u
   ssh $SSH_OPTS root@"$VM_IP" "cat > /opt/cogni-template-runtime/.env << 'ENVEOF'
 # Infra services (actually used)
 APP_ENV=${APP_ENV}
@@ -1080,6 +1086,7 @@ COGNI_REPO_URL=${COGNI_REPO_URL}
 COGNI_REPO_REF=${COGNI_REPO_REF}
 LITELLM_IMAGE=cogni-litellm:latest
 ENVEOF"
+  set -u
 }
 
 # Start services

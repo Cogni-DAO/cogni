@@ -146,7 +146,17 @@ seed_node_app_secrets() {
   for k in "${NODE_BASELINE_KEYS[@]}"; do
     _node_gets_key "$node" "$k" || continue
     v=$(_resolve_node_value "$node" "$k")
-    [[ -z "$v" ]] && continue
+    if [[ -z "$v" ]]; then
+      # TRANSITION_SAFE (secrets-management Invariant 12): an empty *required*
+      # key is allowed at seed time — ESO emits SecretSyncedError and the pod
+      # fails loudly at runtime; the value is entered post-bootstrap. So WARN
+      # (visibility — not silent, not blocking) rather than abort. Common cause:
+      # a _shared/agent key (e.g. LITELLM_MASTER_KEY) missing from .env.<env>
+      # after a partial setup:secrets run (set in GH, never written to .env).
+      [[ "$(_cat_field "$k" '.required')" == "true" ]] \
+        && log_warn "  ${k}: required but EMPTY for '${node}' — skipped (enter post-bootstrap; pod fails loud at runtime)"
+      continue
+    fi
     seed_kv "$node" "$k" "$v"
     n=$((n + 1))
   done
