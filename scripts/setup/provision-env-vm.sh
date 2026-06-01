@@ -940,6 +940,34 @@ for target in "${ALL_TARGETS[@]}"; do
   fi
 done
 
+# Image-digest seed — hub overlays pin `digest: sha256:…`, NOT the newTag
+# placeholder the loop above rewrites, and a fresh candidate-* has no FLIGHT
+# pipeline to promote one → all-zeros digest → ImagePullBackOff. Source the
+# real current-main digest from the preview overlay (refreshed every main
+# merge by promote-preview-digest-seed.yml) and stamp it into each env overlay
+# BEFORE the env-state commit, so it mirrors to every per-app branch below.
+log_info "Seeding overlay digest ← preview overlay digest"
+ZERO_DIGEST="sha256:0000000000000000000000000000000000000000000000000000000000000000"
+for target in "${ALL_TARGETS[@]}"; do
+  env_overlay="$DEPLOY_TMP/infra/k8s/overlays/${OVERLAY_DIR}/${target}/kustomization.yaml"
+  preview_overlay="$REPO_ROOT/infra/k8s/overlays/preview/${target}/kustomization.yaml"
+  [[ -f "$env_overlay" ]] || continue
+  if [[ ! -f "$preview_overlay" ]]; then
+    log_warn "  ${target} — no preview overlay; leaving digest as-is (may ImagePullBackOff)"
+    continue
+  fi
+  preview_digest=$(yq -N '.images[0].digest // ""' "$preview_overlay" 2>/dev/null)
+  if [[ -z "$preview_digest" || "$preview_digest" == "null" || "$preview_digest" == "$ZERO_DIGEST" ]]; then
+    log_warn "  ${target} — preview digest missing/all-zeros; leaving digest as-is"
+    continue
+  fi
+  # Idempotent: rewrite the single images[].digest line to the preview value.
+  sed -i.bak -E "s|(^[[:space:]]*digest:[[:space:]]*\").*(\")|\1${preview_digest}\2|" \
+    "$env_overlay"
+  rm -f "${env_overlay}.bak"
+  log_info "  ${target} digest → ${preview_digest:0:19}…"
+done
+
 cd "$DEPLOY_TMP"
 git config user.name "provision-script"
 git config user.email "provision@cogni.dev"

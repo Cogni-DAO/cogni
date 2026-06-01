@@ -2,6 +2,13 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 #
 # Spec: task.5094 candidate-b OpenBao proof.
+#
+# env-as-formation pilot: a single `list` generator declares which nodes live
+# in candidate-b. The template keys only on {{.name}} and keeps a per-node
+# deploy branch (targetRevision: deploy/candidate-b-{{.name}}), so per-node
+# lane isolation (task.0372) is preserved. Adding/removing a node from this
+# env is now a one-line edit. scheduler-worker is a hard-required service in
+# every deployment (node-app /readyz depends on it).
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -10,16 +17,11 @@ metadata:
 spec:
   goTemplate: true
   generators:
-    - git:
-        repoURL: https://github.com/cogni-dao/cogni.git
-        revision: deploy/candidate-b-node-template
-        files:
-          - path: "infra/catalog/node-template.yaml"
-    - git:
-        repoURL: https://github.com/cogni-dao/cogni.git
-        revision: deploy/candidate-b-canary
-        files:
-          - path: "infra/catalog/canary.yaml"
+    - list:
+        elements:
+          - { name: canary }
+          - { name: node-template }
+          - { name: scheduler-worker }
   template:
     metadata:
       name: "candidate-b-{{.name}}"
