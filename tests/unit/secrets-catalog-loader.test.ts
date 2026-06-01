@@ -12,11 +12,15 @@
  * Links: docs/design/secrets-catalog-per-node.md, scripts/lib/secrets-catalog-loader.ts
  */
 
+import { execSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadSecretsCatalog } from "../../scripts/lib/secrets-catalog-loader";
+import {
+  loadSecretsCatalog,
+  openBaoPathFor,
+} from "../../scripts/lib/secrets-catalog-loader";
 
 let repoRoot: string;
 
@@ -86,5 +90,59 @@ describe("secrets-catalog-loader · capability fan-out (v2)", () => {
     expect(() => loadSecretsCatalog({ repoRoot })).toThrow(
       /mutually exclusive/
     );
+  });
+});
+
+describe("secrets-catalog-loader · openBaoPathFor (fan-out path resolution)", () => {
+  it("resolves distinct per-node paths for an appliesTo+distinct secret", () => {
+    const r = { tier: "A1" as const, appliesTo: "web" as const };
+    const a = openBaoPathFor(r, "AUTH_SECRET", "node-template", "candidate-a");
+    const b = openBaoPathFor(r, "AUTH_SECRET", "canary", "candidate-a");
+    expect(a).toBe("cogni/candidate-a/node-template/AUTH_SECRET");
+    expect(b).toBe("cogni/candidate-a/canary/AUTH_SECRET");
+    expect(a).not.toBe(b); // zero cross-node value reuse — distinct paths
+  });
+
+  it("resolves the _shared path for shared:true regardless of node", () => {
+    const r = {
+      tier: "A1" as const,
+      appliesTo: "all-nodes" as const,
+      shared: true,
+    };
+    expect(
+      openBaoPathFor(r, "EVM_RPC_URL", "node-template", "candidate-a")
+    ).toBe(openBaoPathFor(r, "EVM_RPC_URL", "canary", "candidate-a"));
+    expect(openBaoPathFor(r, "EVM_RPC_URL", "x", "candidate-a")).toBe(
+      "cogni/candidate-a/_shared/EVM_RPC_URL"
+    );
+  });
+});
+
+describe("secrets-catalog-loader · REAL repo catalog (guards the migration)", () => {
+  const repoRoot = execSync("git rev-parse --show-toplevel", {
+    encoding: "utf-8",
+  }).trim();
+
+  it("loads without collision (canary dup removed) + migrates A1 baseline to appliesTo", () => {
+    const { routing } = loadSecretsCatalog({ repoRoot });
+    // node-template's A1 now lives operator-domain as capability-gated entries.
+    expect(routing.AUTH_SECRET).toMatchObject({ appliesTo: "web" });
+    expect(routing.AUTH_SECRET.service).toBeUndefined();
+    // Custody: payment/signing keys are payments-gated, never baseline.
+    expect(routing.PRIVY_SIGNING_KEY?.appliesTo).toBe("payments");
+    // Fan-out yields distinct per-node paths on the real catalog.
+    const nt = openBaoPathFor(
+      routing.AUTH_SECRET,
+      "AUTH_SECRET",
+      "node-template",
+      "preview"
+    );
+    const cn = openBaoPathFor(
+      routing.AUTH_SECRET,
+      "AUTH_SECRET",
+      "canary",
+      "preview"
+    );
+    expect(nt).not.toBe(cn);
   });
 });

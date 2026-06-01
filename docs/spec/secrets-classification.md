@@ -66,6 +66,22 @@ This spec is the **rules** layer between them: the tier definitions, the decisio
 | **F — Local-only**               | `.env.local` (gitignored)                                                                  | Pure dev convenience. Never enters CI or any deployed runtime. Not in `setup-secrets.ts` (no `gh secret set` call).                                                                                                                                                         |
 | **G — Derived**                  | Auto-generated from repo state at provision time                                           | Output of walking `nodes/*/.cogni/repo-spec.yaml` or similar repo metadata. Re-runs of setup pick up new nodes automatically. Example: `COGNI_NODE_DBS`, `COGNI_NODE_ENDPOINTS`.                                                                                            |
 
+### A1 capability-gating + value-distinctness (`appliesTo` / `shared`)
+
+Added by [`design.secrets-catalog-per-node`](../design/secrets-catalog-per-node.md) §Amendment v2 (task.5094). Nodes are heterogeneous — a Next.js app, a langgraph package, a dolt-memory store — so A1 is not "every fork gets all 36 baseline secrets." A1 baseline secrets live **once** in `infra/secrets-catalog.yaml` (operator-domain) and declare **two orthogonal fields** instead of a single `service:`:
+
+- **`appliesTo: <capability>`** — which nodes receive it. The loader fans it to every `type:node` whose node-spec declares that capability. Capability classes: `all-nodes` (boot-floor), `web`, `database`, `llm`, `openclaw`, `payments`. A marker (not a `_node_baseline` pseudo-service) because it must express **subsets** — a langgraph+dolt node must not be fanned `OPENCLAW_GATEWAY_TOKEN` or a payment key.
+- **`shared: true|false`** — value-distinctness, orthogonal to `appliesTo`:
+
+| `shared`          | OpenBao path                | value                                     | example                          |
+| ----------------- | --------------------------- | ----------------------------------------- | -------------------------------- |
+| `false` (default) | `cogni/<env>/<node>/<KEY>`  | **distinct per node** (generated at seed) | `AUTH_SECRET`, `APP_DB_PASSWORD` |
+| `true`            | `cogni/<env>/_shared/<KEY>` | **same** for all in-scope nodes           | `EVM_RPC_URL`, `POSTHOG_API_KEY` |
+
+Path resolution lives in `openBaoPathFor()` in `scripts/lib/secrets-catalog-loader.ts`. `appliesTo` and `service:` are **mutually exclusive** (loader rejects both). `NO_NAME_COLLISIONS` (Invariant 2) is preserved — each name is declared once.
+
+**Custody (firm, not best-effort):** a shared `AUTH_SECRET` enables cross-node session forgery; a shared `PRIVY_SIGNING_KEY` **moves every node's money**. Payment/wallet/signing keys MUST be `appliesTo: payments`, `shared: false`, **never baseline** — OpenBao isolates read (per-node path + reader role); per-wallet owner-keys (#1411) isolate signing.
+
 ### Co-consumed annotation (NOT a separate tier)
 
 When the same value is required by both a k8s app (A-tier) AND a Compose-infra container (B-tier) — e.g., `LITELLM_MASTER_KEY`, `BILLING_INGEST_TOKEN`, `APP_DB_*`, `METRICS_TOKEN`, `DOMAIN` — the script flags it with `coConsumed: true` on its routing entry. This is an **annotation, not a tier**: the primary tier remains whichever determines where the value originates from (usually A1 for application credentials, B for Compose-only).

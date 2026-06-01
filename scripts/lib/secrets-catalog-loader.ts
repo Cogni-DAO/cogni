@@ -304,6 +304,30 @@ export function loadSecretsCatalog(opts: LoadOptions): LoadResult {
   return { secrets, routing };
 }
 
+/**
+ * Resolve the OpenBao path a secret lands at for a given node + env — the
+ * fan-out path resolution (design.secrets-catalog-per-node §Amendment v2):
+ *   - `service: <x>`        → cogni/<env>/<x>/<KEY>        (A2 / _shared / _system)
+ *   - `appliesTo`, shared   → cogni/<env>/_shared/<KEY>    (one value, all nodes)
+ *   - `appliesTo`, !shared  → cogni/<env>/<node>/<KEY>     (distinct value per node)
+ * Returns null for non-OpenBao secrets (B/D/E — no service, no appliesTo).
+ */
+export function openBaoPathFor(
+  routing: SecretRouting,
+  name: string,
+  node: string,
+  env: string
+): string | null {
+  if (routing.service !== undefined) {
+    return `cogni/${env}/${routing.service}/${name}`;
+  }
+  if (routing.appliesTo !== undefined) {
+    const svc = routing.shared ? "_shared" : node;
+    return `cogni/${env}/${svc}/${name}`;
+  }
+  return null;
+}
+
 function parseFile(filePath: string): { secrets: CatalogEntry[] } {
   let raw: unknown;
   try {
