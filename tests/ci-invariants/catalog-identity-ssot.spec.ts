@@ -3,11 +3,8 @@
 
 /**
  * Module: `@tests/ci-invariants/catalog-identity-ssot`
- * Purpose: Pins REPO_SPEC_IS_IDENTITY_SSOT — node identity (`node_id`) is declared
- *          ONLY in `nodes/<name>/.cogni/repo-spec.yaml` (the web3-anchored authority),
- *          never duplicated in `infra/catalog/*.yaml`. The billing/routing CSVs in
- *          `scripts/ci/lib/image-tags.sh` resolve `node_id` from repo-spec.
- * Scope: Static structural test that reads catalog + repo-spec files. No shell-out.
+ * Purpose: Pins REPO_SPEC_IS_IDENTITY_SSOT — `node_id` is declared only in `nodes/<name>/.cogni/repo-spec.yaml` (the web3-anchored authority), never duplicated in `infra/catalog/*.yaml`, so the billing/routing CSVs in `image-tags.sh` resolve identity from one source.
+ * Scope: Static structural test that reads catalog + repo-spec files; does not shell out, build, or hit the network.
  * Invariants:
  *   NO_CATALOG_NODE_ID: no catalog entry may carry a `node_id` key (deploy-shape ≠ identity).
  *   EVERY_NODE_HAS_REPO_SPEC_ID: every `type: node` catalog entry has a repo-spec with a UUID `node_id`.
