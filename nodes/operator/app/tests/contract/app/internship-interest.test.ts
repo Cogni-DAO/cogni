@@ -70,8 +70,17 @@ describe("/api/v1/public/internship-interest contract tests", () => {
     name: "Ada Lovelace",
     email: "ada@example.com",
     github: "ada-lovelace",
+    artifactUrl: "https://github.com/ada-lovelace/cogni-agent",
     focus: "x402-apps",
     squadStatus: "forming",
+    timezone: "Europe/London",
+    weeklyAvailability: "8-10 hours per week",
+    artifactNotes: "Start with the README and the agent evals.",
+    whyCogni: "I want to build durable agent businesses with clear ownership.",
+    firstProjectChoice: "knowledge-capture",
+    reliableCommitment:
+      "Two focused build blocks each week for the next month.",
+    recordingConsent: true,
     note: "I want to build agent-native payment flows.",
   } satisfies InternshipInterestInput;
 
@@ -101,6 +110,7 @@ describe("/api/v1/public/internship-interest contract tests", () => {
     expect(parsed.referenceId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     );
+    expect(parsed.derekInterviewUrl).toBe("https://calendly.com/derekg1729");
   });
 
   it("returns 400 for malformed JSON", async () => {
@@ -135,6 +145,10 @@ describe("/api/v1/public/internship-interest contract tests", () => {
     expect(responseText).not.toContain(validPayload.name);
     expect(responseText).not.toContain(validPayload.email);
     expect(responseText).not.toContain(validPayload.github);
+    expect(responseText).not.toContain(validPayload.artifactUrl);
+    expect(responseText).not.toContain(validPayload.artifactNotes);
+    expect(responseText).not.toContain(validPayload.whyCogni);
+    expect(responseText).not.toContain(validPayload.reliableCommitment);
     expect(responseText).not.toContain(validPayload.note);
   });
 

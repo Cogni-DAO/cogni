@@ -14,6 +14,7 @@
 import { NextResponse } from "next/server";
 import { wrapPublicRoute } from "@/bootstrap/http";
 import { internshipInterestOperation } from "@/contracts/internship.interest.v1.contract";
+import { serverEnv } from "@/shared/env/server-env";
 import { logRequestWarn } from "@/shared/observability";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +45,7 @@ export const POST = wrapPublicRoute(
 
     const input = parseResult.data;
     const referenceId = crypto.randomUUID();
+    const derekInterviewUrl = serverEnv().DEREK_INTERVIEW_URL;
     const emailDomain =
       input.email.split("@").at(1)?.toLowerCase() ?? "unknown";
 
@@ -53,15 +55,25 @@ export const POST = wrapPublicRoute(
         referenceId,
         focus: input.focus,
         squadStatus: input.squadStatus,
-        github: input.github || null,
+        firstProjectChoice: input.firstProjectChoice,
+        hasGithub: Boolean(input.github),
+        hasArtifact: Boolean(input.artifactUrl),
+        recordingConsent: input.recordingConsent,
         emailDomain,
         noteLength: input.note?.length ?? 0,
+        artifactNotesLength: input.artifactNotes.length,
+        whyCogniLength: input.whyCogni.length,
+        reliableCommitmentLength: input.reliableCommitment.length,
       },
       "internship interest submitted"
     );
 
     return NextResponse.json(
-      internshipInterestOperation.output.parse({ ok: true, referenceId }),
+      internshipInterestOperation.output.parse({
+        ok: true,
+        referenceId,
+        derekInterviewUrl,
+      }),
       { status: 201 }
     );
   }

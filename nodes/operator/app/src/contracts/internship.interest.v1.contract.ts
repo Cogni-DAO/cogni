@@ -22,6 +22,14 @@ const InternshipFocusSchema = z.enum([
   "undecided",
 ]);
 
+const FirstProjectChoiceSchema = z.enum([
+  "agent-workflows",
+  "knowledge-capture",
+  "dao-incentives",
+  "infrastructure",
+  "unsure",
+]);
+
 export const internshipInterestOperation = {
   id: "internship.interest.v1",
   summary: "Submit Cogni internship interest",
@@ -29,13 +37,22 @@ export const internshipInterestOperation = {
     name: z.string().trim().min(1).max(120),
     email: z.string().trim().email().max(240),
     github: z.string().trim().max(120).optional(),
+    artifactUrl: z.string().trim().url().max(500).optional(),
     focus: InternshipFocusSchema,
     squadStatus: z.enum(["solo", "forming", "squad-ready"]),
+    timezone: z.string().trim().min(1).max(80),
+    weeklyAvailability: z.string().trim().min(1).max(240),
+    artifactNotes: z.string().trim().min(1).max(1000),
+    whyCogni: z.string().trim().min(1).max(1000),
+    firstProjectChoice: FirstProjectChoiceSchema,
+    reliableCommitment: z.string().trim().min(1).max(500),
+    recordingConsent: z.boolean(),
     note: z.string().trim().max(1000).optional(),
   }),
   output: z.object({
     ok: z.literal(true),
     referenceId: z.string(),
+    derekInterviewUrl: z.string().url(),
   }),
 } as const;
 

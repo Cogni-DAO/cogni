@@ -13,7 +13,6 @@
 
 "use client";
 
-import { cn } from "@cogni/node-ui-kit/util/cn";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
@@ -31,11 +30,15 @@ import Link from "next/link";
 import { useTheme } from "next-themes";
 import { type CSSProperties, type ReactElement, useState } from "react";
 import { Button, Input } from "@/components";
-import type { InternshipInterestInput } from "@/contracts/internship.interest.v1.contract";
+import type {
+  InternshipInterestInput,
+  InternshipInterestOutput,
+} from "@/contracts/internship.interest.v1.contract";
 import { InternshipNetworkBackground } from "./InternshipNetworkBackground";
 
 type FormState = InternshipInterestInput & {
   github: string;
+  artifactUrl: string;
   note: string;
 };
 
@@ -58,6 +61,17 @@ const squadOptions: {
   { value: "solo", label: "Solo for now" },
   { value: "forming", label: "Forming a squad" },
   { value: "squad-ready", label: "Squad ready" },
+];
+
+const firstProjectOptions: {
+  value: InternshipInterestInput["firstProjectChoice"];
+  label: string;
+}[] = [
+  { value: "agent-workflows", label: "Improve agent workflows" },
+  { value: "knowledge-capture", label: "Improve knowledge capture" },
+  { value: "dao-incentives", label: "Improve DAO incentives" },
+  { value: "infrastructure", label: "Improve infra" },
+  { value: "unsure", label: "Not sure yet" },
 ];
 
 const tracks = [
@@ -102,8 +116,16 @@ const initialForm: FormState = {
   name: "",
   email: "",
   github: "",
+  artifactUrl: "",
   focus: "x402-apps",
   squadStatus: "solo",
+  timezone: "",
+  weeklyAvailability: "",
+  artifactNotes: "",
+  whyCogni: "",
+  firstProjectChoice: "knowledge-capture",
+  reliableCommitment: "",
+  recordingConsent: true,
   note: "",
 };
 
@@ -355,6 +377,9 @@ function SignupForm(): ReactElement {
     "idle" | "submitting" | "success" | "error"
   >("idle");
   const [referenceId, setReferenceId] = useState<string | null>(null);
+  const [derekInterviewUrl, setDerekInterviewUrl] = useState<string | null>(
+    null
+  );
 
   const update =
     (key: keyof FormState) =>
@@ -366,18 +391,35 @@ function SignupForm(): ReactElement {
     ): void => {
       setForm((current) => ({ ...current, [key]: event.target.value }));
     };
+  const updateRecordingConsent = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ): void => {
+    setForm((current) => ({
+      ...current,
+      recordingConsent: event.target.checked,
+    }));
+  };
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setStatus("submitting");
     setReferenceId(null);
+    setDerekInterviewUrl(null);
 
     const payload: InternshipInterestInput = {
       name: form.name,
       email: form.email,
       focus: form.focus,
       squadStatus: form.squadStatus,
+      timezone: form.timezone,
+      weeklyAvailability: form.weeklyAvailability,
+      artifactNotes: form.artifactNotes,
+      whyCogni: form.whyCogni,
+      firstProjectChoice: form.firstProjectChoice,
+      reliableCommitment: form.reliableCommitment,
+      recordingConsent: form.recordingConsent,
       ...(form.github.trim() && { github: form.github.trim() }),
+      ...(form.artifactUrl.trim() && { artifactUrl: form.artifactUrl.trim() }),
       ...(form.note.trim() && { note: form.note.trim() }),
     };
 
@@ -392,8 +434,9 @@ function SignupForm(): ReactElement {
       return;
     }
 
-    const data = (await response.json()) as { referenceId: string };
+    const data = (await response.json()) as InternshipInterestOutput;
     setReferenceId(data.referenceId);
+    setDerekInterviewUrl(data.derekInterviewUrl);
     setStatus("success");
     setForm(initialForm);
   }
@@ -439,6 +482,21 @@ function SignupForm(): ReactElement {
         />
       </label>
 
+      <label className="space-y-2" htmlFor="intern-artifact-url">
+        <span className="font-medium text-foreground text-sm">
+          Best artifact link
+        </span>
+        <Input
+          id="intern-artifact-url"
+          type="url"
+          value={form.artifactUrl}
+          onChange={update("artifactUrl")}
+          autoComplete="url"
+          className="border-input bg-background text-foreground"
+          placeholder="https://github.com/you/project"
+        />
+      </label>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="space-y-2" htmlFor="intern-focus">
           <span className="font-medium text-foreground text-sm">Focus</span>
@@ -475,9 +533,113 @@ function SignupForm(): ReactElement {
         </label>
       </div>
 
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="space-y-2" htmlFor="intern-timezone">
+          <span className="font-medium text-foreground text-sm">Timezone</span>
+          <Input
+            id="intern-timezone"
+            required
+            value={form.timezone}
+            onChange={update("timezone")}
+            autoComplete="off"
+            className="border-input bg-background text-foreground"
+            placeholder="America/New_York"
+          />
+        </label>
+
+        <label className="space-y-2" htmlFor="intern-availability">
+          <span className="font-medium text-foreground text-sm">
+            Weekly availability
+          </span>
+          <Input
+            id="intern-availability"
+            required
+            value={form.weeklyAvailability}
+            onChange={update("weeklyAvailability")}
+            className="border-input bg-background text-foreground"
+            placeholder="8-10 hours/week"
+          />
+        </label>
+      </div>
+
+      <label className="space-y-2" htmlFor="intern-artifact-notes">
+        <span className="font-medium text-foreground text-sm">
+          What should Derek inspect in your artifact?
+        </span>
+        <textarea
+          id="intern-artifact-notes"
+          required
+          value={form.artifactNotes}
+          onChange={update("artifactNotes")}
+          rows={3}
+          className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50"
+        />
+      </label>
+
+      <label className="space-y-2" htmlFor="intern-why-cogni">
+        <span className="font-medium text-foreground text-sm">Why Cogni?</span>
+        <textarea
+          id="intern-why-cogni"
+          required
+          value={form.whyCogni}
+          onChange={update("whyCogni")}
+          rows={3}
+          className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50"
+        />
+      </label>
+
+      <label className="space-y-2" htmlFor="intern-first-project">
+        <span className="font-medium text-foreground text-sm">
+          First project direction
+        </span>
+        <select
+          id="intern-first-project"
+          value={form.firstProjectChoice}
+          onChange={update("firstProjectChoice")}
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground text-sm focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {firstProjectOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="space-y-2" htmlFor="intern-commitment">
+        <span className="font-medium text-foreground text-sm">
+          Reliable commitment for the next month
+        </span>
+        <textarea
+          id="intern-commitment"
+          required
+          value={form.reliableCommitment}
+          onChange={update("reliableCommitment")}
+          rows={3}
+          className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50"
+        />
+      </label>
+
+      <label
+        className="flex items-start gap-3 rounded-md border border-border/70 bg-background/60 p-3 text-sm"
+        htmlFor="intern-recording-consent"
+      >
+        <input
+          id="intern-recording-consent"
+          type="checkbox"
+          checked={form.recordingConsent}
+          onChange={updateRecordingConsent}
+          className="mt-1"
+        />
+        <span className="text-muted-foreground">
+          Derek may use an AI note taker for the interview. You can uncheck this
+          and still apply.
+        </span>
+      </label>
+
       <label className="space-y-2" htmlFor="intern-note">
         <span className="font-medium text-foreground text-sm">
-          What would you build?
+          Anything else Derek should know?
         </span>
         <textarea
           id="intern-note"
@@ -493,28 +655,46 @@ function SignupForm(): ReactElement {
           {status === "submitting" ? "Submitting" : "Submit interest"}
           <ArrowRight className="ml-2 size-4" />
         </Button>
-        <Link
-          href="https://discord.gg/3b9sSyhZ4z"
+        {status === "success" && derekInterviewUrl && (
+          <Link
+            href={derekInterviewUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 text-foreground text-sm transition-colors hover:text-primary"
+          >
+            Book Derek interview
+            <ArrowRight className="size-4" />
+          </Link>
+        )}
+        <a
+          href="#interest"
           className="inline-flex items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground"
         >
-          Join Discord
+          Reference appears after submit
           <ArrowRight className="size-4" />
-        </Link>
+        </a>
       </div>
 
-      <p
-        aria-live="polite"
-        className={cn(
-          "min-h-6 text-sm",
-          status === "error" ? "text-destructive" : "text-muted-foreground"
+      <div aria-live="polite" className="min-h-6 text-sm">
+        {status === "success" && referenceId ? (
+          <div className="rounded-md border border-primary/30 bg-primary/10 p-3 text-foreground">
+            <p>Interest received. Reference {referenceId}.</p>
+            {derekInterviewUrl && (
+              <p className="mt-1 text-muted-foreground">
+                Next step: book a 30-minute Derek interview with the link above.
+              </p>
+            )}
+          </div>
+        ) : status === "error" ? (
+          <p className="text-destructive">
+            Submission failed. Check the fields and try again.
+          </p>
+        ) : (
+          <p className="text-muted-foreground">
+            Submit once. Real applicants go straight to Derek's calendar.
+          </p>
         )}
-      >
-        {status === "success" && referenceId
-          ? `Interest received. Reference ${referenceId}.`
-          : status === "error"
-            ? "Submission failed. Check the fields and try again."
-            : "Submitting records an operator event; Discord is the fastest follow-up path."}
-      </p>
+      </div>
     </form>
   );
 }
