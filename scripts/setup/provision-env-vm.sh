@@ -474,6 +474,10 @@ log_info "Probing Cherry for existing resources to adopt..."
 adopt() {  # adopt <tofu-address> <id-or-empty> <human-label>
   local addr="$1" id="$2" lbl="$3"
   [[ -z "$id" ]] && return 0
+  if tofu state list 2>/dev/null | grep -qx "$addr"; then
+    log_info "$lbl already in tofu state — skip import"
+    return 0
+  fi
   log_info "Adopting Cherry $lbl (id=$id) into tofu state"
   tofu import -var-file="terraform.${WORKSPACE}.tfvars" "$addr" "$id"
 }
@@ -533,7 +537,8 @@ SSH_KEY="$REPO_ROOT/.local/${DEPLOY_ENV}-vm-key"
 # 60-min wall-clock = timeout = cancelled).
 # ServerAliveInterval/CountMax govern an established session; ConnectTimeout
 # governs the dial. Both apply.
-SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ConnectionAttempts=1 -o ServerAliveInterval=15 -o ServerAliveCountMax=12"
+SSH_MUX_PATH="/tmp/cogni-mux-${DEPLOY_ENV}-%h"
+SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ConnectionAttempts=1 -o ServerAliveInterval=15 -o ServerAliveCountMax=12 -o ControlMaster=auto -o ControlPath=$SSH_MUX_PATH -o ControlPersist=300"
 
 # ══════════════════════════════════════════════════════════════
 # Phase 4: Wait for cloud-init bootstrap
@@ -790,6 +795,7 @@ if [[ -n "$SEED_TOKEN" ]]; then
   done
   for ref in "${BRANCHES_TO_SEED[@]}"; do
     existing_sha=$(gh api "repos/${GH_REPO}/branches/${ref}" --jq '.commit.sha' 2>/dev/null || echo "")
+    [[ "$existing_sha" =~ ^[0-9a-f]{40}$ ]] || existing_sha=""
     if [[ -n "$existing_sha" ]]; then
       if [[ "$existing_sha" == "$SEED_SHA" ]]; then
         log_info "  ${ref} — already at seed SHA ${SEED_SHA:0:8}"
@@ -887,16 +893,12 @@ done
 # branch is per-env, so substituting _template doesn't race with siblings).
 if [[ -n "$FORK_ROOT" && "$FORK_ROOT" != "null" ]]; then
   log_info "Rewriting overlay vm.cognidao.org → ${VM_DNS_HOST}"
-  # Rewrite both the per-env wrapper directory AND the shared _template.
-  # _template lives at overlays/_template/ — each deploy branch has its own
-  # copy, so per-env substitutions don't conflict across branches.
-  find "$DEPLOY_TMP/infra/k8s/overlays/${OVERLAY_DIR}" \
-       "$DEPLOY_TMP/infra/k8s/overlays/_template" \
-       -name "kustomization.yaml" -print0 2>/dev/null \
+  OVERLAY_ROOTS=("$DEPLOY_TMP/infra/k8s/overlays/${OVERLAY_DIR}")
+  [[ -d "$DEPLOY_TMP/infra/k8s/overlays/_template" ]] \
+    && OVERLAY_ROOTS+=("$DEPLOY_TMP/infra/k8s/overlays/_template")
+  find "${OVERLAY_ROOTS[@]}" -name "kustomization.yaml" -print0 2>/dev/null \
     | xargs -0 sed -i.bak -E "s/vm\.cognidao\.org/${VM_DNS_HOST}/g"
-  find "$DEPLOY_TMP/infra/k8s/overlays/${OVERLAY_DIR}" \
-       "$DEPLOY_TMP/infra/k8s/overlays/_template" \
-       -name "*.bak" -delete 2>/dev/null || true
+  find "${OVERLAY_ROOTS[@]}" -name "*.bak" -delete 2>/dev/null || true
 fi
 
 # Image-pull fallback (next failure cliff after vm.* rewrite) — fresh forks
@@ -1193,6 +1195,14 @@ phase_5b_timeout() {
 # their first sync. Argo's repo-server clones the deploy branch, runs
 # `kustomize build --enable-helm` (per the bootstrap argocd-cm patch), and
 # applies server-side.
+log_info "Enabling --enable-helm in argocd-cm for kustomize-with-helm substrate..."
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=15 root@"$VM_IP" '
+  kubectl -n argocd patch cm argocd-cm --type merge \
+    -p "{\"data\":{\"kustomize.buildOptions\":\"--enable-helm\"}}" &&
+  kubectl -n argocd rollout restart deployment argocd-repo-server &&
+  kubectl -n argocd rollout status deployment argocd-repo-server --timeout=120s
+' || phase_5b_timeout "argocd-cm --enable-helm patch failed"
+
 SUBSTRATE_FORK_REPO="https://github.com/${GH_REPO}.git"
 for substrate in openbao external-secrets; do
   rendered=$(mktemp)

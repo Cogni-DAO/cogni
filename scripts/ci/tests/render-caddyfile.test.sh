@@ -50,7 +50,7 @@ grep -q '{$CANARY_DOMAIN' <<<"$RENDERED" || fail "canary block absent — the ex
 echo "[3/4] catalog node_port == overlay Service nodePort (no split-brain)"
 for node in "${NODE_TARGETS[@]}"; do
   cat_port="$(node_port_for_target "$node")"
-  for env in candidate-a preview production; do
+  for env in candidate-a candidate-b preview production; do
     f="infra/k8s/overlays/$env/$node/kustomization.yaml"
     [ -f "$f" ] || { echo "  skip — $env/$node (no overlay)"; continue; }
     # nodePort lives in a JSON6902 patch: `path: /spec/ports/0/nodePort` / `value: NNNNN`

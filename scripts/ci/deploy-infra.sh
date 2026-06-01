@@ -220,17 +220,20 @@ fi
 # Validate environment
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 if [[ -z "${DEPLOY_ENVIRONMENT:-}" ]]; then
-    log_error "DEPLOY_ENVIRONMENT must be explicitly set to 'candidate-a', 'preview', or 'production'"
+    log_error "DEPLOY_ENVIRONMENT must be explicitly set to candidate-*, preview, or production"
     exit 1
 fi
 
 ENVIRONMENT="$DEPLOY_ENVIRONMENT"
 # 'canary' retained as a legacy alias during bug.0312 rename. Drop once no caller sends it.
-if [[ "$ENVIRONMENT" != "candidate-a" && "$ENVIRONMENT" != "canary" && "$ENVIRONMENT" != "preview" && "$ENVIRONMENT" != "production" ]]; then
-    log_error "DEPLOY_ENVIRONMENT must be 'candidate-a', 'preview', or 'production'"
-    log_error "Current value: $ENVIRONMENT"
-    exit 1
-fi
+case "$ENVIRONMENT" in
+    candidate-*|canary|preview|production) : ;;
+    *)
+        log_error "DEPLOY_ENVIRONMENT must be candidate-*, preview, or production"
+        log_error "Current value: $ENVIRONMENT"
+        exit 1
+        ;;
+esac
 
 # Validate required secrets
 REQUIRED_SECRETS=(
