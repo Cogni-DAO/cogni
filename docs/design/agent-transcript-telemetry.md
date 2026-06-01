@@ -43,7 +43,7 @@ synthesized, attributed, recallable atoms cross. The transcript is the entry's
 an active claim** (30-min TTL). It cannot capture sessions that never claim an
 item, so it is the wrong carrier for "all sessions". The checked-in Claude Code
 `SessionEnd` hook covers every session with zero agent effort. Heartbeat-driven
-*incremental* streaming (flush the transcript tail mid-session, cursor > 0) is the
+_incremental_ streaming (flush the transcript tail mid-session, cursor > 0) is the
 productionization for long/never-cleanly-ended sessions — the schema's `(session_id,
 cursor)` unique index already supports it.
 
