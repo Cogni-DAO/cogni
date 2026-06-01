@@ -35,6 +35,9 @@ for env in staging production; do
     [[ ! -f "$catalog_file" ]] && continue
     name=$(grep '^name:' "$catalog_file" | head -1 | awk '{print $2}')
     [[ -z "$name" ]] && continue
+    # type:infra (e.g. litellm) deploys via Compose-on-VM, not k8s overlays.
+    type=$(grep '^type:' "$catalog_file" | head -1 | awk '{print $2}')
+    [[ "$type" == "infra" ]] && continue
 
     overlay="$ROOT_DIR/infra/k8s/overlays/$env/$name"
     if [[ ! -f "$overlay/kustomization.yaml" ]]; then

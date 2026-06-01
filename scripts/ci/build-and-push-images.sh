@@ -95,7 +95,14 @@ build_timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 # bug.0344: image_name_for_target picks APP vs MIGRATOR package per-target.
 # image-tags.sh's image_tag_for_target joins them with the tag suffix.
 resolve_tag() {
-  image_tag_for_target "$(image_name_for_target "$1")" "$IMAGE_TAG" "$1"
+  # type:infra images are content-hash tagged (litellm-<hash>) so the affected
+  # build rebuilds them only on change and deploy-infra resolves the same tag;
+  # everything else is <IMAGE_TAG><suffix>.
+  if is_infra_target "$1"; then
+    infra_image_tag "$1"
+  else
+    image_tag_for_target "$(image_name_for_target "$1")" "$IMAGE_TAG" "$1"
+  fi
 }
 
 build_target() {
@@ -112,13 +119,16 @@ build_target() {
     log_error "build_target: no catalog entry for '${target}' (${catalog})"
     exit 1
   fi
-  local dockerfile type
+  local dockerfile type context
   dockerfile=$(yq '.dockerfile' "$catalog")
   type=$(yq '.type' "$catalog")
   if [ -z "$dockerfile" ] || [ "$dockerfile" = "null" ]; then
     log_error "build_target: ${catalog} has no .dockerfile"
     exit 1
   fi
+  # Build context defaults to repo root; type:infra images (e.g. litellm) set
+  # their own self-contained dir so the Dockerfile stays context-relative.
+  context=$(yq -N '.build_context // "."' "$catalog")
 
   local args=(--platform "$PLATFORM" --file "$dockerfile")
   if [ "$type" = "node" ]; then
@@ -132,7 +142,7 @@ build_target() {
     --cache-to "type=gha,mode=max,scope=build-${target}"
     --tag "$tag"
     --push
-    .
+    "$context"
   )
   docker buildx build "${args[@]}"
 }

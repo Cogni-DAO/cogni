@@ -115,6 +115,11 @@ promote_target() {
   local target="$1"
   local digest
 
+  # type:infra (e.g. litellm) deploys via Compose-on-VM, not k8s overlays —
+  # there is no overlay digest to promote. deploy-infra resolves its content-
+  # hash tag directly. Skip regardless of caller-supplied target list.
+  is_infra_target "$target" && return 0
+
   digest=$(extract_digest "$target")
   [ -z "$digest" ] && return 0
 

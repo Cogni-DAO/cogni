@@ -27,12 +27,21 @@ _image_tags_catalog_root="${COGNI_CATALOG_ROOT:-${_image_tags_repo_root}/infra/c
 mapfile -t ALL_TARGETS  < <(yq -N '.name' "$_image_tags_catalog_root"/*.yaml)
 # shellcheck disable=SC2034
 mapfile -t NODE_TARGETS < <(yq -N 'select(.type == "node") | .name' "$_image_tags_catalog_root"/*.yaml)
+# K8S_TARGETS: targets deployed via k8s/Argo (overlays, ApplicationSets,
+# digest promotion, gitops coverage). type:infra (e.g. litellm) builds in CI
+# but deploys via Compose-on-VM, so it is excluded here — the k8s plane never
+# iterates it. ALL_TARGETS = K8S_TARGETS ∪ infra targets.
+# shellcheck disable=SC2034
+mapfile -t K8S_TARGETS < <(yq -N 'select(.type == "node" or .type == "service") | .name' "$_image_tags_catalog_root"/*.yaml)
 
 declare -A _image_tags_suffix_cache=()
 declare -A _image_tags_primary_cache=()
 declare -A _image_tags_node_port_cache=()
 declare -A _image_tags_node_id_cache=()
+declare -A _image_tags_type_cache=()
 for _t in "${ALL_TARGETS[@]}"; do
+  _ty=$(yq -N '.type' "${_image_tags_catalog_root}/${_t}.yaml")
+  _image_tags_type_cache["$_t"]="$_ty"
   _s=$(yq '.image_tag_suffix' "${_image_tags_catalog_root}/${_t}.yaml")
   [ "$_s" = "null" ] && _s=""
   _image_tags_suffix_cache["$_t"]="$_s"
@@ -43,7 +52,13 @@ for _t in "${ALL_TARGETS[@]}"; do
   _nid=$(yq -N '.node_id // ""' "${_image_tags_catalog_root}/${_t}.yaml")
   _image_tags_node_id_cache["$_t"]="$_nid"
 done
-unset _t _s _p _np _nid
+unset _t _ty _s _p _np _nid
+
+# True for type:infra targets — built in CI but deployed via Compose-on-VM,
+# not k8s/Argo. Overlay / promotion / gitops-coverage loops skip these.
+is_infra_target() {
+  [ "${_image_tags_type_cache[$1]:-}" = "infra" ]
+}
 
 image_name_for_target() {
   printf '%s' "$IMAGE_NAME_APP"
@@ -62,6 +77,30 @@ image_tag_for_target() {
   local image_name="$1" base_tag="$2" target="$3" suffix
   suffix=$(tag_suffix_for_target "$target") || return 1
   printf '%s:%s%s' "$image_name" "$base_tag" "$suffix"
+}
+
+# Content-hash tag for a type:infra target (e.g. litellm). The tag changes only
+# when the image's build dir changes, so the affected-only build rebuilds it
+# rarely and deploy-infra resolves the identical tag deterministically — no
+# manual `docker build` + hand-pin, no per-sha gap. The build dir is the parent
+# of the catalog `dockerfile`. AGENTS.md + __pycache__ are excluded so docs /
+# bytecode never perturb the image identity. LC_ALL=C sort keeps it stable
+# across macOS (dev) and Linux (CI).
+infra_content_hash() {
+  local target="$1" dockerfile dir
+  dockerfile=$(yq -N '.dockerfile' "${_image_tags_catalog_root}/${target}.yaml")
+  dir=$(dirname "$dockerfile")
+  ( cd "$_image_tags_repo_root" && \
+    find "$dir" -type f ! -name 'AGENTS.md' -not -path '*/__pycache__/*' \
+      | LC_ALL=C sort | xargs cat | shasum -a 256 | cut -c1-12 )
+}
+
+# Full GHCR tag for a type:infra image: <image>:<target>-<contenthash>
+# (e.g. ghcr.io/cogni-dao/cogni-template:litellm-b6e4e942cb23). Single source of
+# truth for both the CI build (build-and-push) and the deploy (deploy-infra).
+infra_image_tag() {
+  local target="$1"
+  printf '%s:%s-%s' "$IMAGE_NAME_APP" "$target" "$(infra_content_hash "$target")"
 }
 
 # Resolve the public host for a node, given a base DOMAIN. Catalog drives
