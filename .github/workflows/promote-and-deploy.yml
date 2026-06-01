@@ -367,7 +367,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: [decide, promote-k8s]
     environment: ${{ needs.decide.outputs.environment }}
-    timeout-minutes: 15
+    # 45m (was 15m, #785-era default): a cold-cache VM provisioning a NEW node
+    # pulls the sandbox + LiteLLM images (~13m) BEFORE db-provision runs, so 15m
+    # times out before `cogni_node_template` is created — node-template-preview
+    # 502'd indefinitely. candidate-flight-infra.yml has no cap (360m default),
+    # which is why candidate-a never hit this. Bounded bump, not unbounded.
+    timeout-minutes: 45
     concurrency:
       group: deploy-infra-${{ needs.decide.outputs.environment }}
       cancel-in-progress: false
