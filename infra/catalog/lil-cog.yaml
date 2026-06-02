@@ -1,0 +1,11 @@
+name: lil-cog
+type: node
+port: 3200
+node_port: 30500
+dockerfile: nodes/lil-cog/app/Dockerfile
+image_tag_suffix: "-lil-cog"
+migrator_tag_suffix: "-lil-cog-migrate"
+candidate_a_branch: deploy/candidate-a-lil-cog
+preview_branch: deploy/preview-lil-cog
+production_branch: deploy/production-lil-cog
+path_prefix: nodes/lil-cog/

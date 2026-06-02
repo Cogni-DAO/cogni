@@ -112,6 +112,8 @@ jobs:
             # >>> GENERATED scope-filters (scripts/ci/render-scope-filters.sh) — DO NOT EDIT BY HAND
             canary:
               - 'nodes/canary/**'
+            lil-cog:
+              - 'nodes/lil-cog/**'
             node-template:
               - 'nodes/node-template/**'
             resy:
@@ -119,6 +121,7 @@ jobs:
             operator:
               - '**'
               - '!nodes/canary/**'
+              - '!nodes/lil-cog/**'
               - '!nodes/node-template/**'
               - '!nodes/resy/**'
             # <<< GENERATED scope-filters
