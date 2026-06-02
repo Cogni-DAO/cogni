@@ -64,6 +64,11 @@ if [ -z "$NODE_ID" ]; then
   NODE_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
 fi
 
+# scope_id is REQUIRED: the app's container init gates the ledger on it and returns
+# /readyz 503 without it (docs/spec/identity-model.md V0 default). Deterministic:
+# uuidv5(node_id, 'default') — matches buildPendingActivationRepoSpecYaml.
+SCOPE_ID="$(python3 -c "import uuid; print(uuid.uuid5(uuid.UUID('${NODE_ID}'), 'default'))")"
+
 echo "[1/4] clone ${TEMPLATE_DIR} → nodes/${SLUG} (excl node_modules/dist/.next/build caches)"
 rsync -a \
   --exclude 'node_modules' --exclude 'dist' --exclude '.next' \
@@ -85,6 +90,7 @@ cat > "nodes/${SLUG}/.cogni/repo-spec.yaml" <<YAML
 schema_version: "0.1.4"
 
 node_id: "${NODE_ID}"
+scope_id: "${SCOPE_ID}"
 scope_key: "default"
 
 # cogni_dao is filled by node formation (operator wizard) before flight.
