@@ -118,11 +118,14 @@ jobs:
               - 'nodes/node-template/**'
             resy:
               - 'nodes/resy/**'
+            wisp:
+              - 'nodes/wisp/**'
             operator:
               - '**'
               - '!nodes/canary/**'
               - '!nodes/node-template/**'
               - '!nodes/resy/**'
+              - '!nodes/wisp/**'
             # <<< GENERATED scope-filters
 
       # Intentionally inline — single-workflow gate, no logic duplicated across

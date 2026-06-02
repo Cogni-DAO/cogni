@@ -1,0 +1,14 @@
+name: wisp
+type: node
+port: 3500
+# task.5078 — edge NodePort (see operator.yaml). Must match overlay nodePort.
+node_port: 30500
+dockerfile: nodes/wisp/app/Dockerfile
+# bug.0344 — see infra/catalog/operator.yaml for why these fields exist.
+image_tag_suffix: "-wisp"
+migrator_tag_suffix: "-wisp-migrate"
+# task.0320 — per-env deploy branches (see operator.yaml).
+candidate_a_branch: deploy/candidate-a-wisp
+preview_branch: deploy/preview-wisp
+production_branch: deploy/production-wisp
+path_prefix: nodes/wisp/
