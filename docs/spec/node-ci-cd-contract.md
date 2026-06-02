@@ -204,15 +204,15 @@ This standard does not split `.dependency-cruiser.cjs` per node. That's a separa
 
 ### Merge Gate (Required for PR Merge)
 
-| Check                                  | Local            | CI                    |
-| -------------------------------------- | ---------------- | --------------------- |
-| `pnpm typecheck`                       | yes              | static job            |
-| `pnpm lint`                            | yes              | static job            |
-| `pnpm format:check`                    | yes              | unit job              |
-| `pnpm test:ci` (unit/contract/meta)    | yes              | unit job              |
-| `pnpm arch:check`                      | yes              | unit job              |
-| `pnpm test:component`                  | yes              | component job         |
-| **SINGLE_DOMAIN_HARD_FAIL** (PR scope) | no               | single-node-scope job |
+| Check                                  | Local | CI                    |
+| -------------------------------------- | ----- | --------------------- |
+| `pnpm typecheck`                       | yes   | static job            |
+| `pnpm lint`                            | yes   | static job            |
+| `pnpm format:check`                    | yes   | unit job              |
+| `pnpm test:ci` (unit/contract/meta)    | yes   | unit job              |
+| `pnpm arch:check`                      | yes   | unit job              |
+| `pnpm test:component`                  | yes   | component job         |
+| **SINGLE_DOMAIN_HARD_FAIL** (PR scope) | no    | single-node-scope job |
 
 **Optional** (not blocking): coverage upload, SonarCloud scan.
 
