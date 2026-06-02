@@ -16,7 +16,7 @@ image_tag_suffix: ""
 # bug.0344 — migrator tag suffix for the node's per-node migrator image
 # (see task.0324 / NODE_TARGETS in scripts/ci/lib/image-tags.sh).
 # Empty means "this catalog entry has no migrator" — the migrator alias
-# in preview-applicationset.yaml will still be emitted but its
+# in preview-operator-applicationset.yaml will still be emitted but its
 # allow-tags regex won't match anything, so argocd-image-updater
 # silently skips.
 migrator_tag_suffix: "-operator-migrate"

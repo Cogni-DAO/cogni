@@ -594,10 +594,9 @@ infra/k8s/
 │   ├── kustomization.yaml
 │   ├── ksops-cmp.yaml
 │   ├── repo-server-patch.yaml
-│   ├── candidate-a-applicationset.yaml
-│   ├── candidate-b-applicationset.yaml
-│   ├── preview-applicationset.yaml
-│   └── production-applicationset.yaml
+│   ├── <env>-<node>-applicationset.yaml  # one AppSet per (env,node), rendered by
+│   │                                     # scripts/ci/render-node-appset.sh (LANE_ISOLATION)
+│   └── candidate-b-applicationset.yaml   # candidate-b provisioned separately
 ├── base/
 │   ├── node-app/
 │   │   ├── deployment.yaml

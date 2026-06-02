@@ -431,7 +431,7 @@ Argo CD ApplicationSets are catalog-driven (task.0247). The catalog is the singl
   - `deployment.yaml`, `service.yaml`, `kustomization.yaml`
   - Reference `services/scheduler-worker` for a worker-style service
   - Apply the security context from Step 7
-- [ ] **Verify the AppSet picks it up** — the per-env ApplicationSet (`infra/k8s/argocd/candidate-a-applicationset.yaml`, `preview-applicationset.yaml`, `production-applicationset.yaml`) generates one Application per catalog entry at runtime. No per-service Application file should be added by hand; if the AppSet template needs to branch on your service, extend the template, not the generated output.
+- [ ] **Regenerate the per-node AppSets** — run `pnpm gen:node-appset` so your service gets its `infra/k8s/argocd/<env>-<service>-applicationset.yaml` (one AppSet object per `(env, node)`; `cogni-<env>-<service>`). The drift gate in CI fails if you skip this. No per-service Application file is hand-written; if the template needs to branch on your service, edit `scripts/ci/render-node-appset.sh`, not the generated output.
 - [ ] **Add to `scripts/ci/wait-for-argocd.sh`** `APPS=(...)` list so flights wait for your service to reach Healthy before declaring success.
 
 #### 9b-infra. Infra images (`type: infra`) — built in CI, deployed via Compose

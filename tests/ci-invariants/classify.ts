@@ -71,10 +71,9 @@ function isRideAlong(path: string): boolean {
  * its catalog/overlays/AppSet. Bounded to the node's OWN slug — a node PR
  * still cannot touch another node's catalog/overlay.
  *
- * RESIDUAL: the AppSet files are shared (one per env, not slug-pathed), so a
- * node-wiring PR could in principle also alter another node's generator block
- * in them. Tighten later via a content check or a glob-based AppSet (the per-
- * node `revision:` blocks are why they aren't a glob today). Reviewed at PR time.
+ * The AppSet files are now per-node (`<env>-<node>-applicationset.yaml`, one
+ * object per (env, node) for LANE_ISOLATION), so a node-wiring PR can only touch
+ * its OWN lane's AppSet — the prior shared-file residual is closed structurally.
  */
 function isNodeWiring(path: string, node: string): boolean {
   if (node === "") return false;
@@ -89,8 +88,8 @@ function isNodeWiring(path: string, node: string): boolean {
     const file = path.slice(argocdPrefix.length);
     return (
       !file.includes("/") &&
-      file.includes("applicationset") &&
-      (file.endsWith(".yaml") || file.endsWith(".yml"))
+      (file.endsWith(`-${node}-applicationset.yaml`) ||
+        file.endsWith(`-${node}-applicationset.yml`))
     );
   }
   // scheduler-worker configmap + edge Caddyfile.tmpl are both catalog-derived

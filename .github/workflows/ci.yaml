@@ -287,6 +287,13 @@ jobs:
       - name: single-node-scope filter drift (CATALOG_IS_SSOT)
         run: bash scripts/ci/render-scope-filters.sh --check
 
+      # Per-node ApplicationSet drift (CATALOG_IS_SSOT + LANE_ISOLATION, axiom
+      # 18). One AppSet object per (env, node) is derived from the catalog rows
+      # that declare a candidate_a_branch. Fails if a node was added/removed or
+      # an AppSet/kustomization was hand-edited without `pnpm gen:node-appset`.
+      - name: per-node ApplicationSet drift (CATALOG_IS_SSOT)
+        run: bash scripts/ci/render-node-appset.sh --check
+
       - name: scheduler runtime routing tests
         run: bash scripts/ci/tests/scheduler-runtime-routing.test.sh
 

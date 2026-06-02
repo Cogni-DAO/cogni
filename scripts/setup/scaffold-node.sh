@@ -5,7 +5,7 @@
 # scaffold-node.sh — clone node-template into a new monorepo node, wired for the
 # full deploy matrix (candidate-a/preview/production). Reproducible precursor to
 # the wizard-invoked TS generator (task.5092). One node = catalog entry +
-# overlays x3 + AppSet x3 + app tree, ALL_THREE_ENVS_OR_NONE by construction.
+# overlays x3 + per-node AppSet x3 + app tree, ALL_THREE_ENVS_OR_NONE by construction.
 #
 # Usage: scaffold-node.sh <slug> <port> <nodeport> [node_id]
 #   slug      lowercase node name, e.g. canary
@@ -89,15 +89,11 @@ for env in "${ENVS[@]}"; do
   perl -pi -e "s/\\b30200\\b/$NODEPORT/g; s/\\b3200\\b/$PORT/g" "$f"
 done
 
-echo "==> 6. AppSet x3 — insert git generator block before template:"
-for env in "${ENVS[@]}"; do
-  appset="infra/k8s/argocd/$env-applicationset.yaml"
-  grep -q "infra/catalog/$SLUG.yaml" "$appset" && { echo "  $env already has $SLUG"; continue; }
-  SLUG="$SLUG" ENV="$env" perl -0pi -e '
-    my $b = "    - git:\n        repoURL: https://github.com/cogni-dao/cogni.git\n        revision: deploy/$ENV{ENV}-$ENV{SLUG}\n        files:\n          - path: \"infra/catalog/$ENV{SLUG}.yaml\"\n";
-    s/^  template:/$b  template:/m;
-  ' "$appset"
-done
+echo "==> 6. per-node AppSets + bootstrap kustomization (catalog-derived, LANE_ISOLATION)"
+# The shared `<env>-applicationset.yaml` files were retired for one AppSet object
+# per (env, node). The new catalog entry above makes the new node a deployable
+# target, so a full re-render emits its 3 AppSet files + kustomization entries.
+bash "$ROOT/scripts/ci/render-node-appset.sh" --write
 
 echo "==> 7. ci.yaml single-node-scope filters (enforced by single-node-scope-meta.spec)"
 SLUG="$SLUG" perl -0pi -e '

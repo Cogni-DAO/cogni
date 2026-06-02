@@ -47,8 +47,8 @@ k8s/
 │   ├── kustomization.yaml   # Non-HA Argo CD v2.13.4 install
 │   ├── ksops-cmp.yaml       # SOPS CMP plugin for secret decryption
 │   ├── repo-server-patch.yaml # ksops sidecar
-│   ├── staging-applicationset.yaml     # Git file generator → cogni-staging
-│   └── production-applicationset.yaml  # Git file generator → cogni-production
+│   └── <env>-<node>-applicationset.yaml # one AppSet per (env,node) → cogni-<env>-<node>
+│                              # rendered by scripts/ci/render-node-appset.sh (LANE_ISOLATION)
 ├── base/                    # Kustomize bases
 │   ├── node-app/            # Shared base for operator, poly, resy
 │   ├── scheduler-worker/    # Temporal worker service

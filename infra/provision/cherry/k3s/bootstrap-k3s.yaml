@@ -125,13 +125,17 @@ write_files:
       git clone --depth=1 --branch "${git_branch:-canary}" \
         "https://github.com/cogni-dao/cogni.git" "$REPO_DIR"
 
-      echo "Applying ApplicationSets..."
-      for appset in canary-applicationset.yaml preview-applicationset.yaml production-applicationset.yaml; do
-        if [[ -f "$REPO_DIR/infra/k8s/argocd/$appset" ]]; then
-          kubectl apply -f "$REPO_DIR/infra/k8s/argocd/$appset" -n argocd
-          echo "  Applied $appset"
-        fi
+      # Per-node AppSets: one `<env>-<node>-applicationset.yaml` object per node
+      # (LANE_ISOLATION, axiom 18). Apply every per-node file for the envs this
+      # VM hosts (preview + production); candidate slots live on separate VMs.
+      echo "Applying per-node ApplicationSets..."
+      shopt -s nullglob
+      for appset in "$REPO_DIR"/infra/k8s/argocd/preview-*-applicationset.yaml \
+                    "$REPO_DIR"/infra/k8s/argocd/production-*-applicationset.yaml; do
+        kubectl apply -f "$appset" -n argocd
+        echo "  Applied $(basename "$appset")"
       done
+      shopt -u nullglob
       rm -rf "$REPO_DIR"
 
       # Create app namespaces (Argo CreateNamespace=true handles this too, belt+suspenders)

@@ -181,18 +181,23 @@ jobs:
   reconcile-appset:
     needs: decide
     if: needs.decide.outputs.has_flight_targets == 'true'
-    # Single shared write to the candidate-a VM (kubectl apply on the AppSet).
-    # Without this guard, two concurrent flights from different PRs race the
-    # apply. See work/items/bug.0378.reconcile-appset-shared-write-race.md.
+    # Per-node lane (axiom 18, LANE_ISOLATION). A flight applies ONLY its own
+    # node's ApplicationSet object — never a shared file carrying other lanes'
+    # generators — so a concurrent flight of a different node cannot prune this
+    # node's Application. This is the structural fix for the shared-appset
+    # clobber: see work/items/bug.0378.reconcile-appset-shared-write-race.md.
+    # Matrix tracks the FLIGHT targets (the nodes actually deploying), in lockstep
+    # with the flight job below.
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJson(needs.decide.outputs.flight_targets_json) }}
     concurrency:
-      group: reconcile-appset-candidate-a
+      group: reconcile-appset-candidate-a-${{ matrix.node }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: candidate-a
     steps:
-      - name: Checkout workflow source (for AppSet YAML)
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
-
       - name: Checkout app source (for AppSet YAML)
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
@@ -216,18 +221,26 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Apply candidate-a-applicationset.yaml
+      - name: Apply candidate-a-${{ matrix.node }}-applicationset.yaml
         if: steps.ssh-setup.outputs.has_vm == 'true'
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           SSH_OPTS: "-i /home/runner/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
+          NODE: ${{ matrix.node }}
         run: |
           set -euo pipefail
-          APPSET_FILE="app-src/infra/k8s/argocd/candidate-a-applicationset.yaml"
+          APPSET_FILE="app-src/infra/k8s/argocd/candidate-a-${NODE}-applicationset.yaml"
+          if [ ! -f "$APPSET_FILE" ]; then
+            echo "::error::$APPSET_FILE missing at head_sha — run 'pnpm gen:node-appset' (CATALOG_IS_SSOT)"
+            exit 1
+          fi
           # shellcheck disable=SC2086
-          scp $SSH_OPTS "$APPSET_FILE" root@"$VM_HOST":/tmp/appset.yaml
+          scp $SSH_OPTS "$APPSET_FILE" root@"$VM_HOST":/tmp/appset-${NODE}.yaml
+          # Anti-resurrection: the legacy shared `cogni-candidate-a` AppSet is
+          # retired. Orphan-delete (never prune its live Applications) so it can
+          # never reappear to re-clobber this lane, then apply the per-node object.
           # shellcheck disable=SC2086
-          ssh $SSH_OPTS root@"$VM_HOST" "kubectl apply -f /tmp/appset.yaml -n argocd && rm -f /tmp/appset.yaml"
+          ssh $SSH_OPTS root@"$VM_HOST" "kubectl delete applicationset cogni-candidate-a -n argocd --cascade=orphan --ignore-not-found && kubectl apply -f /tmp/appset-${NODE}.yaml -n argocd && rm -f /tmp/appset-${NODE}.yaml"
 
   flight:
     needs: [decide, reconcile-appset]
@@ -428,6 +441,12 @@ jobs:
           DOMAIN: ${{ vars.DOMAIN }}
         run: |
           set -euo pipefail
+          # Flights run on a main-merge ref; a pre-#1445 head lacks this script.
+          # Skip rather than 127 so older PRs still flight (their nodes already resolve).
+          if [ ! -f scripts/ci/reconcile-node-dns.sh ]; then
+            echo "::warning::scripts/ci/reconcile-node-dns.sh absent at this ref — skipping node DNS reconcile"
+            exit 0
+          fi
           if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ZONE_ID:-}" ]; then
             echo "::warning::Cloudflare secrets unset on candidate-a — skipping node DNS reconcile (newly-created nodes won't resolve)"
             exit 0

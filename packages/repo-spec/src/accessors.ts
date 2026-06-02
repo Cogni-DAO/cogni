@@ -428,10 +428,13 @@ function isNodeWiring(path: string, node: string): boolean {
   }
   if (path.startsWith(argocdPrefix)) {
     const file = path.slice(argocdPrefix.length);
+    // Per-node AppSet `<env>-<node>-applicationset.yaml` belongs to THIS node
+    // only (LANE_ISOLATION). Node-scoped, so a node PR cannot ride another
+    // lane's AppSet — closes the shared-appset residual flagged in classify.ts.
     return (
       !file.includes("/") &&
-      file.includes("applicationset") &&
-      (file.endsWith(".yaml") || file.endsWith(".yml"))
+      (file.endsWith(`-${node}-applicationset.yaml`) ||
+        file.endsWith(`-${node}-applicationset.yml`))
     );
   }
   return (

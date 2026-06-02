@@ -129,16 +129,25 @@ jobs:
   reconcile-appset:
     needs: decide
     if: needs.decide.outputs.has_targets == 'true'
+    # Per-node lane (axiom 18). Apply ONLY the promoted node's ApplicationSet
+    # object so a concurrent promotion of a different node cannot prune this lane.
+    # Structural fix for the shared-appset clobber — mirrors candidate-flight.yml.
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJson(needs.decide.outputs.targets_json) }}
     concurrency:
-      group: reconcile-appset-${{ needs.decide.outputs.environment }}
+      group: reconcile-appset-${{ needs.decide.outputs.environment }}-${{ matrix.node }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: ${{ needs.decide.outputs.environment }}
     steps:
-      # Checkout the workflow dispatch ref (not source_sha) — the AppSet
-      # YAML is part of the CI control plane, not the artifact under
-      # promotion. Mirrors candidate-flight.yml's reconcile-appset.
+      # Checkout the head ref — the per-node AppSet YAML is catalog-derived CI
+      # control plane (CATALOG_IS_SSOT), and a node ADDED in this promote carries
+      # its own AppSet file at head.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.decide.outputs.head_sha }}
 
       - name: Setup SSH
         id: ssh-setup
@@ -157,19 +166,26 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Apply ApplicationSet
+      - name: Apply ${{ needs.decide.outputs.environment }}-${{ matrix.node }}-applicationset.yaml
         if: steps.ssh-setup.outputs.has_vm == 'true'
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           SSH_OPTS: "-i /home/runner/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
           DEPLOY_ENVIRONMENT: ${{ needs.decide.outputs.environment }}
+          NODE: ${{ matrix.node }}
         run: |
           set -euo pipefail
-          APPSET_FILE="infra/k8s/argocd/${DEPLOY_ENVIRONMENT}-applicationset.yaml"
+          APPSET_FILE="infra/k8s/argocd/${DEPLOY_ENVIRONMENT}-${NODE}-applicationset.yaml"
+          if [ ! -f "$APPSET_FILE" ]; then
+            echo "::error::$APPSET_FILE missing at head — run 'pnpm gen:node-appset' (CATALOG_IS_SSOT)"
+            exit 1
+          fi
           # shellcheck disable=SC2086
-          scp $SSH_OPTS "$APPSET_FILE" root@"$VM_HOST":/tmp/appset.yaml
+          scp $SSH_OPTS "$APPSET_FILE" root@"$VM_HOST":/tmp/appset-${DEPLOY_ENVIRONMENT}-${NODE}.yaml
+          # Anti-resurrection: orphan-delete the retired shared `cogni-<env>` AppSet
+          # (keeps its live Applications), then apply the per-node object.
           # shellcheck disable=SC2086
-          ssh $SSH_OPTS root@"$VM_HOST" "kubectl apply -f /tmp/appset.yaml -n argocd && rm -f /tmp/appset.yaml"
+          ssh $SSH_OPTS root@"$VM_HOST" "kubectl delete applicationset cogni-${DEPLOY_ENVIRONMENT} -n argocd --cascade=orphan --ignore-not-found && kubectl apply -f /tmp/appset-${DEPLOY_ENVIRONMENT}-${NODE}.yaml -n argocd && rm -f /tmp/appset-${DEPLOY_ENVIRONMENT}-${NODE}.yaml"
 
   # Per-node public DNS for preview + production — mirrors candidate-flight.yml's
   # reconcile-dns. DNS is env-level + idempotent (no-op for existing nodes); a node
@@ -203,6 +219,11 @@ jobs:
           DEPLOY_ENVIRONMENT: ${{ needs.decide.outputs.environment }}
         run: |
           set -euo pipefail
+          # A pre-#1445 promote head lacks this script; skip rather than 127.
+          if [ ! -f scripts/ci/reconcile-node-dns.sh ]; then
+            echo "::warning::scripts/ci/reconcile-node-dns.sh absent at this ref — skipping node DNS reconcile"
+            exit 0
+          fi
           if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ZONE_ID:-}" ]; then
             echo "::warning::Cloudflare secrets unset on ${DEPLOY_ENVIRONMENT} — skipping node DNS reconcile (newly-created nodes won't resolve)"
             exit 0

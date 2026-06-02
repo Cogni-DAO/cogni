@@ -2,7 +2,7 @@
 
 > Installed by bug.0344 to retire hand-curated overlay-digest maintenance on `main`.
 > Manifests: `infra/k8s/argocd/image-updater/`
-> Watches: **preview** ApplicationSet's Applications → writes to `main`'s `infra/k8s/overlays/preview/<app>/kustomization.yaml` (MVP scope). Candidate-a was descoped post-#974 merge (write rate vs. seed-value trade-off — see `candidate-a-applicationset.yaml` docstring). Production is human-gated via direct `promote-and-deploy.yml` dispatch (env=production; bug.0361 deleted the PR-dance workflows). Scope is enforced by an allowlist in `scripts/ci/check-image-updater-scope.sh`.
+> Watches: **preview** ApplicationSet's Applications → writes to `main`'s `infra/k8s/overlays/preview/<app>/kustomization.yaml` (MVP scope). Candidate-a was descoped post-#974 merge (write rate vs. seed-value trade-off). Production is human-gated via direct `promote-and-deploy.yml` dispatch (env=production; bug.0361 deleted the PR-dance workflows). Scope is enforced by an allowlist in `scripts/ci/check-image-updater-scope.sh`.
 
 ## What it does
 
@@ -124,7 +124,7 @@ Per-node migrator digests (`-operator-migrate`, `-poly-migrate`, `-resy-migrate`
 
 ### Scope-guard invariant (enforced)
 
-`scripts/ci/check-image-updater-scope.sh` enforces a positive allowlist of AppSets permitted to carry `argocd-image-updater.argoproj.io/*` annotations. Current allowlist: `preview-applicationset.yaml` only. Every other `*-applicationset.yaml` under `infra/k8s/argocd/` (currently candidate-a + production) must be annotation-free and fails the CI `unit` job if it isn't. Adding a new AppSet to the allowlist is a design decision — edit the `ALLOWLIST` array in the script with an accompanying rationale; don't silently annotate. See `candidate-a-applicationset.yaml` docstring for why candidate-a was descoped post-#974.
+`scripts/ci/check-image-updater-scope.sh` enforces a positive allowlist of AppSets permitted to carry `argocd-image-updater.argoproj.io/*` annotations. The allowlist is currently **empty** (task.0349) — every per-node `*-applicationset.yaml` under `infra/k8s/argocd/` must be annotation-free and fails the CI `unit` job if it isn't. Adding an AppSet to the allowlist is a design decision — edit the `ALLOWLIST` array in the script with an accompanying rationale; don't silently annotate.
 
 ## Rollback
 
@@ -141,7 +141,7 @@ git revert <bad-sha> && git push origin main
 To disable permanently:
 
 - Remove `image-updater` from `infra/k8s/argocd/kustomization.yaml` resources.
-- Remove the `argocd-image-updater.argoproj.io/*` annotations from `infra/k8s/argocd/preview-applicationset.yaml` (candidate-a + production are already annotation-free and enforced by the guardrail).
+- Remove the `argocd-image-updater.argoproj.io/*` annotations from the preview per-node AppSets (`infra/k8s/argocd/preview-<node>-applicationset.yaml`); candidate-a + production are already annotation-free and enforced by the guardrail.
 - Delete the controller: `kubectl delete deployment argocd-image-updater -n argocd`.
 
 The bespoke anti-pattern `promote-k8s-image.sh` still works for every environment, so rolling back does not break flights — it just means you're back to hand-maintained `main` seeds (bug.0344 is reopened).
