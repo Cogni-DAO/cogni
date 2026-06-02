@@ -190,11 +190,12 @@ export const serverSchema = z.object({
   LANGFUSE_SECRET_KEY: optionalString,
   LANGFUSE_BASE_URL: optionalUrl,
 
-  // Export AI-developer transcripts to Langfuse as a navigable session VIEW.
-  // OFF by default: enabling it egresses (scrubbed, capped) dev-session content
-  // to the configured Langfuse instance (Cloud) — flipping this true is the
-  // explicit operator-level consent decision (see agent-transcript-telemetry.md).
-  // The raw transcript corpus (Postgres) is unaffected either way.
+  // Force-enable the Langfuse session VIEW export of AI-developer transcripts in
+  // PRODUCTION. Non-production (candidate-a/preview) exports by default — it's the
+  // operator's own dogfood, same Langfuse instance already receiving graph traces.
+  // Production stays consent-gated (external dev sessions → third-party Cloud) and
+  // only exports when this is true. Content is scrubbed + capped either way; the
+  // raw corpus (Postgres) is unaffected. See agent-transcript-telemetry.md.
   TRANSCRIPT_LANGFUSE_EXPORT_ENABLED: z
     .enum(["true", "false"])
     .default("false")

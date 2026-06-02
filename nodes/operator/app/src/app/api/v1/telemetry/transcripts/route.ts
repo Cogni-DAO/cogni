@@ -120,15 +120,18 @@ export const POST = wrapRouteHandlerWithLogging(
         "telemetry.transcripts.append"
       );
 
-      // Additive analytical view: when explicitly enabled (consent-gated, OFF by
-      // default), derive a scrubbed/capped Langfuse session from the same body.
-      // The corpus row above is the source of truth; this never blocks the ack.
-      if (
-        !result.deduped &&
-        serverEnv().TRANSCRIPT_LANGFUSE_EXPORT_ENABLED &&
-        c.langfuse
-      ) {
-        const langfuse = c.langfuse;
+      // Additive analytical view: derive a scrubbed/capped Langfuse session from
+      // the same body. Default-ON in non-production (operator's own dogfood —
+      // same Langfuse instance already receiving graph traces); in production it
+      // stays consent-gated behind TRANSCRIPT_LANGFUSE_EXPORT_ENABLED (external
+      // dev sessions → third-party Cloud). The corpus row above is the source of
+      // truth; this never blocks the ack.
+      const env = serverEnv();
+      const langfuse = c.langfuse;
+      const exportEnabled =
+        env.TRANSCRIPT_LANGFUSE_EXPORT_ENABLED ||
+        env.DEPLOY_ENVIRONMENT !== "production";
+      if (!result.deduped && langfuse && exportEnabled) {
         try {
           const draft = mapTranscriptToDevSession(body, {
             sessionId: parsed.data.sessionId,
@@ -144,6 +147,18 @@ export const POST = wrapRouteHandlerWithLogging(
           // response). Fire-and-forget; the adapter's flush is internally graceful.
           langfuse.recordDevSession(draft);
           void langfuse.flush().catch(() => {});
+          // Observable marker so the emit is provable in Loki without the
+          // destination project's read keys.
+          c.log.info(
+            {
+              route: "telemetry.transcripts.append",
+              sessionId: parsed.data.sessionId,
+              turnCount: draft.turns.length,
+              truncated: draft.truncatedTurns,
+              deployEnv: env.DEPLOY_ENVIRONMENT ?? null,
+            },
+            "telemetry.transcripts.langfuse_export"
+          );
         } catch (e) {
           c.log.warn(
             { route: "telemetry.transcripts.append", err: String(e) },

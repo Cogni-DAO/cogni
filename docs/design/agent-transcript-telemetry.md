@@ -92,12 +92,16 @@ fire-and-forget — never blocking the ingest ack, never touching the corpus row
   `sessionId`, a generation per assistant turn, a span per tool, all tagged
   `source=claude-code-dev-session` so dev sessions never pollute operator-graph
   traces. Reuses the shared Langfuse keys held operator-side; devs never see them.
-- **`TRANSCRIPT_LANGFUSE_EXPORT_ENABLED` — OFF by default.** Langfuse is **Cloud**
-  (`us.cloud.langfuse.com`). Flipping this flag true is the explicit operator-level
-  **consent decision** to egress (scrubbed, capped) dev-session content to a
-  third-party SaaS. Until then nothing leaves; the corpus pipeline runs unchanged.
-  Per-dev opt-in and a separate Langfuse project (to isolate quota) are the next
-  refinements once the flag is exercised.
+- **Env-aware enablement.** Langfuse is **Cloud** (`us.cloud.langfuse.com`).
+  Non-production (candidate-a/preview) **exports by default** — operator dogfood,
+  the same Langfuse instance already receiving graph traces, so the view is
+  exercisable + `deploy_verified`-able. **Production** stays **consent-gated**:
+  exports only when `TRANSCRIPT_LANGFUSE_EXPORT_ENABLED=true` (external dev sessions
+  → third-party SaaS is an explicit operator decision). Content is scrubbed + capped
+  either way; the corpus pipeline runs unchanged. The route emits a
+  `telemetry.transcripts.langfuse_export` log marker so the emit is Loki-provable
+  without the destination project's read keys. Per-dev opt-in and a separate
+  Langfuse project (quota isolation) are the next refinements.
 
 ## Invariants
 
@@ -107,6 +111,6 @@ fire-and-forget — never blocking the ingest ack, never touching the corpus row
 - [ ] ATTRIBUTION_TRACEABLE — every chunk + derived atom traces to its contributor.
 - [ ] CORPUS_IS_SOURCE_OF_TRUTH — Langfuse is a derived, lossy view; the verbatim
       corpus (Postgres) is canonical and is never replaced by the analytics backend.
-- [ ] VIEW_EGRESS_IS_CONSENT_GATED — third-party (Langfuse Cloud) egress is OFF by
-      default; enabling it is an explicit operator decision, content scrubbed + capped.
+- [ ] VIEW_EGRESS_IS_CONSENT_GATED — in **production**, third-party (Langfuse Cloud)
+      egress requires explicit opt-in; non-prod dogfoods by default. Always scrubbed + capped.
 - [ ] SOURCE_TAGGED — dev sessions tagged `source=claude-code-dev-session`.
