@@ -710,7 +710,12 @@ if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] && [[ -n "${CLOUDFLARE_ZONE_ID:-}" ]]; t
     else
       proxied="true"
     fi
-    state=$(cf_upsert_a_record "$CLOUDFLARE_API_TOKEN" "$CLOUDFLARE_ZONE_ID" "$fqdn" "$VM_IP" "$proxied") \
+    # The env's primary host ($DOMAIN) IS the zone apex for production
+    # (domain_for_env production → bare root). Deliberately opt that one record
+    # past the apex guard; every other host (VM alias, per-node) stays guarded.
+    allow_protected=0
+    [[ "$fqdn" == "$DOMAIN" ]] && allow_protected=1
+    state=$(CF_ALLOW_PROTECTED="$allow_protected" cf_upsert_a_record "$CLOUDFLARE_API_TOKEN" "$CLOUDFLARE_ZONE_ID" "$fqdn" "$VM_IP" "$proxied") \
       && log_info "  ${fqdn} → ${VM_IP} (proxied=${proxied}): ${state}" \
       || log_error "  ${fqdn} → ${VM_IP} (proxied=${proxied}): upsert FAILED"
   done

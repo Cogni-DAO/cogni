@@ -69,6 +69,16 @@ if method == "DELETE" and m:
     save(s)
     print(json.dumps({"success": True, "result": {"id": rid}})); sys.exit(0)
 
+if method == "PUT" and m:
+    rid = m.group(1)
+    b = json.loads(data)
+    for r in s["records"]:
+        if r["id"] == rid:
+            r["name"] = b["name"]; r["content"] = b["content"]
+            r["proxied"] = bool(b["proxied"]); r["type"] = b.get("type", "A")
+    save(s)
+    print(json.dumps({"success": True, "result": {"id": rid}})); sys.exit(0)
+
 if method == "POST" and url and url.endswith("/dns_records"):
     b = json.loads(data)
     rid = "rec%d" % s["next_id"]; s["next_id"] += 1
@@ -110,6 +120,13 @@ s=json.load(open(os.environ["CF_STORE"]))
 m=[r for r in s["records"] if r["name"]==os.environ["CF_N"]]
 print(("true" if m[0]["proxied"] else "false") if m else "")'; }
 
+# Echo the id of the first record named $1 (proves in-place update keeps it).
+id_of() { CF_STORE="$CF_STORE" CF_N="$1" python3 -c '
+import json,os
+s=json.load(open(os.environ["CF_STORE"]))
+m=[r for r in s["records"] if r["name"]==os.environ["CF_N"]]
+print(m[0]["id"] if m else "")'; }
+
 pass=0; fail=0
 assert_eq() { # <got> <want> <desc>
   if [ "$1" = "$2" ]; then printf 'OK   %s\n' "$3"; pass=$((pass + 1));
@@ -130,11 +147,31 @@ assert_eq "$(cf_upsert_a_record test-token zone123 resy-test.cognidao.org "$VM_I
   "unchanged" "upsert is a no-op when content+proxied match"
 assert_eq "$(cf_a_record_content test-token zone123 resy-test.cognidao.org)" \
   "$VM_IP_FIXTURE" "content read returns the record IP"
+id_before="$(id_of resy-test.cognidao.org)"
 assert_eq "$(cf_upsert_a_record test-token zone123 resy-test.cognidao.org 10.0.0.9 true)" \
-  "created" "upsert replaces when content drifts"
+  "updated" "upsert UPDATES IN PLACE when content drifts (no delete-then-create)"
 assert_eq "$(cf_a_record_content test-token zone123 resy-test.cognidao.org)" \
   "10.0.0.9" "drifted record now resolves to the new IP"
-assert_eq "$(count_name resy-test.cognidao.org)" "1" "replace leaves exactly one record (delete worked)"
+assert_eq "$(id_of resy-test.cognidao.org)" "$id_before" \
+  "in-place update preserves the record id (never deletes the healthy record)"
+assert_eq "$(count_name resy-test.cognidao.org)" "1" "update leaves exactly one record"
+
+# ── Lib: PROTECTED guard — never clobber the zone apex / www ──────────────────
+# FORK_DOMAIN_ROOT=cognidao.org → apex + www are refused by default.
+if cf_upsert_a_record test-token zone123 cognidao.org "$VM_IP_FIXTURE" false >/dev/null 2>&1; then
+  printf 'FAIL upsert must REFUSE the zone apex (cognidao.org)\n'; fail=$((fail + 1))
+else
+  printf 'OK   upsert refuses the zone apex (cognidao.org)\n'; pass=$((pass + 1))
+fi
+assert_eq "$(count_name cognidao.org)" "0" "apex was never written"
+if cf_upsert_a_record test-token zone123 www.cognidao.org "$VM_IP_FIXTURE" false >/dev/null 2>&1; then
+  printf 'FAIL upsert must REFUSE www.<root>\n'; fail=$((fail + 1))
+else
+  printf 'OK   upsert refuses www.<root>\n'; pass=$((pass + 1))
+fi
+# Deliberate apex provisioning opts in explicitly (provision Phase 4b only).
+assert_eq "$(CF_ALLOW_PROTECTED=1 cf_upsert_a_record test-token zone123 cognidao.org "$VM_IP_FIXTURE" false)" \
+  "created" "CF_ALLOW_PROTECTED=1 permits deliberate apex provisioning"
 
 # ── Script: reconcile fans one record per non-primary node ────────────────────
 printf '{"records":[],"next_id":1}' >"$CF_STORE"

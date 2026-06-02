@@ -9,10 +9,19 @@
 # per-flight DNS did not exist at all. Factor the upsert here so "what a record
 # looks like" is declared once (DNS_IS_RECONCILED_NOT_HANDCRAFTED).
 #
-# Idempotent by contract: an upsert is a no-op when exactly one A record already
-# matches (content + proxied); otherwise it deletes every stale A record of that
-# name and creates the canonical one. Cloudflare returns the origin content for
-# proxied records, so a proxied apex still yields its VM IP on read.
+# Idempotent by contract: a no-op when exactly one A record already matches
+# (content + proxied). On drift the canonical record is UPDATED IN PLACE (PUT) —
+# never deleted-then-recreated — so a failed write can never leave a healthy host
+# with no A record. Only true duplicates (>1 record of the same name) are pruned.
+# Cloudflare returns the origin content for proxied records, so a proxied apex
+# still yields its VM IP on read.
+#
+# DNS_NEVER_TOUCHES_APEX: the zone apex (@) and `www` are never node hosts;
+# mutating them programmatically is the one mistake that takes down the whole
+# domain. cf_upsert_a_record REFUSES them (mirrors the PROTECTED guard in
+# @cogni/dns-ops) unless the caller sets CF_ALLOW_PROTECTED=1 — used solely by
+# env provisioning, which deliberately manages the apex/operator host. Every
+# other caller (reconcile, future) is fail-safe by default.
 #
 # Sourced — caller owns `set -euo pipefail`. Curl is injectable via $CF_CURL
 # (test shim) mirroring verify-buildsha.sh's $CURL_CMD and set-secret's bao shim.
@@ -21,6 +30,23 @@
 _cf_api="https://api.cloudflare.com/client/v4"
 # shellcheck disable=SC2086  # CF_CURL is an intentional word-split command string
 CF_CURL="${CF_CURL:-curl -s}"
+
+# True when $fqdn is the zone apex or its `www` — the records that must never be
+# touched programmatically. The zone root is FORK_DOMAIN_ROOT (the Cloudflare
+# zone name, set by both call sites); CF_PROTECTED_ROOT overrides it, and as a
+# last resort the registrable domain (last two labels) is derived from the fqdn
+# so the guard still bites when neither is set.
+#   _cf_is_protected FQDN
+_cf_is_protected() {
+  local fqdn root
+  fqdn="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  root="${CF_PROTECTED_ROOT:-${FORK_DOMAIN_ROOT:-}}"
+  if [ -z "$root" ]; then
+    root="$(printf '%s' "$fqdn" | awk -F. '{ if (NF>=2) print $(NF-1)"."$NF; else print $0 }')"
+  fi
+  root="$(printf '%s' "$root" | tr '[:upper:]' '[:lower:]')"
+  [ "$fqdn" = "$root" ] || [ "$fqdn" = "www.${root}" ]
+}
 
 # Echo the content (IP) of the first A record named $fqdn, or empty string.
 #   cf_a_record_content TOKEN ZONE_ID FQDN
@@ -44,39 +70,68 @@ cf_a_record_proxied() {
     | python3 -c 'import json,sys; r=json.load(sys.stdin).get("result",[]); print(("true" if r[0]["proxied"] else "false") if r else "")' 2>/dev/null
 }
 
-# Idempotent upsert of a single A record. Echoes "unchanged" or "created".
-# Returns non-zero on a Cloudflare API failure.
+# Idempotent upsert of a single A record. Echoes "unchanged", "created", or
+# "updated". Returns 2 on a refused PROTECTED record, non-zero on API failure.
 #   cf_upsert_a_record TOKEN ZONE_ID FQDN IP PROXIED(true|false)
 cf_upsert_a_record() {
-  local token="$1" zone="$2" fqdn="$3" ip="$4" proxied="$5" existing decision id
+  local token="$1" zone="$2" fqdn="$3" ip="$4" proxied="$5" existing decision keep_id id
+  if [ "${CF_ALLOW_PROTECTED:-0}" != "1" ] && _cf_is_protected "$fqdn"; then
+    echo "[ERROR] cloudflare-dns: refusing to modify PROTECTED record '${fqdn}' (zone apex/www)." >&2
+    echo "[ERROR] Node hosts only. Set CF_ALLOW_PROTECTED=1 only to deliberately provision the apex." >&2
+    return 2
+  fi
   # shellcheck disable=SC2086
   existing=$($CF_CURL -H "Authorization: Bearer ${token}" \
     "${_cf_api}/zones/${zone}/dns_records?name=${fqdn}&type=A")
-  # "noop" when exactly one record already matches; else "<id> <id> ..." to delete.
+  # Decision:
+  #   "noop"                       — exactly one record already matches
+  #   "create"                     — no record of this name
+  #   "update <keep> [<extra>...]" — update <keep> in place; prune any duplicates
   decision=$(printf '%s' "$existing" | CF_IP="$ip" CF_PROXIED="$proxied" python3 -c '
 import json, os, sys
 r = json.load(sys.stdin).get("result", [])
 ip = os.environ["CF_IP"]
 proxied = os.environ["CF_PROXIED"] == "true"
-if len(r) == 1 and r[0]["content"] == ip and bool(r[0]["proxied"]) == proxied:
+if not r:
+    print("create")
+elif len(r) == 1 and r[0]["content"] == ip and bool(r[0]["proxied"]) == proxied:
     print("noop")
 else:
-    print(" ".join(x["id"] for x in r))
+    print("update " + " ".join(x["id"] for x in r))
 ' 2>/dev/null)
-  if [ "$decision" = "noop" ]; then
-    printf 'unchanged'
-    return 0
-  fi
-  for id in $decision; do
-    # shellcheck disable=SC2086
-    $CF_CURL -X DELETE -H "Authorization: Bearer ${token}" \
-      "${_cf_api}/zones/${zone}/dns_records/${id}" >/dev/null
-  done
-  # shellcheck disable=SC2086
-  $CF_CURL -X POST -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" \
-    "${_cf_api}/zones/${zone}/dns_records" \
-    -d "{\"type\":\"A\",\"name\":\"${fqdn}\",\"content\":\"${ip}\",\"ttl\":300,\"proxied\":${proxied}}" \
-    | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("success") else 1)' 2>/dev/null \
-    || return 1
-  printf 'created'
+
+  case "$decision" in
+    noop)
+      printf 'unchanged'
+      return 0
+      ;;
+    create)
+      # shellcheck disable=SC2086
+      $CF_CURL -X POST -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" \
+        "${_cf_api}/zones/${zone}/dns_records" \
+        -d "{\"type\":\"A\",\"name\":\"${fqdn}\",\"content\":\"${ip}\",\"ttl\":300,\"proxied\":${proxied}}" \
+        | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("success") else 1)' 2>/dev/null \
+        || return 1
+      printf 'created'
+      ;;
+    update\ *)
+      # Update the canonical record IN PLACE — never delete the record we keep,
+      # so a failed write cannot leave the host with no A record.
+      keep_id="${decision#update }"
+      keep_id="${keep_id%% *}"
+      # shellcheck disable=SC2086
+      $CF_CURL -X PUT -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" \
+        "${_cf_api}/zones/${zone}/dns_records/${keep_id}" \
+        -d "{\"type\":\"A\",\"name\":\"${fqdn}\",\"content\":\"${ip}\",\"ttl\":300,\"proxied\":${proxied}}" \
+        | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("success") else 1)' 2>/dev/null \
+        || return 1
+      # Prune only true duplicates (the records after the one we kept).
+      for id in ${decision#update "$keep_id"}; do
+        # shellcheck disable=SC2086
+        $CF_CURL -X DELETE -H "Authorization: Bearer ${token}" \
+          "${_cf_api}/zones/${zone}/dns_records/${id}" >/dev/null
+      done
+      printf 'updated'
+      ;;
+  esac
 }
