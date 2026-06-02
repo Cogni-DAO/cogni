@@ -21,13 +21,14 @@ import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/core";
 
 import {
-  insertAppsetStanza,
+  insertAppsetKustomization,
   insertCaddyBlock,
   insertLockfileImporters,
   insertSchedulerEndpoint,
   insertScopeFilter,
   nextFreeNodePort,
   renderCatalog,
+  renderNodeAppset,
   renderOverlay,
   renderRepoSpec,
 } from "@/shared/node-app-scaffold/gens";
@@ -93,7 +94,14 @@ const FOOTPRINT = {
   ciYaml: ".github/workflows/ci.yaml",
   schedulerConfigmap: "infra/k8s/base/scheduler-worker/configmap.yaml",
   lockfile: "pnpm-lock.yaml",
+  argocdKustomization: "infra/k8s/argocd/kustomization.yaml",
 } as const;
+
+/**
+ * Shared per-`(env, node)` ApplicationSet template — the SAME file `render-node-appset.sh` interpolates,
+ * so the operator's emit is byte-exact to the renderer and the `--check` drift gate stays green (bug.0378).
+ */
+const APPSET_TEMPLATE_PATH = "scripts/ci/node-applicationset.yaml.tmpl";
 
 /**
  * Text files inside `nodes/node-template/` that name `node-template` and must be rewritten to the
@@ -490,7 +498,7 @@ export class GitHubRepoWriter {
       renderCatalog(slug, port, nodePort)
     );
 
-    // overlays×3 + appsets×3 — per birth env.
+    // overlays×3 — per birth env.
     for (const env of NODE_BIRTH_ENVS) {
       const overlayPath = `infra/k8s/overlays/${env}/${slug}/kustomization.yaml`;
       const templateOverlay = await this.readFileOnMain(
@@ -503,16 +511,33 @@ export class GitHubRepoWriter {
         overlayPath,
         renderOverlay(templateOverlay, slug, nodePort, port)
       );
-
-      const appsetPath = `infra/k8s/argocd/${env}-applicationset.yaml`;
-      const appset = await this.readFileOnMain(
-        octokit,
-        owner,
-        repo,
-        appsetPath
-      );
-      await addBlob(appsetPath, insertAppsetStanza(appset, slug, env));
     }
+
+    // per-node AppSets×3 — one ApplicationSet object per (env, slug) for structural LANE_ISOLATION
+    // (bug.0378). New files from the shared template (byte-exact to render-node-appset.sh), then folded
+    // into the bootstrap kustomization's GENERATED block so the unit-job drift gate stays green.
+    const appsetTemplate = await this.readFileOnMain(
+      octokit,
+      owner,
+      repo,
+      APPSET_TEMPLATE_PATH
+    );
+    for (const env of NODE_BIRTH_ENVS) {
+      await addBlob(
+        `infra/k8s/argocd/${env}-${slug}-applicationset.yaml`,
+        renderNodeAppset(appsetTemplate, slug, env)
+      );
+    }
+    const argocdKustomization = await this.readFileOnMain(
+      octokit,
+      owner,
+      repo,
+      FOOTPRINT.argocdKustomization
+    );
+    await addBlob(
+      FOOTPRINT.argocdKustomization,
+      insertAppsetKustomization(argocdKustomization, slug, NODE_BIRTH_ENVS)
+    );
 
     // Caddyfile / ci.yaml / scheduler configmap / lockfile — single-file splices over main.
     const caddyfile = await this.readFileOnMain(

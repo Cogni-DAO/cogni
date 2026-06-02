@@ -12,7 +12,7 @@
  * @public
  */
 
-export { insertAppsetStanza } from "./appset";
+export { insertAppsetKustomization, renderNodeAppset } from "./appset";
 export { insertCaddyBlock } from "./caddyfile";
 export { renderCatalog } from "./catalog";
 export { insertLockfileImporters } from "./lockfile";

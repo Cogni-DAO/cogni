@@ -3,56 +3,90 @@
 
 /**
  * Module: `@shared/node-app-scaffold/gens/appset`
- * Purpose: Pure port of `scaffold-node.sh` step 6 — splice a new node's git-generator stanza into a
- *   committed `infra/k8s/argocd/<env>-applicationset.yaml`, so the operator can author a node-birth
- *   PR without `perl -0pi`.
- * Scope: Given the CURRENT committed ApplicationSet YAML + the new node's `slug` + `env`, insert the
- *   5-line `- git:` generator block (revision `deploy/<env>-<slug>`, file `infra/catalog/<slug>.yaml`)
- *   immediately before the `  template:` line, byte-identical to the shell renderer.
- * Invariants: STANZA_BEFORE_TEMPLATE — the block lands ahead of the first `  template:` line, in the
- *   generators list. IDEMPOTENT — a YAML already referencing `infra/catalog/<slug>.yaml` is returned
- *   unchanged (mirrors the shell's `grep -q … && continue`).
- * Side-effects: none — pure string transform, no IO, no env.
- * Links: scripts/setup/scaffold-node.sh, infra/k8s/argocd, task.5092
+ * Purpose: Pure port of `scripts/ci/render-node-appset.sh` — emit a new node's per-`(env, slug)` Argo
+ *   ApplicationSet objects and register them in the bootstrap kustomization, so the operator can author
+ *   a node-birth PR without bash. One AppSet object per `(env, node)` is the structural LANE_ISOLATION
+ *   fix (`bug.0378`): a flight only ever applies its own node's file.
+ * Scope: `renderNodeAppset` substitutes the shared template (the SAME file the shell renderer feeds, so
+ *   output is byte-exact and the `--check` drift gate stays green); `insertAppsetKustomization` re-renders
+ *   the GENERATED sentinel block with the new slug folded in (env-major, node-sorted, mirroring the shell).
+ * Invariants: BYTE_EXACT_WITH_RENDERER — token substitution + block ordering match `render-node-appset.sh`.
+ *   IDEMPOTENT — a kustomization already listing the slug is returned unchanged.
+ * Side-effects: none — pure string transforms, no IO, no env.
+ * Links: scripts/ci/render-node-appset.sh, scripts/ci/node-applicationset.yaml.tmpl, bug.0378, task.5092
  * @public
  */
 
-/** The 5-line git-generator stanza for `<env>/<slug>`, matching the committed AppSet shape. */
-function stanza(slug: string, env: string): string {
-  return [
-    "    - git:",
-    "        repoURL: https://github.com/cogni-dao/cogni.git",
-    `        revision: deploy/${env}-${slug}`,
-    "        files:",
-    `          - path: "infra/catalog/${slug}.yaml"`,
-  ].join("\n");
-}
+/** Sentinels delimiting the generated node-appset list in `infra/k8s/argocd/kustomization.yaml`. */
+const KUSTOMIZATION_BEGIN =
+  "  # >>> GENERATED node-appsets (scripts/ci/render-node-appset.sh) — DO NOT EDIT BY HAND";
+const KUSTOMIZATION_END = "  # <<< GENERATED node-appsets";
 
 /**
- * Insert the `<slug>` git-generator stanza before the `  template:` line of `<env>`'s ApplicationSet.
- * Idempotent: returns the input unchanged if it already references `infra/catalog/<slug>.yaml`.
+ * Substitute the per-`(env, slug)` ApplicationSet template, byte-exact to the shell renderer's
+ * `sed -e s/__ENV__/…/g -e s/__NODE__/…/g`. Argo `{{.name}}` goTemplate markers are left intact.
  */
-export function insertAppsetStanza(
-  currentAppset: string,
+export function renderNodeAppset(
+  template: string,
   slug: string,
   env: string
 ): string {
-  if (currentAppset.includes(`infra/catalog/${slug}.yaml`)) {
-    return currentAppset;
-  }
+  return template.replaceAll("__ENV__", env).replaceAll("__NODE__", slug);
+}
 
-  const lines = currentAppset.split("\n");
-  const templateIdx = lines.indexOf("  template:");
-  if (templateIdx === -1) {
+/** Extract the deployable node slugs already listed in the generated block (across all birth envs). */
+function existingNodes(
+  blockLines: readonly string[],
+  envs: readonly string[]
+): string[] {
+  const nodes = new Set<string>();
+  for (const line of blockLines) {
+    const match = line.match(/^ {2}- (.+)-applicationset\.yaml$/);
+    if (!match) continue;
+    const envNode = match[1];
+    for (const env of envs) {
+      if (envNode.startsWith(`${env}-`)) {
+        nodes.add(envNode.slice(env.length + 1));
+        break;
+      }
+    }
+  }
+  return [...nodes];
+}
+
+/**
+ * Fold `<slug>` into the GENERATED node-appsets block of `infra/k8s/argocd/kustomization.yaml`,
+ * re-rendering it env-major + node-sorted (LC_ALL=C order ≡ ASCII codepoint sort for kebab slugs),
+ * byte-exact to `render-node-appset.sh`'s `render_kustomization_block`. Idempotent.
+ */
+export function insertAppsetKustomization(
+  currentKustomization: string,
+  slug: string,
+  envs: readonly string[]
+): string {
+  const lines = currentKustomization.split("\n");
+  const begin = lines.indexOf(KUSTOMIZATION_BEGIN);
+  const end = lines.indexOf(KUSTOMIZATION_END);
+  if (begin === -1 || end === -1 || end < begin) {
     throw new Error(
-      `ApplicationSet for env '${env}' is missing a top-level 'template:' line; cannot splice.`
+      "infra/k8s/argocd/kustomization.yaml is missing the GENERATED node-appsets sentinels; cannot splice."
     );
   }
 
-  const block = stanza(slug, env).split("\n");
-  return [
-    ...lines.slice(0, templateIdx),
-    ...block,
-    ...lines.slice(templateIdx),
-  ].join("\n");
+  const nodes = existingNodes(lines.slice(begin + 1, end), envs);
+  if (nodes.includes(slug)) {
+    return currentKustomization;
+  }
+
+  const sorted = [...nodes, slug].sort();
+  const block: string[] = [];
+  for (const env of envs) {
+    for (const node of sorted) {
+      block.push(`  - ${env}-${node}-applicationset.yaml`);
+    }
+  }
+
+  return [...lines.slice(0, begin + 1), ...block, ...lines.slice(end)].join(
+    "\n"
+  );
 }
