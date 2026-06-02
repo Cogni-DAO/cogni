@@ -93,9 +93,15 @@ function isNodeWiring(path: string, node: string): boolean {
       (file.endsWith(".yaml") || file.endsWith(".yml"))
     );
   }
+  // scheduler-worker configmap + edge Caddyfile.tmpl are both catalog-derived
+  // regen artifacts (gen:scheduler-worker-endpoints / gen:caddyfile): a node
+  // birth that adds a `type: node` catalog entry regenerates both, so they must
+  // ride along the node's own welcome PR (bug.5086). Not slug-pathed (one shared
+  // file each), so bounded by intent, not by path — reviewed at PR time.
   return (
     path === `infra/catalog/${node}.yaml` ||
-    path === "infra/k8s/base/scheduler-worker/configmap.yaml"
+    path === "infra/k8s/base/scheduler-worker/configmap.yaml" ||
+    path === "infra/compose/edge/configs/Caddyfile.tmpl"
   );
 }
 

@@ -106,18 +106,24 @@ jobs:
           # would (incorrectly) classify as resy + operator. Per-node filters
           # have a single rule each, so the quantifier is a no-op for them.
           predicate-quantifier: "every"
+          # Filter block is CATALOG_IS_SSOT — generated from the nodes/* listing
+          # by scripts/ci/render-scope-filters.sh. Adding nodes/<slug>/ no longer
+          # needs a hand-edited `<slug>:` filter + `!nodes/<slug>/**` negation;
+          # run `pnpm gen:scope-filters`. CI (`--check`, unit job) fails on drift.
           filters: |
+            # >>> GENERATED scope-filters (scripts/ci/render-scope-filters.sh) — DO NOT EDIT BY HAND
             canary:
               - 'nodes/canary/**'
-            resy:
-              - 'nodes/resy/**'
             node-template:
               - 'nodes/node-template/**'
+            resy:
+              - 'nodes/resy/**'
             operator:
               - '**'
               - '!nodes/canary/**'
-              - '!nodes/resy/**'
               - '!nodes/node-template/**'
+              - '!nodes/resy/**'
+            # <<< GENERATED scope-filters
 
       # Intentionally inline — single-workflow gate, no logic duplicated across
       # workflows. SCRIPTS_ARE_THE_API targets cross-workflow drift, not unique
@@ -156,6 +162,7 @@ jobs:
                or ($node != "" and (
                     . == ("infra/catalog/" + $node + ".yaml")
                     or . == "infra/k8s/base/scheduler-worker/configmap.yaml"
+                    or . == "infra/compose/edge/configs/Caddyfile.tmpl"
                     or test("^infra/k8s/overlays/[^/]+/" + $node + "/")
                     or test("^infra/k8s/argocd/[^/]*applicationset[^/]*\\.ya?ml$")
                   ))
@@ -277,6 +284,12 @@ jobs:
 
       - name: scheduler node routing tests
         run: bash scripts/ci/render-scheduler-worker-endpoints.sh --check
+
+      # single-node-scope filters are CATALOG_IS_SSOT: generated from the
+      # nodes/* listing. Fails if a node was added/removed under nodes/ without
+      # regenerating the dorny filter block (run `pnpm gen:scope-filters`).
+      - name: single-node-scope filter drift (CATALOG_IS_SSOT)
+        run: bash scripts/ci/render-scope-filters.sh --check
 
       - name: scheduler runtime routing tests
         run: bash scripts/ci/tests/scheduler-runtime-routing.test.sh
