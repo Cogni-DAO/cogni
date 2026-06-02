@@ -84,6 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       STACK_NODE: ${{ matrix.node }}
+      COGNI_MIGRATE_NODE: ${{ matrix.node }}
       NODE_ENV: test
       APP_ENV: test
       # Database provisioning (provision.sh creates roles + databases)

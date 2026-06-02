@@ -439,11 +439,14 @@ services:
     networks:
       - cogni-edge
     entrypoint: []
+    # Migrate path follows the node baked into APP_IMAGE. Default operator keeps every
+    # existing caller (docker:stack, provision, candidate deploy) unchanged; the
+    # parametrized stack-test sets COGNI_MIGRATE_NODE=<node> to run that node's migrations.
     command:
       [
         "node",
-        "/app/nodes/operator/app/migrate.mjs",
-        "/app/nodes/operator/app/migrations",
+        "/app/nodes/${COGNI_MIGRATE_NODE:-operator}/app/migrate.mjs",
+        "/app/nodes/${COGNI_MIGRATE_NODE:-operator}/app/migrations",
       ]
     environment:
       - DATABASE_URL=${DATABASE_URL?DATABASE_URL is required}
