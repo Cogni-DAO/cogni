@@ -42,8 +42,8 @@ function existingNodes(
   const nodes = new Set<string>();
   for (const line of blockLines) {
     const match = line.match(/^ {2}- (.+)-applicationset\.yaml$/);
-    if (!match) continue;
-    const envNode = match[1];
+    const envNode = match?.[1];
+    if (envNode === undefined) continue;
     for (const env of envs) {
       if (envNode.startsWith(`${env}-`)) {
         nodes.add(envNode.slice(env.length + 1));
