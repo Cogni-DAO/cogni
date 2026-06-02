@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@features/node-app-scaffold/gens/node-port`
+ * Module: `@shared/node-app-scaffold/gens/node-port`
  * Purpose: Pure TS port of `scripts/ci/next-free-node-port.sh` (default mode) — allocate the next
  *   free k3s Service NodePort from the catalog's existing `node_port` values, so the operator can
  *   mint a `type:node` catalog entry without running bash.

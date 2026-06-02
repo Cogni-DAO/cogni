@@ -30,7 +30,7 @@ import {
   renderCatalog,
   renderOverlay,
   renderRepoSpec,
-} from "@/features/node-app-scaffold/gens";
+} from "@/shared/node-app-scaffold/gens";
 
 export interface GitHubRepoWriterConfig {
   readonly appId: string;

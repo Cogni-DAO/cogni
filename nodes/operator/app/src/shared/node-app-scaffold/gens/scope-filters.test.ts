@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@features/node-app-scaffold/gens/scope-filters`
+ * Module: `@shared/node-app-scaffold/gens/scope-filters`
  * Purpose: Pin `insertScopeFilter` to a byte-exact before→after ci.yaml case.
  * Scope: Pure unit test — the golden mirrors `render-scope-filters.sh --write` output.
  * Invariants: BLOCK_IS_SSOT — 12-space indent, ASCII slug sort, per-node filter + negation.
  * Side-effects: none
- * Links: src/features/node-app-scaffold/gens/scope-filters, scripts/ci/render-scope-filters.sh
+ * Links: src/shared/node-app-scaffold/gens/scope-filters, scripts/ci/render-scope-filters.sh
  * @public
  */
 

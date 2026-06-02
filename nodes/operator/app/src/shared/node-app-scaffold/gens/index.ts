@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@features/node-app-scaffold/gens`
+ * Module: `@shared/node-app-scaffold/gens`
  * Purpose: Barrel for the pure node-birth generators — each a TS port of one `scaffold-node.sh`
  *   step or `scripts/ci/*.sh` renderer, so the operator can author a node-app PR via the GitHub Git
  *   Data API without a checkout or bash.

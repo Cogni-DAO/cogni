@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@features/node-app-scaffold/gens/overlay`
+ * Module: `@shared/node-app-scaffold/gens/overlay`
  * Purpose: Pure port of `scaffold-node.sh` step 5 — clone the `node-template` per-env
  *   `kustomization.yaml` into a new node's overlay, so the operator can author a node-birth PR
  *   without `cp -R` + sed on a checkout.

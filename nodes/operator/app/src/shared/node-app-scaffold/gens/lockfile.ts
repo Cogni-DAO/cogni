@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@features/node-app-scaffold/gens/lockfile`
+ * Module: `@shared/node-app-scaffold/gens/lockfile`
  * Purpose: Pure TS splice of a freshly-cloned node's three workspace packages into a committed
  *   `pnpm-lock.yaml`, so the wizard can author a node-birth PR without running `pnpm install`.
  * Scope: Given the CURRENT `pnpm-lock.yaml` and a new node `slug`, return the lockfile

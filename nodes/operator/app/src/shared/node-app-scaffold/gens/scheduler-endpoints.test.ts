@@ -2,14 +2,14 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@features/node-app-scaffold/gens/scheduler-endpoints`
+ * Module: `@shared/node-app-scaffold/gens/scheduler-endpoints`
  * Purpose: Pin `insertSchedulerEndpoint` to a byte-exact before→after configmap.yaml case.
  * Scope: Pure unit test — the golden mirrors `pnpm gen:scheduler-worker-endpoints` output after
  *   scaffolding `ztest` (node_id 8138ed59-…) into the catalog.
  * Invariants: NODE_TARGETS == slug-lexicographic; per node a `<slug>=<url>` cell immediately
  *   trailed by its `<node_id>=<url>` alias; committed 2-space indent + double-quoted value.
  * Side-effects: none
- * Links: src/features/node-app-scaffold/gens/scheduler-endpoints, scripts/ci/render-scheduler-worker-endpoints.sh
+ * Links: src/shared/node-app-scaffold/gens/scheduler-endpoints, scripts/ci/render-scheduler-worker-endpoints.sh
  * @public
  */
 

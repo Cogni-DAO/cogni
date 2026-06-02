@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@features/node-app-scaffold/gens/appset`
+ * Module: `@shared/node-app-scaffold/gens/appset`
  * Purpose: Pure port of `scaffold-node.sh` step 6 — splice a new node's git-generator stanza into a
  *   committed `infra/k8s/argocd/<env>-applicationset.yaml`, so the operator can author a node-birth
  *   PR without `perl -0pi`.

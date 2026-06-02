@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@features/node-app-scaffold/gens/scope-filters`
+ * Module: `@shared/node-app-scaffold/gens/scope-filters`
  * Purpose: Pure TS port of `scripts/ci/render-scope-filters.sh --write` — splice a new
  *   non-operator node's `single-node-scope` dorny/paths-filter entry into a committed
  *   `.github/workflows/ci.yaml`, so the wizard authors a node-birth PR without a checkout.

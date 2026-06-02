@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@features/node-app-scaffold/gens/scheduler-endpoints`
+ * Module: `@shared/node-app-scaffold/gens/scheduler-endpoints`
  * Purpose: Pure port of `scripts/ci/render-scheduler-worker-endpoints.sh`'s per-node insert, so
  *   the operator can author a node-birth PR's `scheduler-worker/configmap.yaml` edit without a
  *   repo checkout or running bash + yq.

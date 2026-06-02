@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@features/node-app-scaffold/gens/lockfile`
+ * Module: `@shared/node-app-scaffold/gens/lockfile`
  * Purpose: Pin `insertLockfileImporters` to a byte-exact before→after `pnpm-lock.yaml` case.
  * Scope: Pure unit test. The golden is the real lockfile importer section after
  *   `scaffold-node.sh zlock` + `pnpm install --lockfile-only`, trimmed at the `packages:`
@@ -11,7 +11,7 @@
  * Invariants: CLONE_ADDS_NO_PACKAGES (the three importer blocks are the entire delta);
  *   IMPORTERS_ARE_SORTED (`nodes/zlock/…` lands between `nodes/resy/…` and `packages/ai-core`).
  * Side-effects: none — reads committed fixtures only.
- * Links: src/features/node-app-scaffold/gens/lockfile, scripts/setup/scaffold-node.sh
+ * Links: src/shared/node-app-scaffold/gens/lockfile, scripts/setup/scaffold-node.sh
  * @public
  */
 

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@features/node-app-scaffold/gens/repo-spec`
+ * Module: `@shared/node-app-scaffold/gens/repo-spec`
  * Purpose: Render a new node's `.cogni/repo-spec.yaml` — the web3-anchored identity + governance
  *   doc — so the operator can author a node-birth PR carrying the node's own identity instead of
  *   cloning the template's.
