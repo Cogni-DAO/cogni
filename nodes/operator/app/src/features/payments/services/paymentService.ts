@@ -489,6 +489,19 @@ async function verifyAndSettle(
             paymentIntentId: clientPaymentId,
             amountUsdCents: attempt.amountUsdCents,
           });
+        } else {
+          // Outbound (Split distribute + OpenRouter top-up) is unconfigured in this
+          // env (operator wallet / treasury / provider ports absent). Credits were
+          // minted inbound, but USDC stays in the Split and OpenRouter is NOT topped
+          // up. Logged so this is never a silent gap again (bug.5087).
+          log.warn(
+            {
+              event: "payments.settlement_skipped",
+              attemptId: attempt.id,
+              paymentIntentId: clientPaymentId,
+            },
+            "post-credit funding skipped — operator wallet / treasury / provider ports not configured in this env"
+          );
         }
       }
     } catch (error) {
