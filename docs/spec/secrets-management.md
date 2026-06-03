@@ -371,6 +371,11 @@ and it fans out to **only** the node-template pod (not every node). `tier: A2`, 
 **`source: agent`** (`generate: { kind: hex, bytes: 16 }`). No app code consumes it; the proof is
 that it materializes in the node-template pod's environment.
 
+The probe ships as its **own node-template-scoped PR** (just the one catalog file) — which is itself
+the cleanest proof of the model: adding a secret is a single-node-domain PR (`single-node-scope`
+passes), with zero operator-domain edits. The substrate that makes it fan out (the emitter, the
+`consumedBy` model, the `reconcile-secrets.sh` swap) is the separate operator-domain track.
+
 > **Why `source: agent`, not `human`:** the candidate-a proof must validate Atom ① + the
 > catalog→ESO→Reloader wire **without** depending on the Atom ② value-write path, which on
 > candidate-a still hits the OpenBao-reachability question (plaintext, ClusterIP, no Ingress — the
@@ -399,7 +404,7 @@ that it materializes in the node-template pod's environment.
 **Candidate-a (the wire — `deploy_verified`):**
 
 - [ ] Flight this branch → candidate-a; confirm build SHA == head.
-- [ ] **Declare** (Atom ①): the probe in `nodes/node-template/.cogni/secrets-catalog.yaml` is in the PR.
+- [ ] **Declare** (Atom ①): land the node-template-scoped probe PR (`nodes/node-template/.cogni/secrets-catalog.yaml`).
       Provision (or Phase-5c reconcile) auto-seeds `cogni/candidate-a/node-template/NODE_TEMPLATE_SELFSERVE_PROBE`
       from the catalog (`source: agent`) — verify via `bao kv get` (port-forward) **with zero per-secret
       hand-edits and zero `pnpm secrets:set`**. This is the catalog-SSOT proof.

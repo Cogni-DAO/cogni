@@ -1,18 +1,17 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
 /**
  * Module: `@scripts/lib/print-pod-keys`
- * Purpose: Emit the set of secret KEY NAMES that fan out to a node's pod,
- *   derived ONLY from the secrets catalog (spec.secrets-management Invariant 14
- *   CATALOG_IS_THE_ONE_READER). This is the single reader the bash provisioning
- *   side consumes — it retires the hand-maintained `NODE_BASELINE_KEYS` array in
- *   reconcile-secrets.sh so a catalog entry (e.g. DOLTHUB_*) can never again be
- *   declared-but-dormant.
- * Invariants: a key is pod-eligible iff it is tier A1/A2 AND resolves to an
- *   OpenBao pod path (`openBaoPathFor` non-null: has `service` or `appliesTo`).
- *   B/D/E (CI/Compose/repo) and `_system` (G-derived) keys never reach a pod via
- *   envFrom and are excluded. Per-node membership gating stays in bash
- *   (`_node_gets_key`); this emitter produces the node-agnostic universe.
- * Usage: `tsx scripts/lib/print-pod-keys.ts [--repo-root <dir>]`
- *   → prints one pod-eligible key name per line, sorted, to stdout.
+ * Purpose: Emit the secret KEY NAMES that fan out to a node's pod, derived ONLY from the secrets catalog (spec.secrets-management Invariant 14 CATALOG_IS_THE_ONE_READER) — the single reader the bash provisioning side consumes to retire the hand-maintained NODE_BASELINE_KEYS array.
+ * Scope: Pure read + filter over the loaded catalog routing. Prints to stdout; does NOT shell out, write files, or touch OpenBao/git state.
+ * Invariants: pod-consumed iff `pod ∈ consumedBy`, else an A1/A2 entry with an OpenBao pod path.
+ * Side-effects: IO (stdout write; reads catalog YAML transitively via loadSecretsCatalog)
+ * Links: docs/spec/secrets-management.md, docs/design/secrets-catalog-per-node.md
+ *
+ * A key is pod-consumed iff `pod ∈ consumedBy` (explicit), else an A1/A2 entry
+ * that resolves to an OpenBao pod path. Per-node membership gating stays in bash
+ * (`_node_gets_key`); this emitter produces the node-agnostic universe.
+ * Usage: `tsx scripts/lib/print-pod-keys.ts [--repo-root <dir>]` → one key/line.
  */
 import {
   loadSecretsCatalog,
