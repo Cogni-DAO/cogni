@@ -1,0 +1,19 @@
+name: litellm
+# infra = shared VM-infra image: built in CI like every other target, but
+# deployed via Compose-on-VM (deploy-infra.sh), not k8s/Argo. No node_port /
+# node_id / deploy branches; no k8s overlay or ApplicationSet. See
+# docs/spec/ci-cd.md axiom 16 and docs/guides/create-service.md (Infra images).
+type: infra
+port: 4000
+dockerfile: infra/images/litellm/Dockerfile
+# Build context (default repo root "."). litellm's Dockerfile COPYs context-
+# relative, so it builds from its own dir — unchanged Dockerfile keeps the
+# content-hash stable.
+build_context: infra/images/litellm
+# image_tag_suffix is unused for type:infra (the image is content-hash tagged as
+# `litellm-<hash>` via image-tags.sh:infra_image_tag); kept to satisfy the schema.
+image_tag_suffix: "-litellm"
+migrator_tag_suffix: ""
+# task.0374 — maps changed paths to this build target. Editing the litellm build
+# context selects only this target (and changes its content-hash tag).
+path_prefix: infra/images/litellm/

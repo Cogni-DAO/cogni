@@ -19,27 +19,39 @@
 #
 # Caller contract (globals expected at invocation time):
 #   DEPLOY_ENV, ROOT_TOKEN, VM_IP, SSH_OPTS, REPO_ROOT,
-#   PRIMARY_NODE_DB, APP_DB_USER, APP_DB_SERVICE_USER, DOMAIN
+#   PRIMARY_NODE_DB, APP_DB_USER, APP_DB_SERVICE_USER, DOMAIN,
+#   POSTGRES_ROOT_PASSWORD, optional DOLTGRES_PASSWORD
 # Caller's seed loop iterates the arrays exported here:
 #   NODE_TEMPLATE_KEYS, SCHEDULER_WORKER_KEYS
 
 # ── Per-service key arrays — single source for both reconcile + seed ──────────
 # Note: operator-passthrough keys (OPENROUTER_API_KEY, POSTHOG_*, EVM_RPC_URL,
-# POLYGON_RPC_URL, OPENCLAW_GITHUB_RW_TOKEN) ARE reconciled from OpenBao on
+# POLYGON_RPC_URL) ARE reconciled from OpenBao on
 # re-runs. This matches the SSoT contract: day-2 rotations use
 # `pnpm secrets:set` (which writes OpenBao directly); `gh secret set` +
 # re-dispatch is bootstrap-only and will NOT propagate a value change for
 # these keys past first provision.
-declare -ga NODE_TEMPLATE_KEYS=(
-  AUTH_SECRET LITELLM_MASTER_KEY OPENCLAW_GATEWAY_TOKEN
-  OPENCLAW_GITHUB_RW_TOKEN SCHEDULER_API_TOKEN BILLING_INGEST_TOKEN
+#
+# NODE_BASELINE_KEYS = the universe of app keys a node MAY consume. The
+# per-node fan-out (seed_node_app_secrets) gates each key against the node's
+# capabilities via infra/secrets-catalog.yaml (CATALOG_IS_SSOT): a `service:`-
+# pinned A2 key (POLY_WALLET_AEAD_*, POLYGON_RPC_URL → poly) is dropped from
+# nodes that don't own it. Drift between this list and the catalog's
+# node-baseline set is guarded by scripts/ci/tests/secrets-fanout.test.sh.
+declare -ga NODE_BASELINE_KEYS=(
+  AUTH_SECRET LITELLM_MASTER_KEY
+  SCHEDULER_API_TOKEN BILLING_INGEST_TOKEN
   INTERNAL_OPS_TOKEN METRICS_TOKEN GH_WEBHOOK_SECRET
   CONNECTIONS_ENCRYPTION_KEY POLY_WALLET_AEAD_KEY_HEX
   POLY_WALLET_AEAD_KEY_ID DATABASE_URL DATABASE_SERVICE_URL
+  DOLTGRES_URL
   POSTHOG_API_KEY POSTHOG_HOST OPENROUTER_API_KEY
   EVM_RPC_URL POLYGON_RPC_URL
   APP_BASE_URL NEXTAUTH_URL
 )
+# Back-compat alias — reconcile_secrets_on_rerun reconciles the primary node's
+# OpenBao SSoT into .env for the runtime/.env (Compose) write.
+declare -ga NODE_TEMPLATE_KEYS=("${NODE_BASELINE_KEYS[@]}")
 declare -ga SCHEDULER_WORKER_KEYS=(
   DATABASE_SERVICE_URL SCHEDULER_API_TOKEN GH_REVIEW_APP_ID
   GH_REVIEW_APP_PRIVATE_KEY_BASE64 GH_WEBHOOK_SECRET
@@ -50,8 +62,112 @@ declare -ga SCHEDULER_WORKER_KEYS=(
 declare -ga COMPOSE_ONLY_KEYS=(
   POSTGRES_ROOT_PASSWORD
   APP_DB_PASSWORD APP_DB_SERVICE_PASSWORD APP_DB_READONLY_PASSWORD
-  TEMPORAL_DB_PASSWORD
+  TEMPORAL_DB_PASSWORD DOLTGRES_PASSWORD
 )
+
+# ── Catalog-gated per-node fan-out (task.5094) ────────────────────────────────
+# The OpenBao seed fans NODE_BASELINE_KEYS to every type:node, gating + valuing
+# each key from infra/secrets-catalog.yaml. Distinct-per-node secrets get a
+# fresh value per node (isolation); derived/DB values bind the node's FQDN/DB;
+# shared + human values pass through identically. openssl generators mirror
+# scripts/lib/secrets-catalog-loader.ts (generate.kind).
+
+CATALOG_FILE="${CATALOG_FILE:-$REPO_ROOT/infra/secrets-catalog.yaml}"
+# Nodes that receive payment/signing-key capabilities (custody opt-in; mirrors
+# PAYMENT_NODES in setup-secrets.ts). A node NEVER gets a key it didn't ask for.
+PAYMENT_NODES="${PAYMENT_NODES:-poly}"
+
+rand64() { openssl rand -base64 "${1:-32}"; }
+randHex() { openssl rand -hex "${1:-32}"; }
+derive_secret() {
+  local salt="$1"
+  if command -v openssl >/dev/null 2>&1; then
+    printf '%s:%s' "$salt" "${POSTGRES_ROOT_PASSWORD:-doltgres}" | openssl dgst -sha256 -hex | awk '{print $NF}' | cut -c1-32
+  elif command -v sha256sum >/dev/null 2>&1; then
+    printf '%s:%s' "$salt" "${POSTGRES_ROOT_PASSWORD:-doltgres}" | sha256sum | cut -c1-32
+  else
+    echo "dev-${salt}"
+  fi
+}
+
+# Read one catalog field for a secret name. Empty string if name or field absent.
+_cat_field() {
+  yq -N "(.secrets[] | select(.name == \"$1\") | ${2}) // \"\"" "$CATALOG_FILE" 2>/dev/null | head -1
+}
+
+# Does node $1 receive key $2? Gate against capability/service pinning in the
+# catalog: a `service:`-pinned A2 key belongs only to its owning node (or poly-
+# capability nodes); `_shared`/`_system` and capability `appliesTo` reach every
+# node (current node set is homogeneous full-app). Legacy keys absent from the
+# catalog (DATABASE_URL/_SERVICE_URL) are baseline → kept.
+_node_gets_key() {
+  local node="$1" k="$2" appliesTo service
+  appliesTo=$(_cat_field "$k" '.appliesTo')
+  service=$(_cat_field "$k" '.service')
+  if [[ "$appliesTo" == "payments" ]]; then
+    [[ " $PAYMENT_NODES " == *" $node "* ]] && return 0 || return 1
+  fi
+  if [[ -n "$service" && "$service" != "_shared" && "$service" != "_system" && "$service" != "$node" ]]; then
+    # A2 pinned to another node (e.g. poly): only that node (or poly-cap) gets it.
+    [[ " $PAYMENT_NODES " == *" $node "* && "$service" == "poly" ]] && return 0 || return 1
+  fi
+  return 0
+}
+
+# Resolve the value to seed for (node, key). Idempotent: an existing OpenBao
+# value at cogni/<env>/<node>/<key> is preserved (no churn on re-runs → 0 pod
+# restarts). Otherwise: Postgres DSNs bind cogni_<node>; the Doltgres DSN binds
+# knowledge_<node> using the Compose-infra root password source; derive-env
+# binds the node's FQDN; agent-random distinct keys mint a FRESH value per node
+# (isolation); _shared / shared:true / human keys pass through the .env value.
+_resolve_node_value() {
+  local node="$1" k="$2" existing kind source shared service db
+  existing=$(bao_get_field "$node" "$k")
+  if [[ -n "$existing" ]]; then printf '%s' "$existing"; return 0; fi
+  db="cogni_${node//-/_}"
+  case "$k" in
+    DATABASE_URL)
+      printf 'postgresql://%s:%s@%s:5432/%s?sslmode=disable' \
+        "${APP_DB_USER}" "${APP_DB_PASSWORD}" "${VM_IP}" "${db}"; return 0 ;;
+    DATABASE_SERVICE_URL)
+      printf 'postgresql://%s:%s@%s:5432/%s?sslmode=disable' \
+        "${APP_DB_SERVICE_USER}" "${APP_DB_SERVICE_PASSWORD}" "${VM_IP}" "${db}"; return 0 ;;
+    DOLTGRES_URL)
+      printf 'postgresql://postgres:%s@%s:5435/knowledge_%s?sslmode=disable' \
+        "${DOLTGRES_PASSWORD:-$(derive_secret doltgres-root)}" "${VM_IP}" "${node//-/_}"; return 0 ;;
+  esac
+  kind=$(_cat_field "$k" '.generate.kind')
+  source=$(_cat_field "$k" '.source')
+  shared=$(_cat_field "$k" '.shared')
+  service=$(_cat_field "$k" '.service')
+  if [[ "$kind" == "derive-env" ]]; then
+    printf 'https://%s' "$(host_for_node "$node" "$DOMAIN")"; return 0
+  fi
+  if [[ "$source" == "agent" && "$service" != "_shared" && "$shared" != "true" \
+        && "$kind" =~ ^(base64|hex|sk-cogni)$ ]]; then
+    case "$kind" in
+      base64) rand64 "$(_cat_field "$k" '.generate.bytes')" ;;
+      hex) randHex "$(_cat_field "$k" '.generate.bytes')" ;;
+      sk-cogni) printf 'sk-cogni-%s' "$(randHex 24)" ;;
+    esac
+    return 0
+  fi
+  printf '%s' "${!k:-}"  # passthrough: _shared / shared:true / human value
+}
+
+# Fan NODE_BASELINE_KEYS to one node's OpenBao path with per-node values.
+# Caller provides seed_kv (provision-env-vm.sh) + globals DOMAIN/VM_IP/APP_DB_*.
+seed_node_app_secrets() {
+  local node="$1" k v n=0
+  for k in "${NODE_BASELINE_KEYS[@]}"; do
+    _node_gets_key "$node" "$k" || continue
+    v=$(_resolve_node_value "$node" "$k")
+    [[ -z "$v" ]] && continue
+    seed_kv "$node" "$k" "$v"
+    n=$((n + 1))
+  done
+  log_info "  seeded ${n} key(s) → cogni/${DEPLOY_ENV}/${node}/*"
+}
 
 # Read one field from OpenBao at cogni/<env>/<svc>/<k>. Stdout = value
 # (empty if path or field absent). Mirrors seed_kv's exec shape.
@@ -107,13 +223,13 @@ _reconcile_from_compose_vm() {
     if _apply_reconciled "$k" "$v"; then n=$((n + 1)); fi
   done
   [[ $n -gt 0 ]] && log_info "  reconciled ${n} Compose-only key(s) from VM runtime/.env"
-  # DATABASE_URL / _SERVICE_URL are constructed in provision-env-vm.sh
-  # line ~335 from APP_DB_*_PASSWORD; if the reconcile changed those,
-  # re-derive so the OpenBao seed below writes a consistent value.
+  # DSN keys are constructed in provision-env-vm.sh from component secrets;
+  # if reconcile changed those components, re-derive so the OpenBao seed below
+  # writes values consistent with the VM runtime.
   if [[ $n -gt 0 ]]; then
     DATABASE_URL="postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@${VM_IP}:5432/${PRIMARY_NODE_DB}?sslmode=disable"
     DATABASE_SERVICE_URL="postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@${VM_IP}:5432/${PRIMARY_NODE_DB}?sslmode=disable"
-    export DATABASE_URL DATABASE_SERVICE_URL
+    export DATABASE_URL DATABASE_SERVICE_URL DOLTGRES_PASSWORD
   fi
   return 0
 }

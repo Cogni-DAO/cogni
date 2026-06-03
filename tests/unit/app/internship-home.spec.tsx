@@ -70,6 +70,29 @@ vi.mock("next-themes", () => ({
   useTheme: () => ({ resolvedTheme: "dark" }),
 }));
 
+vi.mock("@/components", () => ({
+  Button: React.forwardRef<
+    HTMLButtonElement,
+    React.ButtonHTMLAttributes<HTMLButtonElement> & {
+      readonly asChild?: boolean;
+      readonly size?: string;
+      readonly variant?: string;
+    }
+  >(({ asChild, children, size: _size, variant: _variant, ...props }, ref) =>
+    asChild && React.isValidElement(children)
+      ? children
+      : React.createElement(
+          "button",
+          { type: props.type ?? "button", ...props, ref },
+          children
+        )
+  ),
+  Input: React.forwardRef<
+    HTMLInputElement,
+    React.InputHTMLAttributes<HTMLInputElement>
+  >((props, ref) => React.createElement("input", { ...props, ref })),
+}));
+
 vi.mock("@/features/home/components/useInternshipWalletSignature", () => ({
   useInternshipWalletSignature: () => ({
     address: "0x1111111111111111111111111111111111111111",

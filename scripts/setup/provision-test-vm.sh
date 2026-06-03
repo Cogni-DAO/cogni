@@ -59,7 +59,6 @@ case "$DEPLOY_ENV" in
     DEPLOY_BRANCH="deploy/preview"
     K8S_NAMESPACE="cogni-preview"
     OVERLAY_DIR="preview"
-    APPSET_FILE="preview-applicationset.yaml"
     WORKSPACE="preview"
     ;;
   production)
@@ -67,7 +66,6 @@ case "$DEPLOY_ENV" in
     DEPLOY_BRANCH="deploy/production"
     K8S_NAMESPACE="cogni-production"
     OVERLAY_DIR="production"
-    APPSET_FILE="production-applicationset.yaml"
     WORKSPACE="production"
     ;;
   candidate-*)
@@ -80,7 +78,6 @@ case "$DEPLOY_ENV" in
     DEPLOY_BRANCH="deploy/${SLOT}"
     K8S_NAMESPACE="cogni-${SLOT}"
     OVERLAY_DIR="${SLOT}"
-    APPSET_FILE="${SLOT}-applicationset.yaml"
     WORKSPACE="${SLOT}"
     ;;
   *)
@@ -725,19 +722,30 @@ ssh $SSH_OPTS root@"$VM_IP" "
 # operator's local checkout is the source of truth — it has the files they intend to deploy.
 # This also avoids the chicken-and-egg: you can provision preview before the files are
 # promoted to staging.
-APPSET_LOCAL="$REPO_ROOT/infra/k8s/argocd/${APPSET_FILE}"
-if [ ! -f "$APPSET_LOCAL" ]; then
-  log_error "ApplicationSet file not found locally: $APPSET_LOCAL"
+# Per-node AppSets: one `${OVERLAY_DIR}-<node>-applicationset.yaml` object per node
+# (LANE_ISOLATION, axiom 18). Fall back to a legacy shared `${OVERLAY_DIR}-applicationset.yaml`
+# for envs not yet migrated (e.g. candidate-b).
+shopt -s nullglob
+APPSET_LOCALS=("$REPO_ROOT"/infra/k8s/argocd/"${OVERLAY_DIR}"-*-applicationset.yaml)
+if [ ${#APPSET_LOCALS[@]} -eq 0 ] && [ -f "$REPO_ROOT/infra/k8s/argocd/${OVERLAY_DIR}-applicationset.yaml" ]; then
+  APPSET_LOCALS=("$REPO_ROOT/infra/k8s/argocd/${OVERLAY_DIR}-applicationset.yaml")
+fi
+shopt -u nullglob
+if [ ${#APPSET_LOCALS[@]} -eq 0 ]; then
+  log_error "No ApplicationSet files for ${OVERLAY_DIR} under infra/k8s/argocd/ (run 'pnpm gen:node-appset')"
   log_error "Run this script from the repo root on a branch that has infra/k8s/argocd/"
   exit 1
 fi
 
-scp $SSH_OPTS "$APPSET_LOCAL" root@"$VM_IP":/tmp/appset.yaml
-ssh $SSH_OPTS root@"$VM_IP" "
-  kubectl apply -f /tmp/appset.yaml -n argocd
-  rm -f /tmp/appset.yaml
-  echo 'ApplicationSet applied: ${APPSET_FILE} — Argo syncing from deploy/* branches'
-"
+for appset_local in "${APPSET_LOCALS[@]}"; do
+  base="$(basename "$appset_local")"
+  scp $SSH_OPTS "$appset_local" root@"$VM_IP":/tmp/"$base"
+  ssh $SSH_OPTS root@"$VM_IP" "
+    kubectl apply -f /tmp/${base} -n argocd
+    rm -f /tmp/${base}
+    echo 'ApplicationSet applied: ${base} — Argo syncing from deploy/* branches'
+  "
+done
 
 # Poll for apps to sync (up to 5 min)
 log_info "Waiting for Argo to sync apps..."

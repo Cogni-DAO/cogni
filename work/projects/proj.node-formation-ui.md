@@ -38,6 +38,18 @@ Full node lifecycle: DAO formation (done) -> zero-touch provisioning (this proje
 | Automated e2e testing (DAO formation flow with testnet)                                                                                                                                                                                             | Not Started | 2   | —           |
 | Encoding parity test: TokenVoting setup encoding must match Foundry exactly (`packages/aragon-osx/src/__tests__/encoding.parity.test.ts`). Fixture generation: Run Foundry script with known inputs, capture encoded bytes, commit as test fixture. | Not Started | 2   | —           |
 
+### Crawl (P0b) — Payments Activation for Monorepo Nodes
+
+**Goal:** Turn manual 3-step activation into one seamless `activate(nodeId)`, and prove the loop with a deployment-portable $2 live-money test. Design: [design.node-payments-activation](../../docs/design/node-payments-activation.md).
+
+| Deliverable                                                                                                                                                   | Status      | Est | Work Item         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | ----------------- |
+| `activate(nodeId)` — idempotent operator step: provision node wallet + deploy Split + write `nodes/<x>/.cogni/repo-spec.yaml` (replaces the 3 manual steps)   | Not Started | 3   | (create at start) |
+| Rename `operator_wallet` → `node_wallet` in node-spec + `@cogni/repo-spec` schema/accessors (kills the "operator bound?" confusion)                           | Not Started | 1   | (create at start) |
+| Per-node Privy secret namespace so no shared key controls multiple nodes (the only real operator-binding risk)                                                | Not Started | 2   | `task.5081`       |
+| Make `test:external:money` deployment-portable — deep PG/TigerBeetle assertions now optional; HTTP + OpenRouter proof always runs against any `TEST_BASE_URL` | **Done**    | 2   | `task.0165`       |
+| Run the $2 live-money e2e against a deployed monorepo node (candidate/preview); post scorecard                                                                | Not Started | 1   | `task.0165`       |
+
 ### Walk (P1) — Zero-Touch Node Launch + Node Registration
 
 **Goal:** Build the provisionNode workflow so that DAO formation -> live node requires zero manual steps. Shared cluster, namespace per node.
@@ -139,6 +151,24 @@ Full node lifecycle: DAO formation (done) -> zero-touch provisioning (this proje
 - Operator can rebuild from on-chain data
 
 > See: [Node vs Operator Contract](../../docs/spec/node-operator-contract.md)
+
+### TS-Native Node-Birth Rails (direction, Run)
+
+**Today (deliberate, not just debt):** node birth runs Next.js app → GitHub Actions (YAML) → `scripts/ci/*.sh` (bash + `yq` + inline `python3`). This is a real **portability sweet spot**: a fork clones the node-template GitHub repo and runs the _entire_ birth flow with `gh` + `bash` + `yq` + `curl` — **no hard-required Cogni platform/operator backend**. Forks are self-sufficient. That property is load-bearing and must survive any migration.
+
+**The cost we're paying:** bash boundaries are untyped (stringly-typed, `python3 -c` to parse JSON), and the bash operators are a _parallel_ implementation that drifts from the typed layer. Concrete: `@cogni/dns-ops` (`task.0232`) already ships a typed, tested CloudflareAdapter with `PROTECTED` (@/www) enforcement — and the bash reconcile (`#1445`) reimplemented the upsert **without** those guards, forcing them to be hand-written back in bash (`#1447`: apex guard + in-place update). One safety invariant, now in two places.
+
+**Top-0.1% target:**
+
+- One Zod `NodeSpec`/`EnvSpec` as identity+shape SSOT; YAML catalogs are generated-from or validated-against it.
+- DB types derived from the same schema (drizzle-zod): the operator `node_registry_nodes` row and the git `repo-spec.yaml` manifest validate against **one** type — no live-vs-declared drift.
+- Operators (DNS, secrets, overlays, scheduler-routing) as hexagonal TS ports/adapters (`DnsPort` = the existing CloudflareAdapter), unit-tested in vitest.
+- **One `cogni` CLI** is the shared entrypoint for the operator wizard (in-process) _and_ the GH workflow (`- run: pnpm cogni env reconcile <env>` — zero logic in YAML, zero bash).
+- Bash remains only at the irreducible bootstrap floor (the VM step that installs node/pnpm).
+
+**Hard constraint on the migration:** the `cogni` CLI must stay **fork-runnable standalone** (`npx`/`pnpm`, no operator backend dependency) — otherwise we trade away the portability the bash form gives forks today. Preserving fork self-sufficiency is the bar, not just "rewrite in TS."
+
+**Trigger to invest (not now):** when the formation wizard goes from design → shipped-and-used, **or** when a bash-drift bug reaches prod. The `#1447` DNS near-miss is the warning shot, not yet the trigger — bash is proven on candidate-a today.
 
 ### Federation Enrollment (P2+)
 

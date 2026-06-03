@@ -39,10 +39,12 @@ function requireEnv(name: string): string {
   return value;
 }
 
-requireEnv("DATABASE_SERVICE_URL");
-requireEnv("TIGERBEETLE_ADDRESS");
+// Always required (the deployment-portable HTTP + OpenRouter proof).
 requireEnv("OPENROUTER_API_KEY");
 requireEnv("TEST_WALLET_PRIVATE_KEY");
+// DATABASE_SERVICE_URL + TIGERBEETLE_ADDRESS are OPTIONAL: when present (local dev:stack)
+// the test additionally asserts Postgres funding rows + TigerBeetle deltas. Against a
+// deployment, omit them and point TEST_BASE_URL at the deployed node URL.
 
 export default defineConfig({
   root: __dirname,

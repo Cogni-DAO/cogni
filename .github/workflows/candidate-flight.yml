@@ -39,6 +39,9 @@ jobs:
       digests_json: ${{ steps.images.outputs.digests_json }}
       targets_json: ${{ steps.detect.outputs.targets_json }}
       has_targets: ${{ steps.detect.outputs.has_targets }}
+      flight_targets_json: ${{ steps.detect.outputs.flight_targets_json }}
+      has_flight_targets: ${{ steps.detect.outputs.has_flight_targets }}
+      needs_infra: ${{ steps.birth.outputs.needs_infra }}
     steps:
       - name: Checkout workflow source
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
@@ -62,6 +65,13 @@ jobs:
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
           echo "image_tag=pr-${{ inputs.pr_number }}-${HEAD_SHA}" >> "$GITHUB_OUTPUT"
           echo "status_url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout app source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          ref: ${{ steps.meta.outputs.head_sha }}
+          fetch-depth: 0
+          path: app-src
 
       - name: Report pending candidate-flight status
         env:
@@ -98,9 +108,39 @@ jobs:
 
       - name: Detect affected nodes
         id: detect
+        working-directory: app-src
         env:
           CHANGED_PATHS_FILE: ${{ steps.pr-files.outputs.changed_paths_file }}
         run: bash scripts/ci/detect-affected.sh
+
+      # Node BIRTH detection (mochi gap): a flight that ADDS a new
+      # infra/catalog/<slug>.yaml is bringing a brand-new node online, so its
+      # edge route + DB + secret don't exist on the VM yet. Use the GitHub PR
+      # `files` API (status == 'added') as the authoritative added-paths source —
+      # the same reason the affected-detector above prefers it over a merge-base
+      # diff (squash-merged sibling branches pollute `git diff base...head`).
+      # Birth → needs_infra=true couples deploy-infra into THIS flight's graph
+      # (one-flight birth). Ordinary app flights → false: app/infra independence
+      # (task.0314) is preserved; the standalone candidate-flight-infra.yml lever
+      # remains for infra-only/manual changes.
+      - name: Detect node birth (added catalog entry)
+        id: birth
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          ADDED_CATALOG=$(gh api --paginate \
+            "repos/${{ github.repository }}/pulls/${PR_NUMBER}/files" \
+            --jq '.[] | select(.status == "added") | .filename
+                  | select(test("^infra/catalog/[^/]+\\.yaml$"))')
+          if [ -n "$ADDED_CATALOG" ]; then
+            echo "::notice::Node birth detected — new catalog entry: ${ADDED_CATALOG//$'\n'/ }"
+            echo "needs_infra=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ℹ️  No added infra/catalog/*.yaml — app-only flight, infra independent"
+            echo "needs_infra=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Docker Buildx
         if: steps.detect.outputs.has_targets == 'true'
@@ -117,8 +157,10 @@ jobs:
       - name: Resolve PR image digests
         id: images
         if: steps.detect.outputs.has_targets == 'true'
+        working-directory: app-src
         env:
           IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
+          SOURCE_SHA: ${{ steps.meta.outputs.head_sha }}
           OUTPUT_FILE: ${{ runner.temp }}/resolved-pr-images.json
         run: bash scripts/ci/resolve-pr-build-images.sh
 
@@ -138,18 +180,29 @@ jobs:
 
   reconcile-appset:
     needs: decide
-    if: needs.decide.outputs.has_targets == 'true'
-    # Single shared write to the candidate-a VM (kubectl apply on the AppSet).
-    # Without this guard, two concurrent flights from different PRs race the
-    # apply. See work/items/bug.0378.reconcile-appset-shared-write-race.md.
+    if: needs.decide.outputs.has_flight_targets == 'true'
+    # Per-node lane (axiom 18, LANE_ISOLATION). A flight applies ONLY its own
+    # node's ApplicationSet object — never a shared file carrying other lanes'
+    # generators — so a concurrent flight of a different node cannot prune this
+    # node's Application. This is the structural fix for the shared-appset
+    # clobber: see work/items/bug.0378.reconcile-appset-shared-write-race.md.
+    # Matrix tracks the FLIGHT targets (the nodes actually deploying), in lockstep
+    # with the flight job below.
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJson(needs.decide.outputs.flight_targets_json) }}
     concurrency:
-      group: reconcile-appset-candidate-a
+      group: reconcile-appset-candidate-a-${{ matrix.node }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: candidate-a
     steps:
-      - name: Checkout workflow source (for AppSet YAML)
+      - name: Checkout app source (for AppSet YAML)
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          ref: ${{ needs.decide.outputs.head_sha }}
+          path: app-src
 
       - name: Setup SSH to candidate-a VM
         id: ssh-setup
@@ -168,27 +221,35 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Apply candidate-a-applicationset.yaml
+      - name: Apply candidate-a-${{ matrix.node }}-applicationset.yaml
         if: steps.ssh-setup.outputs.has_vm == 'true'
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           SSH_OPTS: "-i /home/runner/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
+          NODE: ${{ matrix.node }}
         run: |
           set -euo pipefail
-          APPSET_FILE="infra/k8s/argocd/candidate-a-applicationset.yaml"
+          APPSET_FILE="app-src/infra/k8s/argocd/candidate-a-${NODE}-applicationset.yaml"
+          if [ ! -f "$APPSET_FILE" ]; then
+            echo "::error::$APPSET_FILE missing at head_sha — run 'pnpm gen:node-appset' (CATALOG_IS_SSOT)"
+            exit 1
+          fi
           # shellcheck disable=SC2086
-          scp $SSH_OPTS "$APPSET_FILE" root@"$VM_HOST":/tmp/appset.yaml
+          scp $SSH_OPTS "$APPSET_FILE" root@"$VM_HOST":/tmp/appset-${NODE}.yaml
+          # Anti-resurrection: the legacy shared `cogni-candidate-a` AppSet is
+          # retired. Orphan-delete (never prune its live Applications) so it can
+          # never reappear to re-clobber this lane, then apply the per-node object.
           # shellcheck disable=SC2086
-          ssh $SSH_OPTS root@"$VM_HOST" "kubectl apply -f /tmp/appset.yaml -n argocd && rm -f /tmp/appset.yaml"
+          ssh $SSH_OPTS root@"$VM_HOST" "kubectl delete applicationset cogni-candidate-a -n argocd --cascade=orphan --ignore-not-found && kubectl apply -f /tmp/appset-${NODE}.yaml -n argocd && rm -f /tmp/appset-${NODE}.yaml"
 
   flight:
     needs: [decide, reconcile-appset]
-    if: needs.decide.outputs.has_targets == 'true'
+    if: needs.decide.outputs.has_flight_targets == 'true'
     strategy:
       fail-fast: false
       matrix:
         env: [candidate-a]
-        node: ${{ fromJson(needs.decide.outputs.targets_json) }}
+        node: ${{ fromJson(needs.decide.outputs.flight_targets_json) }}
     concurrency:
       group: candidate-flight-pipeline-${{ matrix.env }}-${{ matrix.node }}
       cancel-in-progress: false
@@ -257,6 +318,12 @@ jobs:
             "deploy-branch/infra/k8s/overlays/candidate-a/${NODE}/"
           mkdir -p deploy-branch/infra/catalog
           cp "app-src/infra/catalog/${NODE}.yaml" "deploy-branch/infra/catalog/${NODE}.yaml"
+          if [ -d "app-src/nodes/${NODE}/k8s/external-secrets/candidate-a" ]; then
+            mkdir -p "deploy-branch/nodes/${NODE}/k8s/external-secrets/candidate-a"
+            rsync -a --delete \
+              "app-src/nodes/${NODE}/k8s/external-secrets/candidate-a/" \
+              "deploy-branch/nodes/${NODE}/k8s/external-secrets/candidate-a/"
+          fi
 
       - name: Promote this node's digest
         id: promote
@@ -266,6 +333,7 @@ jobs:
           OVERLAY_ENV: candidate-a
           NODE: ${{ matrix.node }}
           HEAD_SHA: ${{ needs.decide.outputs.head_sha }}
+          COGNI_CATALOG_ROOT: ../app-src/infra/catalog
         run: NODES="$NODE" bash ../ci-src/scripts/ci/promote-build-payload.sh
 
       - name: Restore non-promoted overlay digests (post-rsync self-heal)
@@ -336,16 +404,210 @@ jobs:
           path: deploy-sha-out/deploy-sha-${{ matrix.node }}.txt
           retention-days: 1
 
+  # Per-node public DNS. The node's overlay/secrets/DB all auto-fan on flight,
+  # but `<node>-test.<root>` only resolved if someone hand-made a Cloudflare A
+  # record (no `*-test` wildcard) — so a freshly-created node deployed but its
+  # public URL failed at DNS. This reconciles one A record per non-primary
+  # catalog node → the env VM IP (idempotent), so verify-candidate's smoke +
+  # buildSha checks (which curl host_for_node(node, DOMAIN)) resolve.
+  #
+  # Depends only on `decide` (DNS is env-level, independent of the image build):
+  # it runs on EVERY flight dispatch — including no-target ones — so it both
+  # self-heals every node's record and is independently exercisable/validatable
+  # without a node change. Idempotent + mirrors the apex proxy state, so a
+  # no-op run is the proof the live write path is green.
+  reconcile-dns:
+    needs: [decide]
+    if: needs.decide.result == 'success'
+    # Serialize Cloudflare writes across concurrent flights (mirrors reconcile-appset).
+    concurrency:
+      group: reconcile-dns-candidate-a
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    environment: candidate-a
+    steps:
+      # PR head, not the workflow default branch: a PR that ADDS a node carries
+      # the new catalog entry + the reconcile script here, so DNS covers it.
+      - name: Checkout app source (PR catalog + scripts)
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          ref: ${{ needs.decide.outputs.head_sha }}
+
+      - name: Reconcile node DNS (per-node A records → VM IP)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          FORK_DOMAIN_ROOT: ${{ vars.FORK_DOMAIN_ROOT || 'cognidao.org' }}
+          DOMAIN: ${{ vars.DOMAIN }}
+        run: |
+          set -euo pipefail
+          # Flights run on a main-merge ref; a pre-#1445 head lacks this script.
+          # Skip rather than 127 so older PRs still flight (their nodes already resolve).
+          if [ ! -f scripts/ci/reconcile-node-dns.sh ]; then
+            echo "::warning::scripts/ci/reconcile-node-dns.sh absent at this ref — skipping node DNS reconcile"
+            exit 0
+          fi
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ZONE_ID:-}" ]; then
+            echo "::warning::Cloudflare secrets unset on candidate-a — skipping node DNS reconcile (newly-created nodes won't resolve)"
+            exit 0
+          fi
+          bash scripts/ci/reconcile-node-dns.sh candidate-a
+
+  # Node BIRTH only (mochi gap): a flight that ADDS a catalog node must
+  # provision that node's Compose infra — edge route + DB + secret — in the SAME
+  # flight, else the freshly-deployed pod has no DB/secret and the edge returns
+  # TLS-internal-error (no Caddy route). Mirrors candidate-flight-infra.yml's
+  # flight-infra job (the standalone infra lever, still available for manual /
+  # infra-only changes) but sources infra/compose/** from the PR head, not main,
+  # so the birthing PR's own infra lands. Skipped on every non-birth flight →
+  # task.0314 app/infra independence holds; the coupling fires ONLY on birth.
+  deploy-infra:
+    needs: decide
+    if: needs.decide.outputs.needs_infra == 'true'
+    concurrency:
+      group: candidate-flight-infra-candidate-a
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    environment: candidate-a
+    timeout-minutes: 45
+    env:
+      VM_HOST: ${{ secrets.VM_HOST }}
+      DOMAIN: ${{ vars.DOMAIN }}
+      DEPLOY_ENVIRONMENT: candidate-a
+      APP_ENV: production
+      COGNI_REPO_URL: https://github.com/${{ github.repository }}.git
+      COGNI_REPO_REF: ${{ needs.decide.outputs.head_sha }}
+      GIT_READ_USERNAME: Cogni-1729
+      GIT_READ_TOKEN: ${{ secrets.GIT_READ_TOKEN }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DATABASE_SERVICE_URL: ${{ secrets.DATABASE_SERVICE_URL }}
+      POSTGRES_ROOT_USER: ${{ secrets.POSTGRES_ROOT_USER }}
+      POSTGRES_ROOT_PASSWORD: ${{ secrets.POSTGRES_ROOT_PASSWORD }}
+      APP_DB_USER: ${{ secrets.APP_DB_USER }}
+      APP_DB_PASSWORD: ${{ secrets.APP_DB_PASSWORD }}
+      APP_DB_SERVICE_USER: ${{ secrets.APP_DB_SERVICE_USER }}
+      APP_DB_SERVICE_PASSWORD: ${{ secrets.APP_DB_SERVICE_PASSWORD }}
+      APP_DB_READONLY_USER: ${{ secrets.APP_DB_READONLY_USER }}
+      APP_DB_READONLY_PASSWORD: ${{ secrets.APP_DB_READONLY_PASSWORD }}
+      APP_DB_NAME: ${{ secrets.APP_DB_NAME }}
+      LITELLM_MASTER_KEY: ${{ secrets.LITELLM_MASTER_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+      EVM_RPC_URL: ${{ secrets.EVM_RPC_URL }}
+      POLYGON_RPC_URL: ${{ secrets.POLYGON_RPC_URL }}
+      TEMPORAL_DB_USER: ${{ secrets.TEMPORAL_DB_USER }}
+      TEMPORAL_DB_PASSWORD: ${{ secrets.TEMPORAL_DB_PASSWORD }}
+      GHCR_DEPLOY_TOKEN: ${{ secrets.GHCR_DEPLOY_TOKEN }}
+      GHCR_USERNAME: Cogni-1729
+      ACTIONS_AUTOMATION_BOT_PAT: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
+      GRAFANA_CLOUD_LOKI_URL: ${{ secrets.GRAFANA_CLOUD_LOKI_URL }}
+      GRAFANA_CLOUD_LOKI_USER: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
+      GRAFANA_CLOUD_LOKI_API_KEY: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
+      METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+      PROMETHEUS_REMOTE_WRITE_URL: ${{ secrets.PROMETHEUS_REMOTE_WRITE_URL }}
+      PROMETHEUS_USERNAME: ${{ secrets.PROMETHEUS_USERNAME }}
+      PROMETHEUS_PASSWORD: ${{ secrets.PROMETHEUS_PASSWORD }}
+      PROMETHEUS_QUERY_URL: ${{ secrets.PROMETHEUS_QUERY_URL }}
+      PROMETHEUS_READ_USERNAME: ${{ secrets.PROMETHEUS_READ_USERNAME }}
+      PROMETHEUS_READ_PASSWORD: ${{ secrets.PROMETHEUS_READ_PASSWORD }}
+      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+      LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
+      SCHEDULER_API_TOKEN: ${{ secrets.SCHEDULER_API_TOKEN }}
+      BILLING_INGEST_TOKEN: ${{ secrets.BILLING_INGEST_TOKEN }}
+      INTERNAL_OPS_TOKEN: ${{ secrets.INTERNAL_OPS_TOKEN }}
+      OPENCLAW_GATEWAY_TOKEN: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
+      OPENCLAW_GITHUB_RW_TOKEN: ${{ secrets.OPENCLAW_GITHUB_RW_TOKEN }}
+      DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+      GH_OAUTH_CLIENT_ID: ${{ secrets.GH_OAUTH_CLIENT_ID }}
+      GH_OAUTH_CLIENT_SECRET: ${{ secrets.GH_OAUTH_CLIENT_SECRET }}
+      DISCORD_OAUTH_CLIENT_ID: ${{ secrets.DISCORD_OAUTH_CLIENT_ID }}
+      DISCORD_OAUTH_CLIENT_SECRET: ${{ secrets.DISCORD_OAUTH_CLIENT_SECRET }}
+      GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+      DOLTHUB_REMOTE_URL: ${{ secrets.DOLTHUB_REMOTE_URL }}
+      DOLT_CREDS_JWK: ${{ secrets.DOLT_CREDS_JWK }}
+      DOLT_CREDS_KEYID: ${{ secrets.DOLT_CREDS_KEYID }}
+      DOLTHUB_API_TOKEN: ${{ secrets.DOLTHUB_API_TOKEN }}
+      DOLTHUB_OAUTH_CLIENT_ID: ${{ secrets.DOLTHUB_OAUTH_CLIENT_ID }}
+      DOLTHUB_OAUTH_CLIENT_SECRET: ${{ secrets.DOLTHUB_OAUTH_CLIENT_SECRET }}
+      GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
+      GRAFANA_SERVICE_ACCOUNT_TOKEN: ${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}
+      GRAFANA_PDC_SIGNING_TOKEN: ${{ secrets.GRAFANA_PDC_SIGNING_TOKEN }}
+      GRAFANA_PDC_HOSTED_GRAFANA_ID: ${{ secrets.GRAFANA_PDC_HOSTED_GRAFANA_ID }}
+      GRAFANA_PDC_CLUSTER: ${{ secrets.GRAFANA_PDC_CLUSTER }}
+      GRAFANA_PDC_NETWORK_ID: ${{ secrets.GRAFANA_PDC_NETWORK_ID }}
+      GRAFANA_PDC_NETWORK_UUID: ${{ secrets.GRAFANA_PDC_NETWORK_UUID }}
+      GH_REVIEW_APP_ID: ${{ secrets.GH_REVIEW_APP_ID }}
+      GH_REVIEW_APP_PRIVATE_KEY_BASE64: ${{ secrets.GH_REVIEW_APP_PRIVATE_KEY_BASE64 }}
+      GH_REPOS: ${{ vars.GH_REPOS }}
+      GH_WEBHOOK_SECRET: ${{ secrets.GH_WEBHOOK_SECRET }}
+      PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
+      PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET }}
+      PRIVY_SIGNING_KEY: ${{ secrets.PRIVY_SIGNING_KEY }}
+      PRIVY_USER_WALLETS_APP_ID: ${{ secrets.PRIVY_USER_WALLETS_APP_ID }}
+      PRIVY_USER_WALLETS_APP_SECRET: ${{ secrets.PRIVY_USER_WALLETS_APP_SECRET }}
+      PRIVY_USER_WALLETS_SIGNING_KEY: ${{ secrets.PRIVY_USER_WALLETS_SIGNING_KEY }}
+      POLY_WALLET_AEAD_KEY_HEX: ${{ secrets.POLY_WALLET_AEAD_KEY_HEX }}
+      POLY_WALLET_AEAD_KEY_ID: ${{ secrets.POLY_WALLET_AEAD_KEY_ID }}
+      POLY_CLOB_GEO_BLOCK_TOKEN: ${{ secrets.POLY_CLOB_GEO_BLOCK_TOKEN }}
+      CONNECTIONS_ENCRYPTION_KEY: ${{ secrets.CONNECTIONS_ENCRYPTION_KEY }}
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      COGNI_NODE_DBS: ${{ secrets.COGNI_NODE_DBS }}
+    steps:
+      - name: Checkout (for scripts + PR-head infra)
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          ref: ${{ needs.decide.outputs.head_sha }}
+          fetch-depth: 0
+
+      - name: Setup SSH
+        run: |
+          if [ -z "$VM_HOST" ]; then
+            echo "⚠️ No VM_HOST secret set for candidate-a — skipping infra deploy"
+            exit 0
+          fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_DEPLOY_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Preflight Grafana PDC signing token
+        if: env.VM_HOST != '' && env.GRAFANA_PDC_SIGNING_TOKEN != ''
+        run: bash scripts/grafana-pdc-token-preflight.sh
+
+      - name: Deploy Compose infra to candidate-a VM (PR head)
+        if: env.VM_HOST != ''
+        run: bash scripts/ci/deploy-infra.sh --ref "$COGNI_REPO_REF"
+
+      - name: Provision Grafana Postgres datasources
+        if: env.VM_HOST != ''
+        run: bash scripts/ci/provision-grafana-postgres-datasources.sh
+
+      - name: Verify Grafana Postgres datasources
+        if: env.VM_HOST != ''
+        continue-on-error: true
+        run: bash scripts/ci/verify-grafana-postgres-datasources.sh
+
   verify-candidate:
-    needs: [decide, flight]
+    needs: [decide, flight, reconcile-dns, deploy-infra]
+    # deploy-infra runs ONLY on birth (added catalog node); on every ordinary
+    # app flight it is SKIPPED, and a skipped birth-infra must still let verify
+    # run — mirrors promote-and-deploy.yml's
+    # `(deploy-infra.result == 'success' || 'skipped')` gate.
     if: |
-      needs.decide.outputs.has_targets == 'true' &&
-      needs.flight.result == 'success'
+      always() &&
+      needs.decide.outputs.has_flight_targets == 'true' &&
+      needs.flight.result == 'success' &&
+      needs.reconcile-dns.result == 'success' &&
+      (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped')
     strategy:
       fail-fast: false
       matrix:
         env: [candidate-a]
-        node: ${{ fromJson(needs.decide.outputs.targets_json) }}
+        node: ${{ fromJson(needs.decide.outputs.flight_targets_json) }}
     concurrency:
       group: candidate-flight-pipeline-${{ matrix.env }}-${{ matrix.node }}
       cancel-in-progress: false
@@ -416,12 +678,15 @@ jobs:
           PROMOTED_APPS: ${{ matrix.node }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          COGNI_CATALOG_ROOT: app-src/infra/catalog
         run: bash ci-src/scripts/ci/wait-for-argocd.sh
 
       - name: Wait for candidate readiness
         if: steps.ssh-setup.outputs.has_vm == 'true'
         env:
           DOMAIN: ${{ vars.DOMAIN }}
+          PROMOTED_APPS: ${{ matrix.node }}
+          COGNI_CATALOG_ROOT: app-src/infra/catalog
         run: bash ci-src/scripts/ci/wait-for-candidate-ready.sh
 
       - name: Wait for in-cluster services (per-node)
@@ -430,6 +695,7 @@ jobs:
           VM_HOST: ${{ secrets.VM_HOST }}
           DEPLOY_ENVIRONMENT: candidate-a
           PROMOTED_APPS: ${{ matrix.node }}
+          COGNI_CATALOG_ROOT: app-src/infra/catalog
         run: bash ci-src/scripts/ci/wait-for-in-cluster-services.sh
 
       - name: Run candidate smoke checks (per-node)
@@ -437,6 +703,7 @@ jobs:
         env:
           DOMAIN: ${{ vars.DOMAIN }}
           PROMOTED_APPS: ${{ matrix.node }}
+          COGNI_CATALOG_ROOT: app-src/infra/catalog
         run: bash ci-src/scripts/ci/smoke-candidate.sh
 
       - name: Verify buildSha on endpoint (per-node)
@@ -446,6 +713,7 @@ jobs:
           SOURCE_SHA_MAP: deploy-branch/.promote-state/source-sha-by-app.json
           EXPECTED_BUILDSHA: ${{ needs.decide.outputs.head_sha }}
           NODES: ${{ matrix.node }}
+          COGNI_CATALOG_ROOT: app-src/infra/catalog
         run: bash ci-src/scripts/ci/verify-buildsha.sh
 
   report-status:
@@ -460,15 +728,23 @@ jobs:
         id: decide
         env:
           HAS_TARGETS: ${{ needs.decide.outputs.has_targets }}
+          HAS_FLIGHT_TARGETS: ${{ needs.decide.outputs.has_flight_targets }}
           FLIGHT_RESULT: ${{ needs.flight.result }}
           VERIFY_RESULT: ${{ needs.verify-candidate.result }}
-          TARGETS_JSON: ${{ needs.decide.outputs.targets_json }}
+          TARGETS_JSON: ${{ needs.decide.outputs.flight_targets_json }}
         run: |
           set -euo pipefail
-          echo "has_targets=${HAS_TARGETS} flight=${FLIGHT_RESULT} verify=${VERIFY_RESULT} targets=${TARGETS_JSON}"
-          if [ "$HAS_TARGETS" != "true" ]; then
+          echo "has_targets=${HAS_TARGETS} has_flight_targets=${HAS_FLIGHT_TARGETS} flight=${FLIGHT_RESULT} verify=${VERIFY_RESULT} flight_targets=${TARGETS_JSON}"
+          if [ "$HAS_FLIGHT_TARGETS" != "true" ]; then
+            # No k8s app-lever targets. Either nothing affected, or the affected
+            # set is type:infra only (e.g. litellm) — which deploys via Compose
+            # (deploy-infra.sh / candidate-flight-infra.yml), not this app lever.
             STATE=success
-            DESC="Candidate flight no-op (no affected nodes)"
+            if [ "$HAS_TARGETS" = "true" ]; then
+              DESC="Candidate flight no-op (infra-only affected set; deploys via Compose lever)"
+            else
+              DESC="Candidate flight no-op (no affected nodes)"
+            fi
           elif [ "$FLIGHT_RESULT" = "success" ] && [ "$VERIFY_RESULT" = "success" ]; then
             STATE=success
             DESC="Candidate flight passed (matrix: ${TARGETS_JSON})"

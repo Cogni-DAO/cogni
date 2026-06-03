@@ -77,6 +77,22 @@ describe("single-node-scope workflow gate · structural pins", () => {
     ).toEqual(expected);
   });
 
+  it("filter block is wrapped in render-scope-filters.sh GENERATED sentinels (CATALOG_IS_SSOT)", () => {
+    const raw = readFileSync(WORKFLOW_PATH, "utf8");
+    expect(
+      raw,
+      "filter block must be wrapped in the render-scope-filters.sh BEGIN sentinel " +
+        "so the dorny filters stay catalog-derived (no hand-listed `<slug>:` filters). " +
+        "Run `pnpm gen:scope-filters`."
+    ).toContain(
+      "# >>> GENERATED scope-filters (scripts/ci/render-scope-filters.sh) — DO NOT EDIT BY HAND"
+    );
+    expect(
+      raw,
+      "filter block must close with the GENERATED end sentinel"
+    ).toContain("# <<< GENERATED scope-filters");
+  });
+
   it("operator filter is `**` plus negations of every other filter (no positive infra paths)", () => {
     const job = loadJob();
     const filterStep = findStep<{ with: { filters: string } }>(
@@ -189,5 +205,16 @@ describe("single-node-scope workflow gate · structural pins", () => {
     ).toContain(
       'startswith("tests/ci-invariants/fixtures/single-node-scope/")'
     );
+    expect(
+      enforce.run,
+      "node-birth wiring whitelist must include the scheduler-worker configmap " +
+        "(catalog-derived regen artifact; must mirror isNodeWiring in classify.ts)"
+    ).toContain('"infra/k8s/base/scheduler-worker/configmap.yaml"');
+    expect(
+      enforce.run,
+      "node-birth wiring whitelist must include the edge Caddyfile.tmpl " +
+        "(catalog-derived regen artifact; bug.5086 parity — must mirror isNodeWiring " +
+        "in classify.ts so a catalog-driven Caddyfile regen rides a node birth)"
+    ).toContain('"infra/compose/edge/configs/Caddyfile.tmpl"');
   });
 });

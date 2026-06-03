@@ -20,6 +20,7 @@ You have a node app under `nodes/<node>/app` (a Next.js node) and you want it to
 
 **Do NOT use this guide for:**
 
+- **Standing up a whole new ENVIRONMENT** (candidate-\*, preview, production, or a fork — the VM + substrate, not a node) → [`create-env.md`](./create-env.md). That's the env axis; this is the node axis.
 - **Services** (`services/` — Temporal workers, queue consumers, utility HTTP) → [`create-service.md`](./create-service.md).
 - **On-chain DAO formation** (the wizard that deploys the DAO + token + repo-spec) → [`node-formation-guide.md`](./node-formation-guide.md). This guide is the infra-deploy slice that follows its **§8 "Deploy Infrastructure (Post-Formation)"**.
 
@@ -27,9 +28,13 @@ You have a node app under `nodes/<node>/app` (a Next.js node) and you want it to
 
 `infra/catalog/<node>.yaml` with `type: node` is the **single declaration site** ([ci-cd.md](../spec/ci-cd.md) axiom 16). `scripts/ci/lib/image-tags.sh` derives `NODE_TARGETS` from **every** `type: node` catalog entry, and every environment's machinery follows from it:
 
-- the PR build matrix (`detect-affected.sh`, `build-and-push-images.sh`),
+- the PR build matrix (`detect-affected.sh`, `build-and-push-images.sh`,
+  `resolve-pr-build-images.sh`),
 - the Argo `ApplicationSet` generators (one per node per env),
-- `promote-preview-seed-main.sh`, which `sha256sum`s `infra/k8s/overlays/preview/<node>/kustomization.yaml` **for every `NODE_TARGET`**.
+- `promote-preview-seed-main.sh`, which `sha256sum`s `infra/k8s/overlays/preview/<node>/kustomization.yaml` **for every `NODE_TARGET`**,
+- the per-node database inventory, k8s secret, and rollout loops in `deploy-infra.sh` (bug.5086 / task.5078 follow-up),
+- the scheduler-worker `COGNI_NODE_ENDPOINTS` map and LiteLLM node-local metering callback map (slug + `node_id` aliases for every catalog node),
+- the **edge Caddy reverse-proxy roster** — `scripts/ci/render-caddyfile.sh` generates the Caddyfile and `deploy-infra.sh` / `provision-env-vm.sh` write each node's per-env host, all from `node_port` + `is_primary_host` (task.5078). A new `type: node` auto-routes; no Caddyfile or deploy-script edit.
 
 > ⚠️ **The candidate-a-only trap (learned from #1369 / node-template).** Declaring a node in the catalog but only authoring the **candidate-a** overlay leaves the preview + production machinery expecting overlays that don't exist. Result: `Promote Preview Digest Seed` fails on `main` (`sha256sum: …/overlays/preview/<node>/kustomization.yaml: No such file or directory`) for _everyone_, and the node never reaches preview/prod.
 >
@@ -39,7 +44,28 @@ You have a node app under `nodes/<node>/app` (a Next.js node) and you want it to
 
 - [ ] `nodes/<node>/app` exists and builds (its own `Dockerfile`, Next.js app).
 - [ ] DAO formed + `.cogni/repo-spec.yaml` written (`node_id`, `scope_id`) per [`node-formation-guide.md`](./node-formation-guide.md).
-- [ ] A **unique `nodePort`** allocated. Current map: `operator 30000`, `node-template 30200`, `resy 30300`. Pick the next free `302xx`/`303xx` and keep it identical across all three env overlays.
+- [ ] A **unique `nodePort`** allocated. Current map: `operator 30000`, `node-template 30200`, `resy 30300`, `canary 30400`. Pick the next free `30x00`, record it as `node_port:` in the catalog entry (Step 1), and keep it identical across all three env overlays. CI (`scripts/ci/tests/render-caddyfile.test.sh`) asserts `catalog node_port == overlay Service nodePort` so the two can't drift.
+
+## Critical TODO Matrix
+
+Track these rows for every generated node PR. The wizard should emit the pure-git rows in one PR and open/follow side-effect work for provisioning before flight validation.
+
+| Row                   | Owner surface               | Required proof                                                                                                                     | Blocks flight? |
+| --------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| App scaffold          | `nodes/<node>/app`          | `pnpm --dir nodes/<node>/app build` or CI node image build succeeds                                                                | Yes            |
+| Catalog declaration   | `infra/catalog/<node>.yaml` | `scripts/ci/detect-affected.sh` selects `<node>` for `infra/catalog/<node>.yaml` and `nodes/<node>/` changes                       | Yes            |
+| Environment overlays  | `infra/k8s/overlays/*`      | `kustomize build infra/k8s/overlays/{candidate-a,preview,production}/<node>` succeeds                                              | Yes            |
+| ApplicationSet wiring | `infra/k8s/argocd/*`        | all three AppSets include `deploy/{candidate-a,preview,production}-<node>` generators                                              | Yes            |
+| Edge routing          | catalog + Caddy template    | generated Caddyfile has `<node>-test`, `<node>-preview`, and production host routes with the catalog `node_port`                   | Yes            |
+| Scheduler routing     | catalog + worker ConfigMap  | `scripts/ci/render-scheduler-worker-endpoints.sh --check` includes `<node>` slug + `node_id` aliases                               | Yes            |
+| Scheduler runtime DNS | worker overlay              | `scripts/ci/tests/scheduler-runtime-routing.test.sh` verifies scheduler-worker Temporal/Postgres/App Services use the env VM alias | Yes            |
+| LiteLLM callbacks     | deploy-infra catalog render | `deploy-infra.sh --dry-run` derives `COGNI_NODE_ENDPOINTS` from all catalog nodes for node-local metering callbacks                | Yes            |
+| Secrets               | deploy-infra / OpenBao path | target cluster has the pod-consumed secret (`<node>-node-app-secrets` today; ESO migration uses `<node>-env-secrets`)              | Yes            |
+| Databases             | deploy-infra                | Postgres `cogni_<node>` and Doltgres `knowledge_<node>` exist and app migrations complete                                          | Yes            |
+| DNS                   | DNS ops                     | `<node>-test`, `<node>-preview`, and production hostnames resolve to the correct env VM                                            | Yes            |
+| Candidate flight      | operator API / GitHub       | candidate-flight promotes only `<node>`, Argo syncs the deploy branch, and `/version.buildSha` equals PR head                      | Yes            |
+| Agent API validation  | `/validate-candidate`       | discover → register → chat/completions → runs list → SSE stream scorecard posted with Loki evidence                                | Yes            |
+| Wizard repeatability  | node wizard                 | a second generated node (for example `<node>-2`) produces the same rows without manual script edits                                | vNext gate     |
 
 ## Steps
 
@@ -51,6 +77,7 @@ The one declaration that makes the node a build target **and** a `NODE_TARGET`. 
 name: <node>
 type: node # MUST be "node" (drives NODE_TARGETS)
 port: 3200
+node_port: 30x00 # k3s Service NodePort; edge Caddy proxies host.docker.internal:<node_port>
 dockerfile: nodes/<node>/app/Dockerfile
 node_id: "<uuidv4>" # real UUID, not the 000…0 placeholder
 image_tag_suffix: "-<node>"
@@ -61,13 +88,17 @@ production_branch: deploy/production-<node>
 path_prefix: nodes/<node>/
 ```
 
-### 2. Wire the build matrix
+### 2. Verify the build matrix
 
-`image-tags.sh` is catalog-driven (no edit), but the build/affected scripts still carry per-target cases (until task.5079 makes `build_target()` catalog-driven):
+The build path is catalog-driven: `detect-affected.sh` reads `path_prefix`,
+`build-and-push-images.sh` reads `dockerfile` + `type`, and
+`resolve-pr-build-images.sh` uses the catalog tag suffix. A normal node add
+should not require a per-target case in these scripts.
 
-- [ ] `scripts/ci/detect-affected.sh` — add to `ALL_TARGETS` + a `nodes/<node>/*)` path case.
-- [ ] `scripts/ci/build-and-push-images.sh` — `resolve_tag()` + `build_target()` cases.
-- [ ] `scripts/ci/resolve-pr-build-images.sh` — mirror the `resolve_tag` case.
+- [ ] Confirm `infra/catalog/<node>.yaml` has `dockerfile`,
+      `image_tag_suffix`, `migrator_tag_suffix`, and `path_prefix`.
+- [ ] Do not add hand-maintained target lists. If a new node needs a script
+      edit here, treat that as a regression in `CATALOG_IS_SSOT`.
 
 **Verify:** touch a file under `nodes/<node>/` → `TURBO_SCM_BASE=origin/main TURBO_SCM_HEAD=HEAD scripts/ci/detect-affected.sh` lists `<node>`.
 
@@ -113,9 +144,9 @@ The AppSet template renders `path: infra/k8s/overlays/<env>/{{.name}}`. **This i
 
 Steps 1–5 land the rails; the node only becomes Healthy once each target env has:
 
-- [ ] **Secrets** — `<node>-node-app-secrets` in `cogni-<env>` (`scripts/ci/deploy-infra.sh` seeds from GitHub environment secrets; a new node needs its own DB creds + `DOLTGRES_URL`). Ties into the OpenBao/ESO secrets substrate.
-- [ ] **Databases** — per-namespace Postgres + Doltgres for the node.
-- [ ] **DNS** — `<node>-test` / `<node>-preview` / `<node>` `.cognidao.org` → the env VM IP, via the [`/dns-ops`](../../.claude/skills/dns-ops/SKILL.md) skill. Must match the overlay `NEXTAUTH_URL`.
+- [ ] **Secrets** — `<node>-node-app-secrets` in `cogni-<env>` (`scripts/ci/deploy-infra.sh` fans the baseline secrets to every catalog node). Ties into the OpenBao/ESO secrets substrate.
+- [ ] **Databases** — per-node Postgres + Doltgres for the node. `COGNI_NODE_DBS` is derived from `NODE_TARGETS` at deploy time (`<node>` -> `cogni_<node>`), so a new catalog node cannot be skipped by a stale GitHub env secret.
+- [ ] **DNS** — `<node>-test` / `<node>-preview` / `<node>` `.cognidao.org` -> the env VM IP, via the [`/dns-ops`](../../.claude/skills/dns-ops/SKILL.md) skill. Must match the overlay `NEXTAUTH_URL`. For candidate-a, use the monorepo VM alias/IP (`cogni-candidate-a.vm.cognidao.org`), not the legacy poly candidate alias.
 - [ ] **Externals** — LiteLLM / Temporal / Redis reachable at the VM host (the ExternalName targets from Step 3).
 
 ### 7. Flight gating — `wait-for-argocd.sh`
@@ -132,7 +163,7 @@ Steps 1–5 land the rails; the node only becomes Healthy once each target env h
 
 **Today (#1381):** the wizard deploys the web3 contracts (DAO + GovernanceERC20 + CogniSignal) and then auto-drafts a **repo-spec-only PR** — just `.cogni/repo-spec.yaml` (node identity). It stops at identity; the node is not yet a build target and has no deploy footprint.
 
-**vNext:** the wizard spawns a full **node-app PR** that scaffolds `nodes/<node>/app` plus Steps **1, 3, 4, 5** of this guide — catalog entry, overlays × 3, AppSet generators × 3, deploy branches — so a newly-formed node starts life already wired for **test → preview → prod**. Those four steps are pure functions of the `type: node` catalog declaration, which is what makes the candidate-a-only trap structurally impossible to repeat. Step **6** (secrets/DB/DNS) stays imperative — the side-effecting half the wizard's "Deploy Infrastructure" stage drives after the PR merges. Steps **2, 7** shrink to nothing once `build_target()` and `APPS` become catalog-driven (task.5079).
+**vNext:** the wizard spawns a full **node-app PR** that scaffolds `nodes/<node>/app` plus Steps **1, 3, 4, 5** of this guide — catalog entry, overlays × 3, AppSet generators × 3, deploy branches — so a newly-formed node starts life already wired for **test → preview → prod**. Those four steps are pure functions of the `type: node` catalog declaration, which is what makes the candidate-a-only trap structurally impossible to repeat. Step **6** (secrets/DB/DNS) stays imperative — the side-effecting half the wizard's "Deploy Infrastructure" stage drives after the PR merges. Step **2** is now verification only; Step **7** shrinks away once `wait-for-argocd.sh` is fully catalog-driven for required apps.
 
 > **Contract for the vNext wizard:** `formation(web3 + repo-spec)` → `node-app PR { nodes/<node>/app, catalog(type:node), overlays × 3, AppSet generators × 3, deploy branches × 3 }` → provision `{ secrets, DB, DNS } × 3`. Either the full matrix is generated or the node is not deployable — no partial (candidate-a-only) enablement.
 

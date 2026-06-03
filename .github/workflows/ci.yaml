@@ -38,8 +38,6 @@ jobs:
       SCHEDULER_API_TOKEN: test-scheduler-api-token-for-ci-min32chars
       BILLING_INGEST_TOKEN: test-billing-ingest-token-for-ci-min32ch
       INTERNAL_OPS_TOKEN: test-internal-ops-token-for-ci-min32
-      OPENCLAW_GATEWAY_TOKEN: test-openclaw-gateway-token-for-ci-32ch
-      OPENCLAW_GITHUB_RW_TOKEN: test-github-rw-token
       DISCORD_BOT_TOKEN: test-discord-bot-token-for-ci
       POSTHOG_API_KEY: phc_test_key_for_ci
       POSTHOG_HOST: http://localhost:18000
@@ -106,18 +104,24 @@ jobs:
           # would (incorrectly) classify as resy + operator. Per-node filters
           # have a single rule each, so the quantifier is a no-op for them.
           predicate-quantifier: "every"
+          # Filter block is CATALOG_IS_SSOT — generated from the nodes/* listing
+          # by scripts/ci/render-scope-filters.sh. Adding nodes/<slug>/ no longer
+          # needs a hand-edited `<slug>:` filter + `!nodes/<slug>/**` negation;
+          # run `pnpm gen:scope-filters`. CI (`--check`, unit job) fails on drift.
           filters: |
+            # >>> GENERATED scope-filters (scripts/ci/render-scope-filters.sh) — DO NOT EDIT BY HAND
             canary:
               - 'nodes/canary/**'
-            resy:
-              - 'nodes/resy/**'
             node-template:
               - 'nodes/node-template/**'
+            resy:
+              - 'nodes/resy/**'
             operator:
               - '**'
               - '!nodes/canary/**'
-              - '!nodes/resy/**'
               - '!nodes/node-template/**'
+              - '!nodes/resy/**'
+            # <<< GENERATED scope-filters
 
       # Intentionally inline — single-workflow gate, no logic duplicated across
       # workflows. SCRIPTS_ARE_THE_API targets cross-workflow drift, not unique
@@ -130,12 +134,18 @@ jobs:
           count=$(jq 'length' <<<"$MATCHED")
           if [ "$count" -le 1 ]; then exit 0; fi
 
-          # Ride-along exception: |S|=2, operator ∈ S, and every operator-
-          # matched path is in the whitelist. Whitelist must mirror
-          # RIDE_ALONG_PATTERNS in classify.ts.
+          # The single non-operator node (if exactly one), for the NODE_BIRTH
+          # wiring carve-out below.
+          NODE=$(jq -r 'map(select(. != "operator")) | if length == 1 then .[0] else "" end' <<<"$MATCHED")
+
+          # Ride-along exception: |S|=2, operator ∈ S, and every operator-matched
+          # path is in the whitelist OR is the node's OWN deploy wiring (bug.5086
+          # NODE_BIRTH — catalog/overlays/AppSet for the one node in S). Whitelist
+          # + isNodeWiring must mirror classify.ts (parity by convention; the
+          # parity spec covers the TS side only).
           if [ "$count" -eq 2 ] \
              && jq -e 'index("operator") != null' <<<"$MATCHED" >/dev/null \
-             && jq -e 'all(
+             && jq -e --arg node "$NODE" 'all(
                . == "pnpm-lock.yaml"
                or startswith("work/")
                or startswith("docs/")
@@ -147,6 +157,13 @@ jobs:
                or startswith("tests/ci-invariants/fixtures/single-node-scope/")
                or . == "tests/ci-invariants/single-node-scope-meta.spec.ts"
                or . == "tests/unit/packages/repo-spec/accessors.test.ts"
+               or ($node != "" and (
+                    . == ("infra/catalog/" + $node + ".yaml")
+                    or . == "infra/k8s/base/scheduler-worker/configmap.yaml"
+                    or . == "infra/compose/edge/configs/Caddyfile.tmpl"
+                    or test("^infra/k8s/overlays/[^/]+/" + $node + "/")
+                    or test("^infra/k8s/argocd/[^/]*applicationset[^/]*\\.ya?ml$")
+                  ))
              )' <<<"$OPERATOR_FILES" >/dev/null; then
             echo "single-domain scope OK (ride-along applied)"
             exit 0
@@ -165,8 +182,6 @@ jobs:
       SCHEDULER_API_TOKEN: test-scheduler-api-token-for-ci-min32chars
       BILLING_INGEST_TOKEN: test-billing-ingest-token-for-ci-min32ch
       INTERNAL_OPS_TOKEN: test-internal-ops-token-for-ci-min32
-      OPENCLAW_GATEWAY_TOKEN: test-openclaw-gateway-token-for-ci-32ch
-      OPENCLAW_GITHUB_RW_TOKEN: test-github-rw-token
       DISCORD_BOT_TOKEN: test-discord-bot-token-for-ci
       POSTHOG_API_KEY: phc_test_key_for_ci
       POSTHOG_HOST: http://localhost:18000
@@ -243,6 +258,45 @@ jobs:
       - name: secrets:set CLI tests (task.0284)
         run: bash scripts/ci/tests/set-secret.test.sh
 
+      # task.5094 — per-node secret fan-out (seed_node_app_secrets). Drives the
+      # catalog-gated fan-out against the real infra/secrets-catalog.yaml with
+      # stubbed runtime deps; proves distinct-value-per-node + custody gating.
+      - name: secrets fan-out tests (task.5094)
+        run: bash scripts/ci/tests/secrets-fanout.test.sh
+
+      # task.5078 — catalog-driven edge routing. Asserts the committed Caddyfile
+      # is in sync with the catalog (drift gate that makes "add a node = 1
+      # catalog PR" enforceable), every type:node has an edge block (canary
+      # included), and catalog node_port == per-env overlay Service nodePort.
+      - name: edge routing tests (task.5078)
+        run: bash scripts/ci/tests/render-caddyfile.test.sh
+
+      # Catalog-driven node DNS: idempotent Cloudflare A-record upsert +
+      # reconcile fans one record per non-primary type:node. Stateful CF shim,
+      # no network. Closes the node-formation DNS gap (catalog → overlays →
+      # flight → secrets all auto-fan, but the public host never resolved).
+      - name: node DNS reconcile tests
+        run: bash scripts/ci/tests/reconcile-node-dns.test.sh
+
+      - name: scheduler node routing tests
+        run: bash scripts/ci/render-scheduler-worker-endpoints.sh --check
+
+      # single-node-scope filters are CATALOG_IS_SSOT: generated from the
+      # nodes/* listing. Fails if a node was added/removed under nodes/ without
+      # regenerating the dorny filter block (run `pnpm gen:scope-filters`).
+      - name: single-node-scope filter drift (CATALOG_IS_SSOT)
+        run: bash scripts/ci/render-scope-filters.sh --check
+
+      # Per-node ApplicationSet drift (CATALOG_IS_SSOT + LANE_ISOLATION, axiom
+      # 18). One AppSet object per (env, node) is derived from the catalog rows
+      # that declare a candidate_a_branch. Fails if a node was added/removed or
+      # an AppSet/kustomization was hand-edited without `pnpm gen:node-appset`.
+      - name: per-node ApplicationSet drift (CATALOG_IS_SSOT)
+        run: bash scripts/ci/render-node-appset.sh --check
+
+      - name: scheduler runtime routing tests
+        run: bash scripts/ci/tests/scheduler-runtime-routing.test.sh
+
       - name: Unit + contract coverage tests
         run: pnpm test:ci
 
@@ -280,8 +334,6 @@ jobs:
       SCHEDULER_API_TOKEN: test-scheduler-api-token-for-ci-min32chars
       BILLING_INGEST_TOKEN: test-billing-ingest-token-for-ci-min32ch
       INTERNAL_OPS_TOKEN: test-internal-ops-token-for-ci-min32
-      OPENCLAW_GATEWAY_TOKEN: test-openclaw-gateway-token-for-ci-32ch
-      OPENCLAW_GITHUB_RW_TOKEN: test-github-rw-token
       DISCORD_BOT_TOKEN: test-discord-bot-token-for-ci
       POSTHOG_API_KEY: phc_test_key_for_ci
       POSTHOG_HOST: http://localhost:18000

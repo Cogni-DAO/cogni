@@ -80,7 +80,12 @@ function generateSSHKey(env: string): string {
 
 const REPO = "Cogni-DAO/cogni";
 /** Deploy environments. Secrets are set per-env, not repo-level. */
-const ENVIRONMENTS = ["candidate-a", "preview", "production"] as const;
+const ENVIRONMENTS = [
+  "candidate-a",
+  "candidate-b",
+  "preview",
+  "production",
+] as const;
 const LEGACY_ENV_ALIASES: Record<string, (typeof ENVIRONMENTS)[number]> = {
   canary: "candidate-a",
 };
@@ -199,22 +204,41 @@ function applyTransform(secret: Secret, value: string): string {
 }
 
 /**
+ * Capabilities a node has. Source of truth is node-spec (repo-spec→node-spec
+ * work); until that lands, every present node gets the standard node-app
+ * capabilities and `payments` is opt-in via an explicit allowlist (custody —
+ * a node must NEVER receive payment/signing keys it didn't ask for).
+ * design.secrets-catalog-per-node §Amendment v2.
+ */
+const PAYMENT_NODES = new Set<string>(["poly"]);
+function capabilitiesForNode(nodeName: string): Set<string> {
+  const caps = new Set(["all-nodes", "web", "database", "llm"]);
+  if (PAYMENT_NODES.has(nodeName)) caps.add("payments");
+  return caps;
+}
+
+/**
  * Categorize a secret as belonging to a specific node (--node <name> filter).
- * Routing-driven: a secret belongs to <node> iff its OpenBao service is
- *   - the node name itself (A1/A2 entries the node owns), OR
- *   - `_shared` (cross-service A1 entries the node also needs), OR
- *   - `_system` (G-tier derived entries — node-list dependent and provisioned
- *     alongside any node's catalog).
+ * Routing-driven: a secret belongs to <node> iff
+ *   - its `service` is the node name (A2 it owns), `_shared`, or `_system`, OR
+ *   - it's capability-gated (`appliesTo`) and the node has that capability.
  *
- * Excludes operator-domain B/D/E entries (no service in OpenBao; Compose-infra
- * and CI-only). Replaces the legacy hardcoded `isPolySecret`.
+ * Excludes operator-domain B/D/E entries (no service in OpenBao). Replaces the
+ * legacy hardcoded `isPolySecret`.
  */
 function isNodeSecret(secret: Secret, nodeName: string): boolean {
   const r = SECRET_ROUTING[secret.name];
+  if (!r) return false;
+  if (
+    r.service === nodeName ||
+    r.service === "_shared" ||
+    r.service === "_system"
+  ) {
+    return true;
+  }
+  // Capability fan-out: appliesTo matches one of the node's capabilities.
   return (
-    r?.service === nodeName ||
-    r?.service === "_shared" ||
-    r?.service === "_system"
+    r.appliesTo !== undefined && capabilitiesForNode(nodeName).has(r.appliesTo)
   );
 }
 

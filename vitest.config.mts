@@ -76,21 +76,50 @@ export default defineConfig({
   },
   plugins: [tsconfigPaths({ projects: ["./tsconfig.base.json"] })],
   resolve: {
-    alias: {
-      "@tests": path.resolve(__dirname, "./tests"),
-      react: path.resolve(__dirname, "./nodes/operator/app/node_modules/react"),
-      "react-dom": path.resolve(
-        __dirname,
-        "./nodes/operator/app/node_modules/react-dom"
-      ),
-      "react/jsx-dev-runtime": path.resolve(
-        __dirname,
-        "./nodes/operator/app/node_modules/react/jsx-dev-runtime.js"
-      ),
-      "react/jsx-runtime": path.resolve(
-        __dirname,
-        "./nodes/operator/app/node_modules/react/jsx-runtime.js"
-      ),
-    },
+    alias: [
+      {
+        find: /^@cogni\/repo-spec$/,
+        replacement: path.resolve(
+          __dirname,
+          "./packages/repo-spec/src/index.ts"
+        ),
+      },
+      {
+        find: /^@cogni\/repo-spec\/testing$/,
+        replacement: path.resolve(
+          __dirname,
+          "./packages/repo-spec/src/testing.ts"
+        ),
+      },
+      { find: "@tests", replacement: path.resolve(__dirname, "./tests") },
+      {
+        find: "react",
+        replacement: path.resolve(
+          __dirname,
+          "./nodes/operator/app/node_modules/react"
+        ),
+      },
+      {
+        find: "react-dom",
+        replacement: path.resolve(
+          __dirname,
+          "./nodes/operator/app/node_modules/react-dom"
+        ),
+      },
+      {
+        find: "react/jsx-dev-runtime",
+        replacement: path.resolve(
+          __dirname,
+          "./nodes/operator/app/node_modules/react/jsx-dev-runtime.js"
+        ),
+      },
+      {
+        find: "react/jsx-runtime",
+        replacement: path.resolve(
+          __dirname,
+          "./nodes/operator/app/node_modules/react/jsx-runtime.js"
+        ),
+      },
+    ],
   },
 });

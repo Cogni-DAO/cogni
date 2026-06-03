@@ -71,7 +71,12 @@ if ! docker buildx version >/dev/null 2>&1; then
 fi
 
 resolve_tag() {
-  image_tag_for_target "$(image_name_for_target "$1")" "$IMAGE_TAG" "$1"
+  # Mirror build-and-push-images.sh: type:infra is content-hash tagged.
+  if is_infra_target "$1"; then
+    infra_image_tag "$1"
+  else
+    image_tag_for_target "$(image_name_for_target "$1")" "$IMAGE_TAG" "$1"
+  fi
 }
 
 resolve_digest_ref() {

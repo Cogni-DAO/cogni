@@ -79,15 +79,6 @@ export const serverSchema = z.object({
     ),
   LITELLM_MASTER_KEY: z.string().min(1),
 
-  // OpenClaw gateway (sandbox:openclaw agent execution)
-  // Default: localhost:3333 for dev/test (host-mapped port); Docker DNS in production
-  OPENCLAW_GATEWAY_URL: z.string().url().default("http://127.0.0.1:3333"),
-  // Auth token for OpenClaw gateway WS handshake (must match openclaw-gateway.json gateway.auth.token)
-  OPENCLAW_GATEWAY_TOKEN: z.string().min(32),
-  // OpenClaw's GitHub token for host-side git relay (push + PR creation).
-  // Per SECRETS_HOST_ONLY (inv. 4): never passed into the sandbox container.
-  OPENCLAW_GITHUB_RW_TOKEN: z.string().min(1),
-
   // TODO: Remove when proper wallet→key registry exists (MVP crutch)
   // Wallet link MVP - single API key for all wallets (temporary)
   LITELLM_MVP_API_KEY: z.string().default("test-mvp-api-key"),
@@ -169,7 +160,7 @@ export const serverSchema = z.object({
 
   // EVM RPC - On-chain verification (Phase 3)
   // Required for production/preview/dev; not used in test mode (FakeEvmOnchainClient)
-  EVM_RPC_URL: z.string().url().optional(),
+  EVM_RPC_URL: optionalUrl,
 
   // Langfuse (AI observability) - Optional
   // Only required when Langfuse tracing is enabled
@@ -271,8 +262,8 @@ export const serverSchema = z.object({
   // PostHog product analytics — required
   // See docs/guides/posthog-setup.md for setup
   // PostHog Cloud free tier: 1M events/month at https://us.i.posthog.com
-  POSTHOG_API_KEY: z.string().min(1),
-  POSTHOG_HOST: z.string().url(),
+  POSTHOG_API_KEY: optionalString,
+  POSTHOG_HOST: optionalUrl,
   POSTHOG_PROJECT_ID: optionalString,
 });
 

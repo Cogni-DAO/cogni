@@ -144,6 +144,9 @@ done
 # Cogni-DAO/cogni + operator|poly|resy hardcodes the canary tripped on.
 # shellcheck source=../ci/lib/image-tags.sh
 . "$REPO_ROOT/scripts/ci/lib/image-tags.sh"
+# Idempotent Cloudflare A-record upsert — shared with scripts/ci/reconcile-node-dns.sh.
+# shellcheck source=../ci/lib/cloudflare-dns.sh
+. "$REPO_ROOT/scripts/ci/lib/cloudflare-dns.sh"
 
 # Runs on any repo that owns its deploy state on origin: the hub
 # (Cogni-DAO/cogni — multi-node) and downstream forks (single- or multi-node)
@@ -205,8 +208,11 @@ if [[ -z "${CHERRY_PROJECT_ID:-}" ]]; then
   echo ""
 fi
 
-# OpenRouter key — optional (LiteLLM starts but can't proxy)
-if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+# OpenRouter key — optional (LiteLLM starts but can't proxy). Only prompt
+# interactively; under CI / non-TTY (e.g. the provision-env.yml runner) an
+# unset key falls through to the placeholder below instead of blocking on a
+# read that EOFs and aborts under `set -e`.
+if [[ -z "${OPENROUTER_API_KEY:-}" && "${CI:-}" != "true" && -t 0 ]]; then
   echo -n "OpenRouter API key (Enter to skip): "
   read -rs OPENROUTER_API_KEY
   echo ""
@@ -219,6 +225,7 @@ fi
 # GHCR token for k3s image pulls (dummy OK for test — images are placeholders anyway)
 GHCR_TOKEN="${GHCR_DEPLOY_TOKEN:-dummy-ghcr-token-for-test}"
 GHCR_USERNAME="${GHCR_DEPLOY_USERNAME:-Cogni-1729}"
+export GHCR_USERNAME
 
 # ══════════════════════════════════════════════════════════════
 # Phase 2: Load secrets from .env.{env} + generate VM keys
@@ -474,6 +481,10 @@ log_info "Probing Cherry for existing resources to adopt..."
 adopt() {  # adopt <tofu-address> <id-or-empty> <human-label>
   local addr="$1" id="$2" lbl="$3"
   [[ -z "$id" ]] && return 0
+  if tofu state list 2>/dev/null | grep -qx "$addr"; then
+    log_info "$lbl already in tofu state — skip import"
+    return 0
+  fi
   log_info "Adopting Cherry $lbl (id=$id) into tofu state"
   tofu import -var-file="terraform.${WORKSPACE}.tfvars" "$addr" "$id"
 }
@@ -533,7 +544,8 @@ SSH_KEY="$REPO_ROOT/.local/${DEPLOY_ENV}-vm-key"
 # 60-min wall-clock = timeout = cancelled).
 # ServerAliveInterval/CountMax govern an established session; ConnectTimeout
 # governs the dial. Both apply.
-SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ConnectionAttempts=1 -o ServerAliveInterval=15 -o ServerAliveCountMax=12"
+SSH_MUX_PATH="/tmp/cogni-mux-${DEPLOY_ENV}-%h"
+SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ConnectionAttempts=1 -o ServerAliveInterval=15 -o ServerAliveCountMax=12 -o ControlMaster=auto -o ControlPath=$SSH_MUX_PATH -o ControlPersist=300"
 
 # ══════════════════════════════════════════════════════════════
 # Phase 4: Wait for cloud-init bootstrap
@@ -670,33 +682,23 @@ if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] && [[ -n "${CLOUDFLARE_ZONE_ID:-}" ]]; t
   fi
   log_info "Cloudflare SSL mode → full (zone $CLOUDFLARE_ZONE_ID)"
 
-  # FQDNs come from two sources (B2):
-  #   1. DOMAIN — the apex/operator-host (Caddy listens here for TLS)
-  #   2. public_url_for_target $DEPLOY_ENV $node — one per NODE_TARGETS entry
-  # No more hardcoded poly-*/resy-* (those squatted on upstream's zone last canary).
-  # The VM alias is repo-scoped because several forks may share a Cloudflare
-  # zone; generic candidate-a.vm.<root> collides across repos.
+  # FQDNs (B2): apex/operator host + the repo-scoped VM alias + one per
+  # non-primary type:node, via host_for_node() — the SAME host SSOT the edge
+  # Caddyfile and smoke/buildSha checks use, so DNS can't drift from what they
+  # expect. (host_for_node replaces an undefined `public_url_for_target` shim
+  # that silently no-op'd every per-node record — see scripts/ci/reconcile-node-dns.sh,
+  # which reconciles these same records on every candidate-a flight.) The VM
+  # alias is repo-scoped because several forks may share a Cloudflare zone;
+  # generic candidate-a.vm.<root> collides across repos.
   DNS_RECORDS=("$DOMAIN" "$VM_DNS_HOST")
   for node in "${NODE_TARGETS[@]}"; do
-    node_url=$(public_url_for_target "$DEPLOY_ENV" "$node" 2>/dev/null || true)
-    [[ -z "$node_url" ]] && continue
-    fqdn="${node_url#https://}"
-    [[ "$fqdn" == "$DOMAIN" ]] && continue  # dedupe apex
-    DNS_RECORDS+=("$fqdn")
+    is_primary_host "$node" && continue  # apex already in DNS_RECORDS
+    DNS_RECORDS+=("$(host_for_node "$node" "$DOMAIN")")
   done
 
   for fqdn in "${DNS_RECORDS[@]}"; do
-    # Subdomain = FQDN minus the zone root. Use FORK_DOMAIN_ROOT if available;
-    # else fall back to the legacy cognidao.org suffix strip.
-    sub="$fqdn"
-    if [[ -n "$FORK_ROOT" && "$FORK_ROOT" != "null" ]]; then
-      sub="${fqdn%.${FORK_ROOT}}"
-      [[ "$sub" == "$fqdn" ]] && sub="@"  # apex record
-    else
-      sub="${fqdn%.cognidao.org}"
-    fi
     # Proxy state per record:
-    #   • Browser-facing (DOMAIN apex + per-node public URLs) → proxied=true
+    #   • Browser-facing (DOMAIN apex + per-node public hosts) → proxied=true
     #     so Cloudflare terminates TLS at the edge with Universal SSL
     #     (browser-trusted always; no LE involvement).
     #   • VM_DNS_HOST → proxied=false so SSH (port 22) + diagnostic NodePort
@@ -708,18 +710,14 @@ if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] && [[ -n "${CLOUDFLARE_ZONE_ID:-}" ]]; t
     else
       proxied="true"
     fi
-    EXISTING=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-      "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records?name=${fqdn}&type=A" \
-      | python3 -c "import json,sys; [print(x['id']) for x in json.load(sys.stdin).get('result',[])]" 2>/dev/null)
-    for id in $EXISTING; do
-      curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-        "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records/$id" >/dev/null
-    done
-    RESULT=$(curl -s -X POST -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
-      "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records" \
-      -d "{\"type\":\"A\",\"name\":\"${sub}\",\"content\":\"${VM_IP}\",\"ttl\":300,\"proxied\":${proxied}}")
-    OK=$(echo "$RESULT" | python3 -c 'import json,sys; print("OK" if json.load(sys.stdin).get("success") else "FAIL")' 2>/dev/null)
-    log_info "  ${fqdn} → ${VM_IP} (proxied=${proxied}): $OK"
+    # The env's primary host ($DOMAIN) IS the zone apex for production
+    # (domain_for_env production → bare root). Deliberately opt that one record
+    # past the apex guard; every other host (VM alias, per-node) stays guarded.
+    allow_protected=0
+    [[ "$fqdn" == "$DOMAIN" ]] && allow_protected=1
+    state=$(CF_ALLOW_PROTECTED="$allow_protected" cf_upsert_a_record "$CLOUDFLARE_API_TOKEN" "$CLOUDFLARE_ZONE_ID" "$fqdn" "$VM_IP" "$proxied") \
+      && log_info "  ${fqdn} → ${VM_IP} (proxied=${proxied}): ${state}" \
+      || log_error "  ${fqdn} → ${VM_IP} (proxied=${proxied}): upsert FAILED"
   done
 else
   log_warn "Skipping DNS — CLOUDFLARE_API_TOKEN or CLOUDFLARE_ZONE_ID not set"
@@ -790,6 +788,7 @@ if [[ -n "$SEED_TOKEN" ]]; then
   done
   for ref in "${BRANCHES_TO_SEED[@]}"; do
     existing_sha=$(gh api "repos/${GH_REPO}/branches/${ref}" --jq '.commit.sha' 2>/dev/null || echo "")
+    [[ "$existing_sha" =~ ^[0-9a-f]{40}$ ]] || existing_sha=""
     if [[ -n "$existing_sha" ]]; then
       if [[ "$existing_sha" == "$SEED_SHA" ]]; then
         log_info "  ${ref} — already at seed SHA ${SEED_SHA:0:8}"
@@ -879,24 +878,26 @@ data:
 EOF
 done
 
-# B2 (overlays) — the shared _template/ overlay and per-env wrappers
-# reference `vm.cognidao.org` as the ExternalName placeholder for pod→host
+# B2 (overlays) — per-env wrappers reference the ExternalName host for pod→host
 # service discovery (postgres, temporal, litellm, doltgres, redis). Rewrite it
 # to the repo/env-scoped VM alias, e.g. `<slug>-candidate-a.vm.<root>`.
-# Sed walks both the per-env wrapper AND the shared _template (each deploy
-# branch is per-env, so substituting _template doesn't race with siblings).
+#
+# The overlays are NOT uniform: candidate-b (+ _template) carry the BARE
+# `vm.cognidao.org` placeholder, while the per-node-AppSet-migrated envs
+# (candidate-a/preview/production, bug.0295/#1465) carry the already-qualified
+# canonical host `cogni-<env>.vm.cognidao.org`. A bare `s/vm.cognidao.org/$HOST/`
+# DOUBLED the prefix on the latter (→ `cogni-candidate-a.cogni-candidate-a.vm…`
+# → NXDOMAIN → every pod 503s on temporal/redis). Match an optional run of
+# leading labels so the substitution is idempotent across BOTH overlay forms
+# and self-heals a deploy branch already corrupted by the old sed.
 if [[ -n "$FORK_ROOT" && "$FORK_ROOT" != "null" ]]; then
-  log_info "Rewriting overlay vm.cognidao.org → ${VM_DNS_HOST}"
-  # Rewrite both the per-env wrapper directory AND the shared _template.
-  # _template lives at overlays/_template/ — each deploy branch has its own
-  # copy, so per-env substitutions don't conflict across branches.
-  find "$DEPLOY_TMP/infra/k8s/overlays/${OVERLAY_DIR}" \
-       "$DEPLOY_TMP/infra/k8s/overlays/_template" \
-       -name "kustomization.yaml" -print0 2>/dev/null \
-    | xargs -0 sed -i.bak -E "s/vm\.cognidao\.org/${VM_DNS_HOST}/g"
-  find "$DEPLOY_TMP/infra/k8s/overlays/${OVERLAY_DIR}" \
-       "$DEPLOY_TMP/infra/k8s/overlays/_template" \
-       -name "*.bak" -delete 2>/dev/null || true
+  log_info "Rewriting overlay ExternalName host → ${VM_DNS_HOST}"
+  OVERLAY_ROOTS=("$DEPLOY_TMP/infra/k8s/overlays/${OVERLAY_DIR}")
+  [[ -d "$DEPLOY_TMP/infra/k8s/overlays/_template" ]] \
+    && OVERLAY_ROOTS+=("$DEPLOY_TMP/infra/k8s/overlays/_template")
+  find "${OVERLAY_ROOTS[@]}" -name "kustomization.yaml" -print0 2>/dev/null \
+    | xargs -0 sed -i.bak -E "s/([a-z0-9-]+\.)*vm\.cognidao\.org/${VM_DNS_HOST}/g"
+  find "${OVERLAY_ROOTS[@]}" -name "*.bak" -delete 2>/dev/null || true
 fi
 
 # Image-pull fallback (next failure cliff after vm.* rewrite) — fresh forks
@@ -939,6 +940,34 @@ for target in "${ALL_TARGETS[@]}"; do
     rm -f "${overlay_file}.bak"
     log_info "  ${target} migrator → ${migrator_boot_tag}"
   fi
+done
+
+# Image-digest seed — hub overlays pin `digest: sha256:…`, NOT the newTag
+# placeholder the loop above rewrites, and a fresh candidate-* has no FLIGHT
+# pipeline to promote one → all-zeros digest → ImagePullBackOff. Source the
+# real current-main digest from the preview overlay (refreshed every main
+# merge by promote-preview-digest-seed.yml) and stamp it into each env overlay
+# BEFORE the env-state commit, so it mirrors to every per-app branch below.
+log_info "Seeding overlay digest ← preview overlay digest"
+ZERO_DIGEST="sha256:0000000000000000000000000000000000000000000000000000000000000000"
+for target in "${ALL_TARGETS[@]}"; do
+  env_overlay="$DEPLOY_TMP/infra/k8s/overlays/${OVERLAY_DIR}/${target}/kustomization.yaml"
+  preview_overlay="$REPO_ROOT/infra/k8s/overlays/preview/${target}/kustomization.yaml"
+  [[ -f "$env_overlay" ]] || continue
+  if [[ ! -f "$preview_overlay" ]]; then
+    log_warn "  ${target} — no preview overlay; leaving digest as-is (may ImagePullBackOff)"
+    continue
+  fi
+  preview_digest=$(yq -N '.images[0].digest // ""' "$preview_overlay" 2>/dev/null)
+  if [[ -z "$preview_digest" || "$preview_digest" == "null" || "$preview_digest" == "$ZERO_DIGEST" ]]; then
+    log_warn "  ${target} — preview digest missing/all-zeros; leaving digest as-is"
+    continue
+  fi
+  # Idempotent: rewrite the single images[].digest line to the preview value.
+  sed -i.bak -E "s|(^[[:space:]]*digest:[[:space:]]*\").*(\")|\1${preview_digest}\2|" \
+    "$env_overlay"
+  rm -f "${env_overlay}.bak"
+  log_info "  ${target} digest → ${preview_digest:0:19}…"
 done
 
 cd "$DEPLOY_TMP"
@@ -996,19 +1025,27 @@ scp $SSH_OPTS "$REPO_ROOT/infra/images/litellm/cogni_callbacks.py" root@"$VM_IP"
 # Write .env files
 log_info "Writing .env files..."
 
-# NODE_UPSTREAM points Caddy at the k3s NodePort on the host. Single-node
-# fork: one site block, one upstream (bug.5001). Multi-node forks add
-# additional NODE_UPSTREAM_<slug> blocks rather than reintroducing the
-# multi-key pattern. Port is catalog-driven (catalog::node_port is the
-# canonical source — node-template ships 30000).
-NODE_PORT_FROM_CATALOG=$(yq -N '.node_port // 30000' "$REPO_ROOT/infra/catalog/node-template.yaml")
-# Caddy serves a self-signed origin cert via `tls internal`; Cloudflare's
-# Full SSL mode trusts any origin cert. No ACME, no LE rate limit, no
-# cert-loss-on-reprovision. See infra/compose/edge/configs/Caddyfile.tmpl.
+# task.5078 — edge routing is catalog-driven (CATALOG_IS_SSOT), unified with
+# deploy-infra.sh. The generated Caddyfile (scripts/ci/render-caddyfile.sh)
+# resolves {$<SLUG>_DOMAIN} per non-primary node and bakes upstream ports from
+# catalog node_port. We write only the env-variant overrides — each non-primary
+# node's per-env host and the primary's k3s NodePort upstream — via the same
+# NODE_TARGETS loop. A new type:node auto-routes with no edit here (replaces the
+# single-node NODE_UPSTREAM, bug.5001). node_port_for_target / host_for_node /
+# is_primary_host come from the already-sourced image-tags.sh.
+EDGE_ENV_LINES=""
+for _edge_node in "${NODE_TARGETS[@]}"; do
+  _edge_slug=$(printf '%s' "$_edge_node" | tr '[:lower:]-' '[:upper:]_')
+  if is_primary_host "$_edge_node"; then
+    EDGE_ENV_LINES+="${_edge_slug}_UPSTREAM=host.docker.internal:$(node_port_for_target "$_edge_node")"$'\n'
+  else
+    EDGE_ENV_LINES+="${_edge_slug}_DOMAIN=$(host_for_node "$_edge_node" "$DOMAIN")"$'\n'
+  fi
+done
+unset _edge_node _edge_slug
 ssh $SSH_OPTS root@"$VM_IP" "cat > /opt/cogni-template-edge/.env << 'ENVEOF'
 DOMAIN=${DOMAIN}
-NODE_UPSTREAM=host.docker.internal:${NODE_PORT_FROM_CATALOG}
-ENVEOF"
+${EDGE_ENV_LINES}ENVEOF"
 
 # runtime/.env is written AFTER Phase 5c's OpenBao-SSoT reconcile (bug.5081)
 # so re-runs don't ship Phase-2's freshly-regenerated random values that would
@@ -1185,6 +1222,14 @@ phase_5b_timeout() {
 # their first sync. Argo's repo-server clones the deploy branch, runs
 # `kustomize build --enable-helm` (per the bootstrap argocd-cm patch), and
 # applies server-side.
+log_info "Enabling --enable-helm in argocd-cm for kustomize-with-helm substrate..."
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=15 root@"$VM_IP" '
+  kubectl -n argocd patch cm argocd-cm --type merge \
+    -p "{\"data\":{\"kustomize.buildOptions\":\"--enable-helm\"}}" &&
+  kubectl -n argocd rollout restart deployment argocd-repo-server &&
+  kubectl -n argocd rollout status deployment argocd-repo-server --timeout=120s
+' || phase_5b_timeout "argocd-cm --enable-helm patch failed"
+
 SUBSTRATE_FORK_REPO="https://github.com/${GH_REPO}.git"
 for substrate in openbao external-secrets; do
   rendered=$(mktemp)
@@ -1389,6 +1434,23 @@ else
 fi
 
 # ── 5b.5 Apply ClusterSecretStore (lives at parent of per-env trees) ──────
+# Argo reporting the external-secrets app Succeeded does NOT mean its admission
+# webhook has ready endpoints yet — the validating webhook for ClusterSecretStore
+# registers a few seconds after the Deployment rolls out. Applying the CSS into
+# that window fails with `no endpoints available for service
+# "external-secrets-webhook"` (flaky — wins/loses on timing). Wait for the
+# webhook Deployment to be Available AND its Service to have ready endpoints
+# before applying, so provisioning is deterministic.
+log_info "Waiting for external-secrets webhook to be serving (deterministic CSS apply)..."
+ssh $SSH_OPTS root@"$VM_IP" '
+  kubectl -n external-secrets rollout status deployment external-secrets-webhook --timeout=180s
+  for i in $(seq 1 60); do
+    eps=$(kubectl -n external-secrets get endpoints external-secrets-webhook \
+      -o jsonpath="{.subsets[*].addresses[*].ip}" 2>/dev/null)
+    [ -n "$eps" ] && { echo "external-secrets-webhook endpoints ready: $eps"; break; }
+    sleep 2
+  done
+' || phase_5b_timeout "external-secrets webhook never became ready"
 CSS_LOCAL="$REPO_ROOT/infra/k8s/secrets/external-secrets/cluster-secret-store.yaml"
 scp $SSH_OPTS "$CSS_LOCAL" root@"$VM_IP":/tmp/cluster-secret-store.yaml
 ssh $SSH_OPTS root@"$VM_IP" "kubectl apply -f /tmp/cluster-secret-store.yaml"
@@ -1451,8 +1513,15 @@ else
   source "$REPO_ROOT/scripts/setup/lib/reconcile-secrets.sh"
   reconcile_secrets_on_rerun
 
-  log_info "Seeding cogni/${DEPLOY_ENV}/node-template/*..."
-  for k in "${NODE_TEMPLATE_KEYS[@]}"; do seed_kv node-template "$k" "${!k:-}"; done
+  # Fan baseline app secrets to EVERY type:node (task.5094). Each node's path
+  # cogni/<env>/<node>/* gets capability-gated keys with per-node-DISTINCT
+  # values (AUTH_SECRET, CONNECTIONS_ENCRYPTION_KEY, …) — its ExternalSecret
+  # <node>-env-secrets extracts them into the pod. node-template remains the
+  # runtime/.env (Compose) primary above.
+  for node in "${NODE_TARGETS[@]}"; do
+    log_info "Seeding cogni/${DEPLOY_ENV}/${node}/*..."
+    seed_node_app_secrets "$node"
+  done
   log_info "Seeding cogni/${DEPLOY_ENV}/scheduler-worker/*..."
   for k in "${SCHEDULER_WORKER_KEYS[@]}"; do seed_kv scheduler-worker "$k" "${!k:-}"; done
   log_info "OpenBao paths seeded for ${DEPLOY_ENV}"
@@ -1603,6 +1672,7 @@ DEPLOY_ENVIRONMENT="$DEPLOY_ENV" \
 APP_ENV="$APP_ENV" \
 COGNI_REPO_URL="$COGNI_REPO_URL" \
 COGNI_REPO_REF="$COGNI_REPO_REF" \
+GHCR_USERNAME="$GHCR_USERNAME" \
 DATABASE_URL="$DATABASE_URL" \
 DATABASE_SERVICE_URL="$DATABASE_SERVICE_URL" \
 LITELLM_IMAGE="cogni-litellm:latest" \
@@ -1751,29 +1821,46 @@ log_step "Phase 7: Apply ApplicationSets (triggers Argo sync)"
 # operator's local checkout is the source of truth — it has the files they intend to deploy.
 # This also avoids the chicken-and-egg: you can provision preview before the files are
 # promoted to staging.
-APPSET_LOCAL="$REPO_ROOT/infra/k8s/argocd/${APPSET_FILE}"
-if [ ! -f "$APPSET_LOCAL" ]; then
-  log_error "ApplicationSet file not found locally: $APPSET_LOCAL"
-  log_error "Run this script from the repo root on a branch that has infra/k8s/argocd/"
+# Per-node AppSets (bug.0378 / #1465) replaced the monolithic
+# ${DEPLOY_ENV}-applicationset.yaml with one ${DEPLOY_ENV}-<node>-applicationset.yaml
+# per node (operator/node-template/resy/canary/scheduler-worker). Discover all
+# of them; fall back to the monolith (candidate-b still ships one) for envs not
+# yet migrated. Applying a single ${DEPLOY_ENV}-applicationset.yaml was the
+# Phase-7 break that orphaned the first candidate-a re-provision.
+APPSET_DIR="$REPO_ROOT/infra/k8s/argocd"
+APPSET_LOCALS=()
+for f in "$APPSET_DIR/${DEPLOY_ENV}"-*-applicationset.yaml; do
+  [ -f "$f" ] && APPSET_LOCALS+=("$f")
+done
+if [ ${#APPSET_LOCALS[@]} -eq 0 ] && [ -f "$APPSET_DIR/${APPSET_FILE}" ]; then
+  APPSET_LOCALS+=("$APPSET_DIR/${APPSET_FILE}")
+fi
+if [ ${#APPSET_LOCALS[@]} -eq 0 ]; then
+  log_error "No ApplicationSet files for ${DEPLOY_ENV} in $APPSET_DIR"
+  log_error "Expected per-node ${DEPLOY_ENV}-<node>-applicationset.yaml or monolithic ${APPSET_FILE}."
+  log_error "Run this script from the repo root on a branch that has infra/k8s/argocd/."
   exit 1
 fi
+log_info "Applying ${#APPSET_LOCALS[@]} ApplicationSet(s) for ${DEPLOY_ENV}: $(printf '%s ' "${APPSET_LOCALS[@]##*/}")"
 
 # B1 (deploy machinery) — substitute repoURL to point at the FORK, not the
 # upstream. AppSet files commit with the canonical Cogni-DAO/node-template
 # URL; provision rewrites at apply time so Argo CD syncs from the fork's
 # own deploy/* branches. Idempotent for the canonical operator (no-op).
-APPSET_RENDERED=$(mktemp)
-trap 'rm -f "$APPSET_RENDERED"' EXIT
-sed -E "s#https://github\.com/[Cc]ogni-[Dd][Aa][Oo]/node-template\.git#https://github.com/${GH_REPO}.git#g" \
-  "$APPSET_LOCAL" > "$APPSET_RENDERED"
-log_info "AppSet repoURL substituted: → https://github.com/${GH_REPO}.git"
-
-scp $SSH_OPTS "$APPSET_RENDERED" root@"$VM_IP":/tmp/appset.yaml
-ssh $SSH_OPTS root@"$VM_IP" "
-  kubectl apply -f /tmp/appset.yaml -n argocd
-  rm -f /tmp/appset.yaml
-  echo 'ApplicationSet applied: ${APPSET_FILE} — Argo syncing from deploy/* branches'
-"
+for APPSET_LOCAL in "${APPSET_LOCALS[@]}"; do
+  APPSET_NAME=$(basename "$APPSET_LOCAL")
+  APPSET_RENDERED=$(mktemp)
+  sed -E "s#https://github\.com/[Cc]ogni-[Dd][Aa][Oo]/node-template\.git#https://github.com/${GH_REPO}.git#g" \
+    "$APPSET_LOCAL" > "$APPSET_RENDERED"
+  scp $SSH_OPTS "$APPSET_RENDERED" root@"$VM_IP":/tmp/appset.yaml
+  ssh $SSH_OPTS root@"$VM_IP" "
+    kubectl apply -f /tmp/appset.yaml -n argocd
+    rm -f /tmp/appset.yaml
+    echo 'ApplicationSet applied: ${APPSET_NAME}'
+  "
+  rm -f "$APPSET_RENDERED"
+done
+log_info "All ApplicationSets applied — Argo syncing from deploy/* branches"
 
 # Poll for apps to sync (up to 5 min)
 log_info "Waiting for Argo to sync apps..."

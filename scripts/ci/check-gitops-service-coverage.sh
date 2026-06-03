@@ -37,6 +37,13 @@ for catalog_file in "$CATALOG_DIR"/*.yaml; do
     continue
   fi
 
+  # type:infra (e.g. litellm) deploys via Compose-on-VM, not k8s/Argo — no
+  # overlays/base by design. Skip the k8s coverage requirement.
+  if [[ "$type" == "infra" ]]; then
+    printf "%-20s %-8s %-8s %-10s\n" "$name" "$type" "n/a" "compose"
+    continue
+  fi
+
   # Services must have a services/ directory
   if [[ "$type" == "service" ]] && [[ ! -d "$ROOT_DIR/services/$name" ]]; then
     echo "WARN: catalog service '$name' has no services/$name directory"

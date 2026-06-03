@@ -5,7 +5,7 @@
 # scaffold-node.sh — clone node-template into a new monorepo node, wired for the
 # full deploy matrix (candidate-a/preview/production). Reproducible precursor to
 # the wizard-invoked TS generator (task.5092). One node = catalog entry +
-# overlays x3 + AppSet x3 + app tree, ALL_THREE_ENVS_OR_NONE by construction.
+# overlays x3 + per-node AppSet x3 + app tree, ALL_THREE_ENVS_OR_NONE by construction.
 #
 # Usage: scaffold-node.sh <slug> <port> <nodeport> [node_id]
 #   slug      lowercase node name, e.g. canary
@@ -18,19 +18,32 @@ set -euo pipefail
 
 SLUG="${1:?slug required}"
 PORT="${2:?port required}"
-NODEPORT="${3:?nodeport required}"
 NODE_ID="${4:-}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TPL=node-template
 ENVS=(candidate-a preview production)
 
 cd "$ROOT"
+# node_port is the scarce per-VM k8s NodePort (must be unique). Default to the
+# auto-allocated next-free port (max(node_port)+100, ~x00 stride) so adding a
+# node needs no hand-picked value; an explicit $3 still overrides. CATALOG_IS_SSOT
+# — the uniqueness gate (next-free-node-port.sh --check, run in pr-build.yml)
+# rejects any clash this could still produce on a stale checkout.
+NODEPORT="${3:-$(bash "$ROOT/scripts/ci/next-free-node-port.sh")}"
 [ -d "nodes/$SLUG" ] && { echo "nodes/$SLUG already exists"; exit 1; }
 
-echo "==> 1. clone nodes/$TPL -> nodes/$SLUG (excluding build artifacts)"
+echo "==> 1. clone nodes/$TPL -> nodes/$SLUG (excluding build artifacts + secrets)"
+# bug.5086 Part D — NEVER clone the per-node secrets catalog or ExternalSecrets.
+# node-template's .cogni/secrets-catalog.yaml is the TEMPLATE (loader excludes it,
+# secrets-catalog-loader.ts `d !== "node-template"`). A real node that copies it
+# re-declares the ~57 shared baseline names -> NO_NAME_COLLISIONS throw -> kills
+# setup:secrets for EVERY env. A new node inherits shared/baseline secrets via the
+# substrate (per-node OpenBao path); it gets a per-node secrets-catalog ONLY when
+# it declares its OWN unique secrets — which a fresh clone never does.
 rsync -a \
   --exclude node_modules --exclude .next --exclude dist --exclude .turbo \
   --exclude coverage --exclude '*.tsbuildinfo' \
+  --exclude '.cogni/secrets-catalog.yaml' --exclude 'k8s/external-secrets' \
   "nodes/$TPL/" "nodes/$SLUG/"
 
 echo "==> 2. rename node-template -> $SLUG across the node tree (text files)"
@@ -53,6 +66,7 @@ sed -E \
   -e "s/^name: .*/name: $SLUG/" \
   -e "s#^dockerfile: .*#dockerfile: nodes/$SLUG/app/Dockerfile#" \
   -e "s/^port: .*/port: $PORT/" \
+  -e "s/^node_port: .*/node_port: $NODEPORT/" \
   -e "s/^image_tag_suffix: .*/image_tag_suffix: \"-$SLUG\"/" \
   -e "s/^migrator_tag_suffix: .*/migrator_tag_suffix: \"-$SLUG-migrate\"/" \
   -e "s#deploy/candidate-a-$TPL#deploy/candidate-a-$SLUG#" \
@@ -75,15 +89,11 @@ for env in "${ENVS[@]}"; do
   perl -pi -e "s/\\b30200\\b/$NODEPORT/g; s/\\b3200\\b/$PORT/g" "$f"
 done
 
-echo "==> 6. AppSet x3 — insert git generator block before template:"
-for env in "${ENVS[@]}"; do
-  appset="infra/k8s/argocd/$env-applicationset.yaml"
-  grep -q "infra/catalog/$SLUG.yaml" "$appset" && { echo "  $env already has $SLUG"; continue; }
-  SLUG="$SLUG" ENV="$env" perl -0pi -e '
-    my $b = "    - git:\n        repoURL: https://github.com/cogni-dao/cogni.git\n        revision: deploy/$ENV{ENV}-$ENV{SLUG}\n        files:\n          - path: \"infra/catalog/$ENV{SLUG}.yaml\"\n";
-    s/^  template:/$b  template:/m;
-  ' "$appset"
-done
+echo "==> 6. per-node AppSets + bootstrap kustomization (catalog-derived, LANE_ISOLATION)"
+# The shared `<env>-applicationset.yaml` files were retired for one AppSet object
+# per (env, node). The new catalog entry above makes the new node a deployable
+# target, so a full re-render emits its 3 AppSet files + kustomization entries.
+bash "$ROOT/scripts/ci/render-node-appset.sh" --write
 
 echo "==> 7. ci.yaml single-node-scope filters (enforced by single-node-scope-meta.spec)"
 SLUG="$SLUG" perl -0pi -e '

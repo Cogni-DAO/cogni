@@ -220,17 +220,20 @@ fi
 # Validate environment
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 if [[ -z "${DEPLOY_ENVIRONMENT:-}" ]]; then
-    log_error "DEPLOY_ENVIRONMENT must be explicitly set to 'candidate-a', 'preview', or 'production'"
+    log_error "DEPLOY_ENVIRONMENT must be explicitly set to candidate-*, preview, or production"
     exit 1
 fi
 
 ENVIRONMENT="$DEPLOY_ENVIRONMENT"
 # 'canary' retained as a legacy alias during bug.0312 rename. Drop once no caller sends it.
-if [[ "$ENVIRONMENT" != "candidate-a" && "$ENVIRONMENT" != "canary" && "$ENVIRONMENT" != "preview" && "$ENVIRONMENT" != "production" ]]; then
-    log_error "DEPLOY_ENVIRONMENT must be 'candidate-a', 'preview', or 'production'"
-    log_error "Current value: $ENVIRONMENT"
-    exit 1
-fi
+case "$ENVIRONMENT" in
+    candidate-*|canary|preview|production) : ;;
+    *)
+        log_error "DEPLOY_ENVIRONMENT must be candidate-*, preview, or production"
+        log_error "Current value: $ENVIRONMENT"
+        exit 1
+        ;;
+esac
 
 # Validate required secrets
 REQUIRED_SECRETS=(
@@ -252,8 +255,6 @@ REQUIRED_SECRETS=(
     "POLYGON_RPC_URL"
     "TEMPORAL_DB_USER"
     "TEMPORAL_DB_PASSWORD"
-    "OPENCLAW_GATEWAY_TOKEN"
-    "OPENCLAW_GITHUB_RW_TOKEN"
     "INTERNAL_OPS_TOKEN"
     "POSTHOG_API_KEY"
     "POSTHOG_HOST"
@@ -398,6 +399,59 @@ log_info "VM Host: $VM_HOST"
 log_info "Artifact directory: $ARTIFACT_DIR"
 
 emit_deployment_event "infra_deployment.started" "in_progress" "Deploying infrastructure to $ENVIRONMENT"
+
+# bug.5086 — catalog-driven node-app list (CATALOG_IS_SSOT). Computed locally
+# (the runner has the repo + yq) and threaded into the remote heredoc via the
+# env block so the per-node secret + rollout loops below stop hardcoding nodes —
+# a new type:node (e.g. canary) auto-provisions. Fail loud, never empty.
+# shellcheck source=scripts/ci/lib/image-tags.sh
+source "$REPO_ROOT/scripts/ci/lib/image-tags.sh"
+NODE_APP_TARGETS="${NODE_TARGETS[*]}"
+[ -n "$NODE_APP_TARGETS" ] || log_fatal "deploy-infra: no type:node targets from infra/catalog — refusing to deploy with an empty node list"
+log_info "Node-app targets (catalog-driven): ${NODE_APP_TARGETS}"
+
+# G-tier derived inventory: database names are a pure function of the catalog
+# node list. Do not trust the GitHub env secret here; it can lag a new node and
+# leave the pod with a DATABASE_URL for a DB that db-provision never created.
+COGNI_NODE_DBS="$(node_database_csv)"
+export COGNI_NODE_DBS
+log_info "Node databases (catalog-driven): ${COGNI_NODE_DBS}"
+
+# task.5078 — catalog-driven edge routing. The generated Caddyfile
+# (scripts/ci/render-caddyfile.sh) resolves {$<SLUG>_DOMAIN} per non-primary
+# node and bakes upstream ports from catalog node_port. Here we compute only the
+# env-variant overrides the VM needs: each non-primary node's per-env host
+# (host_for_node) and the primary's k3s NodePort upstream (the Caddyfile default
+# is the docker-DNS app:3000). Space-separated KEY=VALUE tokens (no spaces in
+# values) thread cleanly through the SSH env block into the remote heredoc — the
+# same pattern as NODE_APP_TARGETS. A new type:node auto-routes, no edit here.
+EDGE_ENV_LINES=""
+for _edge_node in "${NODE_TARGETS[@]}"; do
+  _edge_slug=$(printf '%s' "$_edge_node" | tr '[:lower:]-' '[:upper:]_')
+  if is_primary_host "$_edge_node"; then
+    EDGE_ENV_LINES+="${_edge_slug}_UPSTREAM=host.docker.internal:$(node_port_for_target "$_edge_node") "
+  else
+    EDGE_ENV_LINES+="${_edge_slug}_DOMAIN=$(host_for_node "$_edge_node" "$DOMAIN") "
+  fi
+done
+unset _edge_node _edge_slug
+log_info "Edge routing (catalog-driven): ${EDGE_ENV_LINES}"
+
+# LiteLLM runs in Compose while node apps run in k3s. Its callback map must
+# target each node's VM NodePort and include both slug + UUID aliases. Compute
+# from catalog on the runner; the remote VM script consumes only the rendered
+# string and does not need catalog helper functions.
+LITELLM_NODE_HOST="${DEPLOY_ENVIRONMENT}.vm.cognidao.org"
+LITELLM_NODE_ENDPOINTS="$(node_billing_endpoint_csv "$LITELLM_NODE_HOST")"
+log_info "LiteLLM callback routing (catalog-driven): ${LITELLM_NODE_ENDPOINTS}"
+# LiteLLM image is a type:infra catalog target — content-hash tagged + built in
+# CI (no manual docker build / hand-pin). Resolve the same tag CI pushed.
+LITELLM_IMAGE="$(infra_image_tag litellm)"
+log_info "LiteLLM image (catalog content-hash): ${LITELLM_IMAGE}"
+# Default node for unattributed spend — primary-host node_id from repo-spec
+# (REPO_SPEC_IS_IDENTITY_SSOT). The LiteLLM callback carries no hardcoded UUID.
+COGNI_DEFAULT_NODE_ID="$(default_node_id)"
+log_info "LiteLLM default node (repo-spec primary-host): ${COGNI_DEFAULT_NODE_ID}"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Create remote deployment script (heredoc — no variable expansion)
@@ -605,47 +659,25 @@ docker network create cogni-edge 2>/dev/null || true
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 log_info "Creating environment files..."
 
-# Derive per-env subdomains from DEPLOY_ENVIRONMENT for the edge Caddyfile.
-# Convention matches scripts/setup/lib/cogni-deployment-identity.sh
-# (cogni_resy_domain_for_env). Kept inline to avoid a runtime library dep here.
-case "$DEPLOY_ENVIRONMENT" in
-    production)  RESY_DOMAIN_DERIVED="resy.${DOMAIN}" ;;
-    preview)     RESY_DOMAIN_DERIVED="resy-preview.${DOMAIN#preview.}" ;;
-    candidate-a|canary) RESY_DOMAIN_DERIVED="resy-test.${DOMAIN#test.}" ;;
-    *)           RESY_DOMAIN_DERIVED="resy.${DOMAIN}" ;;
-esac
-RESY_DOMAIN="${RESY_DOMAIN:-$RESY_DOMAIN_DERIVED}"
-
-case "$DEPLOY_ENVIRONMENT" in
-    production)  NODE_TEMPLATE_DOMAIN_DERIVED="node-template.${DOMAIN}" ;;
-    preview)     NODE_TEMPLATE_DOMAIN_DERIVED="node-template-preview.${DOMAIN#preview.}" ;;
-    candidate-a|canary) NODE_TEMPLATE_DOMAIN_DERIVED="node-template-test.${DOMAIN#test.}" ;;
-    *)           NODE_TEMPLATE_DOMAIN_DERIVED="node-template.${DOMAIN}" ;;
-esac
-NODE_TEMPLATE_DOMAIN="${NODE_TEMPLATE_DOMAIN:-$NODE_TEMPLATE_DOMAIN_DERIVED}"
-
-# Edge env — Caddyfile site blocks resolve these. Missing values produce
-# anonymous server blocks and Caddy refuses to start (bug.5070).
-# UPSTREAMS were previously only written by provision-test-vm.sh at fresh-VM
-# bootstrap; on every deploy-infra run this file was rewritten without them,
-# so a subsequent Caddy restart would have nothing to substitute. The values
-# are stable per-VM (host.docker.internal forwarding to k3s NodePorts on the
-# host), so writing them here is idempotent and removes the bootstrap-coupling.
+# Edge env — the generated Caddyfile (scripts/ci/render-caddyfile.sh) resolves
+# {$<SLUG>_DOMAIN} per non-primary node and {$<SLUG>_UPSTREAM} per primary.
+# task.5078 — these lines are catalog-driven: EDGE_ENV_LINES (computed on the
+# runner from NODE_TARGETS, threaded in) carries one KEY=VALUE token per node so
+# a new type:node auto-routes with no edit here. Concrete values (not empty
+# {$VAR}) avoid the anonymous-server-block crash (bug.5070). DOMAIN drives the
+# operator primary block + the www→non-www redirect.
 cat > /opt/cogni-template-edge/.env << ENV_EOF
 DOMAIN=${DOMAIN}
-RESY_DOMAIN=${RESY_DOMAIN}
-NODE_TEMPLATE_DOMAIN=${NODE_TEMPLATE_DOMAIN}
-OPERATOR_UPSTREAM=host.docker.internal:30000
-RESY_UPSTREAM=host.docker.internal:30300
-NODE_TEMPLATE_UPSTREAM=host.docker.internal:30200
 ENV_EOF
+for _edge_kv in ${EDGE_ENV_LINES}; do
+  echo "$_edge_kv" >> /opt/cogni-template-edge/.env
+done
+unset _edge_kv
 
-# LiteLLM image is built from infra/images/litellm/ and pushed to GHCR.
-# Content-hash tag so it only changes when Dockerfile or callbacks change.
-# To rebuild: docker buildx build --platform linux/amd64 --push \
-#   --tag ghcr.io/cogni-dao/cogni-template:litellm-$(find infra/images/litellm -type f ! -name 'AGENTS.md' | sort | xargs cat | shasum -a 256 | cut -c1-12) \
-#   infra/images/litellm/
-LITELLM_IMAGE=${LITELLM_IMAGE:-ghcr.io/cogni-dao/cogni-template:litellm-b6e4e942cb23}
+# LiteLLM is a type:infra catalog target — built + pushed by CI like every other
+# image (content-hash tagged: litellm-<hash>). The runner resolves the tag via
+# image-tags.sh:infra_image_tag and passes it in; no manual docker build, no pin.
+LITELLM_IMAGE=${LITELLM_IMAGE:?LITELLM_IMAGE required (resolved on the runner from infra/catalog/litellm.yaml content-hash)}
 
 # Runtime env (full config — compose validates all vars even for services we don't start)
 RUNTIME_ENV=/opt/cogni-template-runtime/.env
@@ -676,8 +708,6 @@ COGNI_REPO_URL=${COGNI_REPO_URL}
 COGNI_REPO_REF=${COGNI_REPO_REF}
 GIT_READ_USERNAME=${GIT_READ_USERNAME}
 GIT_READ_TOKEN=${GIT_READ_TOKEN}
-OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
-OPENCLAW_GITHUB_RW_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN}
 POSTHOG_API_KEY=${POSTHOG_API_KEY}
 POSTHOG_HOST=${POSTHOG_HOST}
 # App/worker images — not started by infra deploy, but compose validates all vars.
@@ -757,11 +787,10 @@ append_env_if_set "$RUNTIME_ENV" GRAFANA_PDC_HOSTED_GRAFANA_ID "${GRAFANA_PDC_HO
 append_env_if_set "$RUNTIME_ENV" GRAFANA_PDC_CLUSTER "${GRAFANA_PDC_CLUSTER-}"
 append_env_if_set "$RUNTIME_ENV" GRAFANA_PDC_NETWORK_ID "${GRAFANA_PDC_NETWORK_ID-}"
 # LiteLLM (Compose) → node apps (k3s NodePorts) via bug.0295 VM DNS.
-# NodePorts pinned in infra/k8s/base/node-app/service.yaml; UUIDs in each
-# node's .cogni/repo-spec.yaml. Scheduler-worker uses its own k8s ConfigMap.
-LITELLM_NODE_HOST="${DEPLOY_ENVIRONMENT}.vm.cognidao.org"
-LITELLM_NODE_ENDPOINTS="4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://${LITELLM_NODE_HOST}:30000,5ed2d64f-2745-4676-983b-2fb7e05b2eba=http://${LITELLM_NODE_HOST}:30100,f6d2a17d-b7f6-4ad1-a86b-f0ad2380999e=http://${LITELLM_NODE_HOST}:30300,b927a9dd-6132-4fc9-a51e-e3cee2568e3c=http://${LITELLM_NODE_HOST}:30200"
-printf '%s=%s\n' COGNI_NODE_ENDPOINTS "$LITELLM_NODE_ENDPOINTS" >> "$RUNTIME_ENV"
+# Derived from NODE_TARGETS so node-local metering gets slug + UUID aliases
+# for every catalog node without a deploy-script edit.
+printf '%s=%s\n' COGNI_NODE_ENDPOINTS "${LITELLM_NODE_ENDPOINTS:?LITELLM_NODE_ENDPOINTS required}" >> "$RUNTIME_ENV"
+printf '%s=%s\n' COGNI_DEFAULT_NODE_ID "${COGNI_DEFAULT_NODE_ID:?COGNI_DEFAULT_NODE_ID required}" >> "$RUNTIME_ENV"
 # Multi-node DB provisioning
 append_env_if_set "$RUNTIME_ENV" COGNI_NODE_DBS "${COGNI_NODE_DBS-}"
 # Database backup cadence. A systemd timer runs the Compose db-backup profile as
@@ -885,12 +914,8 @@ log_info "Logging into GHCR for private image pulls..."
 echo "${GHCR_DEPLOY_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Step 3.5: Pull sandbox images (may update on :latest)
+# Step 3.5: Pull images (may update on :latest)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-log_info "Pulling sandbox images..."
-PNPM_STORE_IMAGE="ghcr.io/cogni-dao/node-template:pnpm-store-latest"
-docker pull "$PNPM_STORE_IMAGE" || log_warn "pnpm-store image not found, skipping"
-
 # Pull LiteLLM from GHCR (built in CI — bug.0298 / G12).
 # LITELLM_IMAGE was self-resolved above from COGNI_REPO_REF to a GHCR tag,
 # or remains "cogni-litellm:latest" for local dev/provision (no pull needed).
@@ -900,11 +925,6 @@ if [[ "$LITELLM_IMAGE" == ghcr.io/* ]]; then
 else
   log_info "LiteLLM image is local ($LITELLM_IMAGE) — skipping pull"
 fi
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Step 3.6: Seed pnpm_store volume (idempotent, skip if hash matches)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-source /tmp/seed-pnpm-store.sh
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 4: Assert profile services exist (guard against silent compose drift)
@@ -1181,11 +1201,20 @@ if command -v kubectl &>/dev/null; then
   HOST_IP=$(hostname -I | awk '{print $1}')
   log_info "  k8s namespace: ${K8S_NS}, host IP: ${HOST_IP}"
 
-  # ── Per-node secrets (operator, poly, resy, node-template) ────────────────
-  # task.5078 — node-template added as fourth deployable node. Hyphenated node
-  # names map to underscored DB names (postgres identifier rules):
+  # ── Per-node secrets (catalog-driven: every type:node in NODE_APP_TARGETS) ──
+  # bug.5086 — node list comes from infra/catalog (CATALOG_IS_SSOT), threaded in
+  # from the local context, so a new node (e.g. canary) auto-provisions its
+  # secret. poly is absent (own VM, not in catalog); scheduler-worker is a
+  # service (own secret below). Hyphenated names map to underscored DB names.
   #   node="node-template" → DB="cogni_node_template" / "knowledge_node_template".
-  for node in operator poly resy node-template; do
+  # Defense-in-depth: the local context already asserts non-empty before
+  # threading; refuse here too so a future threading regression can never
+  # silently create ZERO node-app-secrets and starve every node.
+  if [ -z "${NODE_APP_TARGETS}" ]; then
+    echo "[FATAL] NODE_APP_TARGETS empty — refusing to (re)create node-app-secrets" >&2
+    exit 1
+  fi
+  for node in ${NODE_APP_TARGETS}; do
     db_node="${node//-/_}"
     # Doltgres URL points to this node's own DB (knowledge_<node>).
     # Poly reads DOLTGRES_URL_POLY in its Zod schema; operator / resy /
@@ -1214,8 +1243,6 @@ POLYGON_RPC_URL=${POLYGON_RPC_URL}
 POSTHOG_API_KEY=${POSTHOG_API_KEY:-}
 POSTHOG_HOST=${POSTHOG_HOST:-}
 TAVILY_API_KEY=${TAVILY_API_KEY:-}
-OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
-OPENCLAW_GITHUB_RW_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN:-}
 SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN:-}
 BILLING_INGEST_TOKEN=${BILLING_INGEST_TOKEN:-}
 INTERNAL_OPS_TOKEN=${INTERNAL_OPS_TOKEN:-}
@@ -1254,10 +1281,15 @@ LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
 LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
 LANGFUSE_BASE_URL=${LANGFUSE_BASE_URL:-}
 SECEOF
-    kubectl -n "${K8S_NS}" create secret generic "${node}-node-app-secrets" \
-      --from-env-file="$SECRET_FILE" --dry-run=client -o yaml | kubectl apply -f -
+    # bug.5086 — fail-soft per node: a broken/new node can't abort the run and
+    # leave operator/resy/node-template without their secrets.
+    if kubectl -n "${K8S_NS}" create secret generic "${node}-node-app-secrets" \
+      --from-env-file="$SECRET_FILE" --dry-run=client -o yaml | kubectl apply -f -; then
+      log_info "  Applied ${node}-node-app-secrets"
+    else
+      log_warn "  Skipped ${node}-node-app-secrets (apply failed; deploy continues)"
+    fi
     rm -f "$SECRET_FILE"
-    log_info "  Applied ${node}-node-app-secrets"
   done
 
   # ── Scheduler-worker secret ────────────────────────────────────────────────
@@ -1294,17 +1326,20 @@ SECEOF
   # /api/internal/graph-runs and /api/internal/grants/*/validate routes.
   # Rolling the node-apps first, waiting, then rolling the worker guarantees
   # the new endpoints exist before the worker can call them.
-  kubectl -n "${K8S_NS}" rollout restart \
-    deployment/operator-node-app \
-    deployment/poly-node-app \
-    deployment/resy-node-app \
-    deployment/node-template-node-app 2>/dev/null || true
+  # bug.5086 — catalog-driven node-app set (CATALOG_IS_SSOT); restart args built
+  # from NODE_APP_TARGETS so a new node rolls without editing this list.
+  NODE_APP_DEPLOYMENTS=""
+  for node in ${NODE_APP_TARGETS}; do
+    NODE_APP_DEPLOYMENTS="${NODE_APP_DEPLOYMENTS} deployment/${node}-node-app"
+  done
+  # shellcheck disable=SC2086
+  kubectl -n "${K8S_NS}" rollout restart ${NODE_APP_DEPLOYMENTS} 2>/dev/null || true
   log_info "[$(date -u +%H:%M:%S)] Node-app pods restarting (scheduler-worker waits)..."
 
   # ── Wait for node-app rollouts first ───────────────────────────────────────
   ROLLOUT_PIDS=""
-  for deploy in operator-node-app poly-node-app resy-node-app node-template-node-app; do
-    kubectl -n "${K8S_NS}" rollout status "deployment/${deploy}" --timeout=300s 2>/dev/null &
+  for node in ${NODE_APP_TARGETS}; do
+    kubectl -n "${K8S_NS}" rollout status "deployment/${node}-node-app" --timeout=300s 2>/dev/null &
     ROLLOUT_PIDS="$ROLLOUT_PIDS $!"
   done
   ROLLOUT_FAILED=0
@@ -1444,6 +1479,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
     echo "    $REPO_ROOT/infra/compose/edge/                → root@$VM_HOST:/opt/cogni-template-edge/"
     echo "    $REPO_ROOT/infra/compose/runtime/             → root@$VM_HOST:/opt/cogni-template-runtime/"
     echo "    $REPO_ROOT/infra/k8s/argocd/image-updater/    → root@$VM_HOST:/opt/cogni-template-argocd-updater/  (bug.0344)"
+    echo "LiteLLM node routes: $LITELLM_NODE_ENDPOINTS"
     echo "Remote script:      $ARTIFACT_DIR/deploy-infra-remote.sh → /tmp/deploy-infra-remote.sh"
     echo "Infra services managed by remote script: postgres, litellm, temporal, alloy, caddy (plus db-backup timer and healthchecks)"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -1484,13 +1520,9 @@ scp $SSH_OPTS "$ARTIFACT_DIR/deploy-infra-remote.sh" root@"$VM_HOST":/tmp/deploy
 
 # Upload healthcheck and bootstrap scripts (called from deploy-infra-remote.sh)
 scp $SSH_OPTS \
-  "$REPO_ROOT/scripts/ci/seed-pnpm-store.sh" \
   "$REPO_ROOT/scripts/ci/ensure-temporal-namespace.sh" \
   "$REPO_ROOT/infra/provision/cherry/harden-docker-public-ports.sh" \
   root@"$VM_HOST":/tmp/
-scp $SSH_OPTS \
-  "$REPO_ROOT/services/sandbox-openclaw/seed-pnpm-store.sh" \
-  root@"$VM_HOST":/tmp/seed-pnpm-store-core.sh
 
 # Verify SCP landed correctly
 REMOTE_CHECK=$(ssh $SSH_OPTS root@"$VM_HOST" "echo host=\$(hostname) date=\$(date -u +%Y-%m-%dT%H:%M:%SZ) && sha256sum /tmp/deploy-infra-remote.sh | awk '{print \$1}'" 2>&1) || {
@@ -1509,8 +1541,61 @@ log_info "deploy-infra-remote.sh verified on VM (sha256 match)"
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Execute remote script with env vars
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Remote env is passed via a quote-safe file (printf %q) + scp + source, NOT a
+# fragile inline `VAR='$VAR'` ssh command line. A single value containing a `'`
+# (or newline) corrupted the remote's single-quote parsing and silently
+# truncated every var AFTER it: COGNI_NODE_DBS / COGNI_DEFAULT_NODE_ID /
+# LITELLM_IMAGE arrived EMPTY at the VM and deploy-infra aborted before
+# db-provision ran (bug.5090 — preview node DBs never created). printf %q is
+# injection-proof for arbitrary secret values. Required runner-computed vars
+# still hard-fail HERE on the runner if unset.
+: "${COGNI_DEFAULT_NODE_ID:?COGNI_DEFAULT_NODE_ID required (resolved on runner from repo-spec primary-host)}"
+: "${LITELLM_IMAGE:?LITELLM_IMAGE required (resolved on runner from infra/catalog/litellm.yaml content-hash)}"
+COMMIT_SHA="${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
+DEPLOY_ACTOR="${GITHUB_ACTOR:-$(whoami)}"
+
+REMOTE_ENV_VARS=(
+  DOMAIN APP_ENV DEPLOY_ENVIRONMENT DATABASE_URL DATABASE_SERVICE_URL
+  LITELLM_MASTER_KEY OPENROUTER_API_KEY AUTH_SECRET
+  POSTGRES_ROOT_USER POSTGRES_ROOT_PASSWORD APP_DB_USER APP_DB_PASSWORD
+  APP_DB_SERVICE_USER APP_DB_SERVICE_PASSWORD APP_DB_READONLY_USER
+  APP_DB_READONLY_PASSWORD APP_DB_NAME EVM_RPC_URL POLYGON_RPC_URL
+  TEMPORAL_DB_USER TEMPORAL_DB_PASSWORD GHCR_DEPLOY_TOKEN GHCR_USERNAME
+  GRAFANA_CLOUD_LOKI_URL GRAFANA_CLOUD_LOKI_USER GRAFANA_CLOUD_LOKI_API_KEY
+  METRICS_TOKEN SCHEDULER_API_TOKEN BILLING_INGEST_TOKEN INTERNAL_OPS_TOKEN
+  WORK_ITEMS_NOTION_TOKEN WORK_ITEMS_NOTION_DATA_SOURCE_ID WORK_ITEMS_NOTION_VERSION
+  PROMETHEUS_REMOTE_WRITE_URL PROMETHEUS_USERNAME PROMETHEUS_PASSWORD
+  PROMETHEUS_QUERY_URL PROMETHEUS_READ_USERNAME PROMETHEUS_READ_PASSWORD
+  LANGFUSE_PUBLIC_KEY LANGFUSE_SECRET_KEY LANGFUSE_BASE_URL
+  COGNI_REPO_URL COGNI_REPO_REF GIT_READ_USERNAME GIT_READ_TOKEN
+  GRAFANA_URL
+  GRAFANA_SERVICE_ACCOUNT_TOKEN GRAFANA_PDC_SIGNING_TOKEN
+  GRAFANA_PDC_HOSTED_GRAFANA_ID GRAFANA_PDC_CLUSTER GRAFANA_PDC_NETWORK_ID
+  GRAFANA_PDC_NETWORK_UUID POSTHOG_API_KEY POSTHOG_HOST TAVILY_API_KEY
+  DISCORD_BOT_TOKEN GH_OAUTH_CLIENT_ID GH_OAUTH_CLIENT_SECRET
+  DISCORD_OAUTH_CLIENT_ID DISCORD_OAUTH_CLIENT_SECRET GOOGLE_OAUTH_CLIENT_ID
+  GOOGLE_OAUTH_CLIENT_SECRET DOLTHUB_REMOTE_URL DOLT_CREDS_JWK DOLT_CREDS_KEYID
+  DOLTHUB_API_TOKEN DOLTHUB_OAUTH_CLIENT_ID DOLTHUB_OAUTH_CLIENT_SECRET
+  GH_REVIEW_APP_ID GH_REVIEW_APP_PRIVATE_KEY_BASE64 GH_REPOS GH_WEBHOOK_SECRET
+  PRIVY_APP_ID PRIVY_APP_SECRET PRIVY_SIGNING_KEY PRIVY_USER_WALLETS_APP_ID
+  PRIVY_USER_WALLETS_APP_SECRET PRIVY_USER_WALLETS_SIGNING_KEY
+  POLY_WALLET_AEAD_KEY_HEX POLY_WALLET_AEAD_KEY_ID POLY_CLOB_GEO_BLOCK_TOKEN
+  CONNECTIONS_ENCRYPTION_KEY COGNI_NODE_DBS NODE_APP_TARGETS EDGE_ENV_LINES
+  LITELLM_NODE_ENDPOINTS COGNI_DEFAULT_NODE_ID ACTIONS_AUTOMATION_BOT_PAT
+  LITELLM_IMAGE COMMIT_SHA DEPLOY_ACTOR
+)
+REMOTE_ENV_FILE="$ARTIFACT_DIR/deploy-infra-env.sh"
+: > "$REMOTE_ENV_FILE"
+for _rv in "${REMOTE_ENV_VARS[@]}"; do
+  # %q quotes any value safely (single quotes, spaces, newlines) so sourcing
+  # reconstructs the exact value. `${!_rv-}` = indirect read, empty if unset.
+  printf '%s=%q\n' "$_rv" "${!_rv-}" >> "$REMOTE_ENV_FILE"
+done
+unset _rv
+scp $SSH_OPTS "$REMOTE_ENV_FILE" root@"$VM_HOST":/tmp/deploy-infra-env.sh
 ssh $SSH_OPTS root@"$VM_HOST" \
-    "DOMAIN='$DOMAIN' APP_ENV='$APP_ENV' DEPLOY_ENVIRONMENT='$DEPLOY_ENVIRONMENT' DATABASE_URL='$DATABASE_URL' DATABASE_SERVICE_URL='$DATABASE_SERVICE_URL' LITELLM_MASTER_KEY='$LITELLM_MASTER_KEY' OPENROUTER_API_KEY='$OPENROUTER_API_KEY' AUTH_SECRET='$AUTH_SECRET' POSTGRES_ROOT_USER='$POSTGRES_ROOT_USER' POSTGRES_ROOT_PASSWORD='$POSTGRES_ROOT_PASSWORD' APP_DB_USER='$APP_DB_USER' APP_DB_PASSWORD='$APP_DB_PASSWORD' APP_DB_SERVICE_USER='$APP_DB_SERVICE_USER' APP_DB_SERVICE_PASSWORD='$APP_DB_SERVICE_PASSWORD' APP_DB_READONLY_USER='${APP_DB_READONLY_USER:-}' APP_DB_READONLY_PASSWORD='${APP_DB_READONLY_PASSWORD:-}' APP_DB_NAME='$APP_DB_NAME' EVM_RPC_URL='$EVM_RPC_URL' POLYGON_RPC_URL='$POLYGON_RPC_URL' TEMPORAL_DB_USER='$TEMPORAL_DB_USER' TEMPORAL_DB_PASSWORD='$TEMPORAL_DB_PASSWORD' GHCR_DEPLOY_TOKEN='$GHCR_DEPLOY_TOKEN' GHCR_USERNAME='$GHCR_USERNAME' GRAFANA_CLOUD_LOKI_URL='${GRAFANA_CLOUD_LOKI_URL:-}' GRAFANA_CLOUD_LOKI_USER='${GRAFANA_CLOUD_LOKI_USER:-}' GRAFANA_CLOUD_LOKI_API_KEY='${GRAFANA_CLOUD_LOKI_API_KEY:-}' METRICS_TOKEN='${METRICS_TOKEN:-}' SCHEDULER_API_TOKEN='${SCHEDULER_API_TOKEN:-}' BILLING_INGEST_TOKEN='${BILLING_INGEST_TOKEN:-}' INTERNAL_OPS_TOKEN='${INTERNAL_OPS_TOKEN:-}' WORK_ITEMS_NOTION_TOKEN='${WORK_ITEMS_NOTION_TOKEN:-}' WORK_ITEMS_NOTION_DATA_SOURCE_ID='${WORK_ITEMS_NOTION_DATA_SOURCE_ID:-}' WORK_ITEMS_NOTION_VERSION='${WORK_ITEMS_NOTION_VERSION:-}' PROMETHEUS_REMOTE_WRITE_URL='${PROMETHEUS_REMOTE_WRITE_URL:-}' PROMETHEUS_USERNAME='${PROMETHEUS_USERNAME:-}' PROMETHEUS_PASSWORD='${PROMETHEUS_PASSWORD:-}' PROMETHEUS_QUERY_URL='${PROMETHEUS_QUERY_URL:-}' PROMETHEUS_READ_USERNAME='${PROMETHEUS_READ_USERNAME:-}' PROMETHEUS_READ_PASSWORD='${PROMETHEUS_READ_PASSWORD:-}' LANGFUSE_PUBLIC_KEY='${LANGFUSE_PUBLIC_KEY:-}' LANGFUSE_SECRET_KEY='${LANGFUSE_SECRET_KEY:-}' LANGFUSE_BASE_URL='${LANGFUSE_BASE_URL:-}' COGNI_REPO_URL='$COGNI_REPO_URL' COGNI_REPO_REF='$COGNI_REPO_REF' GIT_READ_USERNAME='$GIT_READ_USERNAME' GIT_READ_TOKEN='$GIT_READ_TOKEN' OPENCLAW_GATEWAY_TOKEN='$OPENCLAW_GATEWAY_TOKEN' OPENCLAW_GITHUB_RW_TOKEN='${OPENCLAW_GITHUB_RW_TOKEN:-}' GRAFANA_URL='${GRAFANA_URL:-}' GRAFANA_SERVICE_ACCOUNT_TOKEN='${GRAFANA_SERVICE_ACCOUNT_TOKEN:-}' GRAFANA_PDC_SIGNING_TOKEN='${GRAFANA_PDC_SIGNING_TOKEN:-}' GRAFANA_PDC_HOSTED_GRAFANA_ID='${GRAFANA_PDC_HOSTED_GRAFANA_ID:-}' GRAFANA_PDC_CLUSTER='${GRAFANA_PDC_CLUSTER:-}' GRAFANA_PDC_NETWORK_ID='${GRAFANA_PDC_NETWORK_ID:-}' GRAFANA_PDC_NETWORK_UUID='${GRAFANA_PDC_NETWORK_UUID:-}' POSTHOG_API_KEY='$POSTHOG_API_KEY' POSTHOG_HOST='$POSTHOG_HOST' TAVILY_API_KEY='${TAVILY_API_KEY:-}' DISCORD_BOT_TOKEN='${DISCORD_BOT_TOKEN:-}' GH_OAUTH_CLIENT_ID='${GH_OAUTH_CLIENT_ID:-}' GH_OAUTH_CLIENT_SECRET='${GH_OAUTH_CLIENT_SECRET:-}' DISCORD_OAUTH_CLIENT_ID='${DISCORD_OAUTH_CLIENT_ID:-}' DISCORD_OAUTH_CLIENT_SECRET='${DISCORD_OAUTH_CLIENT_SECRET:-}' GOOGLE_OAUTH_CLIENT_ID='${GOOGLE_OAUTH_CLIENT_ID:-}' GOOGLE_OAUTH_CLIENT_SECRET='${GOOGLE_OAUTH_CLIENT_SECRET:-}' DOLTHUB_REMOTE_URL='${DOLTHUB_REMOTE_URL:-}' DOLT_CREDS_JWK='${DOLT_CREDS_JWK:-}' DOLT_CREDS_KEYID='${DOLT_CREDS_KEYID:-}' DOLTHUB_API_TOKEN='${DOLTHUB_API_TOKEN:-}' DOLTHUB_OAUTH_CLIENT_ID='${DOLTHUB_OAUTH_CLIENT_ID:-}' DOLTHUB_OAUTH_CLIENT_SECRET='${DOLTHUB_OAUTH_CLIENT_SECRET:-}' GH_REVIEW_APP_ID='${GH_REVIEW_APP_ID:-}' GH_REVIEW_APP_PRIVATE_KEY_BASE64='${GH_REVIEW_APP_PRIVATE_KEY_BASE64:-}' GH_REPOS='${GH_REPOS:-}' GH_WEBHOOK_SECRET='${GH_WEBHOOK_SECRET:-}' PRIVY_APP_ID='${PRIVY_APP_ID:-}' PRIVY_APP_SECRET='${PRIVY_APP_SECRET:-}' PRIVY_SIGNING_KEY='${PRIVY_SIGNING_KEY:-}' PRIVY_USER_WALLETS_APP_ID='${PRIVY_USER_WALLETS_APP_ID:-}' PRIVY_USER_WALLETS_APP_SECRET='${PRIVY_USER_WALLETS_APP_SECRET:-}' PRIVY_USER_WALLETS_SIGNING_KEY='${PRIVY_USER_WALLETS_SIGNING_KEY:-}' POLY_WALLET_AEAD_KEY_HEX='${POLY_WALLET_AEAD_KEY_HEX:-}' POLY_WALLET_AEAD_KEY_ID='${POLY_WALLET_AEAD_KEY_ID:-}' POLY_CLOB_GEO_BLOCK_TOKEN='${POLY_CLOB_GEO_BLOCK_TOKEN:-}' CONNECTIONS_ENCRYPTION_KEY='${CONNECTIONS_ENCRYPTION_KEY:-}' COGNI_NODE_DBS='${COGNI_NODE_DBS:-}' ACTIONS_AUTOMATION_BOT_PAT='${ACTIONS_AUTOMATION_BOT_PAT:-}' LITELLM_IMAGE='${LITELLM_IMAGE:-ghcr.io/cogni-dao/cogni-template:litellm-b6e4e942cb23}' COMMIT_SHA='${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}' DEPLOY_ACTOR='${GITHUB_ACTOR:-$(whoami)}' bash /tmp/deploy-infra-remote.sh"
+    "set -a; . /tmp/deploy-infra-env.sh; set +a; rm -f /tmp/deploy-infra-env.sh; bash /tmp/deploy-infra-remote.sh"
+rm -f "$REMOTE_ENV_FILE"
 
 emit_deployment_event "infra_deployment.complete" "success" "Infrastructure deployment completed"
 log_info "Infrastructure deployment complete!"

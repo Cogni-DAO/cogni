@@ -125,11 +125,24 @@ export function formatPaymentError(error: unknown): FormattedError {
 
     if (
       errorName === "ContractFunctionRevertedError" ||
-      errorName.includes("Reverted")
+      errorName === "ContractFunctionExecutionError" ||
+      errorName.includes("Reverted") ||
+      errorName.includes("ContractFunctionExecution")
     ) {
+      // ERC20 insufficient-balance is the common revert — make it actionable
+      // (the reason string says "exceeds balance", not "insufficient").
+      if (/exceeds balance|transfer amount exceeds/.test(debug.toLowerCase())) {
+        return {
+          code: "INSUFFICIENT_BALANCE",
+          userMessage:
+            "Insufficient USDC balance — add USDC to this wallet on Base, then try again.",
+          debug,
+        };
+      }
       return {
         code: "CONTRACT_REVERTED",
-        userMessage: "Transaction failed",
+        userMessage:
+          "This payment would fail on-chain — check your wallet and try again.",
         debug,
       };
     }

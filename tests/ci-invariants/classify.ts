@@ -64,6 +64,47 @@ function isRideAlong(path: string): boolean {
 }
 
 /**
+ * NODE_BIRTH ride-along (bug.5086): a node may carry its OWN deploy wiring —
+ * the operator-owned files that exist only to make `nodes/<node>/` deployable.
+ * This lets a single welcome PR create + wire a node in one PR (the
+ * CATALOG_IS_SSOT / create-node.md contract) without splitting node app from
+ * its catalog/overlays/AppSet. Bounded to the node's OWN slug — a node PR
+ * still cannot touch another node's catalog/overlay.
+ *
+ * The AppSet files are now per-node (`<env>-<node>-applicationset.yaml`, one
+ * object per (env, node) for LANE_ISOLATION), so a node-wiring PR can only touch
+ * its OWN lane's AppSet — the prior shared-file residual is closed structurally.
+ */
+function isNodeWiring(path: string, node: string): boolean {
+  if (node === "") return false;
+  const overlayPrefix = "infra/k8s/overlays/";
+  const argocdPrefix = "infra/k8s/argocd/";
+  if (path.startsWith(overlayPrefix)) {
+    const rest = path.slice(overlayPrefix.length);
+    const slash = rest.indexOf("/");
+    return slash > 0 && rest.slice(slash + 1).startsWith(`${node}/`);
+  }
+  if (path.startsWith(argocdPrefix)) {
+    const file = path.slice(argocdPrefix.length);
+    return (
+      !file.includes("/") &&
+      (file.endsWith(`-${node}-applicationset.yaml`) ||
+        file.endsWith(`-${node}-applicationset.yml`))
+    );
+  }
+  // scheduler-worker configmap + edge Caddyfile.tmpl are both catalog-derived
+  // regen artifacts (gen:scheduler-worker-endpoints / gen:caddyfile): a node
+  // birth that adds a `type: node` catalog entry regenerates both, so they must
+  // ride along the node's own welcome PR (bug.5086). Not slug-pathed (one shared
+  // file each), so bounded by intent, not by path — reviewed at PR time.
+  return (
+    path === `infra/catalog/${node}.yaml` ||
+    path === "infra/k8s/base/scheduler-worker/configmap.yaml" ||
+    path === "infra/compose/edge/configs/Caddyfile.tmpl"
+  );
+}
+
+/**
  * Classify a list of changed paths against the set of known non-operator nodes.
  * The rule:
  *   domain(path) = X         if path starts with `nodes/<X>/` for X in nonOperatorNodes
@@ -96,12 +137,17 @@ export function classify(
     if (assigned === OPERATOR_NODE) operatorPaths.push(p);
   }
 
+  // The single non-operator node (if exactly one) — used for the NODE_BIRTH
+  // wiring carve-out so a node may ride along its OWN catalog/overlays/AppSet.
+  const nonOperator = [...domains].filter((d) => d !== OPERATOR_NODE);
+  const theNode = nonOperator.length === 1 ? nonOperator[0] : "";
+
   let rideAlongApplied = false;
   if (
     domains.size === 2 &&
     domains.has(OPERATOR_NODE) &&
     operatorPaths.length > 0 &&
-    operatorPaths.every(isRideAlong)
+    operatorPaths.every((p) => isRideAlong(p) || isNodeWiring(p, theNode))
   ) {
     domains.delete(OPERATOR_NODE);
     rideAlongApplied = true;

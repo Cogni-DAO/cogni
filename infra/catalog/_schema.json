@@ -12,10 +12,7 @@
     "dockerfile",
     "image_tag_suffix",
     "migrator_tag_suffix",
-    "path_prefix",
-    "candidate_a_branch",
-    "preview_branch",
-    "production_branch"
+    "path_prefix"
   ],
   "allOf": [
     {
@@ -23,7 +20,25 @@
         "properties": { "type": { "const": "node" } },
         "required": ["type"]
       },
-      "then": { "required": ["node_id"] }
+      "then": { "required": ["node_port"] }
+    },
+    {
+      "$comment": "REPO_SPEC_IS_IDENTITY_SSOT — node_id is declared in nodes/<name>/.cogni/repo-spec.yaml (the web3-anchored authority), never in the catalog. Forbid it here so the duplicate cannot be reintroduced.",
+      "not": { "required": ["node_id"] }
+    },
+    {
+      "$comment": "Deploy branches are k8s/Argo per-env state. type:infra (e.g. litellm) deploys via Compose-on-VM (deploy-infra.sh resolves a content-hash tag), so it has no deploy branches.",
+      "if": {
+        "properties": { "type": { "enum": ["node", "service"] } },
+        "required": ["type"]
+      },
+      "then": {
+        "required": [
+          "candidate_a_branch",
+          "preview_branch",
+          "production_branch"
+        ]
+      }
     }
   ],
   "properties": {
@@ -34,23 +49,28 @@
     },
     "type": {
       "type": "string",
-      "enum": ["node", "service"],
-      "description": "node = full node app (operator/poly/resy); service = supporting service (scheduler-worker)."
+      "enum": ["node", "service", "infra"],
+      "description": "node = full node app (operator/poly/resy); service = supporting k8s service (scheduler-worker); infra = shared VM-infra image built in CI but deployed via Compose-on-VM (litellm). node+service deploy via Argo; infra is content-hash tagged and resolved by deploy-infra.sh."
     },
     "port": {
       "type": "integer",
       "minimum": 1,
       "maximum": 65535
     },
-    "node_id": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-      "description": "UUID v4 — bound at provision time, persisted in repo-spec lookups."
+    "node_port": {
+      "type": "integer",
+      "minimum": 30000,
+      "maximum": 32767,
+      "description": "task.5078 — k3s Service NodePort the edge Caddy reverse-proxies to (host.docker.internal:<node_port>). Required for type:node. CATALOG_IS_SSOT: render-caddyfile.sh bakes it into the generated Caddyfile and deploy-infra.sh / provision-env-vm.sh skip per-node edits. Must equal the per-env overlay Service nodePort."
     },
     "dockerfile": {
       "type": "string",
       "pattern": "^[a-z0-9._/-]+/Dockerfile$",
       "description": "Repo-relative path to the build Dockerfile."
+    },
+    "build_context": {
+      "type": "string",
+      "description": "Docker build context (repo-relative). Defaults to '.' (repo root) for node/service images that COPY from the monorepo. type:infra images with a self-contained context (e.g. litellm) set their own dir so the Dockerfile stays context-relative and its content-hash is stable."
     },
     "image_tag_suffix": {
       "type": "string",
