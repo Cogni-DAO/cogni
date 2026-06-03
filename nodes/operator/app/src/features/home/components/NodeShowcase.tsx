@@ -25,7 +25,6 @@ import Link from "next/link";
 import type { ReactElement } from "react";
 
 import { Badge, Card, CardContent } from "@/components";
-import { container, section } from "@/styles/ui";
 
 import type { ResolvedShowcaseNode } from "../showcase/getShowcaseNodes.server";
 import type { ShowcaseAccent, ShowcaseCategory } from "../showcase/nodes.data";
@@ -56,7 +55,7 @@ function NodeTile({ node }: { node: ResolvedShowcaseNode }): ReactElement {
       href={node.href}
       target="_blank"
       rel="noopener noreferrer"
-      className="group block focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+      className="group block"
     >
       <Card className="h-full overflow-hidden transition-shadow hover:shadow-lg">
         <div
@@ -88,9 +87,9 @@ function LaunchTile(): ReactElement {
   return (
     <Link
       href="/setup/dao"
-      className="group block focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+      className="group block"
     >
-      <Card className="flex h-full items-center justify-center border-2 border-border border-dashed bg-transparent transition-colors hover:border-primary">
+      <Card className="flex h-full items-center justify-center border-2 border-border bg-transparent transition-colors hover:border-primary">
         <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
           <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors group-hover:bg-primary/20">
             <Plus className="size-6" aria-hidden="true" />
@@ -113,8 +112,11 @@ export function NodeShowcase({
   nodes: readonly ResolvedShowcaseNode[];
 }): ReactElement {
   return (
-    <section className={section({ surface: "muted" })} id="nodes">
-      <div className={container({ size: "lg", spacing: "lg" })}>
+    <section
+      className="w-full border-border border-t bg-muted py-16 md:py-20"
+      id="nodes"
+    >
+      <div className="mx-auto max-w-7xl px-4 sm:px-6">
         <div className="mb-10 text-center">
           <h2 className="font-bold text-3xl text-foreground tracking-tight sm:text-4xl">
             Explore the network
