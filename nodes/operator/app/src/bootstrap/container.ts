@@ -660,15 +660,16 @@ function createContainer(): Container {
     const contributionPort = new DoltgresKnowledgeContributionAdapter({
       sql: doltClient,
     });
-    // Optional post-merge mirror to DoltHub (task.5069). Disabled when
-    // DOLTHUB_REMOTE_URL is unset. Gate-by-secret-presence follows the
-    // established pattern (Langfuse, Privy, PostHog) — DOLTHUB_REMOTE_URL
-    // is only granted to the production GitHub Environment Secret scope, so
-    // candidate-a/preview boot with the hook undefined and never push. v0
-    // invariant: prod is the only writer. Bootstrap: see
-    // docs/runbooks/dolthub-remote-bootstrap.md.
-    const pushMainOnMerge = doltRemoteUrl
-      ? wrapPushSafe(
+    // Optional post-merge mirror to DoltHub (task.5069). Fail-closed: the push
+    // is wired only when DOLTHUB_REMOTE_URL is set AND DOLTHUB_MIRROR_PUSH is
+    // true. The URL alone enables the read-only seed/pull above; PUSHING the
+    // canonical history additionally requires the prod-only flag, so a URL
+    // fat-fingered onto test/preview (as on candidate-a) can pull-seed but can
+    // never write to the prod mirror. v0 invariant: prod is the only writer.
+    // Bootstrap: see docs/runbooks/dolthub-remote-bootstrap.md.
+    const pushMainOnMerge =
+      doltRemoteUrl && env.DOLTHUB_MIRROR_PUSH
+        ? wrapPushSafe(
           createDoltgresPusher({
             sql: doltClient,
             remoteName: "origin",
