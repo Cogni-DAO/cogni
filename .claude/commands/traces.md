@@ -33,7 +33,7 @@ scripts/langfuse-query.sh '/api/public/traces?limit=20&fromTimestamp=2026-06-01T
 - **Host:** `https://us.cloud.langfuse.com` — the Cogni project lives on the
   **US** region. The EU host (`https://cloud.langfuse.com`, the stale "Default"
   in `infra/secrets-catalog.yaml`) returns `Invalid credentials. Confirm that
-  you've configured the correct host.` for the same keys. Override with
+you've configured the correct host.` for the same keys. Override with
   `LANGFUSE_BASE_URL` only if the project moves.
 - **UI:** https://us.cloud.langfuse.com → org `Cogni` → project `cogni-template`.
 - One project holds **all envs** (production + candidate-a + local). Filter by
