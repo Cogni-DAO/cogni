@@ -7,9 +7,9 @@
  * Scope: Two thin factories over the `dolt_*` SQL surface. Lazy-adds the remote on first use, then `dolt_push` (pusher) or `dolt_fetch` + conditional `dolt_reset` (puller). Does not contain HTTP, cred management, retry/backoff, or logging — those belong to the caller (operator DI).
  * Invariants:
  *   - Push happens AFTER the merge transaction commits; never holds the merge connection open.
- *   - The puller runs once at boot, before the knowledge store serves traffic. Its only job is to make local `main` descend from `origin/main` — a no-op when it already does.
+ *   - The puller runs once as a floating boot task. Its only job is to make local `main` descend from `origin/main` — a no-op when it already does.
  *   - Auth lives in the doltgres process state (DOLT creds file, see docs/runbooks/dolthub-remote-bootstrap.md). The SQL surface here knows nothing about credentials.
- *   - Errors propagate to the caller; the caller (operator container DI) wraps push with `wrapPushSafe` and seed with a boot try/catch to keep both best-effort.
+ *   - Errors propagate to the caller; the caller (operator container DI) wraps push with `wrapPushSafe` and the seed with a boot `.catch`, keeping both best-effort.
  * Side-effects: IO (SQL against the knowledge DB; outbound GRPC to the remote)
  * Links: docs/runbooks/dolthub-remote-bootstrap.md, work/projects/proj.knowledge-syntropy.md
  * @public

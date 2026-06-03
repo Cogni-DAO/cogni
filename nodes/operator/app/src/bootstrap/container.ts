@@ -625,20 +625,25 @@ function createContainer(): Container {
     // Seed-on-boot (task.5104): a freshly-provisioned node inits an empty
     // knowledge DB with no common ancestor to the remote, so the push mirror
     // can never push and the node has no knowledge. Make local main descend
-    // from origin/main before the store serves traffic. Idempotent — a no-op
-    // once the node already shares history. Degrades like the push: a failed
-    // seed logs and continues; boot never hard-fails on it.
+    // from origin/main so the mirror works and reads return data. Idempotent —
+    // a no-op once the node already shares history. `createContainer` is a
+    // synchronous singleton (and instrumentation.ts can't import bootstrap),
+    // so the seed runs as a floating boot task — same fire-and-forget shape as
+    // the LiteLLM preflight in instrumentation.ts and the lazily-invoked push
+    // mirror. It races nothing in practice: knowledge reads arrive at HTTP
+    // request time, well after the fetch+reset completes. Degrades like the
+    // push — a failed seed logs and boot continues; never hard-fails.
     if (doltRemoteUrl) {
-      try {
-        await createDoltgresPuller({
-          sql: doltClient,
-          remoteName: "origin",
-          remoteUrl: doltRemoteUrl,
-        }).seedFromRemote();
-        log.info({ remote: doltRemoteUrl }, "dolthub_seed_ok");
-      } catch (err) {
-        log.warn({ err, remote: doltRemoteUrl }, "dolthub_seed_failed");
-      }
+      void createDoltgresPuller({
+        sql: doltClient,
+        remoteName: "origin",
+        remoteUrl: doltRemoteUrl,
+      })
+        .seedFromRemote()
+        .then(() => log.info({ remote: doltRemoteUrl }, "dolthub_seed_ok"))
+        .catch((err) =>
+          log.warn({ err, remote: doltRemoteUrl }, "dolthub_seed_failed")
+        );
     }
     const knowledgePort = new DoltgresKnowledgeStoreAdapter({
       sql: doltClient,
