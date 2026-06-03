@@ -12,8 +12,12 @@
  */
 
 import { NextResponse } from "next/server";
+import { verifyMessage } from "viem";
 import { wrapPublicRoute } from "@/bootstrap/http";
-import { internshipInterestOperation } from "@/contracts/internship.interest.v1.contract";
+import {
+  buildInternshipApplicationMessage,
+  internshipInterestOperation,
+} from "@/contracts/internship.interest.v1.contract";
 import { serverEnv } from "@/shared/env/server-env";
 import { logRequestWarn } from "@/shared/observability";
 
@@ -44,6 +48,51 @@ export const POST = wrapPublicRoute(
     }
 
     const input = parseResult.data;
+    const expectedWalletMessage = buildInternshipApplicationMessage({
+      name: input.name,
+      email: input.email,
+      github: input.github,
+      artifactUrl: input.artifactUrl,
+      focus: input.focus,
+      squadStatus: input.squadStatus,
+      timezone: input.timezone,
+      weeklyAvailability: input.weeklyAvailability,
+      artifactNotes: input.artifactNotes,
+      whyCogni: input.whyCogni,
+      firstProjectChoice: input.firstProjectChoice,
+      recordingConsent: input.recordingConsent,
+      note: input.note,
+      walletSignedAt: input.walletSignedAt,
+    });
+    if (input.walletMessage !== expectedWalletMessage) {
+      logRequestWarn(
+        ctx.log,
+        { walletAddress: input.walletAddress.toLowerCase() },
+        "WALLET_MESSAGE_MISMATCH"
+      );
+      return NextResponse.json(
+        { error: "wallet signature does not match application" },
+        { status: 400 }
+      );
+    }
+
+    const walletVerified = await verifyMessage({
+      address: input.walletAddress as `0x${string}`,
+      message: input.walletMessage,
+      signature: input.walletSignature as `0x${string}`,
+    });
+    if (!walletVerified) {
+      logRequestWarn(
+        ctx.log,
+        { walletAddress: input.walletAddress.toLowerCase() },
+        "WALLET_SIGNATURE_INVALID"
+      );
+      return NextResponse.json(
+        { error: "wallet signature does not match application" },
+        { status: 400 }
+      );
+    }
+
     const referenceId = crypto.randomUUID();
     const derekInterviewUrl = serverEnv().DEREK_INTERVIEW_URL;
     const emailDomain =
@@ -59,11 +108,12 @@ export const POST = wrapPublicRoute(
         hasGithub: Boolean(input.github),
         hasArtifact: Boolean(input.artifactUrl),
         recordingConsent: input.recordingConsent,
+        walletAddress: input.walletAddress.toLowerCase(),
+        walletSignedAt: input.walletSignedAt,
         emailDomain,
         noteLength: input.note?.length ?? 0,
         artifactNotesLength: input.artifactNotes.length,
         whyCogniLength: input.whyCogni.length,
-        reliableCommitmentLength: input.reliableCommitment.length,
       },
       "internship interest submitted"
     );

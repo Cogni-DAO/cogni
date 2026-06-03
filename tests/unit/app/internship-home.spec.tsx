@@ -19,6 +19,11 @@ import userEvent from "@testing-library/user-event";
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const walletMocks = vi.hoisted(() => ({
+  openConnectModal: vi.fn(),
+  signMessageAsync: vi.fn(async () => `0x${"a".repeat(130)}` as `0x${string}`),
+}));
+
 type MotionProps = React.HTMLAttributes<HTMLElement> & {
   readonly children?: React.ReactNode;
   readonly animate?: unknown;
@@ -65,6 +70,16 @@ vi.mock("next-themes", () => ({
   useTheme: () => ({ resolvedTheme: "dark" }),
 }));
 
+vi.mock("@/features/home/components/useInternshipWalletSignature", () => ({
+  useInternshipWalletSignature: () => ({
+    address: "0x1111111111111111111111111111111111111111",
+    isConnected: true,
+    isSigning: false,
+    openConnectModal: walletMocks.openConnectModal,
+    signMessage: walletMocks.signMessageAsync,
+  }),
+}));
+
 vi.mock("@/features/home/components/InternshipNetworkBackground", () => ({
   InternshipNetworkBackground: () =>
     React.createElement("div", { "data-testid": "internship-background" }),
@@ -72,10 +87,12 @@ vi.mock("@/features/home/components/InternshipNetworkBackground", () => ({
 
 describe("InternshipHome", () => {
   afterEach(() => {
+    walletMocks.openConnectModal.mockClear();
+    walletMocks.signMessageAsync.mockClear();
     vi.unstubAllGlobals();
   });
 
-  it("submits expanded intake fields and shows Derek interview handoff", async () => {
+  it("signs and submits streamlined intake fields with Derek interview handoff", async () => {
     class TestIntersectionObserver implements IntersectionObserver {
       readonly root = null;
       readonly rootMargin = "";
@@ -107,7 +124,7 @@ describe("InternshipHome", () => {
     render(React.createElement(InternshipHome));
 
     const submitButton = screen.getByRole("button", {
-      name: /submit interest/i,
+      name: /submit signed application/i,
     });
     const form = submitButton.closest("form");
     expect(form).not.toBeNull();
@@ -116,9 +133,9 @@ describe("InternshipHome", () => {
 
     await user.type(scoped.getByLabelText("Name"), "Ada Lovelace");
     await user.type(scoped.getByLabelText("Email"), "ada@example.com");
-    await user.type(scoped.getByLabelText("GitHub or portfolio"), "ada");
+    await user.type(scoped.getByLabelText("GitHub / portfolio"), "ada");
     await user.type(
-      scoped.getByLabelText("Best artifact link"),
+      scoped.getByLabelText("Best proof link"),
       "https://github.com/ada/cogni-agent"
     );
     await user.selectOptions(
@@ -143,10 +160,6 @@ describe("InternshipHome", () => {
       scoped.getByLabelText("First project direction"),
       "agent-workflows"
     );
-    await user.type(
-      scoped.getByLabelText("Reliable commitment for the next month"),
-      "Two focused build blocks every week."
-    );
     await user.click(scoped.getByLabelText(/Derek may use an AI note taker/));
     await user.type(
       scoped.getByLabelText("Anything else Derek should know?"),
@@ -155,11 +168,16 @@ describe("InternshipHome", () => {
 
     await user.click(submitButton);
 
+    await waitFor(() =>
+      expect(walletMocks.signMessageAsync).toHaveBeenCalledTimes(1)
+    );
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const payload = JSON.parse(String(init.body));
+
     expect(init.method).toBe("POST");
     expect(init.headers).toEqual({ "Content-Type": "application/json" });
-    expect(JSON.parse(String(init.body))).toEqual({
+    expect(payload).toMatchObject({
       name: "Ada Lovelace",
       email: "ada@example.com",
       github: "ada",
@@ -172,10 +190,15 @@ describe("InternshipHome", () => {
       whyCogni:
         "I want to build durable AI businesses with clear contribution proof.",
       firstProjectChoice: "agent-workflows",
-      reliableCommitment: "Two focused build blocks every week.",
       recordingConsent: false,
       note: "I learn fastest through shipped feedback.",
+      walletAddress: "0x1111111111111111111111111111111111111111",
+      walletSignature: `0x${"a".repeat(130)}`,
     });
+    expect(payload.walletSignedAt).toEqual(expect.any(String));
+    expect(payload.walletMessage).toContain("Cogni internship application");
+    expect(payload.walletMessage).toContain("Name: Ada Lovelace");
+    expect(payload.walletMessage).toContain("Best artifact:");
 
     expect(await screen.findByText(/candidate-demo-001/)).toBeInTheDocument();
     expect(

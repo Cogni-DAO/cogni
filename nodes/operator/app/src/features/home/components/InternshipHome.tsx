@@ -23,20 +23,31 @@ import {
   Github,
   GitPullRequest,
   Network,
+  PenLine,
   ShieldCheck,
   UsersRound,
+  Wallet,
 } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
-import { type CSSProperties, type ReactElement, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactElement,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Button, Input } from "@/components";
-import type {
-  InternshipInterestInput,
-  InternshipInterestOutput,
+import {
+  buildInternshipApplicationMessage,
+  type InternshipInterestInput,
+  type InternshipInterestOutput,
+  type UnsignedInternshipInterestInput,
 } from "@/contracts/internship.interest.v1.contract";
 import { InternshipNetworkBackground } from "./InternshipNetworkBackground";
+import { useInternshipWalletSignature } from "./useInternshipWalletSignature";
 
-type FormState = InternshipInterestInput & {
+type FormState = UnsignedInternshipInterestInput & {
   github: string;
   artifactUrl: string;
   note: string;
@@ -124,7 +135,6 @@ const initialForm: FormState = {
   artifactNotes: "",
   whyCogni: "",
   firstProjectChoice: "knowledge-capture",
-  reliableCommitment: "",
   recordingConsent: true,
   note: "",
 };
@@ -372,6 +382,9 @@ function RoadmapSection(): ReactElement {
 }
 
 function SignupForm(): ReactElement {
+  const formRef = useRef<HTMLFormElement>(null);
+  const { address, isConnected, isSigning, openConnectModal, signMessage } =
+    useInternshipWalletSignature();
   const [form, setForm] = useState<FormState>(initialForm);
   const [status, setStatus] = useState<
     "idle" | "submitting" | "success" | "error"
@@ -379,6 +392,19 @@ function SignupForm(): ReactElement {
   const [referenceId, setReferenceId] = useState<string | null>(null);
   const [derekInterviewUrl, setDerekInterviewUrl] = useState<string | null>(
     null
+  );
+  const [walletProof, setWalletProof] = useState<{
+    walletAddress: `0x${string}`;
+    walletSignature: `0x${string}`;
+    walletMessage: string;
+    walletSignedAt: string;
+  } | null>(null);
+  const [signatureError, setSignatureError] = useState<string | null>(null);
+
+  const signedAddress = walletProof?.walletAddress.toLowerCase();
+  const connectedAddress = address?.toLowerCase();
+  const hasFreshSignature = Boolean(
+    walletProof && signedAddress === connectedAddress
   );
 
   const update =
@@ -390,6 +416,8 @@ function SignupForm(): ReactElement {
         | React.ChangeEvent<HTMLTextAreaElement>
     ): void => {
       setForm((current) => ({ ...current, [key]: event.target.value }));
+      setWalletProof(null);
+      setSignatureError(null);
     };
   const updateRecordingConsent = (
     event: React.ChangeEvent<HTMLInputElement>
@@ -398,15 +426,18 @@ function SignupForm(): ReactElement {
       ...current,
       recordingConsent: event.target.checked,
     }));
+    setWalletProof(null);
+    setSignatureError(null);
   };
 
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setStatus("submitting");
-    setReferenceId(null);
-    setDerekInterviewUrl(null);
+  useEffect(() => {
+    if (walletProof && signedAddress !== connectedAddress) {
+      setWalletProof(null);
+    }
+  }, [connectedAddress, signedAddress, walletProof]);
 
-    const payload: InternshipInterestInput = {
+  function buildUnsignedPayload(): UnsignedInternshipInterestInput {
+    return {
       name: form.name,
       email: form.email,
       focus: form.focus,
@@ -416,11 +447,58 @@ function SignupForm(): ReactElement {
       artifactNotes: form.artifactNotes,
       whyCogni: form.whyCogni,
       firstProjectChoice: form.firstProjectChoice,
-      reliableCommitment: form.reliableCommitment,
       recordingConsent: form.recordingConsent,
       ...(form.github.trim() && { github: form.github.trim() }),
       ...(form.artifactUrl.trim() && { artifactUrl: form.artifactUrl.trim() }),
       ...(form.note.trim() && { note: form.note.trim() }),
+    };
+  }
+
+  async function signApplication() {
+    setSignatureError(null);
+    if (!formRef.current?.reportValidity()) return null;
+
+    if (!isConnected || !address) {
+      openConnectModal?.();
+      return null;
+    }
+
+    const walletSignedAt = new Date().toISOString();
+    const walletMessage = buildInternshipApplicationMessage({
+      ...buildUnsignedPayload(),
+      walletSignedAt,
+    });
+
+    try {
+      const walletSignature = await signMessage(walletMessage);
+      const proof = {
+        walletAddress: address,
+        walletSignature,
+        walletMessage,
+        walletSignedAt,
+      };
+      setWalletProof(proof);
+      return proof;
+    } catch {
+      setSignatureError("Wallet signature was cancelled or failed.");
+      return null;
+    }
+  }
+
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus("idle");
+    setReferenceId(null);
+    setDerekInterviewUrl(null);
+
+    const proof = hasFreshSignature ? walletProof : await signApplication();
+    if (!proof) return;
+
+    setStatus("submitting");
+
+    const payload: InternshipInterestInput = {
+      ...buildUnsignedPayload(),
+      ...proof,
     };
 
     const response = await fetch("/api/v1/public/internship-interest", {
@@ -439,10 +517,11 @@ function SignupForm(): ReactElement {
     setDerekInterviewUrl(data.derekInterviewUrl);
     setStatus("success");
     setForm(initialForm);
+    setWalletProof(null);
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
+    <form ref={formRef} onSubmit={onSubmit} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="space-y-2" htmlFor="intern-name">
           <span className="font-medium text-foreground text-sm">Name</span>
@@ -471,7 +550,7 @@ function SignupForm(): ReactElement {
 
       <label className="space-y-2" htmlFor="intern-github">
         <span className="font-medium text-foreground text-sm">
-          GitHub or portfolio
+          GitHub / portfolio
         </span>
         <Input
           id="intern-github"
@@ -484,7 +563,7 @@ function SignupForm(): ReactElement {
 
       <label className="space-y-2" htmlFor="intern-artifact-url">
         <span className="font-medium text-foreground text-sm">
-          Best artifact link
+          Best proof link
         </span>
         <Input
           id="intern-artifact-url"
@@ -493,7 +572,7 @@ function SignupForm(): ReactElement {
           onChange={update("artifactUrl")}
           autoComplete="url"
           className="border-input bg-background text-foreground"
-          placeholder="https://github.com/you/project"
+          placeholder="Repo, demo, writing, or project"
         />
       </label>
 
@@ -557,7 +636,7 @@ function SignupForm(): ReactElement {
             value={form.weeklyAvailability}
             onChange={update("weeklyAvailability")}
             className="border-input bg-background text-foreground"
-            placeholder="8-10 hours/week"
+            placeholder="Hours/week + best interview windows"
           />
         </label>
       </div>
@@ -571,8 +650,9 @@ function SignupForm(): ReactElement {
           required
           value={form.artifactNotes}
           onChange={update("artifactNotes")}
-          rows={3}
+          rows={2}
           className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50"
+          placeholder="Point to the part that proves taste, speed, or technical judgment."
         />
       </label>
 
@@ -583,8 +663,9 @@ function SignupForm(): ReactElement {
           required
           value={form.whyCogni}
           onChange={update("whyCogni")}
-          rows={3}
+          rows={2}
           className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50"
+          placeholder="One concrete reason you want this instead of a normal internship."
         />
       </label>
 
@@ -606,20 +687,6 @@ function SignupForm(): ReactElement {
         </select>
       </label>
 
-      <label className="space-y-2" htmlFor="intern-commitment">
-        <span className="font-medium text-foreground text-sm">
-          Reliable commitment for the next month
-        </span>
-        <textarea
-          id="intern-commitment"
-          required
-          value={form.reliableCommitment}
-          onChange={update("reliableCommitment")}
-          rows={3}
-          className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50"
-        />
-      </label>
-
       <label
         className="flex items-start gap-3 rounded-md border border-border/70 bg-background/60 p-3 text-sm"
         htmlFor="intern-recording-consent"
@@ -632,8 +699,7 @@ function SignupForm(): ReactElement {
           className="mt-1"
         />
         <span className="text-muted-foreground">
-          Derek may use an AI note taker for the interview. You can uncheck this
-          and still apply.
+          Derek may use an AI note taker for the interview.
         </span>
       </label>
 
@@ -645,14 +711,62 @@ function SignupForm(): ReactElement {
           id="intern-note"
           value={form.note}
           onChange={update("note")}
-          rows={5}
+          rows={3}
           className="flex min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 text-foreground text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50"
         />
       </label>
 
+      <div className="rounded-md border border-border/70 bg-background/70 p-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-md border border-border bg-secondary/60">
+              {hasFreshSignature ? (
+                <PenLine className="size-4 text-foreground" />
+              ) : (
+                <Wallet className="size-4 text-foreground" />
+              )}
+            </div>
+            <div>
+              <p className="font-medium text-foreground text-sm">
+                {hasFreshSignature
+                  ? "Application signed"
+                  : isConnected
+                    ? "Wallet connected"
+                    : "Wallet signature required"}
+              </p>
+              <p className="text-muted-foreground text-xs">
+                {address
+                  ? `${address.slice(0, 6)}...${address.slice(-4)}`
+                  : "No account. No gas."}
+              </p>
+            </div>
+          </div>
+          {isConnected && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={signApplication}
+              disabled={isSigning || status === "submitting"}
+            >
+              {isSigning ? "Signing" : "Sign application"}
+            </Button>
+          )}
+        </div>
+      </div>
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Button type="submit" disabled={status === "submitting"} size="lg">
-          {status === "submitting" ? "Submitting" : "Submit interest"}
+        <Button
+          type="submit"
+          disabled={status === "submitting" || isSigning}
+          size="lg"
+        >
+          {status === "submitting"
+            ? "Submitting"
+            : isSigning
+              ? "Waiting for signature"
+              : isConnected
+                ? "Submit signed application"
+                : "Connect wallet to submit"}
           <ArrowRight className="ml-2 size-4" />
         </Button>
         {status === "success" && derekInterviewUrl && (
@@ -689,9 +803,12 @@ function SignupForm(): ReactElement {
           <p className="text-destructive">
             Submission failed. Check the fields and try again.
           </p>
+        ) : signatureError ? (
+          <p className="text-destructive">{signatureError}</p>
         ) : (
           <p className="text-muted-foreground">
-            Submit once. Real applicants go straight to Derek's calendar.
+            Sign once with your wallet. Real applicants go straight to Derek's
+            calendar.
           </p>
         )}
       </div>

@@ -12,12 +12,15 @@
  * @public
  */
 
+import { generateTestWallet } from "@tests/_fixtures/auth/siwe-helpers";
 import { MOCK_SERVER_ENV } from "@tests/_fixtures/env/base-env";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  buildInternshipApplicationMessage,
   type InternshipInterestInput,
   internshipInterestOperation,
+  type UnsignedInternshipInterestInput,
 } from "@/contracts/internship.interest.v1.contract";
 
 vi.mock("@/shared/env", () => ({
@@ -66,7 +69,8 @@ vi.mock("@/bootstrap/container", () => {
 import { POST } from "@/app/api/v1/public/internship-interest/route";
 
 describe("/api/v1/public/internship-interest contract tests", () => {
-  const validPayload = {
+  const wallet = generateTestWallet("internship-interest-contract");
+  const unsignedPayload = {
     name: "Ada Lovelace",
     email: "ada@example.com",
     github: "ada-lovelace",
@@ -78,11 +82,31 @@ describe("/api/v1/public/internship-interest contract tests", () => {
     artifactNotes: "Start with the README and the agent evals.",
     whyCogni: "I want to build durable agent businesses with clear ownership.",
     firstProjectChoice: "knowledge-capture",
-    reliableCommitment:
-      "Two focused build blocks each week for the next month.",
     recordingConsent: true,
     note: "I want to build agent-native payment flows.",
-  } satisfies InternshipInterestInput;
+  } satisfies UnsignedInternshipInterestInput;
+
+  async function validPayload(
+    overrides: Partial<InternshipInterestInput> = {}
+  ): Promise<InternshipInterestInput> {
+    const walletSignedAt = "2026-05-19T00:00:00.000Z";
+    const walletMessage = buildInternshipApplicationMessage({
+      ...unsignedPayload,
+      walletSignedAt,
+    });
+    const walletSignature = await wallet.account.signMessage({
+      message: walletMessage,
+    });
+
+    return {
+      ...unsignedPayload,
+      walletAddress: wallet.account.address,
+      walletMessage,
+      walletSignature,
+      walletSignedAt,
+      ...overrides,
+    };
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -100,7 +124,9 @@ describe("/api/v1/public/internship-interest contract tests", () => {
   }
 
   it("returns contract-valid output for a valid interest submission", async () => {
-    const response = await POST(makePostRequest(JSON.stringify(validPayload)));
+    const response = await POST(
+      makePostRequest(JSON.stringify(await validPayload()))
+    );
     const data = await response.json();
 
     expect(response.status).toBe(201);
@@ -125,7 +151,7 @@ describe("/api/v1/public/internship-interest contract tests", () => {
     const response = await POST(
       makePostRequest(
         JSON.stringify({
-          ...validPayload,
+          ...(await validPayload()),
           email: "not-an-email",
         })
       )
@@ -138,26 +164,68 @@ describe("/api/v1/public/internship-interest contract tests", () => {
   });
 
   it("does not echo submitted applicant details on success", async () => {
-    const response = await POST(makePostRequest(JSON.stringify(validPayload)));
+    const payload = await validPayload();
+    const response = await POST(makePostRequest(JSON.stringify(payload)));
     const responseText = await response.text();
 
     expect(response.status).toBe(201);
-    expect(responseText).not.toContain(validPayload.name);
-    expect(responseText).not.toContain(validPayload.email);
-    expect(responseText).not.toContain(validPayload.github);
-    expect(responseText).not.toContain(validPayload.artifactUrl);
-    expect(responseText).not.toContain(validPayload.artifactNotes);
-    expect(responseText).not.toContain(validPayload.whyCogni);
-    expect(responseText).not.toContain(validPayload.reliableCommitment);
-    expect(responseText).not.toContain(validPayload.note);
+    expect(responseText).not.toContain(payload.name);
+    expect(responseText).not.toContain(payload.email);
+    expect(responseText).not.toContain(payload.github);
+    expect(responseText).not.toContain(payload.artifactUrl);
+    expect(responseText).not.toContain(payload.artifactNotes);
+    expect(responseText).not.toContain(payload.whyCogni);
+    expect(responseText).not.toContain(payload.note);
+    expect(responseText).not.toContain(payload.walletAddress);
+    expect(responseText).not.toContain(payload.walletSignature);
   });
 
   it("sets non-cacheable public cache headers on successful submissions", async () => {
-    const response = await POST(makePostRequest(JSON.stringify(validPayload)));
+    const response = await POST(
+      makePostRequest(JSON.stringify(await validPayload()))
+    );
 
     expect(response.status).toBe(201);
     expect(response.headers.get("Cache-Control")).toBe(
       "public, max-age=0, stale-while-revalidate=0"
     );
+  });
+
+  it("returns 400 when the wallet message no longer matches the application", async () => {
+    const response = await POST(
+      makePostRequest(
+        JSON.stringify(
+          await validPayload({
+            whyCogni: "Tampered after signing.",
+          })
+        )
+      )
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data).toEqual({
+      error: "wallet signature does not match application",
+    });
+  });
+
+  it("returns 400 when the signature was produced by a different wallet", async () => {
+    const attacker = generateTestWallet("internship-interest-attacker");
+    const payload = await validPayload({
+      walletSignature: await attacker.account.signMessage({
+        message: buildInternshipApplicationMessage({
+          ...unsignedPayload,
+          walletSignedAt: "2026-05-19T00:00:00.000Z",
+        }),
+      }),
+    });
+
+    const response = await POST(makePostRequest(JSON.stringify(payload)));
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data).toEqual({
+      error: "wallet signature does not match application",
+    });
   });
 });
