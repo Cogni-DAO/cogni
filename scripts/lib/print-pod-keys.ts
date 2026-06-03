@@ -14,7 +14,11 @@
  * Usage: `tsx scripts/lib/print-pod-keys.ts [--repo-root <dir>]`
  *   → prints one pod-eligible key name per line, sorted, to stdout.
  */
-import { loadSecretsCatalog, openBaoPathFor } from "./secrets-catalog-loader";
+import {
+  loadSecretsCatalog,
+  openBaoPathFor,
+  type SecretRouting,
+} from "./secrets-catalog-loader";
 
 function repoRootFromArgv(argv: string[]): string {
   const i = argv.indexOf("--repo-root");
@@ -22,17 +26,26 @@ function repoRootFromArgv(argv: string[]): string {
   return process.cwd();
 }
 
+/**
+ * Is this key consumed by node-app pods? Explicit `consumedBy` wins (the
+ * authoritative axis — a B-tier key the pod also reads, e.g. OPENROUTER_API_KEY,
+ * declares `consumedBy: [compose, pod]`). Absent → default from tier+path: an
+ * A1/A2 entry that resolves to an OpenBao pod path is pod-consumed; everything
+ * else (B/D/E/G with no path) is not. `node`/`env` are placeholders — path
+ * PRESENCE is node-agnostic.
+ */
+export function isPodConsumed(name: string, r: SecretRouting): boolean {
+  if (r.consumedBy !== undefined) return r.consumedBy.includes("pod");
+  if (r.tier !== "A1" && r.tier !== "A2") return false;
+  return openBaoPathFor(r, name, "__probe__", "__probe__") !== null;
+}
+
 export function podKeyUniverse(repoRoot: string): string[] {
   const { routing } = loadSecretsCatalog({ repoRoot });
-  const keys: string[] = [];
-  for (const [name, r] of Object.entries(routing)) {
-    if (r.tier !== "A1" && r.tier !== "A2") continue;
-    // `node`/`env` are placeholders — pod-eligibility (non-null path) does not
-    // depend on which node; the path SHAPE does, but presence does not.
-    if (openBaoPathFor(r, name, "__probe__", "__probe__") === null) continue;
-    keys.push(name);
-  }
-  return keys.sort();
+  return Object.entries(routing)
+    .filter(([name, r]) => isPodConsumed(name, r))
+    .map(([name]) => name)
+    .sort();
 }
 
 function main(): void {
