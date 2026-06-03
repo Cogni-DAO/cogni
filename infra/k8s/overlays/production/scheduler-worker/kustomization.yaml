@@ -26,7 +26,7 @@ patches:
         path: /data/IMAGE_DIGEST
         value: "production-placeholder-scheduler-worker"
 
-  # bug.0295: VM discovery via DNS (production.vm.cognidao.org).
+  # bug.0295: VM discovery via DNS (cogni.vm.cognidao.org).
   # Convert base headless Services → ExternalName; delete EndpointSlices.
   - target: { kind: Service, name: temporal }
     patch: |
@@ -36,7 +36,7 @@ patches:
         name: temporal
       spec:
         type: ExternalName
-        externalName: production.vm.cognidao.org
+        externalName: cogni.vm.cognidao.org
         clusterIP: null
   - target: { kind: Service, name: postgres }
     patch: |
@@ -46,7 +46,7 @@ patches:
         name: postgres
       spec:
         type: ExternalName
-        externalName: production.vm.cognidao.org
+        externalName: cogni.vm.cognidao.org
         clusterIP: null
   - target: { kind: Service, name: app }
     patch: |
@@ -56,7 +56,7 @@ patches:
         name: app
       spec:
         type: ExternalName
-        externalName: production.vm.cognidao.org
+        externalName: cogni.vm.cognidao.org
         clusterIP: null
   - target: { kind: Service, name: poly-app }
     patch: |
@@ -66,7 +66,7 @@ patches:
         name: poly-app
       spec:
         type: ExternalName
-        externalName: production.vm.cognidao.org
+        externalName: cogni.vm.cognidao.org
         clusterIP: null
   - target: { kind: Service, name: resy-app }
     patch: |
@@ -76,7 +76,7 @@ patches:
         name: resy-app
       spec:
         type: ExternalName
-        externalName: production.vm.cognidao.org
+        externalName: cogni.vm.cognidao.org
         clusterIP: null
   - target: { kind: EndpointSlice, name: temporal-1 }
     patch: |
