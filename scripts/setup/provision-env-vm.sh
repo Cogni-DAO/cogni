@@ -878,19 +878,25 @@ data:
 EOF
 done
 
-# B2 (overlays) — the shared _template/ overlay and per-env wrappers
-# reference `vm.cognidao.org` as the ExternalName placeholder for pod→host
+# B2 (overlays) — per-env wrappers reference the ExternalName host for pod→host
 # service discovery (postgres, temporal, litellm, doltgres, redis). Rewrite it
 # to the repo/env-scoped VM alias, e.g. `<slug>-candidate-a.vm.<root>`.
-# Sed walks both the per-env wrapper AND the shared _template (each deploy
-# branch is per-env, so substituting _template doesn't race with siblings).
+#
+# The overlays are NOT uniform: candidate-b (+ _template) carry the BARE
+# `vm.cognidao.org` placeholder, while the per-node-AppSet-migrated envs
+# (candidate-a/preview/production, bug.0295/#1465) carry the already-qualified
+# canonical host `cogni-<env>.vm.cognidao.org`. A bare `s/vm.cognidao.org/$HOST/`
+# DOUBLED the prefix on the latter (→ `cogni-candidate-a.cogni-candidate-a.vm…`
+# → NXDOMAIN → every pod 503s on temporal/redis). Match an optional run of
+# leading labels so the substitution is idempotent across BOTH overlay forms
+# and self-heals a deploy branch already corrupted by the old sed.
 if [[ -n "$FORK_ROOT" && "$FORK_ROOT" != "null" ]]; then
-  log_info "Rewriting overlay vm.cognidao.org → ${VM_DNS_HOST}"
+  log_info "Rewriting overlay ExternalName host → ${VM_DNS_HOST}"
   OVERLAY_ROOTS=("$DEPLOY_TMP/infra/k8s/overlays/${OVERLAY_DIR}")
   [[ -d "$DEPLOY_TMP/infra/k8s/overlays/_template" ]] \
     && OVERLAY_ROOTS+=("$DEPLOY_TMP/infra/k8s/overlays/_template")
   find "${OVERLAY_ROOTS[@]}" -name "kustomization.yaml" -print0 2>/dev/null \
-    | xargs -0 sed -i.bak -E "s/vm\.cognidao\.org/${VM_DNS_HOST}/g"
+    | xargs -0 sed -i.bak -E "s/([a-z0-9-]+\.)*vm\.cognidao\.org/${VM_DNS_HOST}/g"
   find "${OVERLAY_ROOTS[@]}" -name "*.bak" -delete 2>/dev/null || true
 fi
 
