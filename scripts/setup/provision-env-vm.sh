@@ -1815,29 +1815,46 @@ log_step "Phase 7: Apply ApplicationSets (triggers Argo sync)"
 # operator's local checkout is the source of truth — it has the files they intend to deploy.
 # This also avoids the chicken-and-egg: you can provision preview before the files are
 # promoted to staging.
-APPSET_LOCAL="$REPO_ROOT/infra/k8s/argocd/${APPSET_FILE}"
-if [ ! -f "$APPSET_LOCAL" ]; then
-  log_error "ApplicationSet file not found locally: $APPSET_LOCAL"
-  log_error "Run this script from the repo root on a branch that has infra/k8s/argocd/"
+# Per-node AppSets (bug.0378 / #1465) replaced the monolithic
+# ${DEPLOY_ENV}-applicationset.yaml with one ${DEPLOY_ENV}-<node>-applicationset.yaml
+# per node (operator/node-template/resy/canary/scheduler-worker). Discover all
+# of them; fall back to the monolith (candidate-b still ships one) for envs not
+# yet migrated. Applying a single ${DEPLOY_ENV}-applicationset.yaml was the
+# Phase-7 break that orphaned the first candidate-a re-provision.
+APPSET_DIR="$REPO_ROOT/infra/k8s/argocd"
+APPSET_LOCALS=()
+for f in "$APPSET_DIR/${DEPLOY_ENV}"-*-applicationset.yaml; do
+  [ -f "$f" ] && APPSET_LOCALS+=("$f")
+done
+if [ ${#APPSET_LOCALS[@]} -eq 0 ] && [ -f "$APPSET_DIR/${APPSET_FILE}" ]; then
+  APPSET_LOCALS+=("$APPSET_DIR/${APPSET_FILE}")
+fi
+if [ ${#APPSET_LOCALS[@]} -eq 0 ]; then
+  log_error "No ApplicationSet files for ${DEPLOY_ENV} in $APPSET_DIR"
+  log_error "Expected per-node ${DEPLOY_ENV}-<node>-applicationset.yaml or monolithic ${APPSET_FILE}."
+  log_error "Run this script from the repo root on a branch that has infra/k8s/argocd/."
   exit 1
 fi
+log_info "Applying ${#APPSET_LOCALS[@]} ApplicationSet(s) for ${DEPLOY_ENV}: $(printf '%s ' "${APPSET_LOCALS[@]##*/}")"
 
 # B1 (deploy machinery) — substitute repoURL to point at the FORK, not the
 # upstream. AppSet files commit with the canonical Cogni-DAO/node-template
 # URL; provision rewrites at apply time so Argo CD syncs from the fork's
 # own deploy/* branches. Idempotent for the canonical operator (no-op).
-APPSET_RENDERED=$(mktemp)
-trap 'rm -f "$APPSET_RENDERED"' EXIT
-sed -E "s#https://github\.com/[Cc]ogni-[Dd][Aa][Oo]/node-template\.git#https://github.com/${GH_REPO}.git#g" \
-  "$APPSET_LOCAL" > "$APPSET_RENDERED"
-log_info "AppSet repoURL substituted: → https://github.com/${GH_REPO}.git"
-
-scp $SSH_OPTS "$APPSET_RENDERED" root@"$VM_IP":/tmp/appset.yaml
-ssh $SSH_OPTS root@"$VM_IP" "
-  kubectl apply -f /tmp/appset.yaml -n argocd
-  rm -f /tmp/appset.yaml
-  echo 'ApplicationSet applied: ${APPSET_FILE} — Argo syncing from deploy/* branches'
-"
+for APPSET_LOCAL in "${APPSET_LOCALS[@]}"; do
+  APPSET_NAME=$(basename "$APPSET_LOCAL")
+  APPSET_RENDERED=$(mktemp)
+  sed -E "s#https://github\.com/[Cc]ogni-[Dd][Aa][Oo]/node-template\.git#https://github.com/${GH_REPO}.git#g" \
+    "$APPSET_LOCAL" > "$APPSET_RENDERED"
+  scp $SSH_OPTS "$APPSET_RENDERED" root@"$VM_IP":/tmp/appset.yaml
+  ssh $SSH_OPTS root@"$VM_IP" "
+    kubectl apply -f /tmp/appset.yaml -n argocd
+    rm -f /tmp/appset.yaml
+    echo 'ApplicationSet applied: ${APPSET_NAME}'
+  "
+  rm -f "$APPSET_RENDERED"
+done
+log_info "All ApplicationSets applied — Argo syncing from deploy/* branches"
 
 # Poll for apps to sync (up to 5 min)
 log_info "Waiting for Argo to sync apps..."

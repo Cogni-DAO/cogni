@@ -391,8 +391,16 @@ jobs:
       # ─────────────────────────────────────────────────────────────
       # Init-artifact custody — encrypt at the boundary, upload, summary.
       # GHA storage encryption is defense-in-depth, NOT the primary control.
+      #
+      # if: always() — custody must be fail-open. A failure in a LATE bootstrap
+      # phase (e.g. Phase 7 AppSet apply) still leaves a live VM whose vm-key /
+      # kubeconfig / OpenBao unseal-keys exist in .local. Gating encrypt+upload
+      # on bootstrap success shredded those keys on a late failure and orphaned
+      # an unrecoverable VM. Encrypt + upload whenever artifacts exist so the
+      # box is always recoverable.
       # ─────────────────────────────────────────────────────────────
       - name: Encrypt init artifacts (openssl AES-256-CBC + PBKDF2)
+        if: always()
         env:
           ENCRYPTION_PASSPHRASE: ${{ inputs.encryption_passphrase }}
         run: |
@@ -424,6 +432,7 @@ jobs:
           echo "encrypted ${encrypted_count} artifact(s)"
 
       - name: Upload encrypted init artifacts
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ inputs.env }}-init-artifacts
