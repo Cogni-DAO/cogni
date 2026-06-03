@@ -146,8 +146,13 @@ const CatalogEntrySchema = z
     transform: TransformSchema.optional(),
   })
   .refine(
-    (e) => (e.source !== "agent" && e.source !== "external") || e.generate !== undefined,
-    { message: "source: agent|external requires generate field (the value is self-generated)" },
+    (e) =>
+      (e.source !== "agent" && e.source !== "external") ||
+      e.generate !== undefined,
+    {
+      message:
+        "source: agent|external requires generate field (the value is self-generated)",
+    }
   )
   .refine((e) => !(e.service !== undefined && e.appliesTo !== undefined), {
     message:
