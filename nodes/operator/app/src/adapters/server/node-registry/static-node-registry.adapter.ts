@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@features/home/showcase/static-node-registry.adapter`
+ * Module: `@adapters/server/node-registry/static-node-registry.adapter`
  * Purpose: NodeRegistryPort adapter for operator's curated, shipped showcase nodes (the ones with
  *   committed homepage screenshots). Composed with the DB-projection adapter for dynamic nodes.
  * Scope: Maps bundled full-app nodes → NodeSummary, resolving hrefs from a base domain. Pure: the
@@ -16,7 +16,7 @@
 import type { NodeRegistryPort, NodeSummary } from "@/ports";
 import { resolveHref } from "@/shared/node-registry/resolve";
 
-import { SHOWCASE_NODES, type ShowcaseNode } from "./nodes.data";
+import { SHOWCASE_NODES, type ShowcaseNode } from "./bundled-nodes.data";
 
 function toSummary(
   node: ShowcaseNode,
