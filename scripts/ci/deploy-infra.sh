@@ -1390,15 +1390,15 @@ SECEOF
   # ── Scheduler-worker secret ────────────────────────────────────────────────
   # Non-secret routing (COGNI_NODE_ENDPOINTS) belongs in the overlay ConfigMap —
   # see docs/spec/services-architecture.md → "Configuration source of truth".
+  # bug.5000: GH_REVIEW_APP_* are NOT injected — the worker HTTP-delegates PR
+  # review GitHub I/O to the operator and holds no GitHub credential. (Keep in
+  # parity with SCHEDULER_WORKER_KEYS in scripts/setup/lib/reconcile-secrets.sh.)
   SECRET_FILE=$(mktemp)
   cat > "$SECRET_FILE" <<SECEOF
 DATABASE_URL=postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@${HOST_IP}:5432/cogni_operator?sslmode=disable
 SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN:-}
 INTERNAL_OPS_TOKEN=${INTERNAL_OPS_TOKEN:-}
 COGNI_NODE_DBS=${COGNI_NODE_DBS:-}
-GH_REVIEW_APP_ID=${GH_REVIEW_APP_ID:-}
-GH_REVIEW_APP_PRIVATE_KEY_BASE64=${GH_REVIEW_APP_PRIVATE_KEY_BASE64:-}
-GH_REPOS=${GH_REPOS:-}
 GH_WEBHOOK_SECRET=${GH_WEBHOOK_SECRET:-}
 SECEOF
   kubectl -n "${K8S_NS}" create secret generic scheduler-worker-secrets \

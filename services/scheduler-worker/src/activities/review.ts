@@ -3,41 +3,42 @@
 
 /**
  * Module: `@cogni/scheduler-worker-service/activities/review`
- * Purpose: Temporal Activities for PR review — GitHub I/O, owning-domain resolution, and review orchestration.
- * Scope: Activities perform I/O (GitHub API). Domain logic delegated to domain/review.ts.
+ * Purpose: Temporal Activities for PR review — orchestration + domain evaluation.
+ *   All GitHub I/O is HTTP-delegated to the operator's internal review API
+ *   (bug.5000); this module holds no GitHub SDK and no App private key.
+ * Scope: Activities call the operator review plane (ReviewHttpClient) for GitHub
+ *   reads/writes and run the pure domain evaluation (criteria, formatting) locally.
  * Invariants:
- *   - Per ACTIVITY_IDEMPOTENCY: GitHub writes use stable business keys (repo/pr/headSha)
- *   - Per EXECUTION_VIA_SERVICE_API: graph execution goes through GraphRunWorkflow child, not activities
- *   - Activities resolve GitHub App creds from worker env (never from workflow input)
- *   - Domain logic (criteria evaluation, formatting) in domain/review.ts, not here
- *   - Per PER_NODE_RULE_LOADING: `fetchPrContextActivity` resolves owning domain via
- *     `extractOwningNode` and fetches rule files from `resolveRulePath(owningNode)`
- *     (`<owningNode.path>/.cogni/rules/` for every node — operator + sovereign alike,
- *     no special case). Emits structured `review.routed` log for the deploy_verified loop.
- *   - `postRoutingDiagnosticActivity` handles `conflict` + `miss` outcomes with a
- *     pure formatter + neutral check run — no AI tokens, no GraphRunWorkflow child.
- * Side-effects: IO (GitHub API via Octokit)
- * Links: task.0191, task.0410, docs/spec/temporal-patterns.md, docs/spec/node-ci-cd-contract.md#single-domain-scope
+ *   - WORKER_HOLDS_NO_GITHUB_CRED: no Octokit, no App key. Every GitHub call
+ *     routes to the operator via ReviewHttpClient + SCHEDULER_API_TOKEN.
+ *   - Per EXECUTION_VIA_SERVICE_API: the worker delegates I/O; it does not call
+ *     GitHub directly (mirrors the graph path's run-http delegation).
+ *   - Per ACTIVITY_IDEMPOTENCY: GitHub writes use stable business keys (repo/pr/headSha).
+ *   - Per PER_NODE_RULE_LOADING: owning-domain resolution + rule fetch happen on
+ *     the operator (which holds the GitHub plane). The worker re-emits the
+ *     structured `review.routed` log for the deploy_verified loop.
+ *   - `postRoutingDiagnosticActivity` handles `conflict` + `miss` with a pure
+ *     formatter + neutral check run — no AI tokens, no GraphRunWorkflow child.
+ *   - Domain logic (criteria evaluation, formatting) in domain/review.ts, not here.
+ * Side-effects: IO (HTTP to operator review plane)
+ * Links: bug.5000, task.0191, task.0410, task.0280, docs/spec/unified-graph-launch.md,
+ *   services/scheduler-worker/src/adapters/review-http.ts
  * @internal
  */
 
+import type {
+  InternalReviewPrContextOutput,
+  ReviewCheckRunConclusion,
+} from "@cogni/node-contracts";
 import {
   extractDaoConfig,
-  extractGatesConfig,
-  extractOwningNode,
-  type GateConfig,
-  type GatesConfig,
   type OwningNode,
   parseRepoSpec,
-  parseRule,
-  type RepoSpec,
   type Rule,
-  resolveRulePath,
 } from "@cogni/repo-spec";
 import type { GraphRunResult } from "@cogni/temporal-workflows";
 import {
   aggregateGateStatuses,
-  buildReviewUserMessage,
   type EvaluationOutput,
   type EvidenceBundle,
   evaluateCriteria,
@@ -50,20 +51,17 @@ import {
   type GateStatus,
   type ReviewResult,
 } from "@cogni/temporal-workflows";
-import { createAppAuth } from "@octokit/auth-app";
-import { Octokit } from "@octokit/core";
-import { parse as parseYaml } from "yaml";
 import type { Logger } from "../observability/logger.js";
+import type { ReviewHttpClient } from "../ports/index.js";
+import { translateHttpError } from "./index.js";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface ReviewActivityDeps {
-  /** GitHub App ID (from worker env) */
-  ghAppId: string;
-  /** GitHub App private key PEM (decoded from base64, from worker env) */
-  ghPrivateKey: string;
+  /** HTTP client for the operator's internal review GitHub plane. */
+  reviewClient: ReviewHttpClient;
   logger: Logger;
 }
 
@@ -79,21 +77,6 @@ export interface FetchPrContextInput {
   repo: string;
   prNumber: number;
   installationId: number;
-}
-
-export interface FetchPrContextOutput {
-  evidence: EvidenceBundle;
-  gatesConfig: GatesConfig;
-  rules: Record<string, Rule>;
-  graphMessages: Array<{ role: string; content: string }>;
-  responseFormat: { prompt: string; schemaId: string };
-  modelRef: { providerKey: string; modelId: string; connectionId?: string };
-  /** Raw repo-spec YAML for DAO config extraction in postReviewResult */
-  repoSpecYaml?: string;
-  /** Filenames from `octokit.pulls.listFiles`. Source for owning-domain resolution. */
-  changedFiles: string[];
-  /** Owning domain for the PR — workflow dispatches on `kind`. */
-  owningNode: OwningNode;
 }
 
 export interface PostRoutingDiagnosticInput {
@@ -120,7 +103,7 @@ export interface PostReviewResultInput {
   gateResults?: readonly GateResult[];
   // When graph ran — full evaluation
   graphResult?: GraphRunResult;
-  gatesConfig?: GatesConfig;
+  gatesConfig?: { gates: unknown[]; failOnError: boolean };
   rules?: Record<string, Rule>;
   evidence?: EvidenceBundle;
   /** Raw repo-spec YAML for DAO config extraction */
@@ -128,203 +111,46 @@ export interface PostReviewResultInput {
 }
 
 // ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const CHECK_RUN_NAME = "Cogni Git PR Review";
-// vNext (task.0395): per-node/per-rule modelRef from repo-spec. For now, system actor
-// uses the platform provider (LiteLLM-backed, no per-user connection required).
-const DEFAULT_REVIEW_MODELREF = {
-  providerKey: "platform",
-  modelId: "gpt-4o-mini",
-} as const;
-const MAX_PATCH_BYTES_PER_FILE = 100_000;
-const MAX_TOTAL_PATCH_BYTES = 500_000;
-const MAX_FILES_WITH_PATCHES = 30;
-
-// ---------------------------------------------------------------------------
-// Octokit factory + helpers
-// ---------------------------------------------------------------------------
-
-function createOctokit(
-  deps: ReviewActivityDeps,
-  installationId: number
-): Octokit {
-  return new Octokit({
-    authStrategy: createAppAuth,
-    auth: {
-      appId: deps.ghAppId,
-      privateKey: deps.ghPrivateKey,
-      installationId,
-    },
-  });
-}
-
-/** Fetch a file from a GitHub repo as raw text. Handles both raw and base64 responses. */
-async function fetchRepoFile(
-  octokit: Octokit,
-  owner: string,
-  repo: string,
-  path: string,
-  ref: string
-): Promise<string> {
-  const response = await octokit.request(
-    "GET /repos/{owner}/{repo}/contents/{path}",
-    {
-      owner,
-      repo,
-      path,
-      ref,
-      headers: { accept: "application/vnd.github.raw+json" },
-    }
-  );
-  return typeof response.data === "string"
-    ? response.data
-    : Buffer.from(
-        (response.data as { content?: string }).content ?? "",
-        "base64"
-      ).toString("utf-8");
-}
-
-// ---------------------------------------------------------------------------
 // Activity factory
 // ---------------------------------------------------------------------------
 
 export function createReviewActivities(deps: ReviewActivityDeps) {
-  const { logger } = deps;
+  const { reviewClient, logger } = deps;
 
-  /** Create a GitHub Check Run in "in_progress" state. */
+  /** Create a GitHub Check Run in "in_progress" state (via operator plane). */
   async function createCheckRunActivity(
     input: CreateCheckRunInput
   ): Promise<number> {
-    const octokit = createOctokit(deps, input.installationId);
-    const response = await octokit.request(
-      "POST /repos/{owner}/{repo}/check-runs",
-      {
+    try {
+      return await reviewClient.createCheckRun({
         owner: input.owner,
         repo: input.repo,
-        name: CHECK_RUN_NAME,
-        head_sha: input.headSha,
-        status: "in_progress",
-        started_at: new Date().toISOString(),
-      }
-    );
-    return response.data.id;
+        headSha: input.headSha,
+        installationId: input.installationId,
+      });
+    } catch (err) {
+      // Mirror run-http: permanent 4xx → nonRetryable; transient/5xx bubble.
+      translateHttpError(err, "createCheckRunActivity");
+    }
   }
 
-  /** Fetch PR evidence, repo-spec, and rules from GitHub API. */
+  /** Fetch PR evidence, repo-spec, and rules from the operator review plane. */
   async function fetchPrContextActivity(
     input: FetchPrContextInput
-  ): Promise<FetchPrContextOutput> {
-    const octokit = createOctokit(deps, input.installationId);
-
-    // Fetch PR metadata + files in parallel
-    const [prResponse, filesResponse] = await Promise.all([
-      octokit.request("GET /repos/{owner}/{repo}/pulls/{pull_number}", {
+  ): Promise<InternalReviewPrContextOutput> {
+    let context: InternalReviewPrContextOutput;
+    try {
+      context = await reviewClient.fetchPrContext({
         owner: input.owner,
         repo: input.repo,
-        pull_number: input.prNumber,
-      }),
-      octokit.request("GET /repos/{owner}/{repo}/pulls/{pull_number}/files", {
-        owner: input.owner,
-        repo: input.repo,
-        pull_number: input.prNumber,
-        per_page: 100,
-      }),
-    ]);
-
-    const pr = prResponse.data;
-    const files = filesResponse.data;
-
-    // Budget-aware diff truncation
-    let totalDiffBytes = 0;
-    for (const file of files) {
-      totalDiffBytes += file.patch?.length ?? 0;
+        prNumber: input.prNumber,
+        installationId: input.installationId,
+      });
+    } catch (err) {
+      translateHttpError(err, "fetchPrContextActivity");
     }
 
-    const patches: Array<{ filename: string; patch: string }> = [];
-    let usedBytes = 0;
-    for (const file of files.slice(0, MAX_FILES_WITH_PATCHES)) {
-      if (!file.patch) continue;
-      let patch = file.patch;
-      if (patch.length > MAX_PATCH_BYTES_PER_FILE) {
-        patch = `${patch.slice(0, MAX_PATCH_BYTES_PER_FILE)}\n... (truncated)`;
-      }
-      if (usedBytes + patch.length > MAX_TOTAL_PATCH_BYTES) {
-        patches.push({
-          filename: file.filename,
-          patch: "... (budget exceeded, patch omitted)",
-        });
-        continue;
-      }
-      usedBytes += patch.length;
-      patches.push({ filename: file.filename, patch });
-    }
-
-    const evidence: EvidenceBundle = {
-      prNumber: pr.number,
-      prTitle: pr.title,
-      prBody: pr.body ?? "",
-      headSha: pr.head.sha,
-      baseBranch: pr.base.ref,
-      changedFiles: pr.changed_files,
-      additions: pr.additions,
-      deletions: pr.deletions,
-      patches,
-      totalDiffBytes,
-    };
-
-    const changedFiles = files.map((f) => f.filename);
-
-    // Fetch repo-spec from target repo (base branch)
-    let repoSpecYaml: string;
-    try {
-      repoSpecYaml = await fetchRepoFile(
-        octokit,
-        input.owner,
-        input.repo,
-        ".cogni/repo-spec.yaml",
-        pr.base.ref
-      );
-    } catch {
-      // No repo-spec — return empty gates. Routing also no-ops (miss).
-      return {
-        evidence,
-        gatesConfig: { gates: [], failOnError: false },
-        rules: {},
-        graphMessages: [],
-        responseFormat: { prompt: "", schemaId: "" },
-        modelRef: DEFAULT_REVIEW_MODELREF,
-        changedFiles,
-        owningNode: { kind: "miss" },
-      };
-    }
-
-    // Parse leniently — target repo may not have full node_id/scope_id fields.
-    // We only need gates config, so try full parse first, fall back to lenient extraction.
-    let gatesConfig: GatesConfig;
-    let parsedSpec: RepoSpec | null = null;
-    try {
-      parsedSpec = parseRepoSpec(repoSpecYaml);
-      gatesConfig = extractGatesConfig(parsedSpec);
-    } catch {
-      // Full parse failed (missing node_id, etc.) — extract gates from raw YAML
-      const raw = parseYaml(repoSpecYaml) as Record<string, unknown>;
-      const gates = Array.isArray(raw.gates) ? raw.gates : [];
-      gatesConfig = {
-        gates: gates as GateConfig[],
-        failOnError: raw.fail_on_error === true,
-      };
-    }
-
-    // Resolve owning domain from changed paths. When the spec didn't fully
-    // parse (no nodes registry available), routing is unavailable — fall back
-    // to `miss` so the workflow short-circuits to a neutral check rather than
-    // running a review against the wrong rules.
-    const owningNode: OwningNode = parsedSpec
-      ? extractOwningNode(parsedSpec, changedFiles)
-      : { kind: "miss" };
-
+    const { owningNode } = context;
     logger.info(
       {
         owningNodeKind: owningNode.kind,
@@ -336,106 +162,20 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
           owningNode.kind === "conflict"
             ? owningNode.nodes.map((n) => n.nodeId)
             : undefined,
-        changedFileCount: changedFiles.length,
+        changedFileCount: context.changedFiles.length,
         prNumber: input.prNumber,
-        headSha: pr.head.sha,
+        headSha: context.evidence.headSha,
       },
       "review.routed"
     );
 
-    // Per-node rule path resolved via single source of truth in @cogni/repo-spec.
-    // Conflict / miss never reach the rule fetch — workflow short-circuits first.
-    const ruleBasePath =
-      owningNode.kind === "single"
-        ? resolveRulePath(owningNode)
-        : ".cogni/rules";
-
-    // Fetch rule files referenced by ai-rule gates
-    const rules: Record<string, Rule> = {};
-    for (const gate of gatesConfig.gates) {
-      if (gate.type === "ai-rule" && gate.with?.rule_file) {
-        const ruleFile = gate.with.rule_file as string;
-        if (!rules[ruleFile]) {
-          try {
-            const ruleYaml = await fetchRepoFile(
-              octokit,
-              input.owner,
-              input.repo,
-              `${ruleBasePath}/${ruleFile}`,
-              pr.base.ref
-            );
-            rules[ruleFile] = parseRule(ruleYaml);
-          } catch (error) {
-            logger.warn(
-              { ruleFile, error: String(error) },
-              "Failed to fetch rule file from repo"
-            );
-          }
-        }
-      }
-    }
-
-    // Build graph input for ai-rule gates
-    // Collect all evaluations across all ai-rule gates
-    const allEvaluations: Array<{ metric: string; prompt: string }> = [];
-    for (const gate of gatesConfig.gates) {
-      if (gate.type === "ai-rule" && gate.with?.rule_file) {
-        const rule = rules[gate.with.rule_file as string];
-        if (rule?.evaluations) {
-          for (const entry of rule.evaluations) {
-            const entries = Object.entries(entry);
-            const [metric, prompt] = entries[0] as [string, string];
-            allEvaluations.push({ metric, prompt });
-          }
-        }
-      }
-    }
-
-    const diffSummary = evidence.patches
-      .map((p) => `### ${p.filename}\n${p.patch}`)
-      .join("\n\n");
-
-    const userMessage =
-      allEvaluations.length > 0
-        ? buildReviewUserMessage({
-            prTitle: evidence.prTitle,
-            prBody: evidence.prBody,
-            diffSummary,
-            evaluations: allEvaluations,
-          })
-        : "";
-
-    // Use schemaId for Zod schema resolution in the internal API route.
-    // Zod schemas are not JSON-serializable; the route resolves "evaluation-output"
-    // to the matching Zod schema at runtime.
-    const responseFormat = {
-      prompt:
-        "Respond with a JSON object containing a `metrics` array and a `summary` string. " +
-        "Each metric entry must have: `metric` (name), `value` (0.0-1.0), `observations` (string array).",
-      schemaId: "evaluation-output",
-    };
-
-    return {
-      evidence,
-      gatesConfig,
-      rules,
-      graphMessages: userMessage
-        ? [{ role: "user", content: userMessage }]
-        : [],
-      responseFormat,
-      modelRef: DEFAULT_REVIEW_MODELREF,
-      repoSpecYaml,
-      changedFiles,
-      owningNode,
-    };
+    return context;
   }
 
-  /** Evaluate graph results, format markdown, and post to GitHub. */
+  /** Evaluate graph results, format markdown, and post via the operator plane. */
   async function postReviewResultActivity(
     input: PostReviewResultInput
   ): Promise<void> {
-    const octokit = createOctokit(deps, input.installationId);
-
     let conclusion: GateStatus;
     let gateResults: readonly GateResult[];
 
@@ -443,7 +183,6 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
       conclusion = "pass";
       gateResults = [];
     } else if (input.graphResult && input.gatesConfig && input.rules) {
-      // Evaluate graph structured output against gate criteria
       const evaluated = evaluateGraphResult(
         input.graphResult,
         input.gatesConfig,
@@ -486,10 +225,7 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
       }
     }
 
-    // Format markdown
-    const checkRunSummary = formatCheckRunSummary(reviewResult, {
-      daoBaseUrl,
-    });
+    const checkRunSummary = formatCheckRunSummary(reviewResult, { daoBaseUrl });
 
     const checkRunUrl = input.checkRunId
       ? `https://github.com/${input.owner}/${input.repo}/runs/${input.checkRunId}`
@@ -500,24 +236,18 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
       checkRunUrl,
     });
 
-    // Update check run (if we have one)
+    // Finalize check run (if we have one)
     if (input.checkRunId) {
       try {
-        await octokit.request(
-          "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}",
-          {
-            owner: input.owner,
-            repo: input.repo,
-            check_run_id: input.checkRunId,
-            status: "completed",
-            conclusion: mapConclusion(conclusion),
-            completed_at: new Date().toISOString(),
-            output: {
-              title: `PR Review: ${conclusion.toUpperCase()}`,
-              summary: checkRunSummary,
-            },
-          }
-        );
+        await reviewClient.updateCheckRun({
+          owner: input.owner,
+          repo: input.repo,
+          installationId: input.installationId,
+          checkRunId: input.checkRunId,
+          conclusion: mapConclusion(conclusion),
+          title: `PR Review: ${conclusion.toUpperCase()}`,
+          summary: checkRunSummary,
+        });
       } catch (error) {
         logger.warn(
           { checkRunId: input.checkRunId, error: String(error) },
@@ -526,37 +256,30 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
       }
     }
 
-    // Post PR comment with staleness guard
-    const prResponse = await octokit.request(
-      "GET /repos/{owner}/{repo}/pulls/{pull_number}",
-      {
+    // Post PR comment — operator applies the head-SHA staleness guard.
+    let result: Awaited<ReturnType<ReviewHttpClient["postPrComment"]>>;
+    try {
+      result = await reviewClient.postPrComment({
         owner: input.owner,
         repo: input.repo,
-        pull_number: input.prNumber,
-      }
-    );
-    const currentSha = prResponse.data.head.sha;
-    if (currentSha !== input.headSha) {
+        installationId: input.installationId,
+        prNumber: input.prNumber,
+        body: prCommentBody,
+        expectedHeadSha: input.headSha,
+      });
+    } catch (err) {
+      translateHttpError(err, "postReviewResultActivity");
+    }
+    if (!result.posted) {
       logger.info(
         {
           prNumber: input.prNumber,
           expectedSha: input.headSha,
-          currentSha,
+          reason: result.reason,
         },
-        "PR updated during review — skipping comment"
+        "PR updated during review — comment skipped"
       );
-      return;
     }
-
-    await octokit.request(
-      "POST /repos/{owner}/{repo}/issues/{issue_number}/comments",
-      {
-        owner: input.owner,
-        repo: input.repo,
-        issue_number: input.prNumber,
-        body: prCommentBody,
-      }
-    );
   }
 
   /**
@@ -567,8 +290,6 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
   async function postRoutingDiagnosticActivity(
     input: PostRoutingDiagnosticInput
   ): Promise<void> {
-    const octokit = createOctokit(deps, input.installationId);
-
     let body: string;
     let title: string;
     if (input.owningNode.kind === "conflict") {
@@ -582,18 +303,15 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
 
     if (input.checkRunId) {
       try {
-        await octokit.request(
-          "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}",
-          {
-            owner: input.owner,
-            repo: input.repo,
-            check_run_id: input.checkRunId,
-            status: "completed",
-            conclusion: "neutral",
-            completed_at: new Date().toISOString(),
-            output: { title: `PR Review: ${title}`, summary: body },
-          }
-        );
+        await reviewClient.updateCheckRun({
+          owner: input.owner,
+          repo: input.repo,
+          installationId: input.installationId,
+          checkRunId: input.checkRunId,
+          conclusion: "neutral",
+          title: `PR Review: ${title}`,
+          summary: body,
+        });
       } catch (error) {
         logger.warn(
           { checkRunId: input.checkRunId, error: String(error) },
@@ -603,15 +321,13 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
     }
 
     try {
-      await octokit.request(
-        "POST /repos/{owner}/{repo}/issues/{issue_number}/comments",
-        {
-          owner: input.owner,
-          repo: input.repo,
-          issue_number: input.prNumber,
-          body,
-        }
-      );
+      await reviewClient.postPrComment({
+        owner: input.owner,
+        repo: input.repo,
+        installationId: input.installationId,
+        prNumber: input.prNumber,
+        body,
+      });
     } catch (error) {
       logger.warn(
         { prNumber: input.prNumber, error: String(error) },
@@ -629,24 +345,35 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Helpers (pure domain evaluation — no I/O)
 // ---------------------------------------------------------------------------
 
 /**
+ * Gate shape as it arrives from the operator pr-context plane. Mirrors
+ * @cogni/repo-spec GateConfig; kept local so this module needs no repo-spec
+ * zod3 runtime coupling.
+ */
+type GateLike = {
+  type: string;
+  id?: string;
+  with?: Record<string, unknown>;
+};
+
+/**
  * Evaluate graph structured output against all gate criteria.
- * Domain logic from domain/review.ts — this function bridges graph output to gate results.
+ * Domain logic from domain/review.ts — bridges graph output to gate results.
  */
 function evaluateGraphResult(
   graphResult: GraphRunResult,
-  gatesConfig: GatesConfig,
+  gatesConfig: { gates: unknown[]; failOnError: boolean },
   rules: Record<string, Rule>,
   evidence?: EvidenceBundle
 ): ReviewResult {
   const gateResults: GateResult[] = [];
 
-  for (const gate of gatesConfig.gates) {
+  for (const rawGate of gatesConfig.gates) {
+    const gate = rawGate as GateLike;
     if (gate.type === "review-limits") {
-      // Pure deterministic gate — evaluate without LLM
       gateResults.push(evaluateReviewLimitsGate(gate, evidence));
     } else if (gate.type === "ai-rule") {
       const ruleFile = gate.with?.rule_file as string | undefined;
@@ -670,7 +397,6 @@ function evaluateGraphResult(
       });
       const metricNames = evaluations.map(([name]) => name);
 
-      // Build scores map
       const scores = new Map<string, number>();
       const metrics: Array<{
         metric: string;
@@ -716,11 +442,10 @@ function evaluateGraphResult(
 
 /** Evaluate review-limits gate (pure deterministic, no LLM). */
 function evaluateReviewLimitsGate(
-  gate: GateConfig,
+  gate: GateLike,
   evidence?: EvidenceBundle
 ): GateResult {
-  const gateId =
-    "id" in gate && gate.id ? (gate.id as string) : "review-limits";
+  const gateId = gate.id ?? "review-limits";
   if (!evidence) {
     return {
       gateId,
@@ -730,7 +455,9 @@ function evaluateReviewLimitsGate(
     };
   }
 
-  const limits = gate.type === "review-limits" ? gate.with : undefined;
+  const limits = gate.with as
+    | { max_changed_files?: number; max_total_diff_kb?: number }
+    | undefined;
 
   let status: GateStatus = "pass";
   const reasons: string[] = [];
@@ -762,24 +489,12 @@ function evaluateReviewLimitsGate(
   };
 }
 
-type CheckRunConclusion =
-  | "success"
-  | "failure"
-  | "neutral"
-  | "cancelled"
-  | "skipped"
-  | "timed_out"
-  | "action_required"
-  | "stale";
-
-function mapConclusion(status: string): CheckRunConclusion {
+function mapConclusion(status: string): ReviewCheckRunConclusion {
   switch (status) {
     case "pass":
       return "success";
     case "fail":
       return "failure";
-    case "neutral":
-      return "neutral";
     default:
       return "neutral";
   }

@@ -3,44 +3,23 @@
 
 /**
  * Module: `@cogni/scheduler-worker/tests/review-activities.test`
- * Purpose: Unit tests for fetchPrContextActivity owning-node routing + per-node rule path.
- * Scope: Activity behavior with a fake Octokit. No real GitHub I/O.
+ * Purpose: Unit tests for the review activities' delegation to the operator
+ *   review plane (bug.5000). All GitHub I/O is HTTP-delegated; these tests use a
+ *   fake ReviewHttpClient and assert the worker orchestrates + re-logs correctly.
+ * Scope: Activity behavior with a fake ReviewHttpClient. No GitHub SDK.
  * Invariants:
- *   - PER_NODE_RULE_LOADING: non-operator singles fetch from <path>/.cogni/rules/
- *   - operator singles use root .cogni/rules/
- *   - review.routed log emitted with owningNode shape
- *   - postRoutingDiagnosticActivity posts neutral check + diagnostic comment
+ *   - WORKER_HOLDS_NO_GITHUB_CRED: activities never touch Octokit.
+ *   - review.routed log emitted with owningNode shape.
+ *   - postRoutingDiagnosticActivity finalizes neutral check + diagnostic comment.
  * Side-effects: none
- * Links: task.0410
+ * Links: bug.5000, task.0410
  * @internal
  */
 
-import { TEST_NODE_ENTRIES, TEST_NODE_IDS } from "@cogni/repo-spec/testing";
+import { TEST_NODE_IDS } from "@cogni/repo-spec/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { stringify as stringifyYaml } from "yaml";
-
-// Shared request log + handler map mutated per-test before invoking the activity.
-const requests: Array<{ route: string; params: unknown }> = [];
-let routeHandlers: Record<string, (params: unknown) => unknown> = {};
-
-vi.mock("@octokit/auth-app", () => ({
-  createAppAuth: () => () => ({ token: "fake" }),
-}));
-
-vi.mock("@octokit/core", () => ({
-  Octokit: class {
-    request = async (route: string, params: unknown) => {
-      requests.push({ route, params });
-      const handler = routeHandlers[route];
-      if (!handler) {
-        throw new Error(`Unhandled route in test: ${route}`);
-      }
-      return { data: handler(params) };
-    };
-  },
-}));
-
 import { createReviewActivities } from "../src/activities/review.js";
+import type { ReviewHttpClient } from "../src/ports/index.js";
 
 const mockLogger = {
   info: vi.fn(),
@@ -50,88 +29,86 @@ const mockLogger = {
   child: () => mockLogger,
 } as unknown as Parameters<typeof createReviewActivities>[0]["logger"];
 
-const minimalRepoSpecYaml = stringifyYaml({
-  node_id: TEST_NODE_IDS.operator,
-  scope_id: "00000000-0000-4000-8000-000000000002",
-  cogni_dao: { chain_id: "8453" },
-  payments_in: {
-    credits_topup: {
-      provider: "cogni-usdc-backend-v1",
-      receiving_address: "0x1111111111111111111111111111111111111111",
-    },
-  },
-  nodes: [
-    TEST_NODE_ENTRIES.operator,
-    TEST_NODE_ENTRIES.poly,
-    TEST_NODE_ENTRIES.resy,
-  ],
-  gates: [
-    {
-      type: "ai-rule",
-      with: { rule_file: "quality.rule.yaml" },
-    },
-  ],
-});
-
-const ruleYaml = stringifyYaml({
-  id: "quality",
-  evaluations: [{ quality: "Is it good?" }],
-  success_criteria: { require: [{ metric: "quality", gte: 0.8 }] },
-});
-
-interface FetchPrFakes {
-  changedFiles: string[];
-  ruleAvailableAt?: string;
-}
-
-function setFetchPrHandlers(fakes: FetchPrFakes): void {
-  routeHandlers = {
-    "GET /repos/{owner}/{repo}/pulls/{pull_number}": () => ({
-      number: 123,
-      title: "test pr",
-      body: "",
-      head: { sha: "deadbeef" },
-      base: { ref: "main" },
-      changed_files: fakes.changedFiles.length,
+function makeContext(
+  owningNode: Awaited<
+    ReturnType<ReviewHttpClient["fetchPrContext"]>
+  >["owningNode"],
+  changedFiles: string[]
+): Awaited<ReturnType<ReviewHttpClient["fetchPrContext"]>> {
+  return {
+    evidence: {
+      prNumber: 123,
+      prTitle: "test pr",
+      prBody: "",
+      headSha: "deadbeef",
+      baseBranch: "main",
+      changedFiles: changedFiles.length,
       additions: 1,
       deletions: 0,
-    }),
-    "GET /repos/{owner}/{repo}/pulls/{pull_number}/files": () =>
-      fakes.changedFiles.map((f) => ({ filename: f, patch: "+x" })),
-    "GET /repos/{owner}/{repo}/contents/{path}": (params: unknown) => {
-      const { path } = params as { path: string };
-      if (path === ".cogni/repo-spec.yaml") return minimalRepoSpecYaml;
-      if (fakes.ruleAvailableAt && path === fakes.ruleAvailableAt)
-        return ruleYaml;
-      const err = new Error(`Not Found: ${path}`) as Error & {
-        status?: number;
-      };
-      err.status = 404;
-      throw err;
+      patches: [],
+      totalDiffBytes: 0,
     },
+    gatesConfig: { gates: [], failOnError: false },
+    rules: {},
+    graphMessages: [],
+    responseFormat: { prompt: "", schemaId: "" },
+    modelRef: { providerKey: "platform", modelId: "gpt-4o-mini" },
+    changedFiles,
+    owningNode,
   };
 }
 
+let client: {
+  createCheckRun: ReturnType<typeof vi.fn>;
+  updateCheckRun: ReturnType<typeof vi.fn>;
+  postPrComment: ReturnType<typeof vi.fn>;
+  fetchPrContext: ReturnType<typeof vi.fn>;
+};
+
 function makeActivities() {
   return createReviewActivities({
-    ghAppId: "1",
-    ghPrivateKey: "key",
+    reviewClient: client as unknown as ReviewHttpClient,
     logger: mockLogger,
   });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  requests.length = 0;
-  routeHandlers = {};
+  client = {
+    createCheckRun: vi.fn(async () => 42),
+    updateCheckRun: vi.fn(async () => undefined),
+    postPrComment: vi.fn(async () => ({ posted: true })),
+    fetchPrContext: vi.fn(async () => makeContext({ kind: "miss" }, [])),
+  };
 });
 
-describe("fetchPrContextActivity — owning-node routing", () => {
-  it("returns owningNode=single + fetches rules from per-node path for poly PR", async () => {
-    setFetchPrHandlers({
-      changedFiles: ["nodes/poly/app/src/foo.ts"],
-      ruleAvailableAt: "nodes/poly/.cogni/rules/quality.rule.yaml",
+describe("createCheckRunActivity", () => {
+  it("delegates to the operator review plane and returns the check-run id", async () => {
+    const acts = makeActivities();
+    const id = await acts.createCheckRunActivity({
+      owner: "org",
+      repo: "repo",
+      headSha: "deadbeef",
+      installationId: 1,
     });
+    expect(id).toBe(42);
+    expect(client.createCheckRun).toHaveBeenCalledWith({
+      owner: "org",
+      repo: "repo",
+      headSha: "deadbeef",
+      installationId: 1,
+    });
+  });
+});
+
+describe("fetchPrContextActivity", () => {
+  it("delegates to the operator and re-emits review.routed for a single poly PR", async () => {
+    client.fetchPrContext.mockResolvedValueOnce(
+      makeContext(
+        { kind: "single", nodeId: TEST_NODE_IDS.poly, path: "nodes/poly" },
+        ["nodes/poly/app/src/foo.ts"]
+      )
+    );
     const acts = makeActivities();
 
     const result = await acts.fetchPrContextActivity({
@@ -142,21 +119,12 @@ describe("fetchPrContextActivity — owning-node routing", () => {
     });
 
     expect(result.owningNode.kind).toBe("single");
-    if (result.owningNode.kind === "single") {
-      expect(result.owningNode.path).toBe("nodes/poly");
-    }
-    expect(result.changedFiles).toEqual(["nodes/poly/app/src/foo.ts"]);
-
-    const ruleFetches = requests.filter(
-      (r) =>
-        r.route === "GET /repos/{owner}/{repo}/contents/{path}" &&
-        (r.params as { path: string }).path.endsWith("quality.rule.yaml")
-    );
-    expect(ruleFetches.length).toBe(1);
-    expect((ruleFetches[0]?.params as { path: string }).path).toBe(
-      "nodes/poly/.cogni/rules/quality.rule.yaml"
-    );
-
+    expect(client.fetchPrContext).toHaveBeenCalledWith({
+      owner: "org",
+      repo: "repo",
+      prNumber: 123,
+      installationId: 1,
+    });
     expect(mockLogger.info).toHaveBeenCalledWith(
       expect.objectContaining({
         owningNodeKind: "single",
@@ -168,85 +136,44 @@ describe("fetchPrContextActivity — owning-node routing", () => {
     );
   });
 
-  it("operator-only PR fetches rules from nodes/operator/.cogni/rules/ (no special case)", async () => {
-    setFetchPrHandlers({
-      changedFiles: ["packages/repo-spec/src/x.ts"],
-      ruleAvailableAt: "nodes/operator/.cogni/rules/quality.rule.yaml",
-    });
-    const acts = makeActivities();
-
-    const result = await acts.fetchPrContextActivity({
-      owner: "org",
-      repo: "repo",
-      prNumber: 123,
-      installationId: 1,
-    });
-
-    expect(result.owningNode.kind).toBe("single");
-    if (result.owningNode.kind === "single") {
-      expect(result.owningNode.path).toBe("nodes/operator");
-    }
-
-    const ruleFetches = requests.filter(
-      (r) =>
-        r.route === "GET /repos/{owner}/{repo}/contents/{path}" &&
-        (r.params as { path: string }).path.endsWith("quality.rule.yaml")
+  it("re-emits conflict node ids for a cross-domain PR", async () => {
+    client.fetchPrContext.mockResolvedValueOnce(
+      makeContext(
+        {
+          kind: "conflict",
+          nodes: [
+            { nodeId: TEST_NODE_IDS.poly, path: "nodes/poly" },
+            { nodeId: TEST_NODE_IDS.resy, path: "nodes/resy" },
+          ],
+          operatorPaths: [],
+        },
+        ["nodes/poly/x.ts", "nodes/resy/y.ts"]
+      )
     );
-    expect(ruleFetches.length).toBe(1);
-    expect((ruleFetches[0]?.params as { path: string }).path).toBe(
-      "nodes/operator/.cogni/rules/quality.rule.yaml"
+    const acts = makeActivities();
+
+    await acts.fetchPrContextActivity({
+      owner: "org",
+      repo: "repo",
+      prNumber: 123,
+      installationId: 1,
+    });
+
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owningNodeKind: "conflict",
+        conflictNodeIds: expect.arrayContaining([
+          TEST_NODE_IDS.poly,
+          TEST_NODE_IDS.resy,
+        ]),
+      }),
+      "review.routed"
     );
-  });
-
-  it("cross-domain PR returns owningNode=conflict", async () => {
-    setFetchPrHandlers({
-      changedFiles: ["nodes/poly/x.ts", "nodes/resy/y.ts"],
-    });
-    const acts = makeActivities();
-
-    const result = await acts.fetchPrContextActivity({
-      owner: "org",
-      repo: "repo",
-      prNumber: 123,
-      installationId: 1,
-    });
-
-    expect(result.owningNode.kind).toBe("conflict");
-    if (result.owningNode.kind === "conflict") {
-      expect(result.owningNode.nodes.map((n) => n.nodeId)).toEqual(
-        expect.arrayContaining([TEST_NODE_IDS.poly, TEST_NODE_IDS.resy])
-      );
-    }
-  });
-
-  it("ride-along (poly + pnpm-lock.yaml) routes to single poly", async () => {
-    setFetchPrHandlers({
-      changedFiles: ["nodes/poly/x.ts", "pnpm-lock.yaml"],
-      ruleAvailableAt: "nodes/poly/.cogni/rules/quality.rule.yaml",
-    });
-    const acts = makeActivities();
-
-    const result = await acts.fetchPrContextActivity({
-      owner: "org",
-      repo: "repo",
-      prNumber: 123,
-      installationId: 1,
-    });
-
-    expect(result.owningNode.kind).toBe("single");
-    if (result.owningNode.kind === "single") {
-      expect(result.owningNode.nodeId).toBe(TEST_NODE_IDS.poly);
-      expect(result.owningNode.rideAlongApplied).toBe(true);
-    }
   });
 });
 
 describe("postRoutingDiagnosticActivity", () => {
-  it("posts a comment + neutral check-run for conflict", async () => {
-    routeHandlers = {
-      "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}": () => ({}),
-      "POST /repos/{owner}/{repo}/issues/{issue_number}/comments": () => ({}),
-    };
+  it("finalizes a neutral check + diagnostic comment for conflict", async () => {
     const acts = makeActivities();
 
     await acts.postRoutingDiagnosticActivity({
@@ -267,29 +194,16 @@ describe("postRoutingDiagnosticActivity", () => {
       changedFiles: ["nodes/poly/a.ts", "nodes/resy/b.ts"],
     });
 
-    const patch = requests.find(
-      (r) => r.route === "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}"
+    expect(client.updateCheckRun).toHaveBeenCalledWith(
+      expect.objectContaining({ checkRunId: 99, conclusion: "neutral" })
     );
-    expect(patch).toBeDefined();
-    expect((patch?.params as { conclusion: string }).conclusion).toBe(
-      "neutral"
-    );
-
-    const comment = requests.find(
-      (r) =>
-        r.route === "POST /repos/{owner}/{repo}/issues/{issue_number}/comments"
-    );
-    expect(comment).toBeDefined();
-    expect((comment?.params as { body: string }).body).toContain(
-      "Cross-Domain PR refused"
-    );
+    const commentArg = client.postPrComment.mock.calls[0]?.[0] as {
+      body: string;
+    };
+    expect(commentArg.body).toContain("Cross-Domain PR refused");
   });
 
   it("posts neutral 'no recognizable scope' for miss", async () => {
-    routeHandlers = {
-      "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}": () => ({}),
-      "POST /repos/{owner}/{repo}/issues/{issue_number}/comments": () => ({}),
-    };
     const acts = makeActivities();
 
     await acts.postRoutingDiagnosticActivity({
@@ -303,12 +217,32 @@ describe("postRoutingDiagnosticActivity", () => {
       changedFiles: [],
     });
 
-    const comment = requests.find(
-      (r) =>
-        r.route === "POST /repos/{owner}/{repo}/issues/{issue_number}/comments"
+    const commentArg = client.postPrComment.mock.calls[0]?.[0] as {
+      body: string;
+    };
+    expect(commentArg.body).toContain("No recognizable scope");
+  });
+});
+
+describe("postReviewResultActivity", () => {
+  it("finalizes the check run + posts the comment for a no-gates pass", async () => {
+    const acts = makeActivities();
+
+    await acts.postReviewResultActivity({
+      owner: "org",
+      repo: "repo",
+      prNumber: 5,
+      headSha: "deadbeef",
+      installationId: 1,
+      checkRunId: 11,
+      noGatesConfigured: true,
+    });
+
+    expect(client.updateCheckRun).toHaveBeenCalledWith(
+      expect.objectContaining({ checkRunId: 11, conclusion: "success" })
     );
-    expect((comment?.params as { body: string }).body).toContain(
-      "No recognizable scope"
+    expect(client.postPrComment).toHaveBeenCalledWith(
+      expect.objectContaining({ prNumber: 5, expectedHeadSha: "deadbeef" })
     );
   });
 });

@@ -96,19 +96,16 @@ export async function startSchedulerWorker(
       container.logger.child?.({ component: "activities" }) ?? container.logger,
   });
 
-  const reviewActivities =
-    env.GH_REVIEW_APP_ID && env.GH_REVIEW_APP_PRIVATE_KEY_BASE64
-      ? createReviewActivities({
-          ghAppId: env.GH_REVIEW_APP_ID,
-          ghPrivateKey: Buffer.from(
-            env.GH_REVIEW_APP_PRIVATE_KEY_BASE64,
-            "base64"
-          ).toString("utf-8"),
-          logger:
-            container.logger.child?.({ component: "review-activities" }) ??
-            container.logger,
-        })
-      : {};
+  // Review activities register unconditionally (bug.5000): they hold no GitHub
+  // credential — every GitHub call is HTTP-delegated to the operator's review
+  // plane via container.reviewClient (operator endpoint + SCHEDULER_API_TOKEN,
+  // which the worker already has).
+  const reviewActivities = createReviewActivities({
+    reviewClient: container.reviewClient,
+    logger:
+      container.logger.child?.({ component: "review-activities" }) ??
+      container.logger,
+  });
 
   // Sweep activities poll the operator's work-items API, so they only apply
   // when the formation includes an operator node. Catalog/formation-driven:

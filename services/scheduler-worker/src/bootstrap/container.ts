@@ -38,6 +38,7 @@ import {
   GitHubAppTokenProvider,
   GitHubSourceAdapter,
 } from "../adapters/ingestion/index.js";
+import { createReviewHttpClient } from "../adapters/review-http.js";
 import {
   createHttpExecutionGrantValidator,
   createHttpGraphRunWriter,
@@ -50,6 +51,7 @@ import type {
   DataSourceRegistration,
   ExecutionGrantHttpValidator,
   GraphRunHttpWriter,
+  ReviewHttpClient,
 } from "../ports/index.js";
 import type { Env } from "./env.js";
 
@@ -60,6 +62,8 @@ import type { Env } from "./env.js";
 export interface ServiceContainer {
   grantAdapter: ExecutionGrantHttpValidator;
   runAdapter: GraphRunHttpWriter;
+  /** HTTP client for the operator's review GitHub plane (bug.5000). */
+  reviewClient: ReviewHttpClient;
   config: {
     nodeEndpoints: Map<string, string>;
     schedulerApiToken: string;
@@ -171,6 +175,13 @@ export function createContainer(config: Env, logger: Logger): ServiceContainer {
   return {
     grantAdapter: createHttpExecutionGrantValidator(deps),
     runAdapter: createHttpGraphRunWriter(deps),
+    // Review GitHub I/O is HTTP-delegated to the operator (bug.5000); the worker
+    // holds no GitHub credential. Always targets the "operator" node endpoint.
+    reviewClient: createReviewHttpClient({
+      nodeEndpoints,
+      schedulerApiToken: config.SCHEDULER_API_TOKEN,
+      logger: logger.child?.({ component: "review-http" }) ?? logger,
+    }),
     config: {
       nodeEndpoints,
       schedulerApiToken: config.SCHEDULER_API_TOKEN,
