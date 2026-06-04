@@ -125,11 +125,11 @@ Evolve the agent discovery pipeline from the current single in-proc LangGraph ca
 
 ### Problem — three disjoint registries today
 
-| Surface         | Source of truth                                                         | Dynamic?           |
-| --------------- | ----------------------------------------------------------------------- | ------------------ |
-| monorepo nodes  | `infra/catalog/*.yaml` + `.cogni/repo-spec.yaml` (git; build-time only, NOT in runtime image) | no                 |
-| wizard nodes    | operator Postgres `nodes` table (RLS, owner-private)                    | yes, but private   |
-| homepage        | hand-typed module + committed PNGs (PR #1479)                           | no                 |
+| Surface        | Source of truth                                                                               | Dynamic?         |
+| -------------- | --------------------------------------------------------------------------------------------- | ---------------- |
+| monorepo nodes | `infra/catalog/*.yaml` + `.cogni/repo-spec.yaml` (git; build-time only, NOT in runtime image) | no               |
+| wizard nodes   | operator Postgres `nodes` table (RLS, owner-private)                                          | yes, but private |
+| homepage       | hand-typed module + committed PNGs (PR #1479)                                                 | no               |
 
 Creating a node via the wizard writes a `nodes` row + opens a repo-spec PR, but it never surfaces on the public homepage. The homepage reads neither registry. (Runtime constraint: `COGNI_REPO_PATH=/app` ships only operator's `.cogni`, so `infra/catalog` cannot be globbed at runtime — see `reference_operator_runtime_image_no_catalog`.)
 
@@ -141,33 +141,33 @@ Creating a node via the wizard writes a `nodes` row + opens a repo-spec PR, but 
 - **One public read port:** `NodeRegistryPort.listPublic({ sort, filter, page })` — non-RLS, distinct from the owner-scoped wizard reads. Homepage + future sort/browse become plain SQL on one table.
 - **Thumbnails** = a `thumbnail_url` column, fed by a screenshot service or per-node `opengraph-image` route. Orthogonal — swap the source without touching the read model.
 
-Matches the product vision: operator = git-manager indexing N node repos → the `nodes` table *is* that index/projection.
+Matches the product vision: operator = git-manager indexing N node repos → the `nodes` table _is_ that index/projection.
 
 ### Crawl (P0) — visual prototype (Done, PR #1479)
 
-| Deliverable                                                          | Status | Est | Work Item |
-| ------------------------------------------------------------------- | ------ | --- | --------- |
-| Static typed-module showcase + committed homepage screenshots        | Done   | 1   | PR #1479  |
-| Server-side href resolution via `host_for_node` catalog convention   | Done   | 1   | PR #1479  |
+| Deliverable                                                        | Status | Est | Work Item |
+| ------------------------------------------------------------------ | ------ | --- | --------- |
+| Static typed-module showcase + committed homepage screenshots      | Done   | 1   | PR #1479  |
+| Server-side href resolution via `host_for_node` catalog convention | Done   | 1   | PR #1479  |
 
 ### Walk (P1) — NodeRegistryPort + projection (the alignment)
 
-| Deliverable                                                                                              | Status      | Est | Work Item            |
-| -------------------------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
+| Deliverable                                                                                                                                       | Status      | Est | Work Item            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
 | Generalize `nodes` table: `source` + curation columns (`listed`, `featured`, `display_order`, `tagline`, `homepage_url`, `thumbnail_url`, `tags`) | Not Started | 2   | (create at P1 start) |
-| Build/migrate-time reconciler: catalog/repo-spec snapshot → idempotent upsert of `source=monorepo` rows  | Not Started | 2   | (create at P1 start) |
-| `NodeRegistryPort` (shared package): `listPublic({ sort, filter, page })` + `getBySlug`                  | Not Started | 2   | (create at P1 start) |
-| Public, non-RLS read adapter over `nodes` (`listed=true`)                                                | Not Started | 1   | (create at P1 start) |
-| Point homepage `NodeShowcase` at the port; drop the typed module                                         | Not Started | 1   | (create at P1 start) |
-| Map node-spec/scope-spec fields → `NodeSummary` (carry `scope_id`/`scope_key`)                           | Not Started | 1   | (create at P1 start) |
+| Build/migrate-time reconciler: catalog/repo-spec snapshot → idempotent upsert of `source=monorepo` rows                                           | Not Started | 2   | (create at P1 start) |
+| `NodeRegistryPort` (shared package): `listPublic({ sort, filter, page })` + `getBySlug`                                                           | Not Started | 2   | (create at P1 start) |
+| Public, non-RLS read adapter over `nodes` (`listed=true`)                                                                                         | Not Started | 1   | (create at P1 start) |
+| Point homepage `NodeShowcase` at the port; drop the typed module                                                                                  | Not Started | 1   | (create at P1 start) |
+| Map node-spec/scope-spec fields → `NodeSummary` (carry `scope_id`/`scope_key`)                                                                    | Not Started | 1   | (create at P1 start) |
 
 ### Run (P2+) — browse/sort + dynamic thumbnails
 
-| Deliverable                                                                                  | Status      | Est | Work Item            |
-| -------------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
-| Homepage sorting / filtering / pagination UI over the port                                   | Not Started | 2   | (create at P2 start) |
+| Deliverable                                                                                         | Status      | Est | Work Item            |
+| --------------------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
+| Homepage sorting / filtering / pagination UI over the port                                          | Not Started | 2   | (create at P2 start) |
 | Dynamic thumbnails: per-node `opengraph-image` route OR build-time screenshot job → `thumbnail_url` | Not Started | 2   | (create at P2 start) |
-| Cross-repo nodes (operator indexing N external node repos)                                   | Not Started | 3   | (create at P2 start) |
+| Cross-repo nodes (operator indexing N external node repos)                                          | Not Started | 3   | (create at P2 start) |
 
 ### Node Registry Constraints
 
