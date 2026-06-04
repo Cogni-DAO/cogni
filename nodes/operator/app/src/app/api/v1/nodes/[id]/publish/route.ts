@@ -52,7 +52,7 @@ type MintErrorCode =
 
 function classifyMintError(err: unknown): {
   errorCode: MintErrorCode;
-  status?: number;
+  status: number | undefined;
 } {
   const status =
     typeof err === "object" && err !== null && "status" in err
