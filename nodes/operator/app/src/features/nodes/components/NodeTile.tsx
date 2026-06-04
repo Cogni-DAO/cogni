@@ -39,7 +39,7 @@ function Banner({
   thumbnailUrl,
   title,
 }: {
-  thumbnailUrl?: string | null;
+  thumbnailUrl?: string | null | undefined;
   title: string;
 }): ReactElement {
   if (thumbnailUrl) {
