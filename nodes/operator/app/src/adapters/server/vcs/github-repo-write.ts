@@ -274,26 +274,53 @@ export class GitHubRepoWriter {
   ): Promise<{ cloneUrl: string; headSha: string }> {
     const { templateOwner, owner, slug } = input;
     const tplOctokit = await this.getOctokit(templateOwner, TEMPLATE_SLUG);
-    const { data: created } = await tplOctokit.request(
-      "POST /repos/{template_owner}/{template_repo}/generate",
-      {
-        template_owner: templateOwner,
-        template_repo: TEMPLATE_SLUG,
-        owner,
-        name: slug,
-        private: false,
-        description: `Cogni node ${slug} — submodule of the operator monorepo`,
-      }
-    );
+
+    // Mint the repo — idempotent: a prior partial run (repo created, pin PR failed) re-runs cleanly
+    // by reusing the existing repo instead of 422-ing on the duplicate name.
+    let cloneUrl: string;
+    try {
+      const { data: created } = await tplOctokit.request(
+        "POST /repos/{template_owner}/{template_repo}/generate",
+        {
+          template_owner: templateOwner,
+          template_repo: TEMPLATE_SLUG,
+          owner,
+          name: slug,
+          private: false,
+          description: `Cogni node ${slug} — submodule of the operator monorepo`,
+        }
+      );
+      cloneUrl = created.clone_url;
+    } catch (err) {
+      if ((err as { status?: number })?.status !== 422) throw err;
+      const { data: existing } = await tplOctokit.request(
+        "GET /repos/{owner}/{repo}",
+        { owner, repo: slug }
+      );
+      cloneUrl = existing.clone_url;
+    }
 
     // generate-from-template copies node-template's `.cogni/repo-spec.yaml` verbatim (its identity);
-    // override it on the minted repo's main with this node's identity.
+    // override it on the minted repo's main. The initial commit can lag the generate response, so
+    // resolve main with a short retry before committing identity.
     const octokit = await this.getOctokit(owner, slug);
-    const { baseCommitSha, baseTreeSha } = await this.resolveMainBase(
-      octokit,
-      owner,
-      slug
-    );
+    let base: { baseCommitSha: string; baseTreeSha: string } | undefined;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      try {
+        base = await this.resolveMainBase(octokit, owner, slug);
+        break;
+      } catch (err) {
+        const status = (err as { status?: number })?.status;
+        if (status !== 404 && status !== 409) throw err;
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+    if (!base) {
+      throw new Error(
+        `generateFromTemplate: ${owner}/${slug} main not ready after generate`
+      );
+    }
+    const { baseCommitSha, baseTreeSha } = base;
     const repoSpecSha = await this.createBlob(
       octokit,
       owner,
@@ -333,7 +360,7 @@ export class GitHubRepoWriter {
       }
     );
     await this.upsertRef(octokit, owner, slug, "main", commit.sha);
-    return { cloneUrl: created.clone_url, headSha: commit.sha };
+    return { cloneUrl, headSha: commit.sha };
   }
 
   /**
