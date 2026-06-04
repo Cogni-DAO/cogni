@@ -531,9 +531,17 @@ jobs:
       TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
       COGNI_NODE_DBS: ${{ secrets.COGNI_NODE_DBS }}
     steps:
+      # Deploy tooling (scripts/ci/deploy-infra.sh + scripts/ci/lib/**) runs at the
+      # WORKFLOW ref, not the promoted app sha. The app stays pinned via COGNI_REPO_REF
+      # (env above) and images by digest; deploy-infra.sh already pulls infra/compose
+      # from `--ref main`. Pinning the orchestration script to head_sha stranded infra
+      # fixes (e.g. the doltgres auth-file reconcile) until an app sha carrying them was
+      # promoted — an infra-only fix could not reach prod on its own. github.sha = the
+      # dispatched workflow ref, so tooling fixes apply on the next deploy regardless of
+      # which app sha is promoted (consistent with the existing `--ref main` compose source).
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.decide.outputs.head_sha }}
+          ref: ${{ github.sha }}
 
       - name: Setup SSH
         run: |
