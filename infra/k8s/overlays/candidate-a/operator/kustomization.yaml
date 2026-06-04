@@ -13,7 +13,7 @@ namePrefix: operator-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:96c792bf0bc0a9ca24239a59586e2e614e4bbdd04826ab87f6d502a1a8c5ab6c"
+    digest: "sha256:d08f56176b1045859dce51c6cd682b0fca7e559c695d4b5cf05739f011163349"
 
 patches:
   - target:
@@ -47,6 +47,15 @@ patches:
       - op: add
         path: /data/NODE_TEMPLATE_OWNER
         value: "cogni-test-org"
+      # Submodule pin-PR target — a cogni-shaped mirror in the throwaway org so the test app
+      # (cogni-operator-test, zero Cogni-DAO access) can open the pin-PR. Wizard-scoped override;
+      # prod leaves these unset → pin-PR falls back to Cogni-DAO/cogni.
+      - op: add
+        path: /data/NODE_SUBMODULE_PARENT_OWNER
+        value: "cogni-test-org"
+      - op: add
+        path: /data/NODE_SUBMODULE_PARENT_REPO
+        value: "cogni-monorepo"
   - target:
       kind: Service
       name: node-app
