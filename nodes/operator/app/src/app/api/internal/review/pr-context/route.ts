@@ -19,7 +19,7 @@
 import { InternalReviewPrContextInputSchema } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { resolveReviewRoute } from "../_shared";
+import { resolveReviewRoute } from "@/bootstrap/review/resolve-review-route";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

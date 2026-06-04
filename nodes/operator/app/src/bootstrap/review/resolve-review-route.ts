@@ -2,10 +2,11 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/api/internal/review/_shared`
- * Purpose: Shared bootstrap for the internal review GitHub-plane routes — bearer
- *   auth + GitHub App adapter resolution. The leading underscore keeps Next from
- *   treating this as a route segment.
+ * Module: `@bootstrap/review/resolve-review-route`
+ * Purpose: Bootstrap helper for the internal review GitHub-plane routes — bearer
+ *   auth + GitHub App adapter resolution. Lives in bootstrap so the app/route
+ *   layer can wire the server adapter without importing `adapters/server/*`
+ *   directly (no-restricted-imports boundary).
  * Scope: Auth gate + adapter construction only. No GitHub I/O (that lives in the
  *   adapter).
  * Invariants:
