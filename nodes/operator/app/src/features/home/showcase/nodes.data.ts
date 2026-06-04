@@ -48,7 +48,8 @@ export const SHOWCASE_NODES: readonly ShowcaseNode[] = [
   {
     name: "canary",
     title: "Canary",
-    tagline: "An autonomous AI node — governed on-chain, ships its own pull requests.",
+    tagline:
+      "An autonomous AI node — governed on-chain, ships its own pull requests.",
     thumbnail: "/showcase/canary.png",
   },
   {

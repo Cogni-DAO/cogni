@@ -40,7 +40,9 @@ function NodeTile({ node }: { node: ResolvedShowcaseNode }): ReactElement {
           />
         </div>
         <div className="space-y-2 p-6">
-          <h3 className="font-semibold text-foreground text-lg">{node.title}</h3>
+          <h3 className="font-semibold text-foreground text-lg">
+            {node.title}
+          </h3>
           <p className="text-muted-foreground text-sm">{node.tagline}</p>
         </div>
       </Card>
