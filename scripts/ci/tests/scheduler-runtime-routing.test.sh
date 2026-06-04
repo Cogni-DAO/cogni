@@ -52,10 +52,11 @@ check_scheduler_vm_alias() {
 }
 
 check_scheduler_vm_alias candidate-a cogni-candidate-a.vm.cognidao.org
-# preview uses the canonical cogni-<env> VM alias (cogni_vm_host_for_env) — the bare
-# preview.vm.cognidao.org record points at a dead VM (see PR #1486). production overlay
-# is not yet migrated off the bare name; its alias stays until prod is reprovisioned.
+# preview + production use the canonical cogni_vm_host_for_env alias — the bare
+# {preview,production}.vm.cognidao.org records point at DEAD VMs (84.32.110.92 /
+# 84.32.110.202). PR #1486 migrated preview; this migrates production
+# (cogni.vm.cognidao.org → 84.32.25.152, the live prod VM).
 check_scheduler_vm_alias preview cogni-preview.vm.cognidao.org
-check_scheduler_vm_alias production production.vm.cognidao.org
+check_scheduler_vm_alias production cogni.vm.cognidao.org
 
 echo "PASS: scheduler-runtime-routing.test.sh"
