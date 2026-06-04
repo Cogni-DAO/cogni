@@ -1201,6 +1201,41 @@ if command -v kubectl &>/dev/null; then
   HOST_IP=$(hostname -I | awk '{print $1}')
   log_info "  k8s namespace: ${K8S_NS}, host IP: ${HOST_IP}"
 
+  # ── Phase-1 read-path proof: OpenBao db-reader (Invariant 15 DB-cred migration) ─
+  # secrets-management.md "DB-credential provisioning" Phase 1. deploy-infra holds
+  # NO root token (Invariant 13); here it proves it can mint a least-privilege,
+  # READ-ONLY OpenBao token via the ${DEPLOY_ENVIRONMENT}-db-reader k8s-auth role
+  # and read the env's DB-cred tree — the same values ESO syncs to pods. Phase 2
+  # will USE this to render .env from OpenBao instead of GH secrets; Phase 1 only
+  # establishes + proves the path. STRICTLY NON-FATAL: any failure (db-reader role
+  # absent on a VM provisioned before this landed, OpenBao sealed, empty tree)
+  # logs a warning and never aborts the deploy. No secret VALUE is ever printed.
+  verify_openbao_db_read_path() {
+    local jwt tok
+    if ! kubectl get sa db-provisioner -n default >/dev/null 2>&1; then
+      log_warn "  [openbao-read-path] db-provisioner SA absent — VM predates Phase 1; reprovision to land the db-reader role. Skipping proof (non-fatal)."
+      return 0
+    fi
+    jwt=$(kubectl create token db-provisioner -n default 2>/dev/null) || {
+      log_warn "  [openbao-read-path] could not mint db-provisioner token; skipping proof (non-fatal)."
+      return 0
+    }
+    tok=$(kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
+      bao write -field=token auth/kubernetes/login \
+      "role=${DEPLOY_ENVIRONMENT}-db-reader" "jwt=${jwt}" 2>/dev/null) || {
+      log_warn "  [openbao-read-path] db-reader login failed (role absent / OpenBao sealed); skipping proof (non-fatal)."
+      return 0
+    }
+    if kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN="${tok}" \
+        bao kv list "cogni/${DEPLOY_ENVIRONMENT}" >/dev/null 2>&1; then
+      log_info "  [openbao-read-path] OK — db-reader listed cogni/${DEPLOY_ENVIRONMENT}/* (Phase 1 proven; no value echoed)."
+    else
+      log_warn "  [openbao-read-path] db-reader token minted but list returned nothing (empty tree?); path partially proven (non-fatal)."
+    fi
+    return 0
+  }
+  verify_openbao_db_read_path || true
+
   # ── Per-node secrets (catalog-driven: every type:node in NODE_APP_TARGETS) ──
   # bug.5086 — node list comes from infra/catalog (CATALOG_IS_SSOT), threaded in
   # from the local context, so a new node (e.g. canary) auto-provisions its

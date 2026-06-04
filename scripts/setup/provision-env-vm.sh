@@ -1431,6 +1431,33 @@ HCL
     ttl=1h" >/dev/null
   log_info "  ${DEPLOY_ENV}-writer role bound — operator: kubectl create token openbao-operator -n default | bao login -method=kubernetes role=${DEPLOY_ENV}-writer"
 
+  # ── 5b.4c db-provisioner reader role (deploy-infra single-source read path) ─
+  # secrets-management.md Invariant 15 / DB-cred migration Phase 1: deploy-infra
+  # runs on THIS VM with kubectl and must read pod-consumed DB role passwords from
+  # OpenBao — the SAME values ESO syncs — instead of a GH-secret-rendered .env, so
+  # the DB role and the pod can never diverge (bug.5002). It is NOT a writer and
+  # never holds the root token (Invariant 13): it mints a short-lived READ-ONLY
+  # token via this k8s-auth role, mirroring the operator writer-role pattern above
+  # (a second reader identity onto a read-only policy, not a new entry point —
+  # Invariant 9). Policy is env-WIDE (read-only on all cogni/<env>/* DB keys)
+  # because deploy-infra provisions every node on the VM, not one service.
+  log_info "Writing ${DEPLOY_ENV}-db-reader policy + role binding..."
+  ssh $SSH_OPTS root@"$VM_IP" \
+    "kubectl get sa db-provisioner -n default >/dev/null 2>&1 \
+       || kubectl create sa db-provisioner -n default"
+  ssh $SSH_OPTS root@"$VM_IP" \
+    "kubectl exec -i -n openbao openbao-0 -- env BAO_TOKEN='${ROOT_TOKEN}' BAO_ADDR=http://127.0.0.1:8200 bao policy write ${DEPLOY_ENV}-db-reader -" <<HCL
+path "cogni/data/${DEPLOY_ENV}/*"     { capabilities = ["read"] }
+path "cogni/metadata/${DEPLOY_ENV}"   { capabilities = ["list"] }
+path "cogni/metadata/${DEPLOY_ENV}/*" { capabilities = ["read", "list"] }
+HCL
+  bao_exec "write auth/kubernetes/role/${DEPLOY_ENV}-db-reader \
+    bound_service_account_names=db-provisioner \
+    bound_service_account_namespaces=default \
+    policies=${DEPLOY_ENV}-db-reader \
+    ttl=15m" >/dev/null
+  log_info "  ${DEPLOY_ENV}-db-reader role bound — deploy-infra: kubectl create token db-provisioner -n default | bao login -method=kubernetes role=${DEPLOY_ENV}-db-reader (read-only)"
+
   # ── 5b.4b GitHub Actions OIDC writer role (day-2, zero-laptop-cred path) ───
   # Ships spec secrets-management.md Invariant 9 Entry 2 (previously DEFERRED):
   # the `.github/workflows/secret-set.yml` workflow_dispatch federates a
