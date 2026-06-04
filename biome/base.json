@@ -247,6 +247,8 @@
         "packages/graph-execution-host/vitest.config.ts",
         "services/scheduler-worker/tsup.config.ts",
         "services/scheduler-worker/vitest.config.ts",
+        "services/knowledge-sync/tsup.config.ts",
+        "services/knowledge-sync/vitest.config.ts",
         "vitest.workspace.ts",
         "nodes/*/app/vitest.component.config.mts",
         "nodes/*/app/vitest.external.config.mts",
