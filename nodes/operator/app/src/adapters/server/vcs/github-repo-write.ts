@@ -28,6 +28,7 @@ import {
   insertScopeFilter,
   nextFreeNodePort,
   renderCatalog,
+  renderGitmodules,
   renderNodeAppset,
   renderOverlay,
   renderRepoSpec,
@@ -70,6 +71,20 @@ export interface OpenNodeAppPrInput {
 export interface OpenNodeAppPrResult {
   readonly prNumber: number;
   readonly prUrl: string;
+}
+
+/**
+ * Submodule-birth variant of {@link OpenNodeAppPrInput}: the node's ~1100 files live in an
+ * already-minted standalone repo (the submodule target), not inline in the operator tree. The
+ * operator PR pins that repo as a gitlink at `nodes/<slug>` + registers it in `.gitmodules`.
+ * Minting the repo (GitHub generate-from-template) is the caller's responsibility — it requires a
+ * standalone `node-template` template repo and is injected here as `nodeRepoUrl` + `nodeRepoHeadSha`.
+ */
+export interface OpenNodeSubmodulePrInput extends OpenNodeAppPrInput {
+  /** Clone URL of the minted node repo, written into `.gitmodules`. */
+  readonly nodeRepoUrl: string;
+  /** Default-branch HEAD commit SHA of the minted node repo — the gitlink pin. */
+  readonly nodeRepoHeadSha: string;
 }
 
 /** One entry in a `POST /git/trees` payload; `sha: null` deletes the path from `base_tree`. */
@@ -351,6 +366,111 @@ export class GitHubRepoWriter {
     return this.openOrFindPr(octokit, owner, repo, slug, branch);
   }
 
+  /**
+   * Submodule-birth sibling of {@link openNodeAppPr}: instead of inlining the node's ~1100 files into
+   * the operator tree, pin an already-minted node repo as a git submodule at `nodes/<slug>` (a
+   * `160000` gitlink) + register it in `.gitmodules`, alongside the same catalog/overlays/appsets/
+   * Caddyfile/scheduler/scope-filter footprint MINUS the lockfile (a submodule node is not a workspace
+   * member). The PR touches only operator-domain paths (bare gitlink + operator infra), so it passes
+   * single-node-scope as ONE domain — SUBMODULE_GITLINK_IS_OPERATOR_PIN (spec: node-ci-cd-contract,
+   * proven by single-node-scope fixture 19).
+   *
+   * Minting the node repo (GitHub generate-from-template — needs a standalone `node-template` template
+   * repo) is the caller's job; its result is injected as `nodeRepoUrl` + `nodeRepoHeadSha`.
+   */
+  async openNodeSubmodulePr(
+    input: OpenNodeSubmodulePrInput
+  ): Promise<OpenNodeAppPrResult> {
+    const { owner, repo, slug, nodeRepoUrl, nodeRepoHeadSha } = input;
+    const octokit = await this.getOctokit(owner, repo);
+
+    // a. Base commit → its root tree.
+    const { data: ref } = await octokit.request(
+      "GET /repos/{owner}/{repo}/git/ref/{ref}",
+      { owner, repo, ref: "heads/main" }
+    );
+    const baseCommitSha = ref.object.sha;
+    const { data: baseCommit } = await octokit.request(
+      "GET /repos/{owner}/{repo}/git/commits/{commit_sha}",
+      { owner, repo, commit_sha: baseCommitSha }
+    );
+    const baseTreeSha = baseCommit.tree.sha;
+
+    // b. Allocate the next free k3s NodePort.
+    const nodePort = await this.allocateNodePort(
+      octokit,
+      owner,
+      repo,
+      baseTreeSha
+    );
+    const port = CONTAINER_PORT;
+
+    // c. .gitmodules — append the submodule stanza over current main (create if absent).
+    const currentGitmodules = await this.readFileOnMain(
+      octokit,
+      owner,
+      repo,
+      ".gitmodules"
+    ).catch(() => null);
+    const gitmodulesSha = await this.createBlob(
+      octokit,
+      owner,
+      repo,
+      renderGitmodules(currentGitmodules, slug, nodeRepoUrl)
+    );
+
+    // d. Footprint — same control-plane gens as the inline path, MINUS the lockfile.
+    const footprintEntries = await this.buildFootprintEntries(
+      octokit,
+      owner,
+      repo,
+      input,
+      port,
+      nodePort,
+      { includeLockfile: false }
+    );
+
+    // e. Final tree = main's tree + the submodule GITLINK at nodes/<slug> + .gitmodules + footprint.
+    const { data: finalTree } = await octokit.request(
+      "POST /repos/{owner}/{repo}/git/trees",
+      {
+        owner,
+        repo,
+        base_tree: baseTreeSha,
+        tree: [
+          {
+            path: `nodes/${slug}`,
+            mode: "160000",
+            type: "commit",
+            sha: nodeRepoHeadSha,
+          },
+          {
+            path: ".gitmodules",
+            mode: "100644",
+            type: "blob",
+            sha: gitmodulesSha,
+          },
+          ...footprintEntries,
+        ],
+      }
+    );
+
+    // f. Commit → branch (idempotent) → PR.
+    const branch = `cogni-operator/node-submodule-${slug}`;
+    const { data: commit } = await octokit.request(
+      "POST /repos/{owner}/{repo}/git/commits",
+      {
+        owner,
+        repo,
+        message: `feat(node): pin ${slug} as a submodule`,
+        tree: finalTree.sha,
+        parents: [baseCommitSha],
+      }
+    );
+    await this.upsertRef(octokit, owner, repo, branch, commit.sha);
+    return this.openOrFindPr(octokit, owner, repo, slug, branch);
+  }
+
   /** Resolve the next free NodePort: read each `infra/catalog/*.yaml` `node_port`, then `+100`. */
   private async allocateNodePort(
     octokit: Octokit,
@@ -482,7 +602,8 @@ export class GitHubRepoWriter {
     repo: string,
     input: OpenNodeAppPrInput,
     port: number,
-    nodePort: number
+    nodePort: number,
+    opts: { readonly includeLockfile?: boolean } = {}
   ): Promise<GitTreeEntry[]> {
     const { slug, nodeId } = input;
     const entries: GitTreeEntry[] = [];
@@ -570,13 +691,21 @@ export class GitHubRepoWriter {
       insertSchedulerEndpoint(configmap, slug, nodeId)
     );
 
-    const lockfile = await this.readFileOnMain(
-      octokit,
-      owner,
-      repo,
-      FOOTPRINT.lockfile
-    );
-    await addBlob(FOOTPRINT.lockfile, insertLockfileImporters(lockfile, slug));
+    // pnpm-lock.yaml — INLINE nodes only. A submodule node is not a workspace member of the operator
+    // monorepo (its packages resolve in its own repo + lockfile), so the submodule-birth path skips
+    // this — the single biggest chunk of inline-only tax (knowledge: submodule-node-birth-design).
+    if (opts.includeLockfile !== false) {
+      const lockfile = await this.readFileOnMain(
+        octokit,
+        owner,
+        repo,
+        FOOTPRINT.lockfile
+      );
+      await addBlob(
+        FOOTPRINT.lockfile,
+        insertLockfileImporters(lockfile, slug)
+      );
+    }
 
     return entries;
   }
