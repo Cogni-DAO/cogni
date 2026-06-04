@@ -18,11 +18,10 @@
  * @internal
  */
 
-import {
-  InternalReviewCreateCheckRunOutputSchema,
-  InternalReviewPostPrCommentOutputSchema,
-  InternalReviewPrContextOutputSchema,
-  InternalReviewUpdateCheckRunOutputSchema,
+import type {
+  InternalReviewCreateCheckRunOutput,
+  InternalReviewPostPrCommentOutput,
+  InternalReviewPrContextOutput,
 } from "@cogni/node-contracts";
 import type { Logger } from "../observability/logger.js";
 import { type ReviewHttpClient, RunHttpClientError } from "../ports/index.js";
@@ -105,33 +104,37 @@ export function createReviewHttpClient(
     return response.json();
   }
 
+  // Responses are trusted by shape (cast, not re-validated) — same contract-typed
+  // delegation pattern as run-http.ts. The operator produced them from its own
+  // zod-validated route handlers.
   return {
     async createCheckRun(input) {
-      const json = await send("POST", "/api/internal/review/check-runs", input);
-      return InternalReviewCreateCheckRunOutputSchema.parse(json).checkRunId;
+      const json = (await send(
+        "POST",
+        "/api/internal/review/check-runs",
+        input
+      )) as InternalReviewCreateCheckRunOutput;
+      return json.checkRunId;
     },
 
     async updateCheckRun(input) {
-      const json = await send(
-        "PATCH",
-        "/api/internal/review/check-runs",
-        input
-      );
-      InternalReviewUpdateCheckRunOutputSchema.parse(json);
+      await send("PATCH", "/api/internal/review/check-runs", input);
     },
 
     async postPrComment(input) {
-      const json = await send(
+      return (await send(
         "POST",
         "/api/internal/review/pr-comments",
         input
-      );
-      return InternalReviewPostPrCommentOutputSchema.parse(json);
+      )) as InternalReviewPostPrCommentOutput;
     },
 
     async fetchPrContext(input) {
-      const json = await send("POST", "/api/internal/review/pr-context", input);
-      return InternalReviewPrContextOutputSchema.parse(json);
+      return (await send(
+        "POST",
+        "/api/internal/review/pr-context",
+        input
+      )) as InternalReviewPrContextOutput;
     },
   };
 }
