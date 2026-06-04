@@ -51,8 +51,10 @@ declare -ga NODE_BASELINE_KEYS=(
   # External integrations (source: human, gate-by-presence). _node_gets_key
   # gates each against the catalog: _shared/llm/web reach every node; PRIVY_*
   # (appliesTo: payments) + PRIVY_USER_WALLETS_* (service: poly) drop from
-  # non-poly nodes. GH_REVIEW_APP_* lives here AND in SCHEDULER_WORKER_KEYS so
-  # both the node-app pod and the worker receive it.
+  # non-poly nodes. GH_REVIEW_APP_* lives here for the node-app pods (operator
+  # owns the GitHub App auth). Per bug.5000 it is NO LONGER in
+  # SCHEDULER_WORKER_KEYS — the worker HTTP-delegates review GitHub I/O to the
+  # operator and holds no GitHub credential.
   DOLTHUB_REMOTE_URL DOLT_CREDS_JWK DOLT_CREDS_KEYID DOLTHUB_API_TOKEN
   TAVILY_API_KEY
   LANGFUSE_PUBLIC_KEY LANGFUSE_SECRET_KEY LANGFUSE_BASE_URL
@@ -68,8 +70,7 @@ declare -ga NODE_BASELINE_KEYS=(
 # OpenBao SSoT into .env for the runtime/.env (Compose) write.
 declare -ga NODE_TEMPLATE_KEYS=("${NODE_BASELINE_KEYS[@]}")
 declare -ga SCHEDULER_WORKER_KEYS=(
-  DATABASE_SERVICE_URL SCHEDULER_API_TOKEN GH_REVIEW_APP_ID
-  GH_REVIEW_APP_PRIVATE_KEY_BASE64 GH_WEBHOOK_SECRET
+  DATABASE_SERVICE_URL SCHEDULER_API_TOKEN GH_WEBHOOK_SECRET
   INTERNAL_OPS_TOKEN
 )
 # Compose-tier secrets — bootstrap postgres/temporal directly via runtime/.env,

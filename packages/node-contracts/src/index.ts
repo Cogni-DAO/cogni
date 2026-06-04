@@ -75,6 +75,8 @@ export * from "./payments.intent.v1.contract";
 export * from "./payments.status.v1.contract";
 export * from "./payments.submit.v1.contract";
 // Poly contracts moved to @cogni/poly-node-contracts (task.0421).
+// ── Review (internal GitHub plane) ──────────────────────────────────────────
+export * from "./review.internal.v1.contract";
 // ── Runs ────────────────────────────────────────────────────────────────────
 export * from "./run-stream.contract";
 export * from "./runs.stream.v1.contract";
