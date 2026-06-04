@@ -21,7 +21,13 @@
  * @internal
  */
 
-import type { ReviewCheckRunConclusion } from "@cogni/node-contracts";
+import type {
+  InternalReviewCreateCheckRunInput,
+  InternalReviewPostPrCommentInput,
+  InternalReviewPostPrCommentOutput,
+  InternalReviewPrContextInput,
+  InternalReviewUpdateCheckRunInput,
+} from "@cogni/node-contracts";
 import {
   extractGatesConfig,
   extractOwningNode,
@@ -66,12 +72,6 @@ export interface GithubReviewAdapterDeps {
   /** Base64-encoded PEM private key (GH_REVIEW_APP_PRIVATE_KEY_BASE64). */
   privateKeyBase64: string;
   logger: Logger;
-}
-
-export interface ReviewRepoTarget {
-  owner: string;
-  repo: string;
-  installationId: number;
 }
 
 /** Full review context returned to the worker. JSON-serializable. */
@@ -130,7 +130,7 @@ export function createGithubReviewAdapter(deps: GithubReviewAdapterDeps) {
 
   /** Create a Check Run in "in_progress" state. Returns its id. */
   async function createCheckRun(
-    target: ReviewRepoTarget & { headSha: string }
+    target: InternalReviewCreateCheckRunInput
   ): Promise<number> {
     const octokit = octokitFor(target.installationId);
     const response = await octokit.request(
@@ -149,12 +149,7 @@ export function createGithubReviewAdapter(deps: GithubReviewAdapterDeps) {
 
   /** Finalize a Check Run with a conclusion + formatted output. */
   async function updateCheckRun(
-    target: ReviewRepoTarget & {
-      checkRunId: number;
-      conclusion: ReviewCheckRunConclusion;
-      title: string;
-      summary: string;
-    }
+    target: InternalReviewUpdateCheckRunInput
   ): Promise<void> {
     const octokit = octokitFor(target.installationId);
     await octokit.request(
@@ -176,12 +171,8 @@ export function createGithubReviewAdapter(deps: GithubReviewAdapterDeps) {
    * PR head and skips the comment if it has moved (staleness guard).
    */
   async function postPrComment(
-    target: ReviewRepoTarget & {
-      prNumber: number;
-      body: string;
-      expectedHeadSha?: string;
-    }
-  ): Promise<{ posted: boolean; reason?: "stale" }> {
+    target: InternalReviewPostPrCommentInput
+  ): Promise<InternalReviewPostPrCommentOutput> {
     const octokit = octokitFor(target.installationId);
 
     if (target.expectedHeadSha) {
@@ -221,7 +212,7 @@ export function createGithubReviewAdapter(deps: GithubReviewAdapterDeps) {
 
   /** Fetch PR evidence, repo-spec, rules, and resolve the owning domain. */
   async function fetchPrContext(
-    target: ReviewRepoTarget & { prNumber: number }
+    target: InternalReviewPrContextInput
   ): Promise<PrReviewContext> {
     const octokit = octokitFor(target.installationId);
     const { owner, repo, prNumber } = target;
