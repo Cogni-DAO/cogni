@@ -18,6 +18,13 @@ This is the spec's named v1 — "reconciliation cron diffs dolt_log against orig
 
 v0 wires only the `operator` node. Per-node fan-out is config-driven and deferred.
 
+## Pointers
+
+- [Knowledge Data Plane Spec](../../docs/spec/knowledge-data-plane.md) — MIRROR_PROD_ONLY_WRITER, MIRROR_BEST_EFFORT_NO_RETRY
+- [Create a Service](../../docs/guides/create-service.md) — service structure contract
+- [DoltHub Remote Bootstrap](../../docs/runbooks/dolthub-remote-bootstrap.md) — Dolt creds + remote setup
+- [task.5069 spike findings](../../work/handoffs/task.5069.spike-findings.md) — PAT-write dead-end evidence
+
 ## The two paths (read before touching the adapters)
 
 | Path                                                | Adapter                    | Status                                                                                         |
@@ -104,7 +111,22 @@ src/
   best-effort reconciler never blocks a flight.
 - Mirror disabled on candidate-a/preview/dev (no `DOLTHUB_REMOTE_URL`) → healthy no-op.
 
+## Responsibilities
+
+- This directory **does**: trigger an idempotent, fast-forward `dolt_push` of a node's
+  Doltgres knowledge DB to its DoltHub remote on a schedule; gate the push on secret presence;
+  serve health/metrics; drain in-flight pushes on shutdown.
+- This directory **does not**: write knowledge rows (the app + contribution flow own that);
+  manage Dolt creds (the doltgres container does); read rows / introspect schema (`dolt_push`
+  mirrors the whole DB natively); ever emit a destructive Dolt op.
+
 ## Change Protocol
 
 - Update this file when env vars, adapters, or the safety guard change.
 - Changes require updating `infra/compose/runtime/docker-compose*.yml` and the k8s base.
+
+## Notes
+
+- The live writer is GRPC `dolt_push`; the DoltHub HTTP write API silently no-ops (2026-06-03 spike).
+- Per MIRROR_BEST_EFFORT_NO_RETRY: a failed push is logged and dropped — the next tick is the recovery.
+- candidate-a/preview boot with the mirror disabled (no `DOLTHUB_REMOTE_URL`) — a healthy no-op.
