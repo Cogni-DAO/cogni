@@ -203,10 +203,14 @@ export async function POST(request: Request, routeArgs: RouteParams) {
           slug: node.slug,
           ...identity,
         });
-        // Submodule-PR target = the operator monorepo (nodes live at nodes/<slug> there). Non-negotiable.
+        // Submodule-PR target = the operator's deployment monorepo (nodes live at nodes/<slug> there).
+        // Wizard-scoped, fail-open override: defaults to node.repoOwner/repoName (= getGithubRepo() =
+        // Cogni-DAO/cogni in prod, unchanged). candidate-a points it at a cogni-shaped mirror in the
+        // throwaway org so the test app can open the pin-PR without any Cogni-DAO access. Does NOT
+        // touch getGithubRepo()/operator identity.
         pr = await writer.openNodeSubmodulePr({
-          owner: node.repoOwner,
-          repo: node.repoName,
+          owner: env.NODE_SUBMODULE_PARENT_OWNER ?? node.repoOwner,
+          repo: env.NODE_SUBMODULE_PARENT_REPO ?? node.repoName,
           slug: node.slug,
           ...identity,
           nodeRepoUrl: minted.cloneUrl,
