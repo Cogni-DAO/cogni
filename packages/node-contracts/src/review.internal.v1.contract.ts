@@ -4,10 +4,7 @@
 /**
  * Module: `@contracts/review.internal.v1.contract`
  * Purpose: Wire contracts for the operator's internal PR-review GitHub plane.
- * Scope: Zod request/response shapes for POST /api/internal/review/* — the
- *   scheduler-worker's review activities HTTP-delegate every GitHub call to the
- *   operator, which owns the GitHub App auth (bug.5000). Does not implement the
- *   routes or business logic.
+ * Scope: Zod request/response shapes for POST /api/internal/review/* (worker→operator review delegation, bug.5000); does not implement the routes or business logic.
  * Invariants:
  *   - Bearer SCHEDULER_API_TOKEN required on every endpoint.
  *   - WORKER_HOLDS_NO_GITHUB_CRED: the App private key lives only in the operator.
