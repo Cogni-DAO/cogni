@@ -38,8 +38,6 @@ export interface NodeSummary {
   readonly thumbnailUrl: string;
   /** True for the node that serves the bare base domain (operator). */
   readonly primary?: boolean | undefined;
-  /** Governance/deployment identity, when known (sourced from repo-spec, never minted here). */
-  readonly nodeId?: string | undefined;
 }
 
 /** Read-model registry of discoverable nodes. */

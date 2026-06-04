@@ -16,11 +16,6 @@
 
 import type { ShowcaseNode } from "./nodes.data";
 
-export interface ResolvedShowcaseNode extends ShowcaseNode {
-  /** Live homepage URL, or "#" when no base domain is resolvable. */
-  href: string;
-}
-
 /** Resolve a base domain from env-shaped input: explicit DOMAIN wins, else APP_BASE_URL's host. */
 export function baseDomain(env: {
   DOMAIN?: string | undefined;
@@ -56,12 +51,4 @@ export function resolveHref(
   if (node.url) return node.url;
   if (!domain) return "#";
   return `https://${hostForNode(node.name, node.primary ?? false, domain)}`;
-}
-
-/** Resolve a list of curated nodes to renderable tiles. */
-export function resolveShowcaseNodes(
-  nodes: readonly ShowcaseNode[],
-  domain: string | undefined
-): readonly ResolvedShowcaseNode[] {
-  return nodes.map((node) => ({ ...node, href: resolveHref(node, domain) }));
 }

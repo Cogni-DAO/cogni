@@ -18,7 +18,6 @@ import {
   baseDomain,
   hostForNode,
   resolveHref,
-  resolveShowcaseNodes,
 } from "@/features/home/showcase/nodes.resolve";
 
 const node = (over: Partial<ShowcaseNode> = {}): ShowcaseNode => ({
@@ -99,19 +98,6 @@ describe("features/home/nodes.resolve", () => {
       expect(resolveHref(node(), "test.cognidao.org")).toBe(
         "https://resy-test.cognidao.org"
       );
-    });
-  });
-
-  describe("resolveShowcaseNodes", () => {
-    it("attaches an href to every node", () => {
-      const resolved = resolveShowcaseNodes(
-        [node({ name: "operator", primary: true }), node({ name: "canary" })],
-        "test.cognidao.org"
-      );
-      expect(resolved.map((n) => n.href)).toEqual([
-        "https://test.cognidao.org",
-        "https://canary-test.cognidao.org",
-      ]);
     });
   });
 });
