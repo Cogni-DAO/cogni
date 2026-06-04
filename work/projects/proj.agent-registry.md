@@ -160,6 +160,21 @@ The registry models two node **kinds**, which is just the existing `node-operato
 
 > Reconcile the **three** existing fragmented sources behind the one port: `infra/catalog/*.yaml` (monorepo full-app deploy targets) · operator `nodes` table (wizard formation state machine) · `operator_node_*` registration cache (`docs/spec/vcs-integration.md`, derived from registered repo-specs). The port is the single read model; these are its writers/feeders.
 
+### User ↔ node relations — "nodes I care about" (v1)
+
+Today the link is a single `nodes.ownerUserId` FK (creator-only, RLS-scoped): the authed nodes page lists _nodes you created_. Evolve it to a membership/relation model so the page becomes _nodes you care about_ drawn from the broader registry.
+
+| Relation      | Source                                                          | Plane               |
+| ------------- | --------------------------------------------------------------- | ------------------- |
+| `owner`       | created via wizard (`nodes.ownerUserId`)                        | off-chain           |
+| `admin`       | capability role (`operator_node_capabilities` / GH App install) | off-chain           |
+| `stakeholder` | holds the scope's `GovernanceERC20` (wallet balance > 0)        | **on-chain / web3** |
+| `follower`    | explicit "watch this node"                                      | off-chain           |
+
+- `NodeRegistryPort.listForUser(userId)` → `NodeSummary[]` carrying the user's relation(s); **distinct from `listPublic()`** (keeps `PUBLIC_READ_IS_SEPARATE`). Nodes page renders via the shared `NodeTile`, relation as a badge.
+- **Stakeholder is the key web3 tie**: DAO-token balance per `scope_id` = verifiable skin-in-the-game, _derived_ from wallet ↔ token (treasury-read port), never stored as truth.
+- Migration: `nodes.ownerUserId` → a `node_memberships(user_id, node_id, scope_id?, relation, source)` join; owner becomes one relation among many.
+
 ### Crawl (P0) — visual prototype (Done, PR #1479)
 
 | Deliverable                                                        | Status | Est | Work Item |
@@ -190,11 +205,12 @@ Establish the keystone seam with the simplest adapter; no DB migration yet. App-
 
 ### Run (P2+) — browse/sort + dynamic thumbnails
 
-| Deliverable                                                                                         | Status      | Est | Work Item            |
-| --------------------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
-| Homepage sorting / filtering / pagination UI over the port                                          | Not Started | 2   | (create at P2 start) |
-| Dynamic thumbnails: per-node `opengraph-image` route OR build-time screenshot job → `thumbnail_url` | Not Started | 2   | (create at P2 start) |
-| Cross-repo nodes (operator indexing N external node repos)                                          | Not Started | 3   | (create at P2 start) |
+| Deliverable                                                                                                                   | Status      | Est | Work Item            |
+| ----------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
+| Homepage sorting / filtering / pagination UI over the port                                                                    | Not Started | 2   | (create at P2 start) |
+| Dynamic thumbnails: per-node `opengraph-image` route OR build-time screenshot job → `thumbnail_url`                           | Not Started | 2   | (create at P2 start) |
+| Cross-repo nodes (operator indexing N external node repos)                                                                    | Not Started | 3   | (create at P2 start) |
+| User↔node relations: `node_memberships` + `listForUser` + on-chain stakeholder derivation; nodes page = "nodes I care about" | Not Started | 3   | (create at P2 start) |
 
 ### Node Registry Constraints
 
