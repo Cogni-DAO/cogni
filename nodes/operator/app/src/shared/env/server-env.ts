@@ -155,6 +155,22 @@ export const serverSchema = z.object({
   GH_REVIEW_APP_ID: optionalString,
   GH_REVIEW_APP_PRIVATE_KEY_BASE64: optionalString,
 
+  // Node-formation Publish: where new node repos are minted + where the node-template lives.
+  // Env-scoped, NOT derived from the operator's own monorepo org (the submodule-PR target) — a
+  // test/candidate operator must have zero access to Cogni-DAO, so mint-owner is set explicitly
+  // per env (prod → Cogni-DAO; candidate/preview → a throwaway org like `cogni-nodes-test`). The
+  // publish route fails closed (503) when unset, so no env can accidentally mint into its monorepo.
+  NODE_MINT_OWNER: optionalString,
+  NODE_TEMPLATE_OWNER: optionalString,
+
+  // Node-formation Publish: the submodule-PIN-PR target (the operator's deployment monorepo).
+  // Wizard-scoped override ONLY — does NOT touch getGithubRepo()/operator identity. Fail-open: when
+  // unset, the pin-PR targets `node.repoOwner/repoName` (= Cogni-DAO/cogni in prod, unchanged). Set
+  // on candidate-a to a cogni-shaped mirror in the throwaway org so the test app can open the pin-PR
+  // without any Cogni-DAO access.
+  NODE_SUBMODULE_PARENT_OWNER: optionalString,
+  NODE_SUBMODULE_PARENT_REPO: optionalString,
+
   // Billing ingest token - Bearer auth for LiteLLM generic_api callback → billing ingest endpoint
   // Per billing-ingest-spec: CALLBACK_AUTHENTICATED invariant. Min 32 chars to reduce weak-token risk.
   // Required: Billing ingest endpoint will reject all callbacks without this token.

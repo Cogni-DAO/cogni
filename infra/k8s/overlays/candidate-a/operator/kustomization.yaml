@@ -38,6 +38,24 @@ patches:
       - op: add
         path: /data/NEXTAUTH_URL
         value: "https://test.cognidao.org"
+      # Node-formation mint target — candidate-a mints node repos into the disposable
+      # cogni-test-org (zero Cogni-DAO access); cogni-operator-test holds admin there.
+      # Fail-closed: the publish route 503s if these are unset.
+      - op: add
+        path: /data/NODE_MINT_OWNER
+        value: "cogni-test-org"
+      - op: add
+        path: /data/NODE_TEMPLATE_OWNER
+        value: "cogni-test-org"
+      # Submodule pin-PR target — a cogni-shaped mirror in the throwaway org so the test app
+      # (cogni-operator-test, zero Cogni-DAO access) can open the pin-PR. Wizard-scoped override;
+      # prod leaves these unset → pin-PR falls back to Cogni-DAO/cogni.
+      - op: add
+        path: /data/NODE_SUBMODULE_PARENT_OWNER
+        value: "cogni-test-org"
+      - op: add
+        path: /data/NODE_SUBMODULE_PARENT_REPO
+        value: "cogni-monorepo"
   - target:
       kind: Service
       name: node-app
