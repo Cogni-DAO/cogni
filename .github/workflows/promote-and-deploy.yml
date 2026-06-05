@@ -339,6 +339,28 @@ jobs:
           WRAPPER
           chmod +x "${wrapper_dir}/bao"
 
+          if kubectl -n cogni-preview get secret operator-node-app-secrets >/dev/null 2>&1; then
+            echo "Backfilling preview/operator OpenBao leaf from current legacy Kubernetes secret keys"
+            count=0
+            keys=$(kubectl -n cogni-preview get secret operator-node-app-secrets \
+              -o go-template='{{range $k, $_ := .data}}{{printf "%s\n" $k}}{{end}}')
+            for key in $keys; do
+              [ -n "$key" ] || continue
+              kubectl -n cogni-preview get secret operator-node-app-secrets \
+                -o "jsonpath={.data.${key}}" \
+                | base64 -d \
+                | PATH="${wrapper_dir}:$PATH" \
+                  REPO_ROOT="$REMOTE_DIR" \
+                  BAO_ADDR=http://127.0.0.1:8200 \
+                  BAO_TOKEN="$bao_token" \
+                  bash scripts/secrets/set-secret.sh preview operator "$key" >/dev/null
+              count=$((count + 1))
+            done
+            echo "Backfilled ${count} preview/operator keys into OpenBao"
+          else
+            echo "::warning::Legacy operator-node-app-secrets is absent; continuing with existing OpenBao values"
+          fi
+
           printf '%s' "$PROOF_VALUE" | \
             PATH="${wrapper_dir}:$PATH" \
             REPO_ROOT="$REMOTE_DIR" \
@@ -821,10 +843,15 @@ jobs:
             exit 1
           fi
 
+          kubectl -n cogni-preview get pods -l "$selector" --no-headers 2>/dev/null \
+            | awk '$3 ~ /^Init:CrashLoopBackOff/ {print $1}' \
+            | xargs -r kubectl -n cogni-preview delete pod
+
           dump_diagnostics() {
             echo "operator-env-secrets keys:" >&2
-            kubectl -n cogni-preview get secret operator-env-secrets -o json \
-              | jq -r '.data | keys | sort | join(",")' >&2 || true
+            kubectl -n cogni-preview get secret operator-env-secrets \
+              -o go-template='{{range $k, $_ := .data}}{{printf "%s\n" $k}}{{end}}' \
+              | sort | paste -sd, - >&2 || true
             kubectl -n cogni-preview get pods -l "$selector" -o wide >&2 || true
             for p in $(kubectl -n cogni-preview get pods -l "$selector" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
               echo "=== describe pod/${p} ===" >&2
