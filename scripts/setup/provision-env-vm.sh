@@ -2064,6 +2064,17 @@ log_step "Phase 9: Verify /readyz on all nodes (up to 5 min)"
 
 READYZ_OK=true
 for node in "${NODE_TARGETS[@]}"; do
+  # Per-env node membership (bug: candidate-b 2026-06-04). NODE_TARGETS is the
+  # GLOBAL catalog (every type:node), but an env deploys only the nodes its
+  # ApplicationSet declares — i.e. the nodes with an overlay under
+  # infra/k8s/overlays/${OVERLAY_DIR}/ (the same env-scoped set Phase 4b.5 uses).
+  # Verifying an undeclared node (candidate-b is a 3-node OpenBao-proof env, no
+  # operator/resy overlay) reds a correctly-provisioned env. Skip what this env
+  # doesn't deploy.
+  if [[ ! -d "$REPO_ROOT/infra/k8s/overlays/${OVERLAY_DIR}/${node}" ]]; then
+    log_info "  ${node}: not in ${DEPLOY_ENV} overlays — not deployed here, skipping /readyz"
+    continue
+  fi
   catalog_file="$REPO_ROOT/infra/catalog/${node}.yaml"
   node_port=$(yq -N '.node_port // ""' "$catalog_file" 2>/dev/null)
   if [[ -z "$node_port" || "$node_port" == "null" ]]; then
@@ -2138,10 +2149,10 @@ fi
 
 echo ""
 if [[ "$READYZ_OK" == "true" ]]; then
-  log_info "═══ ALL NODES HEALTHY — CANARY IS GREEN ═══"
+  log_info "═══ ALL DECLARED NODES HEALTHY — ${DEPLOY_ENV} IS GREEN ═══"
   exit 0
 else
-  log_error "═══ SOME NODES FAILED /readyz — CANARY IS RED ═══"
+  log_error "═══ SOME NODES FAILED /readyz — ${DEPLOY_ENV} PROVISION IS RED ═══"
   phase_9_diagnostic
   log_error "Debug: ssh -i .local/${DEPLOY_ENV}-vm-key root@$VM_IP 'kubectl -n ${K8S_NAMESPACE} logs -l app.kubernetes.io/name=node-app --tail=20'"
   exit 1
