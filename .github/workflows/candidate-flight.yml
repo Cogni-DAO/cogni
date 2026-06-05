@@ -198,6 +198,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: candidate-a
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          path: ci-src
+
       - name: Checkout app source (for AppSet YAML)
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
@@ -229,18 +234,20 @@ jobs:
           NODE: ${{ matrix.node }}
         run: |
           set -euo pipefail
+          # shellcheck source=ci-src/scripts/ci/lib/ssh-retry.sh
+          . ci-src/scripts/ci/lib/ssh-retry.sh
           APPSET_FILE="app-src/infra/k8s/argocd/candidate-a-${NODE}-applicationset.yaml"
           if [ ! -f "$APPSET_FILE" ]; then
             echo "::error::$APPSET_FILE missing at head_sha — run 'pnpm gen:node-appset' (CATALOG_IS_SSOT)"
             exit 1
           fi
           # shellcheck disable=SC2086
-          scp $SSH_OPTS "$APPSET_FILE" root@"$VM_HOST":/tmp/appset-${NODE}.yaml
+          ci_ssh_retry scp $SSH_OPTS "$APPSET_FILE" root@"$VM_HOST":/tmp/appset-${NODE}.yaml
           # Anti-resurrection: the legacy shared `cogni-candidate-a` AppSet is
           # retired. Orphan-delete (never prune its live Applications) so it can
           # never reappear to re-clobber this lane, then apply the per-node object.
           # shellcheck disable=SC2086
-          ssh $SSH_OPTS root@"$VM_HOST" "kubectl delete applicationset cogni-candidate-a -n argocd --cascade=orphan --ignore-not-found && kubectl apply -f /tmp/appset-${NODE}.yaml -n argocd && rm -f /tmp/appset-${NODE}.yaml"
+          ci_ssh_retry ssh $SSH_OPTS root@"$VM_HOST" "kubectl delete applicationset cogni-candidate-a -n argocd --cascade=orphan --ignore-not-found && kubectl apply -f /tmp/appset-${NODE}.yaml -n argocd && rm -f /tmp/appset-${NODE}.yaml"
 
   flight:
     needs: [decide, reconcile-appset]
