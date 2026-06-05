@@ -192,7 +192,7 @@ export function getDaoTreasuryAddress(): string | undefined {
 // so the operator can dispatch flights for any registered node repo without cross-pollination
 // between app credentials and repo identity. Until then, single-tenant hardcode here only.
 const OPERATOR_GITHUB_REPO = {
-  owner: "Cogni-DAO",
+  owner: "cogni-dao",
   repo: "cogni",
 } as const;
 
