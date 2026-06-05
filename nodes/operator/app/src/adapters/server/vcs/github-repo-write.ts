@@ -24,7 +24,6 @@ import {
   insertAppsetKustomization,
   insertCaddyBlock,
   insertSchedulerEndpoint,
-  insertScopeFilter,
   nextFreeNodePort,
   renderCatalog,
   renderGitmodules,
@@ -605,13 +604,11 @@ export class GitHubRepoWriter {
       insertCaddyBlock(caddyfile, slug, nodePort)
     );
 
-    const ciYaml = await this.readFileOnMain(
-      octokit,
-      owner,
-      repo,
-      FOOTPRINT.ciYaml
-    );
-    await addBlob(FOOTPRINT.ciYaml, insertScopeFilter(ciYaml, slug));
+    // No ci.yaml scope-filter splice: a submodule node carries NO single-node-scope
+    // filter (SUBMODULE_GITLINK_IS_OPERATOR_PIN). Emitting a `nodes/<slug>/**` filter
+    // would make picomatch's globstar match the bare gitlink `nodes/<slug>`, so the pin
+    // misclassifies as node-domain and single-node-scope false-fails. With no filter the
+    // gitlink falls to operator's `**`. Mirrors render-scope-filters.sh's submodule skip.
 
     const configmap = await this.readFileOnMain(
       octokit,
