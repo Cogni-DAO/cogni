@@ -79,6 +79,9 @@ const ALLOWED_ROOT_ENTRIES = new Set<string>([
   ".env.test.example",
   ".github",
   ".gitignore",
+  // Submodule-pinned nodes (SUBMODULE_GITLINK_IS_OPERATOR_PIN): the wizard's node
+  // birth writes a root `.gitmodules` declaring `nodes/<slug>` gitlinks.
+  ".gitmodules",
   ".husky",
   ".mcp.json",
   ".nvmrc",

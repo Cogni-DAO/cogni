@@ -44,6 +44,7 @@ declare -A _image_tags_primary_cache=()
 declare -A _image_tags_node_port_cache=()
 declare -A _image_tags_node_id_cache=()
 declare -A _image_tags_type_cache=()
+declare -A _image_tags_pathprefix_cache=()
 for _t in "${ALL_TARGETS[@]}"; do
   _ty=$(yq -N '.type' "${_image_tags_catalog_root}/${_t}.yaml")
   _image_tags_type_cache["$_t"]="$_ty"
@@ -57,6 +58,7 @@ for _t in "${ALL_TARGETS[@]}"; do
   # node_id from repo-spec (REPO_SPEC_IS_IDENTITY_SSOT), located via the
   # catalog path_prefix. Services (no path_prefix / no repo-spec) → empty.
   _pp=$(yq -N '.path_prefix // ""' "${_image_tags_catalog_root}/${_t}.yaml")
+  _image_tags_pathprefix_cache["$_t"]="$_pp"
   _rs="${_image_tags_spec_root}/${_pp}.cogni/repo-spec.yaml"
   if [ -n "$_pp" ] && [ -f "$_rs" ]; then
     _nid=$(yq -N '.node_id // ""' "$_rs")
@@ -71,6 +73,24 @@ unset _t _ty _s _p _np _pp _rs _nid
 # not k8s/Argo. Overlay / promotion / gitops-coverage loops skip these.
 is_infra_target() {
   [ "${_image_tags_type_cache[$1]:-}" = "infra" ]
+}
+
+# SUBMODULE_GITLINK_IS_OPERATOR_PIN (docs/spec/node-ci-cd-contract.md): a node
+# whose `nodes/<slug>` is a git submodule gitlink (recorded in `.gitmodules`).
+# Its app tree lives in its OWN repo and is built by its OWN CI — the parent
+# monorepo only holds the pin. Such a node still has a catalog entry (deploy
+# shape) + appears in ALL_TARGETS/NODE_TARGETS, but MUST be excluded from parent
+# BUILD/flight: the gitlink has no app tree (`lstat nodes/<slug>/app: no such
+# file`). Keyed off `.gitmodules` (the gitlink is the SSOT, never a catalog flag
+# that could drift). No-op when `.gitmodules` is absent (in-tree-only forks).
+_image_tags_gitmodules="${_image_tags_spec_root}/.gitmodules"
+is_submodule_node() {
+  local target="$1" pp gl
+  pp="${_image_tags_pathprefix_cache[$target]:-}"
+  [ -n "$pp" ] || return 1
+  gl="${pp%/}"
+  [ -f "$_image_tags_gitmodules" ] || return 1
+  grep -qE "^[[:space:]]*path[[:space:]]*=[[:space:]]*${gl}[[:space:]]*\$" "$_image_tags_gitmodules"
 }
 
 image_name_for_target() {
