@@ -344,6 +344,26 @@ jobs:
             [ "$(tr -d '\r\n' <"$1" | wc -c | tr -d '[:space:]')" -gt 0 ]
           }
 
+          doltgres_url_authenticates() {
+            local value_file="$1"
+            local probe_pod="$2"
+            [ -n "$probe_pod" ] || return 0
+            kubectl -n cogni-preview exec -i "$probe_pod" -c app -- /bin/sh -c \
+              'cd "/app/nodes/${NODE_NAME}/app" && node --input-type=module -e '"'"'
+                import postgres from "postgres";
+                let url = "";
+                for await (const chunk of process.stdin) url += chunk;
+                const sql = postgres(url, { max: 1, connect_timeout: 5, idle_timeout: 1 });
+                try {
+                  await sql.unsafe("select 1");
+                  await sql.end({ timeout: 1 });
+                } catch {
+                  try { await sql.end({ timeout: 1 }); } catch {}
+                  process.exit(1);
+                }
+              '"'"'' <"$value_file" >/dev/null 2>&1
+          }
+
           if kubectl -n cogni-preview get secret operator-node-app-secrets >/dev/null 2>&1; then
             echo "Backfilling preview/operator OpenBao leaf from current legacy Kubernetes secret keys"
             count=0
@@ -392,6 +412,32 @@ jobs:
                 echo "Skipping empty legacy key ${key}"
                 rm -f "$tmp_value"
                 continue
+              fi
+              if [ "$key" = "DOLTGRES_URL" ] && [ -n "$legacy_pod" ]; then
+                if doltgres_url_authenticates "$tmp_value" "$legacy_pod"; then
+                  echo "DOLTGRES_URL auth probe passed for ${source}"
+                elif [ "$source" = "healthy legacy pod env" ]; then
+                  echo "::warning::DOLTGRES_URL from healthy legacy pod env did not authenticate; trying Kubernetes Secret object"
+                  : >"$tmp_value"
+                  source=""
+                  kubectl -n cogni-preview get secret operator-node-app-secrets \
+                    -o "jsonpath={.data.${key}}" \
+                    | base64 -d >"$tmp_value"
+                  if has_non_newline_content "$tmp_value"; then
+                    source="legacy Kubernetes Secret object"
+                  fi
+                  if [ -n "$source" ] && doltgres_url_authenticates "$tmp_value" "$legacy_pod"; then
+                    echo "DOLTGRES_URL auth probe passed for ${source}"
+                  else
+                    echo "::error::No non-empty legacy DOLTGRES_URL source authenticated against Doltgres"
+                    rm -f "$tmp_value"
+                    exit 1
+                  fi
+                else
+                  echo "::error::DOLTGRES_URL from ${source} did not authenticate against Doltgres"
+                  rm -f "$tmp_value"
+                  exit 1
+                fi
               fi
               echo "Backfilling key ${key} from ${source}"
               PATH="${wrapper_dir}:$PATH" \
