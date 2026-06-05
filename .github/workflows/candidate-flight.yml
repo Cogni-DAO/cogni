@@ -185,8 +185,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
+          username: ${{ secrets.GHCR_DEPLOY_USERNAME || github.actor }}
+          password: ${{ secrets.GHCR_DEPLOY_TOKEN || github.token }}
 
       - name: Resolve PR image digests
         id: images
@@ -195,7 +195,7 @@ jobs:
         env:
           IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
           SOURCE_SHA: ${{ steps.meta.outputs.head_sha }}
-          SUBMODULE_BIRTHS_FILE: ${{ runner.temp }}/submodule-births.json
+          SUBMODULE_BIRTHS_FILE: ${{ steps.submodule-births.outputs.births_file }}
           OUTPUT_FILE: ${{ runner.temp }}/resolved-pr-images.json
         run: bash scripts/ci/resolve-pr-build-images.sh
 
