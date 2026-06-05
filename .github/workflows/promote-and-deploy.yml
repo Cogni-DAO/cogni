@@ -791,13 +791,31 @@ jobs:
           set -euo pipefail
           PROOF_SHA=$(printf '%s' "$PROOF_VALUE" | sha256sum | awk '{print $1}')
           echo "Verifying ESO_PREVIEW_PROOF in running operator pod, expected sha256=${PROOF_SHA}"
+          REMOTE_DIR="/tmp/eso-preview-operator-verify-${GITHUB_RUN_ID}"
+          tar -czf /tmp/eso-preview-operator-overlay.tgz \
+            -C deploy-branch \
+            infra/k8s/base \
+            infra/k8s/overlays/preview/operator
+          # shellcheck disable=SC2086
+          ssh $SSH_OPTS root@"$VM_HOST" "rm -rf '$REMOTE_DIR' && mkdir -p '$REMOTE_DIR'"
+          # shellcheck disable=SC2086
+          scp $SSH_OPTS /tmp/eso-preview-operator-overlay.tgz root@"$VM_HOST":"$REMOTE_DIR/payload.tgz"
           # shellcheck disable=SC2086
           ssh $SSH_OPTS root@"$VM_HOST" \
-            "PROOF_VALUE='$PROOF_VALUE' bash -s" <<'REMOTE'
+            "REMOTE_DIR='$REMOTE_DIR' PROOF_VALUE='$PROOF_VALUE' bash -s" <<'REMOTE'
           set -euo pipefail
+          cd "$REMOTE_DIR"
+          tar -xzf payload.tgz
           selector='app.kubernetes.io/name=node-app,app.kubernetes.io/instance=operator'
           secret_ref=$(kubectl -n cogni-preview get deploy operator-node-app \
             -o jsonpath='{.spec.template.spec.containers[?(@.name=="app")].envFrom[1].secretRef.name}')
+          if [ "$secret_ref" != "operator-env-secrets" ]; then
+            echo "operator-node-app still references $secret_ref; applying deploy/preview-operator overlay"
+            kubectl apply -k infra/k8s/overlays/preview/operator
+            kubectl -n cogni-preview rollout status deployment/operator-node-app --timeout=180s
+            secret_ref=$(kubectl -n cogni-preview get deploy operator-node-app \
+              -o jsonpath='{.spec.template.spec.containers[?(@.name=="app")].envFrom[1].secretRef.name}')
+          fi
           if [ "$secret_ref" != "operator-env-secrets" ]; then
             echo "operator-node-app app container still references $secret_ref, expected operator-env-secrets" >&2
             exit 1
