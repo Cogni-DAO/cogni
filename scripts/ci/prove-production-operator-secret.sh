@@ -20,31 +20,23 @@ require() {
   }
 }
 require kubectl
-require jq
 require timeout
 
-kubectl -n "$K8S_NS" get secret operator-node-app-secrets -o json \
-  | jq -e '.data.NODE_MINT_OWNER and .data.NODE_TEMPLATE_OWNER' >/dev/null
+test -n "$(kubectl -n "$K8S_NS" get secret operator-node-app-secrets -o jsonpath='{.data.NODE_MINT_OWNER}')"
+test -n "$(kubectl -n "$K8S_NS" get secret operator-node-app-secrets -o jsonpath='{.data.NODE_TEMPLATE_OWNER}')"
 echo "operator-node-app-secrets has required mint keys (values redacted)"
 
-start_epoch="$(date -u +%s)"
 kubectl -n "$K8S_NS" rollout restart deployment/operator-node-app
 
 pod=""
-deadline="$((start_epoch + 420))"
+deadline="$(($(date -u +%s) + 420))"
 while [ "$(date -u +%s)" -lt "$deadline" ]; do
   pod="$(
     timeout 20 kubectl -n "$K8S_NS" get pods \
       -l app.kubernetes.io/name=node-app,app.kubernetes.io/instance=operator \
-      -o json \
-      | jq -r --argjson start "$start_epoch" '
-          .items[]
-          | select(.metadata.deletionTimestamp == null)
-          | select((.metadata.creationTimestamp | fromdateiso8601) >= $start)
-          | select(any(.status.containerStatuses[]?; .name == "app" and .ready == true))
-          | .metadata.name
-        ' \
-      | tail -n 1
+      --sort-by=.metadata.creationTimestamp \
+      -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.deletionTimestamp}{"\t"}{range .status.containerStatuses[?(@.name=="app")]}{.ready}{end}{"\n"}{end}' \
+      | awk -F '\t' '$2 == "" && $3 == "true" { pod = $1 } END { print pod }'
   )"
   if [ -n "$pod" ]; then
     break
