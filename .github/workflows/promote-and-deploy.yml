@@ -31,12 +31,11 @@ on:
         type: choice
         options: ["true", "false"]
       deploy_infra_mode:
-        description: "deploy-infra mode. full reconciles Compose + k8s bridge secrets; k8s-secrets-only syncs pod secrets without Compose; operator-secret-proof restarts/checks prod operator runtime env; operator-secret-check checks without restart."
+        description: "deploy-infra mode. full reconciles Compose + k8s bridge secrets; k8s-secrets-only syncs pod secrets without Compose."
         required: false
         default: full
         type: choice
-        options:
-          [full, k8s-secrets-only, operator-secret-proof, operator-secret-check]
+        options: [full, k8s-secrets-only]
 
 permissions:
   contents: write
@@ -575,15 +574,6 @@ jobs:
         if: env.VM_HOST != ''
         run: |
           mode="${{ inputs.deploy_infra_mode || 'full' }}"
-          if [ "$mode" = "operator-secret-proof" ]; then
-            K8S_NS="cogni-${{ needs.decide.outputs.environment }}" bash scripts/ci/prove-production-operator-secret.sh
-            exit 0
-          fi
-          if [ "$mode" = "operator-secret-check" ]; then
-            PROOF_RESTART=false K8S_NS="cogni-${{ needs.decide.outputs.environment }}" bash scripts/ci/prove-production-operator-secret.sh
-            exit 0
-          fi
-
           args=(--ref main)
           if [ "$mode" = "k8s-secrets-only" ]; then
             args+=(--k8s-secrets-only)
@@ -623,8 +613,6 @@ jobs:
     needs: [decide, promote-k8s, deploy-infra, reconcile-dns]
     if: |
       always() &&
-      (inputs.deploy_infra_mode || 'full') != 'operator-secret-proof' &&
-      (inputs.deploy_infra_mode || 'full') != 'operator-secret-check' &&
       needs.promote-k8s.result == 'success' &&
       (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped')
     strategy:
@@ -729,8 +717,6 @@ jobs:
     needs: [decide, promote-k8s, deploy-infra]
     if: |
       always() &&
-      (inputs.deploy_infra_mode || 'full') != 'operator-secret-proof' &&
-      (inputs.deploy_infra_mode || 'full') != 'operator-secret-check' &&
       needs.promote-k8s.result == 'success' &&
       (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped')
     environment: ${{ needs.decide.outputs.environment }}
