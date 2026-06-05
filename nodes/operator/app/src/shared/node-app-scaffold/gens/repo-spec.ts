@@ -11,8 +11,13 @@
  *   `pending_activation` (formation is governance-only).
  * Invariants: REPO_SPEC_IS_IDENTITY_SSOT — `node_id` is the single identity authority. SCOPE_ID_IS_DERIVED
  *   — `scope_id = uuidv5("default", node_id)`, matching `features/nodes/repo-spec-builder`. FORMATION_IS_GOVERNANCE_ONLY.
+ *   BORN_REVIEWABLE — the mint overwrites the template's `.cogni/repo-spec.yaml` wholesale, so the
+ *   default review `gates:` MUST be emitted here or every minted node is born with zero gates
+ *   ("no gates, pass" — the `cogni-test-org/ay` gap). The rule files the gates reference ship in the
+ *   node-template repo (`.cogni/rules/`, copied verbatim by generate-from-template) and stay in
+ *   lockstep with `nodes/node-template/.cogni/rules/`. Gate set coordinated with Lane A (review path).
  * Side-effects: none — pure function, no IO, no env.
- * Links: nodes/node-template/.cogni/repo-spec.yaml, src/features/nodes/repo-spec-builder.ts, task.5092
+ * Links: nodes/node-template/.cogni/repo-spec.yaml, nodes/node-template/.cogni/rules/, src/features/nodes/repo-spec-builder.ts, docs/spec/node-ci-cd-contract.md, task.5092
  * @public
  */
 
@@ -64,5 +69,24 @@ ${daoLines}
 # Payment rails — activate with: pnpm node:activate-payments
 payments:
   status: pending_activation
+
+# Born-reviewable default gates (BORN_REVIEWABLE). No \`nodes:\` registry → the operator's
+# review path resolves this minted repo as a single-node fork and runs these gates against
+# the repo-root \`.cogni/rules/\` shipped by the node-template. Tune per node post-mint.
+gates:
+  - type: review-limits
+    id: review_limits
+    with:
+      max_changed_files: 50
+      max_total_diff_kb: 1500
+  - type: ai-rule
+    with:
+      rule_file: pr-syntropy-coherence.yaml
+  - type: ai-rule
+    with:
+      rule_file: patterns-and-docs.yaml
+  - type: ai-rule
+    with:
+      rule_file: repo-goal-alignment.yaml
 `;
 }
