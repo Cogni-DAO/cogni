@@ -109,6 +109,19 @@ function confidenceColor(pct: number): string {
 // the entries' confidence hue is the only color signal.
 const HUB_COLOR = "#94a3b8";
 
+// nodeLabel is injected as HTML by the graph lib; knowledge titles/ids are
+// agent- and externally-authored (untrusted), so escape before interpolation.
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c] ?? c);
+}
+
 export function GraphView({ rows }: { readonly rows: KnowledgeRow[] }) {
   const graphQuery = useQuery({
     queryKey: ["knowledge", "graph"],
@@ -183,9 +196,10 @@ export function GraphView({ rows }: { readonly rows: KnowledgeRow[] }) {
 
   const nodeLabel = useCallback((node: GraphNodeObject) => {
     if (node.isHub) {
-      return `<b>${node.domain}</b> · ${node.entryCount} entries`;
+      return `<b>${escapeHtml(node.domain)}</b> · ${node.entryCount} entries`;
     }
-    return `<div style="max-width:240px"><b>${node.title}</b><br/><span style="opacity:.6">${node.id} · ${node.entryType ?? ""} · ${node.confidencePct ?? "?"}%</span></div>`;
+    const meta = `${escapeHtml(node.id)} · ${escapeHtml(node.entryType ?? "")} · ${node.confidencePct ?? "?"}%`;
+    return `<div style="max-width:240px"><b>${escapeHtml(node.title)}</b><br/><span style="opacity:.6">${meta}</span></div>`;
   }, []);
 
   const linkColor = useCallback((link: GraphLinkObject) => {
