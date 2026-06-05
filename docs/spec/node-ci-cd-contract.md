@@ -212,6 +212,17 @@ All three repos carry the node **app + its merge-gate CI + image build**. They d
 
 **Derivation (this is P1).** `node-template` = the canonical node source in the cogni monorepo (`nodes/node-template/{app,graphs,k8s,packages}`) **projected to repo root**, plus the node-level CI/policy, **minus the deploy/infra plane**. The projection is path-identical (the sync feature `detect-sync-drift.mjs` lacks; #1366); the omit-column above _is_ the projection's exclusion list. This keeps `node-template` in lockstep with the canonical node without ever shipping it the operator's plane.
 
+### Node-dev vs operator split — adding a secret or service to a submodule node
+
+A submodule node-dev carries CI but **not** the deploy/infra plane, so the monorepo guides ([create-service](../guides/create-service.md), [secrets-add-new](../guides/secrets-add-new.md)) split into a **node-dev half (declare _shape_ in your repo)** and an **operator half (the plane _provisions_ it)**. The node-dev never edits `infra/catalog`, runs `provision-env`, or touches Argo — those are the operator's. `node-template` ships a node-scoped `AGENTS.md` pointing at exactly the node-dev half below; the full guides stay the operator's reference.
+
+| Task | Node-dev does (in their repo, their CI) | Operator's plane does |
+| --- | --- | --- |
+| **Add a secret** | Declare the key's _shape_ in `.cogni/secrets-catalog.yaml` (node-domain). Consume it via typed env in app code (fail-fast if missing). | Selective-init reads the catalog → generates the ExternalSecret + OpenBao path. **Value** is set with `pnpm secrets:set <env> <slug> <KEY>` by whoever holds that env's OpenBao writer role — the env owner (a self-host node-dev on their own env; the operator on an operator-hosted env, or a node-dev granted the env-writer role). |
+| **Add a service** | App code + `Dockerfile` + k8s **base** manifest (Deployment/Service) + a catalog entry + the **build→GHCR** workflow leg, all in the node repo. Node CI builds + pushes the image. | The pin-PR / provision generates the per-env **overlay + AppSet + catalog row** referencing the pushed digest; Argo deploys it. |
+
+**Invariant: the node-dev declares shape in-repo; the operator's plane consumes it.** A new secret or service is **one edit in the node's own repo + its own CI** — never a monorepo PR. The value-set + deploy wiring belong to whoever owns the env. This keeps `secrets-add-new` / `create-service` correct verbatim for a **self-host** node (it owns its plane) and cleanly halved for a **submodule** node (operator owns the plane half).
+
 ### Forward path to deployment (Pareto-ordered)
 
 The submodule **birth** is as-built (#1506): the wizard mints the node repo from the node-template (`GitHubRepoWriter.generateFromTemplate` → direct commit to the new repo's `main`, no PR there) and the operator authors **one** pin-PR (`openNodeSubmodulePr` — a `160000` gitlink at `nodes/<slug>` + `.gitmodules` + the `gens/` footprint **minus the lockfile importer**, the only inline-only tax a submodule node sheds). Proven E2E on candidate-a (2026-06-04): wizard Publish → minted node repo + pin-PR into the operator monorepo + review-bot trigger. What remains to carry a born node through **deploy → preview/prod** is the ordered list below. **P0 + P1 are the critical ~20%** — without them nothing merges or builds; **P2–P4 ride the existing inline-node rails** and only need recognition of the submodule seam, not new pipelines.
