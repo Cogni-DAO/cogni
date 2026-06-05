@@ -264,18 +264,38 @@ jobs:
           NODE: ${{ matrix.node }}
         run: |
           set -euo pipefail
+          retry() {
+            local label="$1"
+            shift
+            local attempt status sleep_for
+            for attempt in 1 2 3 4 5; do
+              if "$@"; then
+                return 0
+              fi
+              status=$?
+              if [ "$attempt" -eq 5 ]; then
+                echo "::error::${label} failed after ${attempt} attempts"
+                return "$status"
+              fi
+              sleep_for=$((attempt * 10))
+              echo "::warning::${label} failed on attempt ${attempt}; retrying in ${sleep_for}s"
+              sleep "$sleep_for"
+            done
+          }
+
           APPSET_FILE="app-src/infra/k8s/argocd/candidate-a-${NODE}-applicationset.yaml"
           if [ ! -f "$APPSET_FILE" ]; then
             echo "::error::$APPSET_FILE missing at head_sha — run 'pnpm gen:node-appset' (CATALOG_IS_SSOT)"
             exit 1
           fi
-          # shellcheck disable=SC2086
-          scp $SSH_OPTS "$APPSET_FILE" root@"$VM_HOST":/tmp/appset-${NODE}.yaml
+          read -r -a ssh_opts <<< "$SSH_OPTS"
+          retry "copy ${NODE} ApplicationSet to candidate-a VM" \
+            scp "${ssh_opts[@]}" "$APPSET_FILE" "root@${VM_HOST}:/tmp/appset-${NODE}.yaml"
           # Anti-resurrection: the legacy shared `cogni-candidate-a` AppSet is
           # retired. Orphan-delete (never prune its live Applications) so it can
           # never reappear to re-clobber this lane, then apply the per-node object.
-          # shellcheck disable=SC2086
-          ssh $SSH_OPTS root@"$VM_HOST" "kubectl delete applicationset cogni-candidate-a -n argocd --cascade=orphan --ignore-not-found && kubectl apply -f /tmp/appset-${NODE}.yaml -n argocd && rm -f /tmp/appset-${NODE}.yaml"
+          retry "apply ${NODE} ApplicationSet on candidate-a VM" \
+            ssh "${ssh_opts[@]}" "root@${VM_HOST}" "kubectl delete applicationset cogni-candidate-a -n argocd --cascade=orphan --ignore-not-found && kubectl apply -f /tmp/appset-${NODE}.yaml -n argocd && rm -f /tmp/appset-${NODE}.yaml"
 
   flight:
     needs: [decide, reconcile-appset]
