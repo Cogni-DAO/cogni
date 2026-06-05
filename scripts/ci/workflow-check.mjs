@@ -120,11 +120,11 @@ if (
   )
 ) {
   pass(
-    "candidate-flight wires submodule birth manifest output into image resolution",
+    "candidate-flight wires submodule birth manifest output into image resolution"
   );
 } else {
   fail(
-    "candidate-flight must pass steps.submodule-births.outputs.births_file to SUBMODULE_BIRTHS_FILE",
+    "candidate-flight must pass steps.submodule-births.outputs.births_file to SUBMODULE_BIRTHS_FILE"
   );
 }
 
@@ -139,7 +139,7 @@ if (
   pass("candidate-flight prefers deploy-token GHCR credentials");
 } else {
   fail(
-    "candidate-flight GHCR login must prefer GHCR_DEPLOY_* secrets with GitHub token fallback",
+    "candidate-flight GHCR login must prefer GHCR_DEPLOY_* secrets with GitHub token fallback"
   );
 }
 
