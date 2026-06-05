@@ -582,9 +582,6 @@ importers:
       react-dom:
         specifier: 19.0.0
         version: 19.0.0(react@19.0.0)
-      react-force-graph-3d:
-        specifier: ^1.29.1
-        version: 1.29.1(react@19.0.0)
       recharts:
         specifier: ^2.15.4
         version: 2.15.4(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
@@ -924,6 +921,9 @@ importers:
       react-dom:
         specifier: 19.0.0
         version: 19.0.0(react@19.0.0)
+      react-force-graph-3d:
+        specifier: ^1.29.1
+        version: 1.29.1(react@19.0.0)
       recharts:
         specifier: ^2.15.4
         version: 2.15.4(react-dom@19.0.0(react@19.0.0))(react@19.0.0)

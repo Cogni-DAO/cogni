@@ -48,7 +48,6 @@ import {
   GitBranch,
   GitMerge,
   Library,
-  Network,
   Plus,
   Settings2,
   Tags,
@@ -67,10 +66,9 @@ import { ContributionDetail } from "./_components/ContributionDetail";
 import { knowledgeColumns } from "./_components/columns";
 import { buildContributionColumns } from "./_components/contribution-columns";
 import { domainColumns } from "./_components/domain-columns";
-import { GraphView } from "./_components/GraphView";
 import { KnowledgeDetail } from "./_components/KnowledgeDetail";
 
-type ViewMode = "browse" | "domains" | "inbox" | "chains" | "graph";
+type ViewMode = "browse" | "domains" | "inbox" | "chains";
 
 const EDO_ENTRY_TYPES: ReadonlySet<string> = new Set([
   "hypothesis",
@@ -80,13 +78,7 @@ const EDO_ENTRY_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 function isMode(v: string | null): v is ViewMode {
-  return (
-    v === "browse" ||
-    v === "domains" ||
-    v === "inbox" ||
-    v === "chains" ||
-    v === "graph"
-  );
+  return v === "browse" || v === "domains" || v === "inbox" || v === "chains";
 }
 
 export function KnowledgeDashboardView() {
@@ -174,12 +166,6 @@ export function KnowledgeDashboardView() {
               icon={<Library className="size-3.5" />}
             />
             <ModeButton
-              active={mode === "graph"}
-              onClick={() => setModeUrl("graph")}
-              label="Graph"
-              icon={<Network className="size-3.5" />}
-            />
-            <ModeButton
               active={mode === "chains"}
               onClick={() => setModeUrl("chains")}
               label="Chains"
@@ -219,9 +205,6 @@ export function KnowledgeDashboardView() {
           error={knowledgeQuery.error}
           mode="chains"
         />
-      )}
-      {mode === "graph" && (
-        <GraphView rows={knowledgeQuery.data?.items ?? []} />
       )}
       {mode === "domains" && (
         <DomainsPanel
