@@ -339,6 +339,11 @@ jobs:
           WRAPPER
           chmod +x "${wrapper_dir}/bao"
 
+          has_non_newline_content() {
+            [ -s "$1" ] || return 1
+            [ "$(tr -d '\r\n' <"$1" | wc -c | tr -d '[:space:]')" -gt 0 ]
+          }
+
           if kubectl -n cogni-preview get secret operator-node-app-secrets >/dev/null 2>&1; then
             echo "Backfilling preview/operator OpenBao leaf from current legacy Kubernetes secret keys"
             count=0
@@ -346,6 +351,9 @@ jobs:
             legacy_pod=""
             for pod in $(kubectl -n cogni-preview get pod -l "$selector" \
               -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}' 2>/dev/null); do
+              app_ready=$(kubectl -n cogni-preview get pod "$pod" \
+                -o jsonpath='{.status.containerStatuses[?(@.name=="app")].ready}' 2>/dev/null || true)
+              [ "$app_ready" = "true" ] || continue
               secret_refs=$(kubectl -n cogni-preview get pod "$pod" \
                 -o jsonpath='{.spec.containers[?(@.name=="app")].envFrom[*].secretRef.name}' 2>/dev/null || true)
               if printf '%s\n' "$secret_refs" | grep -qw operator-node-app-secrets; then
@@ -363,19 +371,29 @@ jobs:
             for key in $keys; do
               [ -n "$key" ] || continue
               tmp_value=$(mktemp)
+              source=""
               if [ -n "$legacy_pod" ]; then
                 kubectl -n cogni-preview exec "$legacy_pod" -c app -- printenv "$key" >"$tmp_value" 2>/dev/null || true
+                if has_non_newline_content "$tmp_value"; then
+                  source="healthy legacy pod env"
+                else
+                  : >"$tmp_value"
+                fi
               fi
-              if [ ! -s "$tmp_value" ]; then
+              if [ -z "$source" ]; then
                 kubectl -n cogni-preview get secret operator-node-app-secrets \
                   -o "jsonpath={.data.${key}}" \
                   | base64 -d >"$tmp_value"
+                if has_non_newline_content "$tmp_value"; then
+                  source="legacy Kubernetes Secret object"
+                fi
               fi
-              if [ ! -s "$tmp_value" ]; then
+              if [ -z "$source" ]; then
                 echo "Skipping empty legacy key ${key}"
                 rm -f "$tmp_value"
                 continue
               fi
+              echo "Backfilling key ${key} from ${source}"
               PATH="${wrapper_dir}:$PATH" \
                 REPO_ROOT="$REMOTE_DIR" \
                 BAO_ADDR=http://127.0.0.1:8200 \
