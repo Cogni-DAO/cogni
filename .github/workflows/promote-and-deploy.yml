@@ -821,6 +821,23 @@ jobs:
             exit 1
           fi
 
+          dump_diagnostics() {
+            echo "operator-env-secrets keys:" >&2
+            kubectl -n cogni-preview get secret operator-env-secrets -o json \
+              | jq -r '.data | keys | sort | join(",")' >&2 || true
+            kubectl -n cogni-preview get pods -l "$selector" -o wide >&2 || true
+            for p in $(kubectl -n cogni-preview get pods -l "$selector" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+              echo "=== describe pod/${p} ===" >&2
+              kubectl -n cogni-preview describe pod "$p" >&2 || true
+              for c in migrate migrate-doltgres app; do
+                echo "=== logs pod/${p} -c ${c} ===" >&2
+                kubectl -n cogni-preview logs "$p" -c "$c" --tail=80 >&2 || true
+                echo "=== previous logs pod/${p} -c ${c} ===" >&2
+                kubectl -n cogni-preview logs "$p" -c "$c" --previous --tail=80 >&2 || true
+              done
+            done
+          }
+
           for attempt in $(seq 1 36); do
             pod=$(kubectl -n cogni-preview get pod -l "$selector" \
               -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}' 2>/dev/null | awk '{print $1}')
@@ -831,12 +848,17 @@ jobs:
                 exit 0
               fi
             fi
+            if kubectl -n cogni-preview get pods -l "$selector" --no-headers 2>/dev/null | grep -q 'Init:CrashLoopBackOff'; then
+              echo "ESO-backed operator pod is in Init:CrashLoopBackOff" >&2
+              dump_diagnostics
+              exit 1
+            fi
             sleep 5
           done
 
           echo "ESO_PREVIEW_PROOF did not reach the running operator pod before timeout" >&2
           kubectl -n cogni-preview get deploy operator-node-app -o wide >&2 || true
-          kubectl -n cogni-preview get pods -l "$selector" -o wide >&2 || true
+          dump_diagnostics
           exit 1
           REMOTE
 
