@@ -122,6 +122,34 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c] ?? c);
 }
 
+type ColorMode = "confidence" | "domain";
+
+// Domain palette (Domain color mode). Operator base domains are fixed; any
+// extension domain hashes into a stable fallback hue.
+const BASE_DOMAIN_COLOR: Record<string, string> = {
+  meta: "#a78bfa",
+  nodes: "#34d399",
+  infrastructure: "#fbbf24",
+  governance: "#f472b6",
+};
+const EXTENSION_PALETTE = [
+  "#6ea8fe",
+  "#2dd4bf",
+  "#c084fc",
+  "#f97316",
+  "#22d3ee",
+  "#e879f9",
+];
+function domainColor(domain: string): string {
+  const base = BASE_DOMAIN_COLOR[domain];
+  if (base) return base;
+  let h = 0;
+  for (let i = 0; i < domain.length; i++) {
+    h = (h * 31 + domain.charCodeAt(i)) | 0;
+  }
+  return EXTENSION_PALETTE[Math.abs(h) % EXTENSION_PALETTE.length] ?? "#6ea8fe";
+}
+
 export function GraphView({ rows }: { readonly rows: KnowledgeRow[] }) {
   const graphQuery = useQuery({
     queryKey: ["knowledge", "graph"],
@@ -129,6 +157,7 @@ export function GraphView({ rows }: { readonly rows: KnowledgeRow[] }) {
     staleTime: 30_000,
   });
 
+  const [colorMode, setColorMode] = useState<ColorMode>("confidence");
   const [showHubs, setShowHubs] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -184,10 +213,14 @@ export function GraphView({ rows }: { readonly rows: KnowledgeRow[] }) {
     return { nodes: [...hubs, ...entries], links };
   }, [graphQuery.data, showHubs]);
 
-  const nodeColor = useCallback((node: GraphNodeObject) => {
-    if (node.isHub) return HUB_COLOR;
-    return confidenceColor(node.confidencePct ?? 40);
-  }, []);
+  const nodeColor = useCallback(
+    (node: GraphNodeObject) => {
+      if (colorMode === "domain") return domainColor(node.domain);
+      if (node.isHub) return HUB_COLOR;
+      return confidenceColor(node.confidencePct ?? 40);
+    },
+    [colorMode]
+  );
 
   const nodeVal = useCallback((node: GraphNodeObject) => {
     if (node.isHub) return 22;
@@ -239,9 +272,22 @@ export function GraphView({ rows }: { readonly rows: KnowledgeRow[] }) {
   return (
     <>
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-muted-foreground text-xs">
-          Node color = confidence (red → green)
-        </span>
+        <div className="inline-flex items-center rounded-lg border border-border/60 bg-muted/40 p-0.5">
+          {(["confidence", "domain"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setColorMode(m)}
+              className={`rounded-md px-3 py-1 text-xs capitalize transition-colors ${
+                colorMode === m
+                  ? "bg-background font-medium text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
         <label className="flex cursor-pointer items-center gap-2 text-muted-foreground text-xs">
           <input
             type="checkbox"
@@ -251,11 +297,6 @@ export function GraphView({ rows }: { readonly rows: KnowledgeRow[] }) {
           />
           Domain hubs
         </label>
-        <span className="ml-auto text-muted-foreground text-xs">
-          {graphQuery.data
-            ? `${graphQuery.data.nodes.length} entries · ${graphQuery.data.edges.length} citations`
-            : "Loading graph…"}
-        </span>
       </div>
 
       <div
@@ -287,7 +328,11 @@ export function GraphView({ rows }: { readonly rows: KnowledgeRow[] }) {
             onNodeClick={onNodeClick}
           />
         )}
-        <GraphLegend edges={graphQuery.data?.edges ?? []} />
+        <GraphLegend
+          colorMode={colorMode}
+          edges={graphQuery.data?.edges ?? []}
+          domains={graphQuery.data?.domains ?? []}
+        />
       </div>
 
       <KnowledgeDetail
@@ -302,46 +347,74 @@ export function GraphView({ rows }: { readonly rows: KnowledgeRow[] }) {
   );
 }
 
+const SECTION_CLASS =
+  "mb-1.5 font-medium text-[10px] text-muted-foreground uppercase tracking-wider";
+
 function GraphLegend({
+  colorMode,
   edges,
+  domains,
 }: {
+  readonly colorMode: ColorMode;
   readonly edges: ReadonlyArray<{ citationType: string }>;
+  readonly domains: ReadonlyArray<string>;
 }) {
   const citeTypes = [...new Set(edges.map((e) => e.citationType))];
   const ramp = [0, 25, 50, 75, 100];
   return (
-    <div className="absolute bottom-3 left-3 max-w-[220px] rounded-lg border border-border/60 bg-background/80 p-3 backdrop-blur">
-      <p className="mb-1.5 font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
-        Confidence
+    <div className="absolute bottom-3 left-3 w-[208px] rounded-lg border border-border/60 bg-background/80 p-3 backdrop-blur">
+      <p className="mb-2.5 font-medium text-[11px] text-foreground tabular-nums">
+        {edges.length} citation{edges.length === 1 ? "" : "s"} ·{" "}
+        {domains.length} domain{domains.length === 1 ? "" : "s"}
       </p>
-      <div className="flex items-center gap-2 text-xs">
-        <span className="text-muted-foreground">0</span>
-        <span className="flex">
-          {ramp.map((p) => (
-            <span
-              key={p}
-              className="size-2.5"
-              style={{ backgroundColor: confidenceColor(p) }}
-            />
-          ))}
-        </span>
-        <span className="text-muted-foreground">100</span>
-      </div>
-      {citeTypes.length > 0 && (
+
+      {colorMode === "confidence" ? (
         <>
-          <p className="mt-2 mb-1.5 font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
-            Citations
-          </p>
-          {citeTypes.slice(0, 8).map((ct) => (
-            <div key={ct} className="flex items-center gap-2 text-xs">
+          <p className={SECTION_CLASS}>Confidence</p>
+          <div className="flex items-center gap-2 text-muted-foreground text-xs">
+            <span>0</span>
+            <span className="flex">
+              {ramp.map((p) => (
+                <span
+                  key={p}
+                  className="size-2.5"
+                  style={{ backgroundColor: confidenceColor(p) }}
+                />
+              ))}
+            </span>
+            <span>100</span>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className={SECTION_CLASS}>Domains</p>
+          {domains.slice(0, 8).map((d) => (
+            <div key={d} className="flex items-center gap-2 text-xs">
               <span
-                className="h-0 w-4 border-t-2"
-                style={{ borderColor: CITE_COLOR[ct] ?? "#9aa0aa" }}
+                className="size-2.5 rounded-full"
+                style={{ backgroundColor: domainColor(d) }}
               />
-              {ct}
+              {d}
             </div>
           ))}
         </>
+      )}
+
+      <p className={`${SECTION_CLASS} mt-2.5`}>Links · citations</p>
+      {citeTypes.length > 0 ? (
+        citeTypes.slice(0, 8).map((ct) => (
+          <div key={ct} className="flex items-center gap-2 text-xs">
+            <span
+              className="h-0 w-4 border-t-2"
+              style={{ borderColor: CITE_COLOR[ct] ?? "#9aa0aa" }}
+            />
+            {ct}
+          </div>
+        ))
+      ) : (
+        <span className="text-muted-foreground text-xs">
+          none yet — agents cite as they learn
+        </span>
       )}
     </div>
   );
