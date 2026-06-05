@@ -68,6 +68,8 @@
 set -euo pipefail
 
 LOCAL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./lib/ssh-retry.sh
+. "$LOCAL_SCRIPT_DIR/lib/ssh-retry.sh"
 
 VM_HOST="${VM_HOST:?VM_HOST is required}"
 DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT:?DEPLOY_ENVIRONMENT is required}"
@@ -452,21 +454,21 @@ REMOTE_SCRIPT_PATH="${REMOTE_DIR}/wait-for-argocd-remote.sh"
 REMOTE_TOKEN_PATH="${REMOTE_DIR}/gh-token"
 
 # shellcheck disable=SC2086
-ssh $SSH_OPTS root@"$VM_HOST" "mkdir -p '$REMOTE_DIR'"
+ci_ssh_retry ssh $SSH_OPTS root@"$VM_HOST" "mkdir -p '$REMOTE_DIR'"
 
 # shellcheck disable=SC2086
-scp $SSH_OPTS "$REMOTE_SCRIPT" root@"$VM_HOST":"$REMOTE_SCRIPT_PATH"
+ci_ssh_retry scp $SSH_OPTS "$REMOTE_SCRIPT" root@"$VM_HOST":"$REMOTE_SCRIPT_PATH"
 rm -f "$REMOTE_SCRIPT"
 
 TOKEN_FILE=$(mktemp)
 chmod 600 "$TOKEN_FILE"
 printf '%s' "${GH_TOKEN_FOR_COMPARE}" > "$TOKEN_FILE"
 # shellcheck disable=SC2086
-scp $SSH_OPTS "$TOKEN_FILE" root@"$VM_HOST":"$REMOTE_TOKEN_PATH"
+ci_ssh_retry scp $SSH_OPTS "$TOKEN_FILE" root@"$VM_HOST":"$REMOTE_TOKEN_PATH"
 rm -f "$TOKEN_FILE"
 
 # shellcheck disable=SC2086
-ssh $SSH_OPTS root@"$VM_HOST" \
+ci_ssh_retry ssh $SSH_OPTS root@"$VM_HOST" \
   "NODE_TARGETS_CSV='$NODE_TARGETS_CSV' GH_TOKEN=\$(cat '$REMOTE_TOKEN_PATH') GH_REPO='$GH_REPO_FOR_COMPARE' bash '$REMOTE_SCRIPT_PATH' '$DEPLOY_ENVIRONMENT' '$EXPECTED_SHA' '$ARGOCD_TIMEOUT' '$ACTIVE_SYNC_AFTER' '$SYNC_KICK_INTERVAL' ${APPS[*]}; RC=\$?; rm -rf '$REMOTE_DIR'; exit \$RC"
 
 # Gate-ordering invariant (bug.0321 Fix 4): signal downstream steps in the
