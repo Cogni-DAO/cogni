@@ -1,0 +1,3 @@
+[submodule "nodes/lil-cog"]
+	path = nodes/lil-cog
+	url = https://github.com/Cogni-DAO/lil-cog.git
