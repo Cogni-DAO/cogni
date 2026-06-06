@@ -7,13 +7,14 @@ namespace: cogni-production
 
 resources:
   - ../../../base/node-app
+  - ../../../secrets/external-secrets/production/operator
 
 namePrefix: operator-
 
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:f2ec4b0f667050c10d71dcb2a00b1d6cec554f50d8115fa61752cfee0dcd3689"
+    digest: "sha256:f517d353ab1562e76071b11e71cd74e6cb2405b1a8415eef0ccc836cd2b4bd3f"
 
 patches:
   # Node-specific ConfigMap values.
@@ -40,6 +41,12 @@ patches:
       - op: add
         path: /data/NEXTAUTH_URL
         value: "https://cognidao.org"
+      - op: add
+        path: /data/NODE_MINT_OWNER
+        value: "Cogni-DAO"
+      - op: add
+        path: /data/NODE_TEMPLATE_OWNER
+        value: "Cogni-DAO"
   # NodePort assignment (operator = 30000) + instance label on selector.
   # Instance label prevents cross-node service routing: namePrefix only renames
   # resource names, not labels/selectors, so without this every Service
@@ -61,13 +68,10 @@ patches:
     patch: |
       - op: replace
         path: /spec/template/spec/containers/0/envFrom/1/secretRef/name
-        value: "operator-node-app-secrets"
+        value: "operator-env-secrets"
       - op: replace
         path: /spec/template/spec/initContainers/0/envFrom/1/secretRef/name
-        value: "operator-node-app-secrets"
-      - op: replace
-        path: /spec/template/spec/initContainers/0/envFrom/1/secretRef/name
-        value: "operator-node-app-secrets"
+        value: "operator-env-secrets"
       - op: add
         path: /spec/selector/matchLabels/app.kubernetes.io~1instance
         value: "operator"
@@ -97,7 +101,7 @@ patches:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: operator-node-app-secrets
+                  name: operator-env-secrets
                   key: DOLTGRES_URL
           resources:
             requests:
