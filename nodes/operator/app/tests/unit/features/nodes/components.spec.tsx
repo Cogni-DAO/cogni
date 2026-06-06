@@ -99,8 +99,13 @@ describe("nodes feature components", () => {
     vi.stubGlobal("fetch", vi.fn());
   });
 
-  it("renders a node card with thumbnail, metrics, repo detail link, and visit action", () => {
+  it("renders a node card with thumbnail, metrics, primary detail link, and visit action", () => {
     render(<NodeNetworkCard node={alpha} metrics={alphaMetrics} />);
+
+    const detailsLink = screen.getByRole("link", {
+      name: "View Alpha Node details",
+    });
+    const visitLink = screen.getByRole("link", { name: /Visit app/ });
 
     expect(
       screen.getByRole("img", { name: "Alpha Node homepage" })
@@ -109,11 +114,10 @@ describe("nodes feature components", () => {
     expect(screen.getByText("12 / 30d")).toBeVisible();
     expect(screen.getByText("3 epochs")).toBeVisible();
     expect(screen.getByText("44 / 30d")).toBeVisible();
-    expect(screen.getByRole("link", { name: "View details" })).toHaveAttribute(
-      "href",
-      "/nodes/alpha"
-    );
-    expect(screen.getByRole("link", { name: /Visit app/ })).toHaveAttribute(
+    expect(detailsLink).toHaveAttribute("href", "/nodes/alpha");
+    expect(screen.queryByText("View details")).toBeNull();
+    expect(detailsLink).not.toContainElement(visitLink);
+    expect(visitLink).toHaveAttribute(
       "href",
       "https://alpha-test.cognidao.org"
     );
@@ -125,6 +129,9 @@ describe("nodes feature components", () => {
     expect(screen.getByText("B")).toBeVisible();
     expect(screen.getAllByText("Not connected")).toHaveLength(2);
     expect(screen.getByText("Pending")).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "View Beta Node details" })
+    ).toHaveAttribute("href", "/nodes/beta");
     expect(screen.queryByRole("link", { name: /Visit app/ })).toBeNull();
   });
 

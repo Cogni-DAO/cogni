@@ -79,56 +79,59 @@ export function NodeNetworkCard({
       : "Pending";
 
   return (
-    <Card className="h-full overflow-hidden transition-colors hover:border-primary">
-      <div className="relative aspect-video border-border border-b bg-muted">
-        {node.thumbnailUrl ? (
-          <Image
-            src={node.thumbnailUrl}
-            alt={`${node.title} homepage`}
-            fill
-            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-            className="object-cover object-top transition-transform hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/25 via-primary/10 to-transparent">
-            <span className="font-bold text-4xl text-foreground/70 uppercase">
-              {node.title.charAt(0)}
-            </span>
+    <Card className="flex h-full flex-col overflow-hidden transition-colors hover:border-primary">
+      <Link
+        href={`/nodes/${node.slug}`}
+        aria-label={`View ${node.title} details`}
+        className="group flex flex-1 flex-col focus-visible:outline-2 focus-visible:outline-ring"
+      >
+        <div className="relative aspect-video border-border border-b bg-muted">
+          {node.thumbnailUrl ? (
+            <Image
+              src={node.thumbnailUrl}
+              alt={`${node.title} homepage`}
+              fill
+              sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+              className="object-cover object-top transition-transform group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/25 via-primary/10 to-transparent">
+              <span className="font-bold text-4xl text-foreground/70 uppercase">
+                {node.title.charAt(0)}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="flex min-h-40 flex-1 flex-col gap-5 p-6">
+          <div className="min-w-0 space-y-2">
+            <h2 className="truncate font-semibold text-foreground text-lg">
+              {node.title}
+            </h2>
+            {node.tagline ? (
+              <p className="line-clamp-2 text-muted-foreground text-sm">
+                {node.tagline}
+              </p>
+            ) : null}
           </div>
-        )}
-      </div>
-      <div className="flex min-h-48 flex-col gap-5 p-6">
-        <div className="min-w-0 space-y-2">
-          <h2 className="truncate font-semibold text-foreground text-lg">
-            {node.title}
-          </h2>
-          {node.tagline ? (
-            <p className="line-clamp-2 text-muted-foreground text-sm">
-              {node.tagline}
-            </p>
-          ) : null}
-        </div>
 
-        <div className="grid grid-cols-3 gap-4 border-border border-t pt-4">
-          <TileSignal label="Tracked" value={activity} />
-          <TileSignal label="Ownership" value={ownership} />
-          <TileSignal label="AI usage" value={aiUsage} />
+          <div className="grid grid-cols-3 gap-4 border-border border-t pt-4">
+            <TileSignal label="Tracked" value={activity} />
+            <TileSignal label="Ownership" value={ownership} />
+            <TileSignal label="AI usage" value={aiUsage} />
+          </div>
         </div>
+      </Link>
 
-        <div className="mt-auto flex flex-wrap gap-2">
-          <Button asChild size="sm">
-            <Link href={`/nodes/${node.slug}`}>View details</Link>
+      {node.href !== "#" ? (
+        <div className="flex flex-wrap gap-2 px-6 pb-6">
+          <Button asChild variant="secondary" size="sm">
+            <a href={node.href} target="_blank" rel="noopener noreferrer">
+              Visit app
+              <ArrowUpRight className="size-3.5" />
+            </a>
           </Button>
-          {node.href !== "#" ? (
-            <Button asChild variant="secondary" size="sm">
-              <a href={node.href} target="_blank" rel="noopener noreferrer">
-                Visit app
-                <ArrowUpRight className="size-3.5" />
-              </a>
-            </Button>
-          ) : null}
         </div>
-      </div>
+      ) : null}
     </Card>
   );
 }
