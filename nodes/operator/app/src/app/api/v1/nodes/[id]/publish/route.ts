@@ -41,8 +41,8 @@ const clock = { now: () => new Date().toISOString() };
 
 /**
  * Classify a node-repo-write mint failure into a stable, low-cardinality code.
- * Maps the GitHub adapter's thrown errors (octokit `status` + message) onto the
- * failure classes an operator must distinguish — so the 502 is never opaque again.
+ * Maps the GitHub adapter's thrown errors onto the failure classes an operator
+ * must distinguish.
  */
 type MintErrorCode =
   | "app_not_installed"
@@ -54,14 +54,29 @@ type MintErrorCode =
   | "main_not_ready"
   | "unknown";
 
+function extractHttpStatus(err: unknown): number | undefined {
+  if (typeof err !== "object" || err === null) {
+    return undefined;
+  }
+  const directStatus = (err as { status?: unknown }).status;
+  if (typeof directStatus === "number") {
+    return directStatus;
+  }
+  const responseStatus = (err as { response?: { status?: unknown } }).response
+    ?.status;
+  if (typeof responseStatus === "number") {
+    return responseStatus;
+  }
+  const message = err instanceof Error ? err.message : "";
+  const match = /\bHTTP\s+(\d{3})\b/i.exec(message);
+  return match ? Number(match[1]) : undefined;
+}
+
 function classifyMintError(err: unknown): {
   errorCode: MintErrorCode;
   status: number | undefined;
 } {
-  const status =
-    typeof err === "object" && err !== null && "status" in err
-      ? (err as { status?: number }).status
-      : undefined;
+  const status = extractHttpStatus(err);
   const message = err instanceof Error ? err.message : "";
   if (/not installed/i.test(message)) {
     return { errorCode: "app_not_installed", status };
@@ -81,13 +96,43 @@ function classifyMintError(err: unknown): {
   ) {
     return { errorCode: "forbidden", status };
   }
+  if (/node-template.*not found|node-template.*was not found/i.test(message)) {
+    return { errorCode: "template_not_found", status };
+  }
   if (status === 404) {
     if (/node-template/i.test(message)) {
       return { errorCode: "template_not_found", status };
     }
     return { errorCode: "github_not_found", status };
   }
+  if (/not found/i.test(message)) {
+    return { errorCode: "github_not_found", status };
+  }
   return { errorCode: "unknown", status };
+}
+
+const mintErrorMessages: Record<MintErrorCode, string> = {
+  app_not_installed:
+    "GitHub App installation is missing on the target repository.",
+  forbidden: "GitHub App cannot write to the target repository.",
+  github_not_found: "Target GitHub repository was not found.",
+  template_not_found: "Configured node-template repository was not found.",
+  repo_exists:
+    "Target node repository already exists and could not be reused safely.",
+  github_rate_limited: "GitHub rate limit blocked node repo publishing.",
+  main_not_ready: "Minted node repository main branch was not ready.",
+  unknown: "GitHub repo publishing failed.",
+};
+
+function statusForMintError(errorCode: MintErrorCode): number {
+  switch (errorCode) {
+    case "repo_exists":
+      return 409;
+    case "github_rate_limited":
+      return 429;
+    default:
+      return 424;
+  }
 }
 
 type PublishStep =
@@ -380,24 +425,50 @@ export async function POST(request: Request, routeArgs: RouteParams) {
           });
         } catch (err) {
           const { errorCode, status } = classifyMintError(err);
+          const responseStatus = statusForMintError(errorCode);
           logStep(currentStep, "error", {
             slug: node.slug,
             errorCode,
             githubStatus: status,
           });
+          ctx.log.error(
+            {
+              event: EVENT_NAMES.ADAPTER_GITHUB_REPO_WRITE_ERROR,
+              reqId: ctx.reqId,
+              routeId: ctx.routeId,
+              nodeId: id,
+              dep: "github",
+              step: currentStep,
+              reasonCode: errorCode,
+              githubStatus: status,
+              durationMs: durationMs(),
+            },
+            EVENT_NAMES.ADAPTER_GITHUB_REPO_WRITE_ERROR
+          );
           logTerminal("error", {
             outcome: "error",
             errorCode,
             githubStatus: status,
-            status: 502,
+            status: responseStatus,
             slug: node.slug,
             nodeStatus: node.status,
           });
-          logRequestEnd(ctx.log, { status: 502, durationMs: durationMs() });
-          const message = err instanceof Error ? err.message : "unknown";
+          logRequestEnd(ctx.log, {
+            status: responseStatus,
+            durationMs: durationMs(),
+          });
           return NextResponse.json(
-            { error: "node-app PR authoring failed", reason: message },
-            { status: 502 }
+            {
+              error: "node publish dependency failed",
+              reason: mintErrorMessages[errorCode],
+              errorCode,
+              step: currentStep,
+              reqId: ctx.reqId,
+              routeId: ctx.routeId,
+              nodeId: id,
+              githubStatus: status,
+            },
+            { status: responseStatus }
           );
         }
 
@@ -436,16 +507,23 @@ export async function POST(request: Request, routeArgs: RouteParams) {
         });
         logRequestEnd(ctx.log, { status: 200, durationMs: durationMs() });
         return NextResponse.json({ node: updated, pr });
-      } catch (err) {
+      } catch (_err) {
         logTerminal("error", {
           outcome: "error",
           errorCode: "unhandled",
           status: 500,
         });
         logRequestEnd(ctx.log, { status: 500, durationMs: durationMs() });
-        const message = err instanceof Error ? err.message : "unknown";
         return NextResponse.json(
-          { error: "node publish failed", reason: message },
+          {
+            error: "node publish failed",
+            reason: "Unexpected node publish failure.",
+            errorCode: "unhandled",
+            step: currentStep,
+            reqId: ctx.reqId,
+            routeId: ctx.routeId,
+            nodeId: id,
+          },
           { status: 500 }
         );
       }

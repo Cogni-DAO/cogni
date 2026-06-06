@@ -107,6 +107,7 @@ vi.mock("@/bootstrap/otel", () => ({
 vi.mock("@/shared/observability", () => {
   return {
     EVENT_NAMES: {
+      ADAPTER_GITHUB_REPO_WRITE_ERROR: "adapter.github_repo_write.error",
       NODE_PUBLISH_COMPLETE: "feature.node_publish.complete",
     },
     createRequestContext: () => ({
@@ -298,8 +299,14 @@ describe("POST /api/v1/nodes/[id]/publish", () => {
     const response = await publishNode();
     const body = await response.json();
 
-    expect(response.status).toBe(502);
-    expect(body.error).toBe("node-app PR authoring failed");
+    expect(response.status).toBe(424);
+    expect(body.error).toBe("node publish dependency failed");
+    expect(body.reason).toBe(
+      "GitHub App installation is missing on the target repository."
+    );
+    expect(body.errorCode).toBe("app_not_installed");
+    expect(body.step).toBe("open_submodule_pr");
+    expect(body.reqId).toBe("req-1");
     expect(mockLog.info).toHaveBeenCalledWith(
       expect.objectContaining({
         event: "feature.node_publish.complete",
@@ -314,12 +321,23 @@ describe("POST /api/v1/nodes/[id]/publish", () => {
     );
     expect(mockLog.error).toHaveBeenCalledWith(
       expect.objectContaining({
+        event: "adapter.github_repo_write.error",
+        dep: "github",
+        step: "open_submodule_pr",
+        reasonCode: "app_not_installed",
+        githubStatus: 404,
+        reqId: "req-1",
+      }),
+      "adapter.github_repo_write.error"
+    );
+    expect(mockLog.error).toHaveBeenCalledWith(
+      expect.objectContaining({
         event: "feature.node_publish.complete",
         step: "open_submodule_pr",
         outcome: "error",
         errorCode: "app_not_installed",
         githubStatus: 404,
-        status: 502,
+        status: 424,
         slug: "atlas",
       }),
       "feature.node_publish.complete"
@@ -486,8 +504,12 @@ describe("POST /api/v1/nodes/[id]/publish", () => {
     const response = await publishNode();
     const body = await response.json();
 
-    expect(response.status).toBe(502);
-    expect(body.reason).toBe("node-template was not found");
+    expect(response.status).toBe(424);
+    expect(body.reason).toBe(
+      "Configured node-template repository was not found."
+    );
+    expect(body.errorCode).toBe("template_not_found");
+    expect(body.step).toBe("fork_from_template");
     expect(mockOpenNodeSubmodulePr).not.toHaveBeenCalled();
     expect(mockLog.info).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -510,6 +532,10 @@ describe("POST /api/v1/nodes/[id]/publish", () => {
 
     expect(response.status).toBe(500);
     expect(body.error).toBe("node publish failed");
+    expect(body.reason).toBe("Unexpected node publish failure.");
+    expect(body.errorCode).toBe("unhandled");
+    expect(body.step).toBe("update_node");
+    expect(body.reqId).toBe("req-1");
     expect(mockLog.error).toHaveBeenCalledWith(
       expect.objectContaining({
         event: "feature.node_publish.complete",
