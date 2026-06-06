@@ -12,6 +12,7 @@
 
 "use client";
 
+import { ExternalLink } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ReactElement, useState } from "react";
 
@@ -23,9 +24,39 @@ import { LaunchPackCopyButton } from "./LaunchPackCopyButton.client";
 interface Props {
   readonly nodeId: string;
   readonly status: NodeStatus;
+  readonly publishedHandoff?: {
+    readonly daoAddress: string | null;
+    readonly nodeSlug: string;
+    readonly parentRepoUrl: string;
+    readonly publishPrUrl: string | null;
+  };
 }
 
-export function NodeActionPanel({ nodeId, status }: Props): ReactElement {
+interface NodeActionErrorBody {
+  readonly error?: unknown;
+  readonly reason?: unknown;
+  readonly errorCode?: unknown;
+  readonly step?: unknown;
+  readonly reqId?: unknown;
+}
+
+function formatActionError(body: NodeActionErrorBody, status: number): string {
+  const reason = typeof body.reason === "string" ? body.reason : null;
+  const error = typeof body.error === "string" ? body.error : null;
+  const errorCode =
+    typeof body.errorCode === "string" ? `errorCode=${body.errorCode}` : null;
+  const step = typeof body.step === "string" ? `step=${body.step}` : null;
+  const reqId = typeof body.reqId === "string" ? `reqId=${body.reqId}` : null;
+  const fields = [errorCode, step, reqId].filter(Boolean).join(" ");
+  const prefix = reason ?? error ?? `HTTP ${status}`;
+  return fields ? `${prefix} (${fields})` : prefix;
+}
+
+export function NodeActionPanel({
+  nodeId,
+  status,
+  publishedHandoff,
+}: Props): ReactElement {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +68,7 @@ export function NodeActionPanel({ nodeId, status }: Props): ReactElement {
       const res = await fetch(path, { method: "POST" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setError(body?.reason ?? body?.error ?? `HTTP ${res.status}`);
+        setError(formatActionError(body, res.status));
         return;
       }
       router.refresh();
@@ -69,14 +100,88 @@ export function NodeActionPanel({ nodeId, status }: Props): ReactElement {
       break;
     case "published":
       action = (
-        <div className="space-y-2 text-sm">
-          <p className="text-muted-foreground">
-            Operator wallet provisioning is coming soon.
-          </p>
-          <div className="flex items-center gap-2">
-            <Button disabled>Provision operator wallet</Button>
+        <div className="space-y-5 text-sm">
+          <div className="space-y-2">
+            <p className="font-medium text-base text-foreground">
+              The node birth handoff is ready.
+            </p>
+            <p className="text-muted-foreground">
+              The formation work is recorded. Your AI agent can now drive the
+              node customization PR, DoltHub knowledge mirror verification,
+              normal node CI, operator flight request, and candidate
+              verification from this launch prompt.
+            </p>
+          </div>
+
+          <dl className="grid gap-3">
+            {publishedHandoff?.daoAddress ? (
+              <div className="grid gap-1">
+                <dt className="text-muted-foreground">On-chain DAO</dt>
+                <dd className="break-all font-mono text-xs">
+                  {publishedHandoff.daoAddress}
+                </dd>
+              </div>
+            ) : null}
+            {publishedHandoff ? (
+              <div className="grid gap-1">
+                <dt className="text-muted-foreground">Node repo</dt>
+                <dd>
+                  {publishedHandoff.publishPrUrl ? (
+                    <a
+                      className="inline-flex items-center gap-1 text-primary underline"
+                      href={publishedHandoff.publishPrUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Recover from nodes/{publishedHandoff.nodeSlug} in the
+                      deployment PR
+                      <ExternalLink className="size-3.5" />
+                    </a>
+                  ) : (
+                    <a
+                      className="inline-flex items-center gap-1 text-primary underline"
+                      href={`${publishedHandoff.parentRepoUrl}/tree/main/nodes/${publishedHandoff.nodeSlug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      nodes/{publishedHandoff.nodeSlug} in the deployment repo
+                      <ExternalLink className="size-3.5" />
+                    </a>
+                  )}
+                </dd>
+              </div>
+            ) : null}
+            {publishedHandoff?.publishPrUrl ? (
+              <div className="grid gap-1">
+                <dt className="text-muted-foreground">Deployment PR</dt>
+                <dd>
+                  <a
+                    className="inline-flex items-center gap-1 text-primary underline"
+                    href={publishedHandoff.publishPrUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Parent PR that pins this node for operator deployment
+                    <ExternalLink className="size-3.5" />
+                  </a>
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+
+          <div className="space-y-2">
+            <p className="text-muted-foreground">
+              Copy this prompt for your AI agent to take the node the rest of
+              the way.
+            </p>
             <LaunchPackCopyButton nodeId={nodeId} />
           </div>
+
+          <p className="text-muted-foreground">
+            The node repo-spec already declares the DoltHub knowledge remote;
+            wallet provisioning and payments stay deferred and are not part of
+            this launch handoff.
+          </p>
         </div>
       );
       break;

@@ -14,7 +14,7 @@
  *   BORN_REVIEWABLE — the mint overwrites the template's `.cogni/repo-spec.yaml` wholesale, so the
  *   default review `gates:` MUST be emitted here or every minted node is born with zero gates
  *   ("no gates, pass" — the `cogni-test-org/ay` gap). The rule files the gates reference ship in the
- *   node-template repo (`.cogni/rules/`, copied verbatim by generate-from-template) and stay in
+ *   node-template repo (`.cogni/rules/`, inherited by the template fork) and stay in
  *   lockstep with `nodes/node-template/.cogni/rules/`. Gate set coordinated with Lane A (review path).
  * Side-effects: none — pure function, no IO, no env.
  * Links: nodes/node-template/.cogni/repo-spec.yaml, nodes/node-template/.cogni/rules/, src/features/nodes/repo-spec-builder.ts, docs/spec/node-ci-cd-contract.md, task.5092
@@ -23,12 +23,15 @@
 
 import { v5 as uuidv5 } from "uuid";
 
+import type { NodeKnowledgeRemote } from "../knowledge-remote";
+
 export interface RenderRepoSpecInput {
   readonly nodeId: string;
   readonly chainId: number;
   readonly daoContract?: string | undefined;
   readonly pluginContract?: string | undefined;
   readonly signalContract?: string | undefined;
+  readonly knowledgeRemote?: NodeKnowledgeRemote | undefined;
 }
 
 /** uuidv5 of the scope key under the node_id namespace — matches `repo-spec-builder`'s derivation. */
@@ -66,6 +69,8 @@ scope_key: "default"
 cogni_dao:
 ${daoLines}
 
+${input.knowledgeRemote ? renderKnowledgeBlock(input.knowledgeRemote) : ""}
+
 # Payment rails — activate with: pnpm node:activate-payments
 payments:
   status: pending_activation
@@ -89,4 +94,15 @@ gates:
     with:
       rule_file: repo-goal-alignment.yaml
 `;
+}
+
+function renderKnowledgeBlock(remote: NodeKnowledgeRemote): string {
+  return `knowledge:
+  database: "${remote.database}"
+  remote:
+    provider: dolthub
+    owner: "${remote.owner}"
+    repo: "${remote.repo}"
+    url: "${remote.url}"
+    custody: cogni-owned`;
 }

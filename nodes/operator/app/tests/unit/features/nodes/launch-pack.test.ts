@@ -34,6 +34,7 @@ describe("buildNodeLaunchPack", () => {
       slug: "atlas",
       status: "published",
       operatorOrigin: "https://test.cognidao.org/",
+      nodeRepoUrl: "https://github.com/Cogni-DAO/atlas",
       publishPrUrl: "https://github.com/Cogni-DAO/cogni/pull/42",
     });
 
@@ -49,8 +50,30 @@ describe("buildNodeLaunchPack", () => {
     expect(pack.parentDeploymentPrUrl).toBe(
       "https://github.com/Cogni-DAO/cogni/pull/42"
     );
-    expect(pack.prompt).toContain("Please launch Cogni node atlas end-to-end.");
+    expect(pack.nodeRepoUrl).toBe("https://github.com/Cogni-DAO/atlas");
+    expect(pack.prompt).toContain("Launch Cogni node atlas.");
+    expect(pack.prompt).toContain(
+      "Node repo URL: https://github.com/Cogni-DAO/atlas"
+    );
+    expect(pack.prompt).not.toContain("Launch pack URL:");
+    expect(pack.prompt).not.toContain(pack.launchPackUrl);
+    expect(pack.prompt).toContain(
+      "Cogni knowledge block: https://cognidao.org/knowledge/node-launch-handoff"
+    );
     expect(pack.prompt).toContain("Parent deployment PR:");
-    expect(pack.prompt).toContain("/version.buildSha matches the child SHA");
+    expect(pack.prompt).toContain("Candidate URL:");
+    expect(pack.prompt).toContain("@node-wizard-scorecard");
+    expect(pack.prompt).toContain("Ensure the parent deployment PR is merged");
+    expect(pack.prompt).toContain("Create a node customization PR");
+    expect(pack.prompt).toContain("Do not push directly to main");
+    expect(pack.prompt).toContain("knowledge.remote");
+    expect(pack.prompt).toContain("Cogni-owned DoltHub mirror");
+    expect(pack.prompt).toContain("do not add a DOLTHUB_REMOTE_URL");
+    expect(pack.prompt).toContain("Let the node repo CI build normally");
+    expect(pack.prompt).toContain("operator reports the launch is eligible");
+    expect(pack.prompt).toContain("@node-formation-styling-guide");
+    expect(pack.prompt).toContain("/contribute-to-cogni");
+    expect(pack.prompt).toContain("blocked scorecard row");
+    expect(pack.prompt).toContain("Verify the deployed /version");
   });
 });

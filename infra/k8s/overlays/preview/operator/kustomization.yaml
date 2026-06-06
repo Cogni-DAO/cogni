@@ -7,13 +7,14 @@ namespace: cogni-preview
 
 resources:
   - ../../../base/node-app
+  - ../../../secrets/external-secrets/preview/operator
 
 namePrefix: operator-
 
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:eacd0caa8367271f1744ad8026afbf602f0521a3550a5f43a66340e125eb09bb"
+    digest: "sha256:abac4373f0eead0456f57b07c1a8581ffd439738255da075857d74d2d0cabfa5"
 
 patches:
   # Node-specific ConfigMap values.
@@ -40,6 +41,21 @@ patches:
       - op: add
         path: /data/NEXTAUTH_URL
         value: "https://preview.cognidao.org"
+      - op: add
+        path: /data/NODE_MINT_OWNER
+        value: "cogni-test-org"
+      - op: add
+        path: /data/NODE_TEMPLATE_OWNER
+        value: "cogni-test-org"
+      - op: add
+        path: /data/DOLTHUB_OWNER
+        value: "cogni-test-nodes"
+      - op: add
+        path: /data/NODE_SUBMODULE_PARENT_OWNER
+        value: "cogni-test-org"
+      - op: add
+        path: /data/NODE_SUBMODULE_PARENT_REPO
+        value: "cogni-monorepo"
   # NodePort assignment (operator = 30000) + instance label on selector.
   # Instance label prevents cross-node service routing: namePrefix only renames
   # resource names, not labels/selectors, so without this every Service
@@ -61,13 +77,10 @@ patches:
     patch: |
       - op: replace
         path: /spec/template/spec/containers/0/envFrom/1/secretRef/name
-        value: "operator-node-app-secrets"
+        value: "operator-env-secrets"
       - op: replace
         path: /spec/template/spec/initContainers/0/envFrom/1/secretRef/name
-        value: "operator-node-app-secrets"
-      - op: replace
-        path: /spec/template/spec/initContainers/0/envFrom/1/secretRef/name
-        value: "operator-node-app-secrets"
+        value: "operator-env-secrets"
       - op: add
         path: /spec/selector/matchLabels/app.kubernetes.io~1instance
         value: "operator"
@@ -97,7 +110,7 @@ patches:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: operator-node-app-secrets
+                  name: operator-env-secrets
                   key: DOLTGRES_URL
           resources:
             requests:

@@ -1,9 +1,15 @@
 ---
 name: node-wizard-expert
-description: Use when designing, debugging, or operating the Cogni node formation wizard, node birth PRs, submodule-pinned node repos, child image builds, parent candidate-flight, or AI-assistant launch handoffs.
+description: Use when designing, debugging, or operating the Cogni node formation wizard, node birth PRs, submodule-pinned node repos, child image builds, parent candidate-flight, or AI-assistant launch handoffs. Route launch execution and E2E proof to node-wizard-scorecard.
 ---
 
 # Node Wizard Expert
+
+## Primary Pointer
+
+For any live throwaway-node launch, start with
+[`node-wizard-scorecard`](../node-wizard-scorecard/SKILL.md). This skill is the
+orientation layer; the scorecard is the execution and proof layer.
 
 ## First Recall
 
@@ -15,11 +21,25 @@ That block is the evolving handoff contract for personal AI assistants launching
 
 ## Ground Truth
 
+- `.claude/skills/node-wizard-scorecard/SKILL.md`
 - `docs/guides/node-formation-guide.md`
 - `docs/spec/node-ci-cd-contract.md`
 - `nodes/operator/app/src/features/nodes/launch-pack.ts`
 - `nodes/operator/app/src/app/api/v1/nodes/[id]/launch-pack/route.ts`
+- `.claude/skills/conductor-worktree-setup/SKILL.md`
+- `scripts/conductor-worktree-setup.sh`
 
 ## Operating Rule
 
 The wizard should mint and publish birth facts, then hand the launch to an AI assistant through the launch pack. Do not add saved wizard states for CI, GHCR, candidate-flight, Argo sync, or `/version` when those can be derived from GitHub, GHCR, the operator flight API, and the deployed candidate URL.
+
+Recent launch-path finding: generated parent birth PRs for throwaway nodes are
+not progress by themselves. Progress is a scorecard row moving from blocked to
+pass without privileged manual bridge work. A child commit without a child
+`sha-<child-sha>` GHCR image is a blocker, not a deployable pin.
+
+## Repo Ancestry Rule
+
+Wizard-minted nodes must be named forks of `node-template`, not GitHub template-generated repos. Template generation copies a snapshot without shared git history, so agents cannot fetch `node-template` and merge future template updates. The publish path should call `GitHubRepoWriter.forkFromTemplate`, wait for the forked `main`, commit only the regenerated `.cogni/repo-spec.yaml` identity on top, and pin that identity commit as the operator submodule gitlink.
+
+If a same-named repo already exists, reuse it only when it is a fork of the configured `NODE_TEMPLATE_OWNER/node-template`; otherwise fail closed and repair the repo lineage explicitly.
