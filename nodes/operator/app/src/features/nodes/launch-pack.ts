@@ -62,9 +62,10 @@ export function buildNodeLaunchPack(
     "Required path:",
     "1. Ensure the parent deployment PR is merged before treating this node as deployable.",
     "2. Create a node customization PR in the node repo. Do not push directly to main or hand-edit the operator gitlink.",
-    "3. Let the node repo CI build normally after that PR merges.",
-    "4. Request candidate-a flight through the operator API only when the operator reports the launch is eligible.",
-    "5. Verify the deployed /version at the candidate URL and report the URL only after it matches the launched node SHA.",
+    "3. Verify the node repo-spec contains `knowledge.remote` for the Cogni-owned DoltHub mirror; do not add a DOLTHUB_REMOTE_URL env override.",
+    "4. Let the node repo CI build normally after that PR merges.",
+    "5. Request candidate-a flight through the operator API only when the operator reports the launch is eligible.",
+    "6. Verify the deployed /version at the candidate URL and report the URL only after it matches the launched node SHA.",
     "",
     "Use @node-formation-styling-guide for the customization PR and /contribute-to-cogni for the agent lifecycle. If parent merge, child image, parent pin, or flight eligibility is blocked, report the exact blocked scorecard row instead of inventing privileged manual steps.",
   ].join("\n");

@@ -64,6 +64,7 @@ describe("NodeActionPanel", () => {
 
     expect(screen.getByText("The node birth handoff is ready.")).toBeVisible();
     expect(screen.getByText(/node customization PR/)).toBeVisible();
+    expect(screen.getByText(/DoltHub knowledge mirror/)).toBeVisible();
     expect(screen.getByText(/normal node CI/)).toBeVisible();
     expect(screen.getByText(/operator flight request/)).toBeVisible();
     expect(screen.getByRole("link", { name: /Parent PR/ })).toHaveAttribute(
@@ -73,6 +74,7 @@ describe("NodeActionPanel", () => {
     expect(
       screen.getByRole("button", { name: "Copy launch prompt" })
     ).toHaveTextContent("Copy agent prompt");
+    expect(screen.getByText(/DoltHub knowledge remote/)).toBeVisible();
     expect(screen.getByText(/not part of this launch handoff/)).toBeVisible();
   });
 

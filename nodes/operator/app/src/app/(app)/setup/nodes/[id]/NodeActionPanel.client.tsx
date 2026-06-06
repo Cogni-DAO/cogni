@@ -107,8 +107,9 @@ export function NodeActionPanel({
             </p>
             <p className="text-muted-foreground">
               The formation work is recorded. Your AI agent can now drive the
-              node customization PR, normal node CI, operator flight request,
-              and candidate verification from this launch prompt.
+              node customization PR, DoltHub knowledge mirror verification,
+              normal node CI, operator flight request, and candidate
+              verification from this launch prompt.
             </p>
           </div>
 
@@ -177,7 +178,8 @@ export function NodeActionPanel({
           </div>
 
           <p className="text-muted-foreground">
-            Wallet provisioning and payments stay deferred; they are not part of
+            The node repo-spec already declares the DoltHub knowledge remote;
+            wallet provisioning and payments stay deferred and are not part of
             this launch handoff.
           </p>
         </div>
