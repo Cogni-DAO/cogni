@@ -25,6 +25,26 @@ interface Props {
   readonly status: NodeStatus;
 }
 
+interface NodeActionErrorBody {
+  readonly error?: unknown;
+  readonly reason?: unknown;
+  readonly errorCode?: unknown;
+  readonly step?: unknown;
+  readonly reqId?: unknown;
+}
+
+function formatActionError(body: NodeActionErrorBody, status: number): string {
+  const reason = typeof body.reason === "string" ? body.reason : null;
+  const error = typeof body.error === "string" ? body.error : null;
+  const errorCode =
+    typeof body.errorCode === "string" ? `errorCode=${body.errorCode}` : null;
+  const step = typeof body.step === "string" ? `step=${body.step}` : null;
+  const reqId = typeof body.reqId === "string" ? `reqId=${body.reqId}` : null;
+  const fields = [errorCode, step, reqId].filter(Boolean).join(" ");
+  const prefix = reason ?? error ?? `HTTP ${status}`;
+  return fields ? `${prefix} (${fields})` : prefix;
+}
+
 export function NodeActionPanel({ nodeId, status }: Props): ReactElement {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -37,7 +57,7 @@ export function NodeActionPanel({ nodeId, status }: Props): ReactElement {
       const res = await fetch(path, { method: "POST" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setError(body?.reason ?? body?.error ?? `HTTP ${res.status}`);
+        setError(formatActionError(body, res.status));
         return;
       }
       router.refresh();
