@@ -81,6 +81,10 @@ patches:
       - op: add
         path: /spec/template/metadata/labels/app.kubernetes.io~1instance
         value: "operator"
+      - op: add
+        path: /spec/template/metadata/annotations
+        value:
+          kubectl.kubernetes.io/restartedAt: "2026-06-06T18:32:37Z"
 
   # task.0423: Doltgres knowledge-plane migrator runs as a second initContainer
   # on the operator Deployment. DATABASE_URL maps to DOLTGRES_URL.
