@@ -35,6 +35,14 @@ const dbState = vi.hoisted(() => ({
 const mockGetServerSessionUser = vi.hoisted(() => vi.fn());
 const mockForkFromTemplate = vi.hoisted(() => vi.fn());
 const mockOpenNodeSubmodulePr = vi.hoisted(() => vi.fn());
+const mockLogEvent = vi.hoisted(() => vi.fn());
+const mockLog = vi.hoisted(() => ({
+  child: vi.fn().mockReturnThis(),
+  debug: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+}));
 
 vi.mock("@/lib/auth/server", () => ({
   getServerSessionUser: (...args: unknown[]) =>
@@ -73,22 +81,19 @@ vi.mock("@/bootstrap/otel", () => ({
 }));
 
 vi.mock("@/shared/observability", () => {
-  const log = {
-    child: vi.fn().mockReturnThis(),
-    debug: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  };
   return {
-    EVENT_NAMES: { NODE_PUBLISH_COMPLETE: "node.publish.complete" },
+    EVENT_NAMES: {
+      NODE_PUBLISH_COMPLETE: "feature.node_publish.complete",
+    },
     createRequestContext: () => ({
-      log,
+      log: mockLog,
       reqId: "req-1",
       routeId: "nodes.publish",
     }),
-    logEvent: vi.fn(),
-    makeLogger: () => log,
+    logEvent: mockLogEvent,
+    logRequestEnd: vi.fn(),
+    logRequestStart: vi.fn(),
+    makeLogger: () => mockLog,
   };
 });
 
@@ -137,6 +142,12 @@ describe("POST /api/v1/nodes/[id]/publish", () => {
       prNumber: 1532,
       prUrl: "https://github.com/cogni-test-org/cogni-monorepo/pull/1532",
     });
+    mockLogEvent.mockReset();
+    mockLog.child.mockClear();
+    mockLog.debug.mockClear();
+    mockLog.error.mockClear();
+    mockLog.info.mockClear();
+    mockLog.warn.mockClear();
   });
 
   it("mints the node repo as a template fork before opening the submodule pin PR", async () => {
@@ -181,5 +192,91 @@ describe("POST /api/v1/nodes/[id]/publish", () => {
       "https://github.com/cogni-test-org/cogni-monorepo/pull/1532"
     );
     expect(body.pr.prNumber).toBe(1532);
+    expect(mockLog.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "feature.node_publish.complete",
+        phase: "started",
+        nodeId: "11111111-1111-4111-8111-111111111111",
+      }),
+      "feature.node_publish.complete"
+    );
+    expect(mockLog.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "feature.node_publish.complete",
+        phase: "step",
+        step: "fork_from_template",
+        outcome: "started",
+        slug: "atlas",
+      }),
+      "feature.node_publish.complete"
+    );
+    expect(mockLog.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "feature.node_publish.complete",
+        phase: "step",
+        step: "open_submodule_pr",
+        outcome: "success",
+        prNumber: 1532,
+      }),
+      "feature.node_publish.complete"
+    );
+    expect(mockLogEvent).toHaveBeenCalledWith(
+      mockLog,
+      "feature.node_publish.complete",
+      expect.objectContaining({
+        nodeId: "11111111-1111-4111-8111-111111111111",
+        outcome: "success",
+        prNumber: 1532,
+        prUrl: "https://github.com/cogni-test-org/cogni-monorepo/pull/1532",
+      })
+    );
+  });
+
+  it("logs the failing PR formation stage with a classified GitHub status", async () => {
+    const err = new Error(
+      "GitHub App not installed on cogni-test-org/cogni-monorepo (HTTP 404)"
+    );
+    Object.assign(err, { status: 404 });
+    mockOpenNodeSubmodulePr.mockRejectedValue(err);
+
+    const response = await POST(
+      new Request(
+        "https://operator.test.cognidao.org/api/v1/nodes/11111111-1111-4111-8111-111111111111/publish",
+        { method: "POST" }
+      ),
+      {
+        params: Promise.resolve({
+          id: "11111111-1111-4111-8111-111111111111",
+        }),
+      }
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(502);
+    expect(body.error).toBe("node-app PR authoring failed");
+    expect(mockLog.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "feature.node_publish.complete",
+        phase: "step",
+        step: "open_submodule_pr",
+        outcome: "error",
+        errorCode: "app_not_installed",
+        githubStatus: 404,
+        slug: "atlas",
+      }),
+      "feature.node_publish.complete"
+    );
+    expect(mockLog.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "feature.node_publish.complete",
+        step: "open_submodule_pr",
+        outcome: "error",
+        errorCode: "app_not_installed",
+        githubStatus: 404,
+        status: 502,
+        slug: "atlas",
+      }),
+      "feature.node_publish.complete"
+    );
   });
 });
