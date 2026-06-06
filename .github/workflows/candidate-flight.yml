@@ -316,13 +316,13 @@ jobs:
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+          NODE_SOURCE_SHA: ${{ needs.decide.outputs.node_source_sha }}
+          DEPLOY_ENVIRONMENT: candidate-a
         run: |
-          if [ -z "$VM_HOST" ]; then
-            echo "⚠️ No VM_HOST secret set on candidate-a — skipping AppSet reconcile"
-            echo "has_vm=false" >> "$GITHUB_OUTPUT"
+          bash ci-src/scripts/ci/require-node-ref-vm.sh
+          if [ "$VM_HOST" = "" ]; then
             exit 0
           fi
-          echo "has_vm=true" >> "$GITHUB_OUTPUT"
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           echo "$SSH_DEPLOY_KEY" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
@@ -676,9 +676,11 @@ jobs:
           fetch-depth: 0
 
       - name: Setup SSH
+        env:
+          NODE_SOURCE_SHA: ${{ needs.decide.outputs.node_source_sha }}
         run: |
-          if [ -z "$VM_HOST" ]; then
-            echo "⚠️ No VM_HOST secret set for candidate-a — skipping infra deploy"
+          bash scripts/ci/require-node-ref-vm.sh
+          if [ "$VM_HOST" = "" ]; then
             exit 0
           fi
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -769,18 +771,13 @@ jobs:
           VM_HOST: ${{ secrets.VM_HOST }}
           SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
           NODE_SOURCE_SHA: ${{ needs.decide.outputs.node_source_sha }}
+          DEPLOY_ENVIRONMENT: candidate-a
         run: |
           set -euo pipefail
-          if [ -z "$VM_HOST" ]; then
-            if [ -n "$NODE_SOURCE_SHA" ]; then
-              echo "::error::Node-ref candidate flight requires VM_HOST so /version.buildSha can be observed"
-              exit 1
-            fi
-            echo "⚠️ No VM_HOST secret set on candidate-a — skipping verification"
-            echo "has_vm=false" >> "$GITHUB_OUTPUT"
+          bash ci-src/scripts/ci/require-node-ref-vm.sh
+          if [ "$VM_HOST" = "" ]; then
             exit 0
           fi
-          echo "has_vm=true" >> "$GITHUB_OUTPUT"
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           echo "$SSH_DEPLOY_KEY" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key

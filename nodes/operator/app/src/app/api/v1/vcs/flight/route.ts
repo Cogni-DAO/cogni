@@ -4,29 +4,40 @@
 /**
  * Module: `@app/api/v1/vcs/flight`
  * Purpose: CI-gated candidate-a flight request for external AI agents.
- *   Verifies CI is green for the PR head SHA, then dispatches candidate-flight.yml.
+ *   Supports PR flights and candidate-only node-ref flights for externally built submodule nodes.
  *   The candidate slot controller (GitHub Actions workflow) owns the actual slot lease
  *   on the deploy branch — this endpoint does not replicate that logic.
  * Scope: Auth → CI gate → dispatch. No lease table. No polling hacks.
  * Invariants:
  *   - AUTH_REQUIRED: Bearer token (machine agents) or SIWE session. No open access.
  *   - CI_GATE: Rejects 422 if CI is not fully green for the PR head SHA.
- *   - CAPABILITY_BOUNDARY: Calls VcsCapability only — no direct Octokit in this file.
+ *   - OPERATOR_DEPLOY_PLANE: Hosted flight dispatch goes through an operator-local port.
+ *   - NODE_REF_CANDIDATE_ONLY: nodeRef dispatch targets candidate-a only; preview/prod are out of scope.
  *   - CONTRACTS_ARE_TRUTH: Input/output parsed through flightOperation contract.
  *   - NO_LEASE_SPLIT_BRAIN: Slot lease lives on the deploy branch (candidate-slot-controller);
  *     this route does not write a competing lease.
- * Side-effects: IO (GitHub REST API via VcsCapability)
+ * Side-effects: IO (DB read, GitHub REST API via OperatorDeployPlanePort)
  * Links: task.0361, packages/node-contracts/src/vcs.flight.v1.contract.ts,
  *   docs/spec/development-lifecycle.md
  * @public
  */
 
+import { withTenantScope } from "@cogni/db-client";
+import { type UserId, userActor } from "@cogni/ids";
 import { flightOperation } from "@cogni/node-contracts";
+import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
-import { getContainer } from "@/bootstrap/container";
+import { createOperatorDeployPlane } from "@/bootstrap/capabilities/operator-deploy-plane";
+import { resolveAppDb } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
+import type {
+  OperatorDeployPlanePort,
+  PreparedNodeRefCandidateFlight,
+} from "@/ports";
 import { getGithubRepo } from "@/shared/config/repoSpec.server";
+import { nodes } from "@/shared/db/nodes";
+import { serverEnv } from "@/shared/env";
 import { logRequestWarn, type RequestContext } from "@/shared/observability";
 
 export const runtime = "nodejs";
@@ -50,22 +61,158 @@ function handleDispatchError(
   return null;
 }
 
+function handleDeployPlaneError(error: unknown): NextResponse | null {
+  if (
+    error &&
+    typeof error === "object" &&
+    "status" in error &&
+    typeof (error as { status: unknown }).status === "number"
+  ) {
+    const err = error as { status: number; code?: string; message?: string };
+    return NextResponse.json(
+      {
+        error: err.message ?? "node-ref flight preflight failed",
+        errorCode: err.code ?? "deploy_plane_error",
+      },
+      { status: err.status }
+    );
+  }
+  return null;
+}
+
 export const POST = wrapRouteHandlerWithLogging(
   { routeId: "vcs.flight", auth: { mode: "required", getSessionUser } },
-  async (ctx, request) => {
+  async (ctx, request, sessionUser) => {
     const parsed = flightOperation.input.safeParse(await request.json());
     if (!parsed.success) {
       logRequestWarn(ctx.log, parsed.error, "VALIDATION_ERROR");
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
-    const { prNumber } = parsed.data;
 
     const { owner, repo } = getGithubRepo();
-    const container = getContainer();
-    const vcs = container.vcsCapability;
+    let deployPlane: OperatorDeployPlanePort;
+    try {
+      deployPlane = createOperatorDeployPlane(serverEnv());
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "deploy plane not configured";
+      return NextResponse.json({ error: message }, { status: 503 });
+    }
+
+    const { prNumber, nodeRef } = parsed.data;
+    if (nodeRef) {
+      const db = resolveAppDb();
+      const rows = await withTenantScope(
+        db,
+        userActor(sessionUser.id as UserId),
+        async (tx) =>
+          tx
+            .select()
+            .from(nodes)
+            .where(
+              and(
+                eq(nodes.id, nodeRef.nodeId),
+                eq(nodes.ownerUserId, sessionUser.id)
+              )
+            )
+            .limit(1)
+      );
+      const node = rows[0];
+      if (!node) {
+        return NextResponse.json({ error: "not found" }, { status: 404 });
+      }
+
+      let prepared: PreparedNodeRefCandidateFlight;
+      try {
+        prepared = await deployPlane.prepareNodeRefCandidateFlight({
+          parentOwner: owner,
+          parentRepo: repo,
+          nodeId: node.id,
+          slug: node.slug,
+          sourceSha: nodeRef.sourceSha,
+        });
+      } catch (error) {
+        const response = handleDeployPlaneError(error);
+        if (response) return response;
+        throw error;
+      }
+
+      const parentPin = prepared.parentPin;
+      if (parentPin.status === "pin_pr_opened") {
+        const ciStatus = await deployPlane.getCiStatus({
+          owner,
+          repo,
+          prNumber: parentPin.prNumber,
+        });
+        if (ciStatus.headSha !== parentPin.parentHeadSha) {
+          return NextResponse.json(
+            {
+              error:
+                "parent pin PR CI head does not match the prepared pin commit",
+              parentPrNumber: parentPin.prNumber,
+              expectedHeadSha: parentPin.parentHeadSha,
+              actualHeadSha: ciStatus.headSha,
+            },
+            { status: 409 }
+          );
+        }
+        if (!ciStatus.allGreen || ciStatus.pending) {
+          return NextResponse.json(
+            {
+              error: "Parent pin PR CI is not green for this node-ref flight.",
+              parentPrNumber: parentPin.prNumber,
+              parentHeadSha: parentPin.parentHeadSha,
+              allGreen: ciStatus.allGreen,
+              pending: ciStatus.pending,
+            },
+            { status: 422 }
+          );
+        }
+      }
+
+      try {
+        const dispatch = await deployPlane.dispatchNodeRefCandidateFlight({
+          owner,
+          repo,
+          slug: prepared.slug,
+          sourceSha: prepared.sourceSha,
+        });
+
+        return NextResponse.json(
+          flightOperation.output.parse({
+            dispatched: dispatch.dispatched,
+            slot: "candidate-a",
+            nodeRef: {
+              nodeId: prepared.nodeId,
+              slug: prepared.slug,
+              sourceSha: prepared.sourceSha,
+              sourceRepo: prepared.sourceRepo,
+              image: prepared.image,
+              ...(parentPin.prNumber
+                ? {
+                    parentPrNumber: parentPin.prNumber,
+                    parentHeadSha: parentPin.parentHeadSha,
+                  }
+                : {}),
+            },
+            workflowUrl: dispatch.workflowUrl,
+            message: dispatch.message,
+          }),
+          { status: 202 }
+        );
+      } catch (error) {
+        const errorResponse = handleDispatchError(ctx, error);
+        if (errorResponse) return errorResponse;
+        throw error;
+      }
+    }
+
+    if (!prNumber) {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    }
 
     // CI gate: verify all checks are green for the exact PR head SHA
-    const ciStatus = await vcs.getCiStatus({ owner, repo, prNumber });
+    const ciStatus = await deployPlane.getCiStatus({ owner, repo, prNumber });
     if (!ciStatus.allGreen || ciStatus.pending) {
       logRequestWarn(
         ctx.log,
@@ -85,7 +232,7 @@ export const POST = wrapRouteHandlerWithLogging(
 
     // Dispatch candidate-flight.yml — the workflow owns the slot lease
     try {
-      const dispatch = await vcs.dispatchCandidateFlight({
+      const dispatch = await deployPlane.dispatchCandidateFlight({
         owner,
         repo,
         prNumber,
@@ -96,8 +243,8 @@ export const POST = wrapRouteHandlerWithLogging(
         flightOperation.output.parse({
           dispatched: dispatch.dispatched,
           slot: "candidate-a",
-          prNumber: dispatch.prNumber,
-          headSha: dispatch.headSha,
+          prNumber,
+          headSha: ciStatus.headSha,
           workflowUrl: dispatch.workflowUrl,
           message: dispatch.message,
         }),

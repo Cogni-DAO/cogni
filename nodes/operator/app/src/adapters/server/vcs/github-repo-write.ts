@@ -17,9 +17,20 @@
  * @internal
  */
 
+import { extractNodeId, parseRepoSpec } from "@cogni/repo-spec";
 import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/core";
+import { parse as parseYaml } from "yaml";
+import { z } from "zod";
 
+import type {
+  CandidateFlightDispatchResult,
+  OperatorDeployCheckInfo,
+  OperatorDeployCiStatus,
+  OperatorDeployPlanePort,
+  PreparedNodeRefCandidateFlight,
+  PrepareNodeRefCandidateFlightInput,
+} from "@/ports";
 import {
   insertAppsetKustomization,
   insertCaddyBlock,
@@ -104,6 +115,7 @@ export type EnsureNodeSubmodulePinResult =
       readonly currentSha: string | null;
       readonly prNumber: number;
       readonly prUrl: string;
+      readonly parentHeadSha: string;
     };
 
 export interface PackageImageTagExistsInput {
@@ -157,6 +169,17 @@ const FOOTPRINT = {
  * so the operator's emit is byte-exact to the renderer and the `--check` drift gate stays green (bug.0378).
  */
 const APPSET_TEMPLATE_PATH = "scripts/ci/node-applicationset.yaml.tmpl";
+const SOURCE_SHA_PATTERN = /^[0-9a-fA-F]{40}$/;
+
+const CatalogEntrySchema = z.object({
+  name: z.string(),
+  type: z.literal("node"),
+  path_prefix: z.string(),
+  source_repo: z.string().url(),
+  image_repository: z
+    .string()
+    .regex(/^ghcr\.io\/[a-z0-9][a-z0-9_.-]*\/[a-z0-9][a-z0-9_.-]*$/),
+});
 
 function parseGhcrImageRepository(imageRepository: string): {
   owner: string;
@@ -172,12 +195,43 @@ function parseGhcrImageRepository(imageRepository: string): {
   return { owner, packageName };
 }
 
+function parseGithubRepoUrl(value: string): { owner: string; repo: string } {
+  const url = new URL(value);
+  if (url.protocol !== "https:" || url.hostname !== "github.com") {
+    throw deployPlaneError(
+      "invalid_source_repo",
+      `source_repo must be a GitHub HTTPS URL: ${value}`,
+      409
+    );
+  }
+  const [owner, repoWithSuffix, ...extra] = url.pathname
+    .split("/")
+    .filter(Boolean);
+  const repo = repoWithSuffix?.replace(/\.git$/, "");
+  if (!owner || !repo || extra.length > 0) {
+    throw deployPlaneError(
+      "invalid_source_repo",
+      "source_repo must be https://github.com/<owner>/<repo>",
+      409
+    );
+  }
+  return { owner, repo };
+}
+
+function deployPlaneError(
+  code: string,
+  message: string,
+  status: number
+): Error & { readonly code: string; readonly status: number } {
+  return Object.assign(new Error(message), { code, status });
+}
+
 // Node-content rename/delete (NODE_RENAME_PATHS / NODE_DELETE_PATHS) is gone with the inline
 // `buildNodeSubtree`: a submodule node's files live in its own repo (minted via
 // `forkFromTemplate`), and the seed already strips `.cogni/secrets-catalog.yaml` +
 // `k8s/external-secrets` (bug.5086 Part D) — the operator never rewrites node-content blobs.
 
-export class GitHubRepoWriter {
+export class GitHubRepoWriter implements OperatorDeployPlanePort {
   private readonly config: GitHubRepoWriterConfig;
   private readonly appAuth: ReturnType<typeof createAppAuth>;
 
@@ -187,6 +241,320 @@ export class GitHubRepoWriter {
       appId: config.appId,
       privateKey: config.privateKey,
     });
+  }
+
+  async getCiStatus(input: {
+    owner: string;
+    repo: string;
+    prNumber: number;
+  }): Promise<OperatorDeployCiStatus> {
+    const octokit = await this.getOctokit(input.owner, input.repo);
+    const { data: pr } = await octokit.request(
+      "GET /repos/{owner}/{repo}/pulls/{pull_number}",
+      {
+        owner: input.owner,
+        repo: input.repo,
+        pull_number: input.prNumber,
+      }
+    );
+
+    const [checksResponse, statusResponse] = await Promise.all([
+      octokit.request("GET /repos/{owner}/{repo}/commits/{ref}/check-runs", {
+        owner: input.owner,
+        repo: input.repo,
+        ref: pr.head.sha,
+        per_page: 100,
+      }),
+      octokit.request("GET /repos/{owner}/{repo}/commits/{ref}/status", {
+        owner: input.owner,
+        repo: input.repo,
+        ref: pr.head.sha,
+      }),
+    ]);
+
+    const rawCheckRuns = checksResponse.data.check_runs as Array<{
+      name: string;
+      status: string;
+      conclusion: string | null;
+      app: { slug: string } | null;
+    }>;
+    const legacyStatuses = statusResponse.data.statuses as Array<{
+      context: string;
+      state: string;
+    }>;
+    const checks: OperatorDeployCheckInfo[] = [
+      ...rawCheckRuns.map((check) => ({
+        name: check.name,
+        status: check.status,
+        conclusion: check.conclusion,
+      })),
+      ...legacyStatuses.map((status) => ({
+        name: status.context,
+        status: "completed",
+        conclusion:
+          status.state === "success"
+            ? "success"
+            : status.state === "pending"
+              ? null
+              : "failure",
+      })),
+    ];
+    const ciChecks = [
+      ...rawCheckRuns
+        .filter((check) => check.app?.slug === "github-actions")
+        .map((check) => ({
+          status: check.status,
+          conclusion: check.conclusion,
+        })),
+      ...legacyStatuses.map((status) => ({
+        status: "completed",
+        conclusion:
+          status.state === "success"
+            ? "success"
+            : status.state === "pending"
+              ? null
+              : "failure",
+      })),
+    ];
+    const pending = ciChecks.some(
+      (check) => check.status !== "completed" || check.conclusion === null
+    );
+    const allGreen =
+      ciChecks.length > 0 &&
+      !pending &&
+      ciChecks.every(
+        (check) =>
+          check.conclusion === "success" || check.conclusion === "skipped"
+      );
+
+    return {
+      prNumber: pr.number,
+      headSha: pr.head.sha,
+      allGreen,
+      pending,
+      checks,
+    };
+  }
+
+  async dispatchCandidateFlight(input: {
+    owner: string;
+    repo: string;
+    prNumber: number;
+    headSha: string;
+  }): Promise<CandidateFlightDispatchResult> {
+    const octokit = await this.getOctokit(input.owner, input.repo);
+    await octokit.request(
+      "POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches",
+      {
+        owner: input.owner,
+        repo: input.repo,
+        workflow_id: "candidate-flight.yml",
+        ref: "main",
+        inputs: {
+          pr_number: String(input.prNumber),
+          head_sha: input.headSha,
+        },
+      }
+    );
+    return {
+      dispatched: true,
+      workflowUrl: `https://github.com/${input.owner}/${input.repo}/actions/workflows/candidate-flight.yml`,
+      message: `Flight dispatched for PR #${input.prNumber} @ ${input.headSha.slice(0, 8)}.`,
+    };
+  }
+
+  async prepareNodeRefCandidateFlight(
+    input: PrepareNodeRefCandidateFlightInput
+  ): Promise<PreparedNodeRefCandidateFlight> {
+    const { parentOwner, parentRepo, nodeId, slug, sourceSha } = input;
+    if (!SOURCE_SHA_PATTERN.test(sourceSha)) {
+      throw deployPlaneError(
+        "invalid_source_sha",
+        "sourceSha must be a 40-character hex SHA",
+        400
+      );
+    }
+
+    const catalogText = await this.fetchFileText({
+      owner: parentOwner,
+      repo: parentRepo,
+      path: `infra/catalog/${slug}.yaml`,
+      ref: "main",
+    });
+    if (!catalogText) {
+      throw deployPlaneError(
+        "catalog_missing",
+        `node catalog entry not found for ${slug}`,
+        404
+      );
+    }
+    const catalog = CatalogEntrySchema.safeParse(parseYaml(catalogText));
+    if (!catalog.success || catalog.data.name !== slug) {
+      throw deployPlaneError(
+        "invalid_catalog",
+        `invalid submodule node catalog entry for ${slug}`,
+        409
+      );
+    }
+    if (catalog.data.path_prefix !== `nodes/${slug}/`) {
+      throw deployPlaneError(
+        "catalog_slug_mismatch",
+        `catalog path_prefix does not match nodes/${slug}/`,
+        409
+      );
+    }
+
+    const sourceRepo = parseGithubRepoUrl(catalog.data.source_repo);
+    const sourceExists = await this.commitExists({
+      owner: sourceRepo.owner,
+      repo: sourceRepo.repo,
+      ref: sourceSha,
+    });
+    if (!sourceExists) {
+      throw deployPlaneError(
+        "source_missing",
+        `sourceSha not found in ${catalog.data.source_repo}`,
+        422
+      );
+    }
+
+    const repoSpecText = await this.fetchFileText({
+      owner: sourceRepo.owner,
+      repo: sourceRepo.repo,
+      path: ".cogni/repo-spec.yaml",
+      ref: sourceSha,
+    });
+    if (!repoSpecText) {
+      throw deployPlaneError(
+        "repo_spec_missing",
+        "node repo-spec not found at sourceSha",
+        422
+      );
+    }
+
+    let actualNodeId: string;
+    try {
+      actualNodeId = extractNodeId(parseRepoSpec(repoSpecText));
+    } catch {
+      throw deployPlaneError(
+        "invalid_repo_spec",
+        "node repo-spec is invalid at sourceSha",
+        422
+      );
+    }
+    if (actualNodeId !== nodeId) {
+      throw deployPlaneError(
+        "node_id_mismatch",
+        `node repo-spec identity mismatch: expected ${nodeId}, got ${actualNodeId}`,
+        422
+      );
+    }
+
+    const tag = `sha-${sourceSha}`;
+    const imageExists = await this.packageImageTagExists({
+      owner: parentOwner,
+      repo: parentRepo,
+      imageRepository: catalog.data.image_repository,
+      tag,
+    });
+    if (!imageExists) {
+      throw deployPlaneError(
+        "image_missing",
+        `node image not found: ${catalog.data.image_repository}:${tag}`,
+        422
+      );
+    }
+
+    const parentPin = await this.ensureNodeSubmodulePin({
+      owner: parentOwner,
+      repo: parentRepo,
+      slug,
+      nodeRepoUrl: catalog.data.source_repo,
+      nodeRepoHeadSha: sourceSha,
+    });
+
+    return {
+      nodeId,
+      slug,
+      sourceSha,
+      sourceRepo: catalog.data.source_repo,
+      image: `${catalog.data.image_repository}:${tag}`,
+      parentPin,
+    };
+  }
+
+  async dispatchNodeRefCandidateFlight(input: {
+    owner: string;
+    repo: string;
+    slug: string;
+    sourceSha: string;
+  }): Promise<CandidateFlightDispatchResult> {
+    const octokit = await this.getOctokit(input.owner, input.repo);
+    await octokit.request(
+      "POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches",
+      {
+        owner: input.owner,
+        repo: input.repo,
+        workflow_id: "candidate-flight.yml",
+        ref: "main",
+        inputs: {
+          node_slug: input.slug,
+          source_sha: input.sourceSha,
+        },
+      }
+    );
+    return {
+      dispatched: true,
+      workflowUrl: `https://github.com/${input.owner}/${input.repo}/actions/workflows/candidate-flight.yml`,
+      message: `Candidate flight dispatched for ${input.slug}@${input.sourceSha.slice(0, 8)}.`,
+    };
+  }
+
+  async commitExists(input: {
+    owner: string;
+    repo: string;
+    ref: string;
+  }): Promise<boolean> {
+    const octokit = await this.getOctokit(input.owner, input.repo);
+    try {
+      await octokit.request("GET /repos/{owner}/{repo}/commits/{ref}", {
+        owner: input.owner,
+        repo: input.repo,
+        ref: input.ref,
+      });
+      return true;
+    } catch (error) {
+      if ((error as { status?: number })?.status === 404) return false;
+      throw error;
+    }
+  }
+
+  async fetchFileText(input: {
+    owner: string;
+    repo: string;
+    path: string;
+    ref?: string;
+  }): Promise<string | null> {
+    const octokit = await this.getOctokit(input.owner, input.repo);
+    try {
+      const { data } = await octokit.request(
+        "GET /repos/{owner}/{repo}/contents/{path}",
+        {
+          owner: input.owner,
+          repo: input.repo,
+          path: input.path,
+          ref: input.ref ?? "main",
+        }
+      );
+      if (Array.isArray(data) || data.type !== "file") return null;
+      if (data.encoding === "base64" && data.content) {
+        return Buffer.from(data.content, "base64").toString("utf-8");
+      }
+      return this.readBlob(octokit, input.owner, input.repo, data.sha);
+    } catch (error) {
+      if ((error as { status?: number })?.status === 404) return null;
+      throw error;
+    }
   }
 
   async commitFileAndOpenPr(
@@ -574,7 +942,12 @@ export class GitHubRepoWriter {
       branch,
       nodeRepoHeadSha
     );
-    return { status: "pin_pr_opened", currentSha, ...pr };
+    return {
+      status: "pin_pr_opened",
+      currentSha,
+      parentHeadSha: commit.sha,
+      ...pr,
+    };
   }
 
   async packageImageTagExists(

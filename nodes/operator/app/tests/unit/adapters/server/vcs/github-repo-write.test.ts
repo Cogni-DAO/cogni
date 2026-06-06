@@ -299,3 +299,72 @@ describe("GitHubRepoWriter.forkFromTemplate", () => {
     });
   });
 });
+
+describe("GitHubRepoWriter.packageImageTagExists", () => {
+  it("probes GHCR tags through GitHub Packages REST with installation auth", async () => {
+    routeHandlers = {
+      "GET /orgs/{org}/packages/{package_type}/{package_name}/versions": (
+        params
+      ) => {
+        expect(params).toMatchObject({
+          org: "cogni-dao",
+          package_type: "container",
+          package_name: "creative-node",
+          per_page: 100,
+        });
+        if (params.page === 1) {
+          return Array.from({ length: 100 }, () => ({
+            metadata: { container: { tags: ["sha-other"] } },
+          }));
+        }
+        return [
+          {
+            metadata: {
+              container: {
+                tags: ["sha-0123456789012345678901234567890123456789"],
+              },
+            },
+          },
+        ];
+      },
+    };
+
+    await expect(
+      makeWriter().packageImageTagExists({
+        owner: "Cogni-DAO",
+        repo: "cogni",
+        imageRepository: "ghcr.io/cogni-dao/creative-node",
+        tag: "sha-0123456789012345678901234567890123456789",
+      })
+    ).resolves.toBe(true);
+
+    expect(requests.map((request) => request.route)).toEqual([
+      "GET /orgs/{org}/packages/{package_type}/{package_name}/versions",
+      "GET /orgs/{org}/packages/{package_type}/{package_name}/versions",
+    ]);
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.github.com/repos/Cogni-DAO/cogni/installation",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer app-token",
+        }),
+      })
+    );
+  });
+
+  it("fails closed when GitHub Packages denies or hides the image package", async () => {
+    routeHandlers = {
+      "GET /orgs/{org}/packages/{package_type}/{package_name}/versions": () =>
+        Promise.reject(statusError(403, "Resource not accessible")),
+    };
+
+    await expect(
+      makeWriter().packageImageTagExists({
+        owner: "Cogni-DAO",
+        repo: "cogni",
+        imageRepository: "ghcr.io/cogni-dao/private-node",
+        tag: "sha-0123456789012345678901234567890123456789",
+      })
+    ).resolves.toBe(false);
+  });
+});

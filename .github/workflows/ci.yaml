@@ -291,6 +291,9 @@ jobs:
       - name: aggregate deploy outcome tests
         run: bash scripts/ci/tests/aggregate-decide-outcome.test.sh
 
+      - name: node-ref VM fail-closed tests
+        run: bash scripts/ci/tests/require-node-ref-vm.test.sh
+
       - name: scheduler node routing tests
         run: bash scripts/ci/render-scheduler-worker-endpoints.sh --check
 

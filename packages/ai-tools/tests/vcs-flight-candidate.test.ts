@@ -44,16 +44,7 @@ function makeVcsStub(
     createBranch: async () => {
       throw new Error("not used");
     },
-    commitExists: async () => {
-      throw new Error("not used");
-    },
-    fetchFileText: async () => {
-      throw new Error("not used");
-    },
     dispatchCandidateFlight: dispatchImpl,
-    dispatchNodeFlight: async () => {
-      throw new Error("not used");
-    },
   };
 }
 
