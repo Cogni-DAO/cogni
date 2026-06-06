@@ -66,6 +66,9 @@ describe("buildNodeLaunchPack", () => {
     expect(pack.prompt).toContain("Ensure the parent deployment PR is merged");
     expect(pack.prompt).toContain("Create a node customization PR");
     expect(pack.prompt).toContain("Do not push directly to main");
+    expect(pack.prompt).toContain("knowledge.remote");
+    expect(pack.prompt).toContain("Cogni-owned DoltHub mirror");
+    expect(pack.prompt).toContain("do not add a DOLTHUB_REMOTE_URL");
     expect(pack.prompt).toContain("Let the node repo CI build normally");
     expect(pack.prompt).toContain("operator reports the launch is eligible");
     expect(pack.prompt).toContain("@node-formation-styling-guide");
