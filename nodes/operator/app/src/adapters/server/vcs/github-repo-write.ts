@@ -705,6 +705,7 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
         `forkFromTemplate: ${owner}/${slug} main not ready after fork`
       );
     }
+    await this.ensureActionsEnabled(octokit, owner, slug);
     const { baseCommitSha, baseTreeSha } = base;
     const repoSpecSha = await this.createBlob(
       octokit,
@@ -1431,6 +1432,28 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
         force: true,
       });
     }
+  }
+
+  private async ensureActionsEnabled(
+    octokit: Octokit,
+    owner: string,
+    repo: string
+  ): Promise<void> {
+    await octokit.request("PUT /repos/{owner}/{repo}/actions/permissions", {
+      owner,
+      repo,
+      enabled: true,
+      allowed_actions: "all",
+    });
+    await octokit.request(
+      "PUT /repos/{owner}/{repo}/actions/permissions/workflow",
+      {
+        owner,
+        repo,
+        default_workflow_permissions: "write",
+        can_approve_pull_request_reviews: false,
+      }
+    );
   }
 
   /** Open the node-app PR; on 422 (one already exists for this head), return the existing one. */

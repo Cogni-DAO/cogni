@@ -89,6 +89,24 @@ function setHappyForkHandlers(): void {
       });
       return { tree: { sha: "template-tree" } };
     },
+    "PUT /repos/{owner}/{repo}/actions/permissions": (params) => {
+      expect(params).toMatchObject({
+        owner: "Cogni-DAO",
+        repo: "atlas",
+        enabled: true,
+        allowed_actions: "all",
+      });
+      return {};
+    },
+    "PUT /repos/{owner}/{repo}/actions/permissions/workflow": (params) => {
+      expect(params).toMatchObject({
+        owner: "Cogni-DAO",
+        repo: "atlas",
+        default_workflow_permissions: "write",
+        can_approve_pull_request_reviews: false,
+      });
+      return {};
+    },
     "POST /repos/{owner}/{repo}/git/blobs": (params) => {
       expect(params).toMatchObject({
         owner: "Cogni-DAO",
@@ -181,6 +199,8 @@ describe("GitHubRepoWriter.forkFromTemplate", () => {
       "POST /repos/{owner}/{repo}/forks",
       "GET /repos/{owner}/{repo}/git/ref/{ref}",
       "GET /repos/{owner}/{repo}/git/commits/{commit_sha}",
+      "PUT /repos/{owner}/{repo}/actions/permissions",
+      "PUT /repos/{owner}/{repo}/actions/permissions/workflow",
       "POST /repos/{owner}/{repo}/git/blobs",
       "POST /repos/{owner}/{repo}/git/trees",
       "POST /repos/{owner}/{repo}/git/commits",
@@ -241,6 +261,8 @@ describe("GitHubRepoWriter.forkFromTemplate", () => {
       "GET /repos/{owner}/{repo}",
       "GET /repos/{owner}/{repo}/git/ref/{ref}",
       "GET /repos/{owner}/{repo}/git/commits/{commit_sha}",
+      "PUT /repos/{owner}/{repo}/actions/permissions",
+      "PUT /repos/{owner}/{repo}/actions/permissions/workflow",
       "POST /repos/{owner}/{repo}/git/blobs",
       "POST /repos/{owner}/{repo}/git/trees",
       "POST /repos/{owner}/{repo}/git/commits",
