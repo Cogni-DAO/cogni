@@ -43,6 +43,20 @@ const dbState = vi.hoisted(() => ({
     ownerUserId: "00000000-0000-4000-a000-000000000001",
   } as { id: string; slug: string; ownerUserId: string } | null,
 }));
+const envState = vi.hoisted(() => ({
+  current: {
+    GH_REVIEW_APP_ID: "1",
+    GH_REVIEW_APP_PRIVATE_KEY_BASE64:
+      Buffer.from("private-key").toString("base64"),
+    NODE_SUBMODULE_PARENT_OWNER: "cogni-test-org",
+    NODE_SUBMODULE_PARENT_REPO: "cogni-monorepo",
+  } as {
+    GH_REVIEW_APP_ID?: string;
+    GH_REVIEW_APP_PRIVATE_KEY_BASE64?: string;
+    NODE_SUBMODULE_PARENT_OWNER?: string;
+    NODE_SUBMODULE_PARENT_REPO?: string;
+  },
+}));
 
 const mockGetSessionUser = vi.hoisted(() => vi.fn());
 const mockLog = vi.hoisted(() => ({
@@ -86,11 +100,7 @@ vi.mock("@/shared/config/repoSpec.server", () => ({
 }));
 
 vi.mock("@/shared/env", () => ({
-  serverEnv: () => ({
-    GH_REVIEW_APP_ID: "1",
-    GH_REVIEW_APP_PRIVATE_KEY_BASE64:
-      Buffer.from("private-key").toString("base64"),
-  }),
+  serverEnv: () => envState.current,
 }));
 
 vi.mock("@/app/_lib/auth/session", () => ({
@@ -182,6 +192,13 @@ describe("POST /api/v1/vcs/flight", () => {
       slug: "creative",
       ownerUserId: String(TEST_SESSION_USER_1.id),
     };
+    envState.current = {
+      GH_REVIEW_APP_ID: "1",
+      GH_REVIEW_APP_PRIVATE_KEY_BASE64:
+        Buffer.from("private-key").toString("base64"),
+      NODE_SUBMODULE_PARENT_OWNER: "cogni-test-org",
+      NODE_SUBMODULE_PARENT_REPO: "cogni-monorepo",
+    };
     mockGetSessionUser.mockResolvedValue(TEST_SESSION_USER_1);
   });
 
@@ -272,13 +289,45 @@ describe("POST /api/v1/vcs/flight", () => {
         expect(flightOperation.output.safeParse(body).success).toBe(true);
         expect(body.nodeRef.slug).toBe("creative");
         expect(
-          mockDeployPlane.dispatchNodeRefCandidateFlight
+          mockDeployPlane.prepareNodeRefCandidateFlight
         ).toHaveBeenCalledWith({
-          owner: "test-owner",
-          repo: "test-repo",
+          parentOwner: "cogni-test-org",
+          parentRepo: "cogni-monorepo",
+          nodeId: NODE_ID,
           slug: "creative",
           sourceSha: SOURCE_SHA,
         });
+        expect(
+          mockDeployPlane.dispatchNodeRefCandidateFlight
+        ).toHaveBeenCalledWith({
+          owner: "cogni-test-org",
+          repo: "cogni-monorepo",
+          slug: "creative",
+          sourceSha: SOURCE_SHA,
+        });
+      },
+    });
+  });
+
+  it("fails closed when node-ref parent deployment repo config is missing", async () => {
+    envState.current.NODE_SUBMODULE_PARENT_OWNER = undefined;
+
+    await testApiHandler({
+      appHandler,
+      async test({ fetch }) {
+        const res = await fetch({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nodeRef: { nodeId: NODE_ID, sourceSha: SOURCE_SHA },
+          }),
+        });
+        expect(res.status).toBe(503);
+        const body = await res.json();
+        expect(body.error).toMatch(/NODE_SUBMODULE_PARENT_OWNER/);
+        expect(
+          mockDeployPlane.prepareNodeRefCandidateFlight
+        ).not.toHaveBeenCalled();
       },
     });
   });

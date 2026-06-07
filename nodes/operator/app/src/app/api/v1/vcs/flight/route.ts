@@ -37,7 +37,7 @@ import type {
 } from "@/ports";
 import { getGithubRepo } from "@/shared/config/repoSpec.server";
 import { nodes } from "@/shared/db/nodes";
-import { serverEnv } from "@/shared/env";
+import { type ServerEnv, serverEnv } from "@/shared/env";
 import { logRequestWarn, type RequestContext } from "@/shared/observability";
 
 export const runtime = "nodejs";
@@ -80,6 +80,21 @@ function handleDeployPlaneError(error: unknown): NextResponse | null {
   return null;
 }
 
+function getNodeRefParentRepo(env: ServerEnv): {
+  readonly owner: string;
+  readonly repo: string;
+} {
+  if (!env.NODE_SUBMODULE_PARENT_OWNER || !env.NODE_SUBMODULE_PARENT_REPO) {
+    throw new Error(
+      "operator not configured for node-ref flight: NODE_SUBMODULE_PARENT_OWNER + NODE_SUBMODULE_PARENT_REPO required"
+    );
+  }
+  return {
+    owner: env.NODE_SUBMODULE_PARENT_OWNER,
+    repo: env.NODE_SUBMODULE_PARENT_REPO,
+  };
+}
+
 export const POST = wrapRouteHandlerWithLogging(
   { routeId: "vcs.flight", auth: { mode: "required", getSessionUser } },
   async (ctx, request, sessionUser) => {
@@ -89,10 +104,10 @@ export const POST = wrapRouteHandlerWithLogging(
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
 
-    const { owner, repo } = getGithubRepo();
+    const env = serverEnv();
     let deployPlane: OperatorDeployPlanePort;
     try {
-      deployPlane = createOperatorDeployPlane(serverEnv());
+      deployPlane = createOperatorDeployPlane(env);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "deploy plane not configured";
@@ -122,11 +137,22 @@ export const POST = wrapRouteHandlerWithLogging(
         return NextResponse.json({ error: "not found" }, { status: 404 });
       }
 
+      let parentRepo: ReturnType<typeof getNodeRefParentRepo>;
+      try {
+        parentRepo = getNodeRefParentRepo(env);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "node-ref flight parent repo not configured";
+        return NextResponse.json({ error: message }, { status: 503 });
+      }
+
       let prepared: PreparedNodeRefCandidateFlight;
       try {
         prepared = await deployPlane.prepareNodeRefCandidateFlight({
-          parentOwner: owner,
-          parentRepo: repo,
+          parentOwner: parentRepo.owner,
+          parentRepo: parentRepo.repo,
           nodeId: node.id,
           slug: node.slug,
           sourceSha: nodeRef.sourceSha,
@@ -140,8 +166,8 @@ export const POST = wrapRouteHandlerWithLogging(
       const parentPin = prepared.parentPin;
       if (parentPin.status === "pin_pr_opened") {
         const ciStatus = await deployPlane.getCiStatus({
-          owner,
-          repo,
+          owner: parentRepo.owner,
+          repo: parentRepo.repo,
           prNumber: parentPin.prNumber,
         });
         if (ciStatus.headSha !== parentPin.parentHeadSha) {
@@ -172,8 +198,8 @@ export const POST = wrapRouteHandlerWithLogging(
 
       try {
         const dispatch = await deployPlane.dispatchNodeRefCandidateFlight({
-          owner,
-          repo,
+          owner: parentRepo.owner,
+          repo: parentRepo.repo,
           slug: prepared.slug,
           sourceSha: prepared.sourceSha,
         });
@@ -210,6 +236,8 @@ export const POST = wrapRouteHandlerWithLogging(
     if (!prNumber) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
+
+    const { owner, repo } = getGithubRepo();
 
     // CI gate: verify all checks are green for the exact PR head SHA
     const ciStatus = await deployPlane.getCiStatus({ owner, repo, prNumber });
