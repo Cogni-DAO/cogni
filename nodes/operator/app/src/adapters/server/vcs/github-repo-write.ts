@@ -46,12 +46,6 @@ import type { NodeKnowledgeRemote } from "@/shared/node-app-scaffold/knowledge-r
 export interface GitHubRepoWriterConfig {
   readonly appId: string;
   readonly privateKey: string;
-  readonly ghcrDeployCredentials?: GhcrDeployCredentials | undefined;
-}
-
-export interface GhcrDeployCredentials {
-  readonly username: string;
-  readonly token: string;
 }
 
 export interface CommitFileAndOpenPrInput {
@@ -130,6 +124,11 @@ export interface PackageImageTagExistsInput {
   readonly imageRepository: string;
   readonly tag: string;
 }
+
+type PackageImageTagStatus =
+  | { readonly status: "ready" }
+  | { readonly status: "missing" }
+  | { readonly status: "not_public"; readonly visibility: string };
 
 /** Input to {@link GitHubRepoWriter.forkFromTemplate}: mint a node repo from `node-template`. */
 export interface ForkFromTemplateInput {
@@ -435,13 +434,20 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
     }
 
     const tag = `sha-${sourceSha}`;
-    const imageExists = await this.packageImageTagExists({
-      owner: parentOwner,
-      repo: parentRepo,
+    const imageStatus = await this.packageImageTagStatus({
+      owner: sourceRepo.owner,
+      repo: sourceRepo.repo,
       imageRepository: catalog.data.image_repository,
       tag,
     });
-    if (!imageExists) {
+    if (imageStatus.status === "not_public") {
+      throw deployPlaneError(
+        "image_not_public",
+        `external artifact image is ${imageStatus.visibility}, expected public: ${catalog.data.image_repository}:${tag}`,
+        422
+      );
+    }
+    if (imageStatus.status !== "ready") {
       throw deployPlaneError(
         "image_missing",
         `external artifact image not found: ${catalog.data.image_repository}:${tag}`,
@@ -978,14 +984,34 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
   async packageImageTagExists(
     input: PackageImageTagExistsInput
   ): Promise<boolean> {
-    const parsed = parseGhcrImageRepository(input.imageRepository);
-    if (this.config.ghcrDeployCredentials) {
-      return this.ghcrManifestExists(parsed, input.tag);
-    }
+    return (await this.packageImageTagStatus(input)).status === "ready";
+  }
 
+  async packageImageTagStatus(
+    input: PackageImageTagExistsInput
+  ): Promise<PackageImageTagStatus> {
+    const parsed = parseGhcrImageRepository(input.imageRepository);
     const octokit = await this.getOctokit(input.owner, input.repo);
 
     try {
+      const { data: packageInfo } = await octokit.request(
+        "GET /orgs/{org}/packages/{package_type}/{package_name}",
+        {
+          org: parsed.owner,
+          package_type: "container",
+          package_name: parsed.packageName,
+        }
+      );
+      if (packageInfo.visibility !== "public") {
+        return {
+          status: "not_public",
+          visibility:
+            typeof packageInfo.visibility === "string"
+              ? packageInfo.visibility
+              : "unknown",
+        };
+      }
+
       for (let page = 1; page <= 10; page += 1) {
         const { data } = await octokit.request(
           "GET /orgs/{org}/packages/{package_type}/{package_name}/versions",
@@ -1002,62 +1028,16 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
             version.metadata?.container?.tags?.includes(input.tag)
           )
         ) {
-          return true;
+          return { status: "ready" };
         }
-        if (data.length < 100) return false;
+        if (data.length < 100) return { status: "missing" };
       }
-      return false;
+      return { status: "missing" };
     } catch (err) {
       const status = (err as { status?: number })?.status;
-      if (status === 403 || status === 404) return false;
+      if (status === 403 || status === 404) return { status: "missing" };
       throw err;
     }
-  }
-
-  private async ghcrManifestExists(
-    image: { readonly owner: string; readonly packageName: string },
-    tag: string
-  ): Promise<boolean> {
-    const credentials = this.config.ghcrDeployCredentials;
-    if (!credentials) return false;
-
-    const repository = `${image.owner}/${image.packageName}`;
-    const tokenResponse = await fetch(
-      `https://ghcr.io/token?service=ghcr.io&scope=${encodeURIComponent(
-        `repository:${repository}:pull`
-      )}`,
-      {
-        headers: {
-          Authorization: `Basic ${Buffer.from(
-            `${credentials.username}:${credentials.token}`
-          ).toString("base64")}`,
-        },
-      }
-    );
-    if (!tokenResponse.ok) {
-      const status = tokenResponse.status;
-      if (status === 401 || status === 403 || status === 404) return false;
-      throw new Error(`GHCR token request failed with HTTP ${status}`);
-    }
-    const tokenBody = (await tokenResponse.json()) as { token?: string };
-    if (!tokenBody.token) {
-      throw new Error("GHCR token response did not include a token");
-    }
-
-    const manifestResponse = await fetch(
-      `https://ghcr.io/v2/${repository}/manifests/${tag}`,
-      {
-        headers: {
-          Authorization: `Bearer ${tokenBody.token}`,
-          Accept:
-            "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
-        },
-      }
-    );
-    if (manifestResponse.ok) return true;
-    const status = manifestResponse.status;
-    if (status === 401 || status === 403 || status === 404) return false;
-    throw new Error(`GHCR manifest request failed with HTTP ${status}`);
   }
 
   /** Resolve `heads/main` → its commit + root-tree SHAs (the parent for a node-birth commit). */
