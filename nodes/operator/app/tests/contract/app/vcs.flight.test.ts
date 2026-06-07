@@ -143,6 +143,29 @@ vi.mock("@/shared/observability", async (importOriginal) => {
 
 import * as appHandler from "@/app/api/v1/vcs/flight/route";
 
+function expectFlightRequestLog(
+  level: "info" | "warn" | "error",
+  fields: Record<string, unknown>
+): void {
+  expect(mockLog[level]).toHaveBeenCalledWith(
+    expect.objectContaining({
+      event: "feature.vcs_flight.request_complete",
+      reqId: "req-1",
+      routeId: "vcs.flight",
+      ...fields,
+    }),
+    "feature.vcs_flight.request_complete"
+  );
+}
+
+function statusError(
+  status: number,
+  code: string,
+  message: string
+): Error & { readonly status: number; readonly code: string } {
+  return Object.assign(new Error(message), { status, code });
+}
+
 function makeGreenCiStatus(
   overrides: Partial<OperatorDeployCiStatus> = {}
 ): OperatorDeployCiStatus {
@@ -235,6 +258,13 @@ describe("POST /api/v1/vcs/flight", () => {
         const body = await res.json();
         expect(body.error).toMatch(/CI is not green/);
         expect(mockDeployPlane.dispatchCandidateFlight).not.toHaveBeenCalled();
+        expectFlightRequestLog("warn", {
+          mode: "pr",
+          outcome: "error",
+          status: 422,
+          errorCode: "ci_not_green",
+          prNumber: 42,
+        });
       },
     });
   });
@@ -261,6 +291,13 @@ describe("POST /api/v1/vcs/flight", () => {
           owner: "test-owner",
           repo: "test-repo",
           prNumber: 42,
+        });
+        expectFlightRequestLog("info", {
+          mode: "pr",
+          outcome: "success",
+          status: 202,
+          prNumber: 42,
+          dispatchStatus: "initiated",
         });
       },
     });
@@ -305,6 +342,61 @@ describe("POST /api/v1/vcs/flight", () => {
           slug: "creative",
           sourceSha: SOURCE_SHA,
         });
+        expectFlightRequestLog("info", {
+          mode: "node_ref",
+          outcome: "success",
+          status: 202,
+          nodeId: NODE_ID,
+          slug: "creative",
+          sourceSha8: SOURCE_SHA.slice(0, 8),
+          dispatchStatus: "initiated",
+        });
+      },
+    });
+  });
+
+  it("returns classified node-ref preflight failures with request and adapter logs", async () => {
+    mockDeployPlane.prepareNodeRefCandidateFlight.mockRejectedValue(
+      statusError(422, "source_missing", "sourceSha not found")
+    );
+
+    await testApiHandler({
+      appHandler,
+      async test({ fetch }) {
+        const res = await fetch({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nodeRef: { nodeId: NODE_ID, sourceSha: SOURCE_SHA },
+          }),
+        });
+        expect(res.status).toBe(422);
+        const body = await res.json();
+        expect(body.errorCode).toBe("source_missing");
+        expect(
+          mockDeployPlane.dispatchNodeRefCandidateFlight
+        ).not.toHaveBeenCalled();
+        expect(mockLog.error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            event: "adapter.github_repo_write.error",
+            dep: "github",
+            operation: "prepare_node_ref_candidate_flight",
+            reasonCode: "source_missing",
+            status: 422,
+            nodeId: NODE_ID,
+            slug: "creative",
+          }),
+          "adapter.github_repo_write.error"
+        );
+        expectFlightRequestLog("warn", {
+          mode: "node_ref",
+          outcome: "error",
+          status: 422,
+          errorCode: "source_missing",
+          nodeId: NODE_ID,
+          slug: "creative",
+          sourceSha8: SOURCE_SHA.slice(0, 8),
+        });
       },
     });
   });
@@ -328,6 +420,15 @@ describe("POST /api/v1/vcs/flight", () => {
         expect(
           mockDeployPlane.prepareNodeRefCandidateFlight
         ).not.toHaveBeenCalled();
+        expectFlightRequestLog("error", {
+          mode: "node_ref",
+          outcome: "error",
+          status: 503,
+          errorCode: "node_parent_config_missing",
+          nodeId: NODE_ID,
+          slug: "creative",
+          sourceSha8: SOURCE_SHA.slice(0, 8),
+        });
       },
     });
   });
@@ -369,6 +470,15 @@ describe("POST /api/v1/vcs/flight", () => {
         expect(
           mockDeployPlane.dispatchNodeRefCandidateFlight
         ).not.toHaveBeenCalled();
+        expectFlightRequestLog("warn", {
+          mode: "node_ref",
+          outcome: "error",
+          status: 409,
+          errorCode: "parent_pin_head_mismatch",
+          nodeId: NODE_ID,
+          slug: "creative",
+          parentPrNumber: 77,
+        });
       },
     });
   });
@@ -407,6 +517,15 @@ describe("POST /api/v1/vcs/flight", () => {
         expect(
           mockDeployPlane.dispatchNodeRefCandidateFlight
         ).not.toHaveBeenCalled();
+        expectFlightRequestLog("warn", {
+          mode: "node_ref",
+          outcome: "error",
+          status: 422,
+          errorCode: "parent_ci_not_green",
+          nodeId: NODE_ID,
+          slug: "creative",
+          parentPrNumber: 77,
+        });
       },
     });
   });
