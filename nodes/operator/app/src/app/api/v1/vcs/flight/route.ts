@@ -22,12 +22,14 @@
  * @public
  */
 
+import { withTenantScope } from "@cogni/db-client";
+import { type UserId, userActor } from "@cogni/ids";
 import { flightOperation } from "@cogni/node-contracts";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { createOperatorDeployPlane } from "@/bootstrap/capabilities/operator-deploy-plane";
-import { resolveServiceDb } from "@/bootstrap/container";
+import { resolveAppDb } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import type {
   OperatorDeployPlanePort,
@@ -80,7 +82,7 @@ function handleDeployPlaneError(error: unknown): NextResponse | null {
 
 export const POST = wrapRouteHandlerWithLogging(
   { routeId: "vcs.flight", auth: { mode: "required", getSessionUser } },
-  async (ctx, request, _sessionUser) => {
+  async (ctx, request, sessionUser) => {
     const parsed = flightOperation.input.safeParse(await request.json());
     if (!parsed.success) {
       logRequestWarn(ctx.log, parsed.error, "VALIDATION_ERROR");
@@ -99,12 +101,22 @@ export const POST = wrapRouteHandlerWithLogging(
 
     const { prNumber, nodeRef } = parsed.data;
     if (nodeRef) {
-      const db = resolveServiceDb();
-      const rows = await db
-        .select()
-        .from(nodes)
-        .where(eq(nodes.id, nodeRef.nodeId))
-        .limit(1);
+      const db = resolveAppDb();
+      const rows = await withTenantScope(
+        db,
+        userActor(sessionUser.id as UserId),
+        async (tx) =>
+          tx
+            .select()
+            .from(nodes)
+            .where(
+              and(
+                eq(nodes.id, nodeRef.nodeId),
+                eq(nodes.ownerUserId, sessionUser.id)
+              )
+            )
+            .limit(1)
+      );
       const node = rows[0];
       if (!node) {
         return NextResponse.json({ error: "not found" }, { status: 404 });

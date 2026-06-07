@@ -64,7 +64,6 @@ vi.mock("@/bootstrap/container", () => ({
     config: { unhandledErrorPolicy: "rethrow" },
   }),
   resolveAppDb: () => ({}),
-  resolveServiceDb: () => mockTx,
 }));
 
 vi.mock("@/bootstrap/otel", () => ({
@@ -280,37 +279,6 @@ describe("POST /api/v1/vcs/flight", () => {
           slug: "creative",
           sourceSha: SOURCE_SHA,
         });
-      },
-    });
-  });
-
-  it("allows authenticated agents to request node-ref flight for any registered node", async () => {
-    dbState.current = {
-      id: NODE_ID,
-      slug: "creative",
-      ownerUserId: "22222222-2222-4222-8222-222222222222",
-    };
-    mockDeployPlane.prepareNodeRefCandidateFlight.mockResolvedValue(
-      makePreparedNodeRef()
-    );
-    mockDeployPlane.dispatchNodeRefCandidateFlight.mockResolvedValue(
-      makeDispatchResult("Candidate flight dispatched for creative@01234567.")
-    );
-
-    await testApiHandler({
-      appHandler,
-      async test({ fetch }) {
-        const res = await fetch({
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            nodeRef: { nodeId: NODE_ID, sourceSha: SOURCE_SHA },
-          }),
-        });
-        expect(res.status).toBe(202);
-        expect(
-          mockDeployPlane.prepareNodeRefCandidateFlight
-        ).toHaveBeenCalled();
       },
     });
   });
