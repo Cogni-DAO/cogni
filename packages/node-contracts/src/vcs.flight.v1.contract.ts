@@ -8,22 +8,43 @@
  * Invariants:
  *   - CONTRACTS_ARE_TRUTH: wire shape is owned by vcs.flight.v1.contract
  * Side-effects: none
- * Links: task.0361, nodes/operator/app/src/app/api/v1/vcs/flight/route.ts
+ * Links: task.0370, nodes/operator/app/src/app/api/v1/vcs/flight/route.ts
  * @public
  */
 
 import { z } from "zod";
 
 export const flightOperation = {
-  input: z.object({
-    prNumber: z.number().int().positive(),
-  }),
+  input: z
+    .object({
+      prNumber: z.number().int().positive().optional(),
+      nodeRef: z
+        .object({
+          nodeId: z.string().uuid(),
+          sourceSha: z.string().regex(/^[0-9a-fA-F]{40}$/),
+        })
+        .optional(),
+    })
+    .refine((input) => Boolean(input.prNumber) !== Boolean(input.nodeRef), {
+      message: "Provide exactly one of prNumber or nodeRef",
+    }),
 
   output: z.object({
     dispatched: z.boolean(),
     slot: z.literal("candidate-a"),
-    prNumber: z.number().int().positive(),
-    headSha: z.string().nullable(),
+    prNumber: z.number().int().positive().optional(),
+    headSha: z.string().nullable().optional(),
+    nodeRef: z
+      .object({
+        nodeId: z.string().uuid(),
+        slug: z.string(),
+        sourceSha: z.string(),
+        sourceRepo: z.string().url(),
+        image: z.string(),
+        parentPrNumber: z.number().int().positive().optional(),
+        parentHeadSha: z.string().optional(),
+      })
+      .optional(),
     workflowUrl: z.string().url(),
     message: z.string(),
   }),
