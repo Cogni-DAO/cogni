@@ -11,6 +11,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
 import {
   renderExternalSecret,
   renderExternalSecretKustomization,
@@ -18,27 +19,40 @@ import {
 
 describe("renderExternalSecret", () => {
   it("renders a per-env node-app secret leaf backed by the node OpenBao path", () => {
-    expect(renderExternalSecret("creative", "candidate-a")).toContain(
-      [
-        "kind: ExternalSecret",
-        "metadata:",
-        "  name: node-app-secrets",
-        "  namespace: cogni-candidate-a",
-        "    app.kubernetes.io/component: creative",
-        "  target:",
-        "    name: creative-node-app-secrets",
-        "        key: candidate-a/creative",
-      ].join("\n")
-    );
+    const rendered = parseYaml(renderExternalSecret("creative", "candidate-a"));
+
+    expect(rendered).toMatchObject({
+      apiVersion: "external-secrets.io/v1",
+      kind: "ExternalSecret",
+      metadata: {
+        name: "node-app-secrets",
+        namespace: "cogni-candidate-a",
+        labels: {
+          "app.kubernetes.io/component": "creative",
+        },
+      },
+      spec: {
+        secretStoreRef: {
+          name: "openbao-backend",
+          kind: "ClusterSecretStore",
+        },
+        target: {
+          name: "creative-node-app-secrets",
+          creationPolicy: "Owner",
+          deletionPolicy: "Retain",
+        },
+        dataFrom: [{ extract: { key: "candidate-a/creative" } }],
+      },
+    });
   });
 });
 
 describe("renderExternalSecretKustomization", () => {
   it("renders the leaf kustomization", () => {
-    expect(renderExternalSecretKustomization()).toContain(
-      ["kind: Kustomization", "resources:", "  - external-secret.yaml"].join(
-        "\n"
-      )
-    );
+    expect(parseYaml(renderExternalSecretKustomization())).toEqual({
+      apiVersion: "kustomize.config.k8s.io/v1beta1",
+      kind: "Kustomization",
+      resources: ["external-secret.yaml"],
+    });
   });
 });

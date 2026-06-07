@@ -38,6 +38,9 @@ interface CandidateFlightWorkflow {
     decide: {
       steps: WorkflowStep[];
     };
+    flight: {
+      steps: WorkflowStep[];
+    };
     "deploy-infra": {
       if?: string;
     };
@@ -111,6 +114,22 @@ describe("candidate-flight workflow · node-ref infra coupling", () => {
     expect(infraStep.run).not.toContain("ADDED_CATALOG=");
     expect(workflow.jobs["deploy-infra"].if).toBe(
       "needs.decide.outputs.needs_infra == 'true'"
+    );
+  });
+
+  it("candidate deploy branches sync generated ExternalSecret leaves with overlays", () => {
+    const workflow = loadWorkflow();
+    const syncStep = findStep(
+      workflow.jobs.flight.steps,
+      "Sync base + per-node overlay + per-node catalog to deploy branch"
+    );
+    expect(syncStep.run).toBeDefined();
+
+    expect(syncStep.run).toContain(
+      "app-src/infra/k8s/secrets/external-secrets/candidate-a/${NODE}"
+    );
+    expect(syncStep.run).toContain(
+      "deploy-branch/infra/k8s/secrets/external-secrets/candidate-a/${NODE}"
     );
   });
 });
