@@ -14,8 +14,8 @@ is reproducible by an external agent without privileged manual bridges.
 If the workspace root does not contain `.env.cogni`, run
 `/contribute-to-cogni` against the production operator and save the returned env
 file at the repo root before doing launch work. Use that token to recall the
-launch handoff knowledge block and agent starter-kit knowledge before designing
-the customization PR.
+launch handoff knowledge block (`node-launch-handoff`) and search for agent
+starter-kit knowledge before designing the customization PR.
 
 ## First Response
 
@@ -46,16 +46,17 @@ scorecard.
 Return this matrix only after the child customization PR exists, or when
 reporting a terminal blocker that prevents opening one:
 
-| Gate                   | Evidence                                                         | Status         | Next action                                 |
-| ---------------------- | ---------------------------------------------------------------- | -------------- | ------------------------------------------- |
-| Launch pack facts      | node repo URL, parent PR, candidate URL                          | `pass/blocked` | missing fact to recover                     |
-| Parent birth PR        | merged or still open                                             | `pass/blocked` | wait/ask human to merge parent PR           |
-| Child customization PR | PR URL in node repo                                              | `pass/blocked` | create PR from node repo branch             |
-| Child CI               | required checks green                                            | `pass/blocked` | fix child PR                                |
-| Child main image       | `ghcr.io/<owner>/<repo>:sha-<child-main-sha>` exists after merge | `pass/blocked` | report missing image/tag                    |
-| Parent pin             | parent gitlink pins the image-producing child main SHA           | `pass/blocked` | ask operator to update/publish parent pin   |
-| Candidate flight       | requested through operator API                                   | `pass/blocked` | call operator flight API only when eligible |
-| Candidate verification | candidate `/version` matches launched child SHA                  | `pass/blocked` | validate URL and report                     |
+| Gate                   | Evidence                                                            | Status         | Next action                                 |
+| ---------------------- | ------------------------------------------------------------------- | -------------- | ------------------------------------------- |
+| Launch pack facts      | node repo URL, parent PR, candidate URL                             | `pass/blocked` | missing fact to recover                     |
+| Parent birth PR        | merged or still open                                                | `pass/blocked` | wait/ask human to merge parent PR           |
+| Child customization PR | PR URL in node repo                                                 | `pass/blocked` | create PR from node repo branch             |
+| Child CI               | required checks green                                               | `pass/blocked` | fix child PR                                |
+| Child main image       | `ghcr.io/<owner>/<repo>:sha-<child-main-sha>` exists after merge    | `pass/blocked` | report missing image/tag                    |
+| Parent pin             | parent gitlink pins the image-producing child main SHA              | `pass/blocked` | ask operator to update/publish parent pin   |
+| Candidate flight       | requested through operator API                                      | `pass/blocked` | call operator flight API only when eligible |
+| Candidate verification | candidate `/version` matches launched child SHA                     | `pass/blocked` | run agent-first validation                  |
+| Agent-first validation | candidate API exercised using `docs/guides/agent-api-validation.md` | `pass/blocked` | present human scorecard                     |
 
 ## Rules
 
@@ -76,10 +77,11 @@ reporting a terminal blocker that prevents opening one:
 ## Human Scorecard Timing
 
 Do not present the node formation scorecard to the human until candidate flight
-has succeeded and the candidate URL has been validated. The human-facing report
-must include critical repo links, child PR/check status, image tag and digest,
-parent pin status, flight status, candidate `/version`, and a short explanation
-of the child-build -> operator-pin -> candidate-flight CI/CD path. Use
+has succeeded, candidate `/version` matches the launched SHA, and agent-first
+API validation has passed. The human-facing report must include critical repo
+links, child PR/check status, image tag and digest, parent pin status, flight
+status, candidate `/version`, and a short explanation of the child-build ->
+operator-pin -> candidate-flight CI/CD path. Use
 `docs/spec/node-ci-cd-contract.md` for the CI/CD facts and
 `docs/guides/agent-api-validation.md` for the post-flight API exercise.
 

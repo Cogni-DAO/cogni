@@ -63,6 +63,8 @@ describe("buildNodeLaunchPack", () => {
     expect(pack.prompt).toContain("Parent deployment PR:");
     expect(pack.prompt).toContain("Candidate URL:");
     expect(pack.prompt).toContain("@node-wizard-scorecard");
+    expect(pack.prompt).toContain("not a full matrix");
+    expect(pack.prompt).toContain("child customization PR exists");
     expect(pack.prompt).toContain(".env.cogni");
     expect(pack.prompt).toContain("/contribute-to-cogni");
     expect(pack.prompt).toContain("recall the Cogni knowledge block");
@@ -76,8 +78,9 @@ describe("buildNodeLaunchPack", () => {
     expect(pack.prompt).toContain("Let the node repo CI build normally");
     expect(pack.prompt).toContain("child repo `main` SHA");
     expect(pack.prompt).toContain("ghcr.io/<owner>/<repo>:sha-<sourceSha>");
-    expect(pack.prompt).toContain("operator reports the launch is eligible");
     expect(pack.prompt).toContain("operator API");
+    expect(pack.prompt).toContain("child image tag exists");
+    expect(pack.prompt).toContain("parent pin agrees");
     expect(pack.prompt).toContain("@node-formation-styling-guide");
     expect(pack.prompt).toContain("agent-first API validation");
     expect(pack.prompt).toContain("human scorecard");
