@@ -129,6 +129,19 @@ describe("env schemas", () => {
     expect(env.DATABASE_URL).toBe("sqlite://build.db");
   });
 
+  it("throws when OpenFGA config is partial", async () => {
+    Object.assign(process.env, {
+      ...BASE_VALID_ENV,
+      OPENFGA_API_URL: "http://localhost:8080",
+    });
+
+    const { serverEnv, EnvValidationError } = await import(
+      "@/shared/env/server"
+    );
+
+    expect(() => serverEnv()).toThrow(EnvValidationError);
+  });
+
   // TODO: this fail-fast test being flaky
   it.skip("throws when required server vars are missing", async () => {
     Object.assign(process.env, {
