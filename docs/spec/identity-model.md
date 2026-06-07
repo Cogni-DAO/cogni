@@ -9,7 +9,7 @@ summary: "Single source of truth for all identity primitives in the Cogni system
 read_when: Working on identity, scoping, multi-project, ledger attribution, node-operator boundaries, or any code that references node_id, scope_id, user_id, or billing_account_id.
 owner: derekg1729
 created: 2026-02-22
-verified: 2026-02-22
+verified: 2026-06-07
 tags: [identity, architecture, governance]
 ---
 
@@ -130,6 +130,32 @@ actor_id (N) ──── (1) billing_account_id Multiple actors per tenant
 ```
 
 **Orthogonality:** `scope_id` and `billing_account_id` are independent dimensions. A user's billing account is for paying for AI service consumption. A scope's DAO is for paying contributors. These never intersect — contributing to a project does not require a billing account, and using the AI service does not require contributing to a project.
+
+## Runtime Authorization Principals
+
+Runtime RBAC uses string principal identifiers. These are not database primary
+keys, and `actorId` is not the same thing as the `actor_id` economic-subject
+column.
+
+| Runtime Field | Format                    | Source of Truth                                               | Purpose                                     |
+| ------------- | ------------------------- | ------------------------------------------------------------- | ------------------------------------------- |
+| `actorId`     | `user:{user_id}`          | Browser session or HMAC machine bearer token `sub`            | Direct human/user-bound machine execution   |
+| `actorId`     | `agent:{agent_id}`        | Server-issued execution grant                                 | Autonomous agent execution                  |
+| `actorId`     | `service:{service_name}`  | Internal service bootstrap                                    | Internal service execution                  |
+| `subjectId`   | `user:{user_id}`          | Server-issued delegation/grant/session context only           | On-behalf-of authority for delegated runs   |
+| `tenantId`    | `{billing_account_id}`    | Billing resolver / execution grant / API-originated run input | Authorization tenant boundary and audit key |
+| `graphId`     | `{provider}:{graph_name}` | Graph catalog / execution request                             | Graph-scoped authorization context          |
+
+Current operator chat and API-originated graph runs bind direct users as
+`actorId = user:{user_id}` and `tenantId = billing_account_id` before
+`toolRunner.exec()` can call `AuthorizationPort.check()`. Machine bearer tokens
+are user-bound keys; they resolve to the same `SessionUser.id` shape as browser
+sessions. They are not standalone `agent:{id}` principals until an execution
+grant issues that identity server-side.
+
+**Subject binding:** `subjectId` never comes from a request body, tool args, or
+`RunnableConfig.configurable`. It is attached only by trusted server launchers
+after validating a session or execution grant.
 
 ## Scoping Rules
 

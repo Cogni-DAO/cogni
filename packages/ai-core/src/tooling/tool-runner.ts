@@ -10,8 +10,9 @@
  *   - TOOLCALL_ID_STABLE: Same toolCallId across start→result
  *   - TOOLRUNNER_ALLOWLIST_HARD_FAIL: Missing allowlist or redaction failure → error event
  *   - TOOLRUNNER_RESULT_SHAPE: Returns {ok:true, value} | {ok:false, errorCode, safeMessage}
- *   - TOOLRUNNER_PIPELINE_ORDER: tool lookup → policy check → validate args → execute → validate result → redact → emit → return
+ *   - TOOLRUNNER_PIPELINE_ORDER: tool lookup → policy check → optional authz check → validate args → emit start → execute → validate result → redact → emit result → return
  *   - DENY_BY_DEFAULT: Default to DenyAllPolicy if no policy provided
+ *   - AUTHZ_FAILS_CLOSED_BEFORE_EXEC: when authz is configured, missing identity, deny, or unavailable returns authz_* without executing the tool
  *   - SPAN_PORT_HANDLES_SCRUBBING: ai-core passes raw data to spanPort; adapter handles scrubbing/truncation
  * Side-effects: none (AiEvent emission via injected callback is caller's responsibility)
  * Links: @cogni/ai-tools, AI_SETUP_SPEC.md, TOOL_USE_SPEC.md

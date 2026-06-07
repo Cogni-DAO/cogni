@@ -5,7 +5,10 @@
  * Module: `@cogni/ai-core/tests/tool-runner.authz`
  * Purpose: Verify createToolRunner enforces AuthorizationPort decisions before tool execution.
  * Scope: Package-local unit test with deterministic fake AuthorizationPort and static tool source. Does not call network services.
- * Invariants: AUTHZ_CHECK_BEFORE_TOOL_EXEC; authz deny/unavailable fail closed without executing tools.
+ * Invariants:
+ *   - AUTHZ_CHECK_BEFORE_TOOL_EXEC
+ *   - AUTHZ_FAILS_CLOSED_BEFORE_EXEC
+ *   - AUTHZ_RESULT_ONLY_STABLE_ID
  * Side-effects: none
  * Links: docs/spec/rbac.md, docs/spec/tool-use.md
  * @internal
@@ -120,6 +123,40 @@ describe("createToolRunner authz gate", () => {
       type: "tool_call_result",
       isError: true,
     });
+  });
+
+  it("emits authz denial as result-only with stable model tool call id", async () => {
+    const authz = new FakeAuthorizationAdapter();
+    authz.deny(authzParams);
+    const exec = vi.fn(async () => ({ now: "never" }));
+    const runner = createToolRunner(
+      createStaticToolSource([makeTool(exec)]),
+      (event) => events.push(event),
+      {
+        policy: createToolAllowlistPolicy([toolName]),
+        ctx: { runId: "run-1" },
+        authz,
+        actorId: "user:alice",
+        tenantId: "tenant:one",
+      }
+    );
+
+    const result = await runner.exec(
+      toolName,
+      {},
+      { modelToolCallId: "call_1" }
+    );
+
+    expect(result).toMatchObject({ ok: false, errorCode: "authz_denied" });
+    expect(exec).not.toHaveBeenCalled();
+    expect(events).toEqual([
+      {
+        type: "tool_call_result",
+        toolCallId: "call_1",
+        result: { error: "Tool execution is not authorized" },
+        isError: true,
+      },
+    ]);
   });
 
   it("returns authz_unavailable before execution", async () => {

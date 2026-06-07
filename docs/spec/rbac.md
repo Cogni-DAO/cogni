@@ -8,7 +8,7 @@ summary: OpenFGA-based authorization with actor/subject model and layered permis
 read_when: Implementing authorization checks, tool permissions, or on-behalf-of delegation
 owner: derekg1729
 created: 2026-02-05
-verified: 2026-02-05
+verified: 2026-06-07
 tags: [authorization]
 ---
 
@@ -29,7 +29,7 @@ tags: [authorization]
 
 5. **OBO_SUBJECT_MUST_BE_BOUND**: `subjectId` cannot be supplied by agents, tools, or request parameters. It is set ONLY from server-issued grants, sessions, or execution contexts. Prevents impersonation-by-parameter attacks.
 
-6. **AUTHZ_FAIL_CLOSED_WITH_DISTINCTION**: `AuthorizationPort.check()` returns `deny` on infrastructure failure (timeout, network error, OpenFGA error). Use distinct error codes: `authz_denied` (OpenFGA returned DENY) vs `authz_unavailable` (infrastructure failure). Emit metric `authz.unavailable` on infrastructure failure. Never return `allow` on failure.
+6. **AUTHZ_FAIL_CLOSED_WITH_DISTINCTION**: `AuthorizationPort.check()` returns `deny` on infrastructure failure (timeout, network error, OpenFGA error). Use distinct error codes: `authz_denied` (OpenFGA returned DENY) vs `authz_unavailable` (infrastructure failure). Never return `allow` on failure. Metrics and durable audit events consume these codes in the P1 audit layer.
 
 ---
 
@@ -45,17 +45,32 @@ Authorization operates across three distinct layers with different purposes:
 
 **OpenFGA is the sole source of truth for permission and delegation relationships.** ToolPolicy and Grant Intersection are capability/safety gates that execute before OpenFGA (fail-fast on capability denial). They are NOT authorization in the identity/access sense—they answer "does this capability exist?" not "is this actor permitted?"
 
+## Implementation Coverage
+
+| Surface                                  | Status              | Enforcement                                                                                                       |
+| ---------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Shared authorization contract            | Active in task.5010 | `packages/authorization-core` exports `AuthorizationPort`, check params/decisions, helpers, OpenFGA adapter, fake |
+| Tool execution                           | Active in task.5010 | `createToolRunner()` calls `AuthorizationPort.check()` after ToolPolicy and before arg validation/execution       |
+| Operator in-process graph/chat execution | Active in task.5010 | Operator DI injects `AuthorizationPort`; inproc provider passes `actorId`, `tenantId`, `graphId` to tool runner   |
+| API-originated internal graph runs       | Identity-ready      | Route requires `actorUserId`, `billingAccountId`, `virtualKeyId`; tool authz receives `user:{actorUserId}`        |
+| Direct `POST /api/v1/vcs/flight` route   | Session/bearer-auth | Route requires `SessionUser` and CI green; it does not call OpenFGA in task.5010                                  |
+| `core__vcs_flight_candidate` graph tool  | Tool-authz-covered  | PR-manager graph invokes it through `toolRunner.exec()`, so OpenFGA can deny `tool.execute` for that tool         |
+| Connection broker token materialization  | Pending hardening   | Broker receives `{ actorId, tenantId }`; `connection.use` OpenFGA check is not wired in task.5010                 |
+| Graph invocation entry                   | Pending hardening   | `graph.invoke` check at `GraphExecutorPort.runGraph()` is not wired in task.5010                                  |
+| Authz audit metrics/events               | Pending hardening   | Current adapter returns decision details; durable `authz.check` event/metric emission is P1                       |
+
 ---
 
 ## Actor Types
 
 | Type    | Format                  | Description                          |
 | ------- | ----------------------- | ------------------------------------ |
-| User    | `user:{walletAddress}`  | Human with authenticated wallet      |
+| User    | `user:{user_id}`        | Human or user-bound machine token    |
 | Agent   | `agent:{agentId}`       | Autonomous agent (graph instance)    |
 | Service | `service:{serviceName}` | Internal service (scheduler, worker) |
 
-> **Migration pending:** User actor format will change from `user:{walletAddress}` to `user:{userId}` once [User Identity Bindings](./decentralized-user-identity.md) ships. `user_id` (UUID) is the canonical identifier; wallet address is a binding, not identity.
+`user_id` is the canonical person identifier. Wallet addresses, OAuth provider
+IDs, and bearer token strings are credentials or bindings, never RBAC actors.
 
 **Actor** = who is making the request.
 **Subject** = on whose behalf (always a user; only present for delegated execution).
@@ -145,12 +160,12 @@ The current `user.delegates` relation is global—not scoped to tenant or graph.
 
 ## Action→Relation Mapping
 
-| Action           | Resource Type     | OpenFGA Check                            | Error Code     |
-| ---------------- | ----------------- | ---------------------------------------- | -------------- |
-| `tool.execute`   | `tool:{id}`       | `check(actor, can_execute, tool:{id})`   | `authz_denied` |
-| `connection.use` | `connection:{id}` | `check(actor, can_use, connection:{id})` | `authz_denied` |
-| `graph.invoke`   | `graph:{id}`      | `check(actor, can_invoke, graph:{id})`   | `authz_denied` |
-| `user.act_as`    | `user:{wallet}`   | `check(actor, delegates, user:{wallet})` | `authz_denied` |
+| Action           | Resource Type     | OpenFGA Check                             | Error Code     |
+| ---------------- | ----------------- | ----------------------------------------- | -------------- |
+| `tool.execute`   | `tool:{id}`       | `check(actor, can_execute, tool:{id})`    | `authz_denied` |
+| `connection.use` | `connection:{id}` | `check(actor, can_use, connection:{id})`  | `authz_denied` |
+| `graph.invoke`   | `graph:{id}`      | `check(actor, can_invoke, graph:{id})`    | `authz_denied` |
+| `user.act_as`    | `user:{user_id}`  | `check(actor, delegates, user:{user_id})` | `authz_denied` |
 
 **Delegation relation:** `user.delegates` grants agents the right to act on behalf of user. Dual-check queries `user.act_as` when `subject` is present.
 
@@ -183,11 +198,11 @@ The current `user.delegates` relation is global—not scoped to tenant or graph.
 
 ### 1. Actor vs Subject
 
-| Scenario                | Actor               | Subject       | Checks                                                                       |
-| ----------------------- | ------------------- | ------------- | ---------------------------------------------------------------------------- |
-| User executes directly  | `user:0x1234`       | —             | `ALLOW(user, action, resource)`                                              |
-| Agent on behalf of user | `agent:chat-v1`     | `user:0x1234` | `ALLOW(user, action, resource)` AND `ALLOW(agent, user.act_as, user:0x1234)` |
-| Service (scheduler)     | `service:scheduler` | —             | `ALLOW(service, action, resource)`                                           |
+| Scenario                | Actor               | Subject          | Checks                                                                          |
+| ----------------------- | ------------------- | ---------------- | ------------------------------------------------------------------------------- |
+| User executes directly  | `user:{user_id}`    | —                | `ALLOW(user, action, resource)`                                                 |
+| Agent on behalf of user | `agent:chat-v1`     | `user:{user_id}` | `ALLOW(user, action, resource)` AND `ALLOW(agent, user.act_as, user:{user_id})` |
+| Service (scheduler)     | `service:scheduler` | —                | `ALLOW(service, action, resource)`                                              |
 
 **Why dual-check for OBO?** The user must have the permission, AND the agent must be delegated. This prevents:
 
@@ -210,7 +225,8 @@ If `subjectId` came from request parameters, an agent could claim to act on beha
 │ ─────────────────                                                   │
 │ 1. Extract JWT from session/bearer                                  │
 │ 2. Determine actor type:                                            │
-│    - Session JWT → user:{walletAddress}                             │
+│    - Session JWT → user:{user_id}                                    │
+│    - Machine bearer token → user:{user_id}                           │
 │    - Agent token → agent:{agentId} + subject from grant             │
 │    - Service key → service:{serviceName}                            │
 │ 3. Attach { actorId, subjectId?, tenantId } to request context      │
@@ -251,7 +267,8 @@ toolRunner.exec(toolId, rawArgs, ctx)
     │      └─ deny → { errorCode: 'policy_denied' }
     │
     ├─ 2. AuthorizationPort.check(actor, subject?, action, resource)  ← OpenFGA (network)
-    │      └─ deny → { errorCode: 'authz_denied' }
+    │      ├─ deny → { errorCode: 'authz_denied' }
+    │      └─ unavailable/missing identity → { errorCode: 'authz_unavailable' }
     │
     ├─ 3. Grant intersection (if connection required)  ← In-memory set intersection
     │      └─ connectionId ∉ effective → { errorCode: 'policy_denied' }
@@ -271,9 +288,51 @@ toolRunner.exec(toolId, rawArgs, ctx)
 
 **Key:** `policy_denied` is local/cheap checks; `authz_denied` is centralized OpenFGA.
 
-### 5. Audit Events
+Authz failures occur before validated arguments and before `tool_call_start`.
+`toolRunner.exec()` emits a `tool_call_result` error with the stable
+`toolCallId` and does not execute the tool. Operator chat UI streams ignore
+result-only tool events for display, so denied tools do not produce broken tool
+cards; the graph still receives the fail-closed tool result.
 
-Every `AuthorizationPort.check()` emits:
+### 5. Candidate Flight Use Case
+
+There are two flight paths:
+
+1. **Direct route:** `POST /api/v1/vcs/flight`
+   - Authenticates with browser session or HMAC machine bearer token.
+   - Resolves `SessionUser.id`, checks CI is green for the target PR head, then dispatches `candidate-flight.yml`.
+   - Does not call `AuthorizationPort.check()` in task.5010.
+
+2. **PR-manager graph tool:** `core__vcs_flight_candidate`
+   - Exposed to the operator-only `pr-manager` LangGraph catalog entry.
+   - Runs through `createToolRunner()`.
+   - When OpenFGA is configured, checks:
+
+```typescript
+AuthorizationPort.check({
+  actorId: "user:{user_id}",
+  action: "tool.execute",
+  resource: "tool:core__vcs_flight_candidate",
+  context: { tenantId, graphId: "langgraph:pr-manager", runId, toolCallId },
+});
+```
+
+The end-to-end validation for task.5010 is therefore: an authenticated operator
+chat/API graph run selects `langgraph:pr-manager`, requests an explicit
+candidate-a flight, and observes either an allowed dispatch of
+`core__vcs_flight_candidate` or a fail-closed `authz_denied` /
+`authz_unavailable` before any GitHub workflow dispatch. Direct route-level
+OpenFGA for `/api/v1/vcs/flight` is a follow-up protected-action gate.
+
+Candidate-a deployment proof uses the existing app flight lever: PR Build
+produces per-target digests, `candidate-flight.yml` writes the candidate overlay
+deploy branch, Argo reconciles the operator pod, and validation checks
+`/version.buildSha` on `https://test.cognidao.org` against the PR head SHA. A
+`/readyz` 200 alone is not deployment proof.
+
+### 6. Audit Events (P1)
+
+The target durable audit event shape is:
 
 ```typescript
 {
@@ -296,7 +355,10 @@ Every `AuthorizationPort.check()` emits:
 - "Who actually did it?" → actor
 - "On whose authority?" → subject
 
-### 6. Caching Strategy (P1)
+The task.5010 adapter returns decision/check details to the caller but does not
+emit this durable event itself.
+
+### 7. Caching Strategy (P1)
 
 **Cache key:** `${actor}:${subject ?? 'direct'}:${action}:${resource}`
 
