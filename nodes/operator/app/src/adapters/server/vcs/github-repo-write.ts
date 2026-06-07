@@ -13,7 +13,7 @@
  *   - SINGLE_FILE_COMMIT: writes exactly one file path; no multi-file orchestration.
  *   - PR_AGAINST_BASE_REF: opens a PR with the given title/body against `baseRef`; never force-pushes.
  * Side-effects: IO (GitHub REST API)
- * Links: docs/spec/node-formation.md, task.5083
+ * Links: docs/spec/node-formation.md, task.0370, task.5083
  * @internal
  */
 
@@ -884,6 +884,47 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
       return { status: "already_pinned", currentSha };
     }
 
+    const branch = `cogni-operator/node-submodule-${slug}-pin-${nodeRepoHeadSha.slice(0, 8)}`;
+    const existingPinHeadSha = await this.resolveBranchHead(
+      octokit,
+      owner,
+      repo,
+      branch
+    );
+    if (existingPinHeadSha) {
+      const existingPinTreeSha = await this.resolveCommitTreeSha(
+        octokit,
+        owner,
+        repo,
+        existingPinHeadSha
+      );
+      const branchAlreadyPins = await this.treePinsNodeSubmodule(
+        octokit,
+        owner,
+        repo,
+        existingPinTreeSha,
+        slug,
+        nodeRepoUrl,
+        nodeRepoHeadSha
+      );
+      if (branchAlreadyPins) {
+        const pr = await this.openOrFindPinPr(
+          octokit,
+          owner,
+          repo,
+          slug,
+          branch,
+          nodeRepoHeadSha
+        );
+        return {
+          status: "pin_pr_opened",
+          currentSha,
+          parentHeadSha: existingPinHeadSha,
+          ...pr,
+        };
+      }
+    }
+
     const currentGitmodules = await this.readFileOnMain(
       octokit,
       owner,
@@ -900,7 +941,6 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
       renderGitmodules(currentGitmodules, slug, nodeRepoUrl)
     );
 
-    const branch = `cogni-operator/node-submodule-${slug}-pin-${nodeRepoHeadSha.slice(0, 8)}`;
     const { data: finalTree } = await octokit.request(
       "POST /repos/{owner}/{repo}/git/trees",
       {
@@ -1001,6 +1041,37 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
       { owner, repo, commit_sha: baseCommitSha }
     );
     return { baseCommitSha, baseTreeSha: baseCommit.tree.sha };
+  }
+
+  private async resolveBranchHead(
+    octokit: Octokit,
+    owner: string,
+    repo: string,
+    branch: string
+  ): Promise<string | null> {
+    try {
+      const { data: ref } = await octokit.request(
+        "GET /repos/{owner}/{repo}/git/ref/{ref}",
+        { owner, repo, ref: `heads/${branch}` }
+      );
+      return ref.object.sha;
+    } catch (err) {
+      if ((err as { status?: number })?.status === 404) return null;
+      throw err;
+    }
+  }
+
+  private async resolveCommitTreeSha(
+    octokit: Octokit,
+    owner: string,
+    repo: string,
+    commitSha: string
+  ): Promise<string> {
+    const { data: commit } = await octokit.request(
+      "GET /repos/{owner}/{repo}/git/commits/{commit_sha}",
+      { owner, repo, commit_sha: commitSha }
+    );
+    return commit.tree.sha;
   }
 
   private assertExistingTemplateFork(
@@ -1246,6 +1317,58 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
       treeSha = match.sha;
     }
     return undefined;
+  }
+
+  private async treePinsNodeSubmodule(
+    octokit: Octokit,
+    owner: string,
+    repo: string,
+    rootTreeSha: string,
+    slug: string,
+    nodeRepoUrl: string,
+    nodeRepoHeadSha: string
+  ): Promise<boolean> {
+    const nodeEntry = await this.findTreeEntry(
+      octokit,
+      owner,
+      repo,
+      rootTreeSha,
+      `nodes/${slug}`
+    );
+    if (
+      nodeEntry?.type !== "commit" ||
+      nodeEntry.mode !== "160000" ||
+      nodeEntry.sha !== nodeRepoHeadSha
+    ) {
+      return false;
+    }
+
+    const gitmodulesEntry = await this.findTreeEntry(
+      octokit,
+      owner,
+      repo,
+      rootTreeSha,
+      ".gitmodules"
+    );
+    if (
+      gitmodulesEntry?.type !== "blob" ||
+      gitmodulesEntry.mode !== "100644" ||
+      !gitmodulesEntry.sha
+    ) {
+      return false;
+    }
+
+    const gitmodules = await this.readBlob(
+      octokit,
+      owner,
+      repo,
+      gitmodulesEntry.sha
+    );
+    return (
+      gitmodules.includes(`[submodule "nodes/${slug}"]`) &&
+      gitmodules.includes(`path = nodes/${slug}`) &&
+      gitmodules.includes(`url = ${nodeRepoUrl}`)
+    );
   }
 
   /** Read a blob by SHA and decode its (base64) contents to UTF-8. */

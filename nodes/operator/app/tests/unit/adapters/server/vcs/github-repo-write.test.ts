@@ -300,6 +300,119 @@ describe("GitHubRepoWriter.forkFromTemplate", () => {
   });
 });
 
+describe("GitHubRepoWriter.ensureNodeSubmodulePin", () => {
+  it("reuses an existing matching pin PR without moving the branch", async () => {
+    const childSha = "0123456789012345678901234567890123456789";
+    const branch = "heads/cogni-operator/node-submodule-atlas-pin-01234567";
+    routeHandlers = {
+      "GET /repos/{owner}/{repo}/git/ref/{ref}": (params) => {
+        if (params.ref === "heads/main") {
+          return { object: { sha: "parent-main" } };
+        }
+        expect(params.ref).toBe(branch);
+        return { object: { sha: "pin-head" } };
+      },
+      "GET /repos/{owner}/{repo}/git/commits/{commit_sha}": (params) => {
+        if (params.commit_sha === "parent-main") {
+          return { tree: { sha: "main-tree" } };
+        }
+        expect(params.commit_sha).toBe("pin-head");
+        return { tree: { sha: "pin-tree" } };
+      },
+      "GET /repos/{owner}/{repo}/git/trees/{tree_sha}": (params) => {
+        if (params.tree_sha === "main-tree") {
+          return {
+            tree: [
+              {
+                path: "nodes",
+                type: "tree",
+                mode: "040000",
+                sha: "main-nodes",
+              },
+            ],
+          };
+        }
+        if (params.tree_sha === "main-nodes") {
+          return { tree: [] };
+        }
+        if (params.tree_sha === "pin-tree") {
+          return {
+            tree: [
+              { path: "nodes", type: "tree", mode: "040000", sha: "pin-nodes" },
+              {
+                path: ".gitmodules",
+                type: "blob",
+                mode: "100644",
+                sha: "pin-gitmodules",
+              },
+            ],
+          };
+        }
+        expect(params.tree_sha).toBe("pin-nodes");
+        return {
+          tree: [
+            {
+              path: "atlas",
+              type: "commit",
+              mode: "160000",
+              sha: childSha,
+            },
+          ],
+        };
+      },
+      "GET /repos/{owner}/{repo}/git/blobs/{file_sha}": (params) => {
+        expect(params.file_sha).toBe("pin-gitmodules");
+        return {
+          content: Buffer.from(
+            `[submodule "nodes/atlas"]\n\tpath = nodes/atlas\n\turl = https://github.com/Cogni-DAO/atlas.git\n`,
+            "utf-8"
+          ).toString("base64"),
+          encoding: "base64",
+        };
+      },
+      "POST /repos/{owner}/{repo}/pulls": () =>
+        Promise.reject(statusError(422, "A pull request already exists")),
+      "GET /repos/{owner}/{repo}/pulls": (params) => {
+        expect(params).toMatchObject({
+          owner: "Cogni-DAO",
+          repo: "cogni",
+          state: "open",
+          head: "Cogni-DAO:cogni-operator/node-submodule-atlas-pin-01234567",
+        });
+        return [
+          {
+            number: 88,
+            html_url: "https://github.com/Cogni-DAO/cogni/pull/88",
+          },
+        ];
+      },
+    };
+
+    await expect(
+      makeWriter().ensureNodeSubmodulePin({
+        owner: "Cogni-DAO",
+        repo: "cogni",
+        slug: "atlas",
+        nodeRepoUrl: "https://github.com/Cogni-DAO/atlas.git",
+        nodeRepoHeadSha: childSha,
+      })
+    ).resolves.toEqual({
+      status: "pin_pr_opened",
+      currentSha: null,
+      prNumber: 88,
+      prUrl: "https://github.com/Cogni-DAO/cogni/pull/88",
+      parentHeadSha: "pin-head",
+    });
+
+    expect(requests.map((request) => request.route)).not.toContain(
+      "POST /repos/{owner}/{repo}/git/commits"
+    );
+    expect(requests.map((request) => request.route)).not.toContain(
+      "PATCH /repos/{owner}/{repo}/git/refs/{ref}"
+    );
+  });
+});
+
 describe("GitHubRepoWriter.packageImageTagExists", () => {
   it("probes GHCR tags through GitHub Packages REST with installation auth", async () => {
     routeHandlers = {

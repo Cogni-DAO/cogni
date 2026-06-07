@@ -17,7 +17,7 @@
  *   - NO_LEASE_SPLIT_BRAIN: Slot lease lives on the deploy branch (candidate-slot-controller);
  *     this route does not write a competing lease.
  * Side-effects: IO (DB read, GitHub REST API via OperatorDeployPlanePort)
- * Links: task.0361, packages/node-contracts/src/vcs.flight.v1.contract.ts,
+ * Links: task.0370, packages/node-contracts/src/vcs.flight.v1.contract.ts,
  *   docs/spec/development-lifecycle.md
  * @public
  */

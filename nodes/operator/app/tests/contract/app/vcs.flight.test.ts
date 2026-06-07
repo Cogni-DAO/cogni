@@ -10,7 +10,7 @@
  *   - NODE_REF_PARENT_PIN_GATE: parent pin PR head must match the prepared pin commit.
  *   - CONTRACTS_ARE_TRUTH: 202 response matches flightOperation.output schema.
  * Side-effects: none
- * Links: task.0361, nodes/operator/app/src/app/api/v1/vcs/flight/route.ts,
+ * Links: task.0370, nodes/operator/app/src/app/api/v1/vcs/flight/route.ts,
  *   packages/node-contracts/src/vcs.flight.v1.contract.ts
  * @internal
  */

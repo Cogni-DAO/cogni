@@ -8,7 +8,7 @@
  * Invariants:
  *   - CONTRACTS_ARE_TRUTH: wire shape is owned by vcs.flight.v1.contract
  * Side-effects: none
- * Links: task.0361, nodes/operator/app/src/app/api/v1/vcs/flight/route.ts
+ * Links: task.0370, nodes/operator/app/src/app/api/v1/vcs/flight/route.ts
  * @public
  */
 
