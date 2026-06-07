@@ -112,7 +112,8 @@ Optional:
 - DOLTHUB_OWNER - Env-scoped DoltHub owner for node knowledge repos. Required with DOLTHUB_API_TOKEN; test/preview must use a non-production owner.
 - DOLTHUB_API_TOKEN - DoltHub PAT for REST/SQL API and node knowledge repo creation; does NOT authenticate the Dolt push protocol
 - DOLTHUB_OAUTH_CLIENT_ID / DOLTHUB_OAUTH_CLIENT_SECRET - reserved for v1 per-user identity (task.5070); not read by v0 push job
-  **Public client (client.ts)**
+
+**Public client (client.ts)**
 
 - NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID (optional; degrades to injected wallet only)
 

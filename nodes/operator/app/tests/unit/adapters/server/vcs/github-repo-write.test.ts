@@ -690,6 +690,45 @@ payments_in:
       "GET /repos/{owner}/{repo}/git/ref/{ref}"
     );
   });
+
+  it("rejects catalogs that point source refs at a different GHCR package", async () => {
+    const sourceSha = "0123456789012345678901234567890123456789";
+    const nodeId = "11111111-1111-4111-8111-111111111111";
+    const encode = (value: string) =>
+      Buffer.from(value, "utf-8").toString("base64");
+    routeHandlers = {
+      "GET /repos/{owner}/{repo}/contents/{path}": (params) => {
+        expect(params.path).toBe("infra/catalog/ghcr.yaml");
+        return {
+          type: "file",
+          encoding: "base64",
+          content: encode(`name: ghcr
+type: node
+path_prefix: nodes/ghcr/
+source_repo: https://github.com/cogni-test-org/ghcr
+image_repository: ghcr.io/cogni-test-org/other
+`),
+        };
+      },
+    };
+
+    await expect(
+      makeWriter().prepareNodeRefCandidateFlight({
+        parentOwner: "cogni-test-org",
+        parentRepo: "cogni-monorepo",
+        nodeId,
+        slug: "ghcr",
+        sourceSha,
+      })
+    ).rejects.toMatchObject({
+      code: "image_repository_mismatch",
+      status: 409,
+    });
+
+    expect(requests.map((request) => request.route)).not.toContain(
+      "GET /repos/{owner}/{repo}/commits/{ref}"
+    );
+  });
 });
 
 describe("GitHubRepoWriter.packageImageTagExists", () => {

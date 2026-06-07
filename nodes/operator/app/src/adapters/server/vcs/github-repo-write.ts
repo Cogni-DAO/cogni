@@ -388,6 +388,18 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
     }
 
     const sourceRepo = parseGithubRepoUrl(catalog.data.source_repo);
+    const imageRepo = parseGhcrImageRepository(catalog.data.image_repository);
+    if (
+      imageRepo.owner.toLowerCase() !== sourceRepo.owner.toLowerCase() ||
+      imageRepo.packageName.toLowerCase() !== sourceRepo.repo.toLowerCase()
+    ) {
+      throw deployPlaneError(
+        "image_repository_mismatch",
+        `catalog image_repository must match source_repo: expected ghcr.io/${sourceRepo.owner.toLowerCase()}/${sourceRepo.repo.toLowerCase()}`,
+        409
+      );
+    }
+
     const sourceExists = await this.commitExists({
       owner: sourceRepo.owner,
       repo: sourceRepo.repo,
