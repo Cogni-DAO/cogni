@@ -306,7 +306,7 @@ PR update
 
 Merge to main
   → flight-preview.yml fires on push:main (or manual workflow_dispatch)
-  → external artifacts resolve image_repository:sha-<sourceSha>; legacy in-repo artifacts may still re-tag mq-{N}-{sha} → preview-{sha}
+  → remote-source artifacts resolve image_repository:sha-<sourceSha>; legacy in-repo artifacts may still re-tag mq-{N}-{sha} → preview-{sha}
   → flight-preview.sh reads .promote-state/review-state on deploy/preview
       ├── unlocked   → claim dispatching lease, dispatch promote-and-deploy
       ├── dispatching → queue-only (candidate-sha high-water mark)

@@ -30,6 +30,8 @@ This spec distinguishes two things that are easy to conflate:
 
 Define the CI/CD invariants, artifact contract, and file ownership boundaries that ensure every deployable artifact is built by its source repo and can still be deployed by a shared operator.
 
+The simplification target is one artifact contract and one promotion primitive. Everything else is policy: source repos decide how to build and gate; the operator decides who may deploy where; the deploy plane always consumes `{ target, source_repo, sourceSha, image_repository, digest }`.
+
 ## Non-Goals
 
 - Reusable workflow extraction (see [proj.ci-cd-reusable](../../work/projects/proj.ci-cd-reusable.md))
@@ -55,7 +57,7 @@ Define the CI/CD invariants, artifact contract, and file ownership boundaries th
 
 8. **SINGLE_DOMAIN_HARD_FAIL**: Source-code PRs happen in the source repo that owns the artifact. Parent repo PRs for hosted artifacts are operator control-plane changes: gitlink/pin acceptance, catalog rows, overlays, AppSets, DNS/provisioning wiring, and deploy-state machinery. Legacy in-tree node directories remain transitional and are still guarded by `single-node-scope`; they are not the future build model. See `## Single-Domain Scope` below.
 
-9. **SOURCE_SHA_IS_DEPLOY_IDENTITY**: `sourceSha` is the deployment coordinate for every node or node-shaped artifact. Every flightable artifact for that source revision must be published as `<image_repository>:sha-<40-char-sourceSha>`. The operator resolves that tag to `image@sha256:<digest>` before writing deploy state.
+9. **SOURCE_SHA_IS_DEPLOY_IDENTITY**: `sourceSha` is the deployment coordinate for every deployable artifact. Every flightable artifact for that source revision must be published as `<image_repository>:sha-<40-char-sourceSha>`. The operator resolves that tag to `image@sha256:<digest>` before writing deploy state.
 
 ---
 
@@ -201,7 +203,7 @@ environments.
 
 ### Artifact contract
 
-Deployable catalog rows are artifact records. The operator's deploy plane consumes four stable facts:
+Deployable catalog rows are artifact records. Build ownership may differ by source repo; promotion does not. The operator's deploy plane consumes four stable facts:
 
 | Fact               | Source of truth                                  | Purpose                                                   |
 | ------------------ | ------------------------------------------------ | --------------------------------------------------------- |
@@ -345,7 +347,7 @@ The submodule **birth** is as-built (#1506): the wizard mints the node repo as a
 
 The forward deployment contract is:
 
-1. **Parent CI never builds submodule nodes.** `.gitmodules` identifies submodule slugs. `render-scope-filters.sh` skips them so the gitlink falls to the operator domain, and parent build/affected logic skips their catalog rows as build targets. A parent `build (<slug>)` leg is always wrong for a submodule node.
+1. **Parent CI builds only artifacts whose source repo is this repo.** `.gitmodules` still identifies current submodule slugs for parent-domain routing, but build selection keys on artifact build ownership: a catalog row whose `source_repo` is another repo is a deploy input, not a parent build leg. A parent `build (<slug>)` leg is always wrong for a remote-source submodule node.
 2. **The submodule template is node-at-root and self-building.** A minted node repo contains `app/`, `graphs/`, `k8s/`, `packages/`, node-local rules, and its own merge gate/build workflow at repo root. It publishes every flightable deployable to GHCR as `sha-<sourceSha>`.
 3. **Candidate flight is source-addressed.** The operator API accepts `nodeRef { nodeId, sourceSha }`, verifies the catalog, verifies the child commit exists, verifies `.cogni/repo-spec.yaml` identity at that commit, verifies `image_repository:sha-<sourceSha>` exists, ensures the parent gitlink pins that commit, then dispatches `candidate-flight.yml`.
 4. **Deploy state is digest-addressed.** `candidate-flight.yml` resolves `image_repository:sha-<sourceSha>` to `image_repository@sha256:<digest>`, writes only deploy-state branches, and verifies `/version.buildSha == sourceSha`.
@@ -353,7 +355,7 @@ The forward deployment contract is:
 
 **Identity/config prerequisite (per-env, proven on candidate-a).** Minting authenticates as an env-scoped GitHub App that must (a) be installed **all-repositories** on the mint org and (b) hold **`workflows:write`** — the seed/pin flow edits `.github/workflows/pr-build.yml`, which GitHub 403s without it. Mint target, template owner, and submodule-pin-PR parent are env config (`NODE_MINT_OWNER` / `NODE_TEMPLATE_OWNER` / `NODE_SUBMODULE_PARENT_{OWNER,REPO}`), fail-closed (mint) / fail-open (parent → `getGithubRepo()`), so a candidate/test operator has **zero access to the production org** (candidate-a mints into the disposable `cogni-test-org`, pin-PRs into a cogni-shaped fork there).
 
-> **Correction (live repro `cogni-test-org/cogni-monorepo#1`): the `.gitmodules` subtraction _is_ needed.** The parent scope and build planes must exclude submodule slugs. A generated dorny filter `nodes/<slug>/**` matches the bare gitlink, and a catalog row can otherwise put the slug into `ALL_TARGETS`; both outcomes are wrong. `.gitmodules` is the parent repo's submodule-slug SSOT for CI exclusion. The child repo remains the build plane.
+> **Correction (live repro `cogni-test-org/cogni-monorepo#1`): gitlink-aware scope routing is still needed while submodules remain.** A generated dorny filter `nodes/<slug>/**` matches the bare gitlink, so submodule pins must route as operator-domain work. Build exclusion should not depend on submodule ontology: it follows artifact source ownership. The child repo remains the build plane because its `source_repo` is not this repo.
 
 ---
 

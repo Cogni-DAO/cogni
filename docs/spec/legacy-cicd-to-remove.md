@@ -5,7 +5,7 @@ title: Legacy CI/CD To Remove
 status: active
 trust: draft
 summary: Inventory of CI/CD mechanics that do not match the sourceSha artifact contract and must be removed once replacement paths are live.
-read_when: Modifying candidate flight, preview promotion, production promotion, PR-build tags, or external artifact deployment.
+read_when: Modifying candidate flight, preview promotion, production promotion, PR-build tags, or remote-source artifact deployment.
 owner: derekg1729
 created: 2026-06-07
 verified: 2026-06-07
@@ -17,6 +17,8 @@ tags:
 # Legacy CI/CD To Remove
 
 ## North Star
+
+One artifact contract. One promotion primitive. Everything else is policy.
 
 Deployable artifacts are promoted by artifact identity:
 
@@ -54,13 +56,13 @@ Anything that uses a pull request number, merge-queue tag, or preview tag as art
 
 ### In-repo artifact build fan-out
 
-**Mechanic:** `scripts/ci/detect-affected.sh` selects parent-built targets from catalog path changes and excludes `source_repo` rows from the parent build.
+**Mechanic:** `scripts/ci/detect-affected.sh` selects targets this repo must build from catalog path changes. Rows whose `source_repo` is another repo are skipped because their source repo owns the build.
 
 **Why it is legacy:** Parent build fan-out is valid only for deployables whose source repo is still this repo. It must not become a second node model.
 
 **Why not removed here:** `operator`, `resy`, `canary`, and scheduler-worker are not fully represented as source-SHA artifact rows yet.
 
-**Removal condition:** Parent-owned deployables publish `source_repo` + `image_repository` rows and use the same `sha-<sourceSha>` resolver. `detect-affected.sh` becomes a source-repo build concern, not the operator deploy-plane selector.
+**Removal condition:** Parent-owned deployables publish `source_repo` + `image_repository` rows and use the same `sha-<sourceSha>` resolver. `detect-affected.sh` remains a build-plane selector only; deploy selection consumes artifact records.
 
 ### Preview re-tagging
 
@@ -68,23 +70,23 @@ Anything that uses a pull request number, merge-queue tag, or preview tag as art
 
 **Why it is legacy:** Preview should carry the candidate-proven digest forward, not mint a new lookup tag.
 
-**Why not removed here:** Parent-built in-repo artifacts still need a lookup path for `promote-and-deploy.yml`. External artifact rows now bypass this and resolve `image_repository:sha-<sourceSha>` directly.
+**Why not removed here:** Parent-built in-repo artifacts still need a lookup path for `promote-and-deploy.yml`. Remote-source artifact rows now bypass this and resolve `image_repository:sha-<sourceSha>` directly.
 
 **Removal condition:** `promote-and-deploy.yml` consumes a resolved digest payload or resolves every target from `image_repository:sha-<sourceSha>`; the `Re-tag merge_group images as preview-{sha}` step is deleted.
 
 ### Digest re-resolution instead of carry-forward
 
-**Mechanic:** External artifact preview promotion can re-resolve `image_repository:sha-<sourceSha>` after merge rather than consuming the exact artifact record resolved during candidate flight.
+**Mechanic:** Remote-source artifact preview promotion can re-resolve `image_repository:sha-<sourceSha>` after merge rather than consuming the exact artifact record resolved during candidate flight.
 
 **Why it is legacy:** A serious deploy plane resolves once, stores `{ target, source_repo, sourceSha, image_repository, digest }`, and carries that exact digest through candidate, preview, and production. Re-resolution is only equivalent if the source-SHA tag is immutable and never repointed.
 
-**Why not removed here:** This PR is the first vertical slice for external artifact rows. Adding a durable artifact-record store plus cross-workflow carry-forward would widen it into the platform rewrite.
+**Why not removed here:** This PR is the first vertical slice for remote-source artifact rows. Adding a durable artifact-record store plus cross-workflow carry-forward would widen it into the platform rewrite.
 
 **Removal condition:** Candidate flight writes a durable artifact record for each promoted target; preview and production read that record or a promoted successor record and never re-resolve source-SHA tags after the first accepted resolution.
 
 ### Gitlink as source-SHA pin
 
-**Mechanic:** External artifact preview promotion infers `sourceSha` from the parent repo gitlink at `nodes/<slug>`.
+**Mechanic:** Remote-source artifact preview promotion infers `sourceSha` from the parent repo gitlink at `nodes/<slug>`.
 
 **Why it is transitional:** Gitlinks are a good approval pin, but they are not the fundamental deployment primitive. The artifact coordinate is `source_repo + sourceSha + image_repository`.
 
