@@ -109,6 +109,28 @@ describe("NodeActionPanel", () => {
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
+  it("keeps the published launch prompt available when handoff links are missing", () => {
+    render(
+      <NodeActionPanel
+        nodeId="11111111-1111-4111-8111-111111111111"
+        status="published"
+        publishedHandoff={{
+          nodeRepoUrl: null,
+          knowledgeRepoUrl: null,
+          publishPrUrl: null,
+        }}
+      />
+    );
+
+    expect(screen.getByText("Launch pack ready.")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Copy launch prompt" })
+    ).toBeVisible();
+    expect(screen.queryByRole("link", { name: /Node repo/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /DoltHub repo/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Deployment PR/ })).toBeNull();
+  });
+
   it("copies the launch prompt from the owner-gated API", async () => {
     render(<NodeActionPanel nodeId="node-1" status="published" />);
 
