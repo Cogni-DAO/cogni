@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 #
 # Idempotently bootstrap the Cogni RBAC OpenFGA store and authorization model.
-# Emits shell-safe OPENFGA_STORE_ID / OPENFGA_AUTHORIZATION_MODEL_ID lines.
+# Emits shell-safe OPENFGA_STORE_ID / OPENFGA_AUTHORIZATION_MODEL_ID / hash lines.
 
 set -euo pipefail
 
@@ -119,10 +119,12 @@ authorization_model_id_for_hash() {
   done < <(printf '%s' "$models_json" | jq -r '.authorization_models[]?.id')
 }
 
-authorization_model_id_exists() {
+authorization_model_hash_for_id() {
   local store_id="$1" model_id="$2"
+  local model_json
   [[ -n "$model_id" ]] || return 1
-  curl_json GET "/stores/${store_id}/authorization-models/${model_id}" >/dev/null 2>&1
+  model_json="$(curl_json GET "/stores/${store_id}/authorization-models/${model_id}")" || return 1
+  printf '%s' "$model_json" | canonical_model_json | model_hash
 }
 
 wait_for_openfga
@@ -140,12 +142,20 @@ canonical="$(canonical_model_json < "$OPENFGA_MODEL_FILE")"
 expected_hash="$(printf '%s' "$canonical" | model_hash)"
 authorization_model_id="$(authorization_model_id_for_hash "$store_id" "$expected_hash")"
 if [[ -z "$authorization_model_id" ]]; then
-  if [[ -n "$OPENFGA_EXISTING_AUTHORIZATION_MODEL_ID" ]] \
-    && authorization_model_id_exists "$store_id" "$OPENFGA_EXISTING_AUTHORIZATION_MODEL_ID" \
-    && { [[ -z "$OPENFGA_EXISTING_AUTHORIZATION_MODEL_HASH" ]] || [[ "$OPENFGA_EXISTING_AUTHORIZATION_MODEL_HASH" == "$expected_hash" ]]; }; then
-    log "using existing configured authorization model"
-    authorization_model_id="$OPENFGA_EXISTING_AUTHORIZATION_MODEL_ID"
-  else
+  if [[ -n "$OPENFGA_EXISTING_AUTHORIZATION_MODEL_ID" ]]; then
+    configured_hash="$(authorization_model_hash_for_id "$store_id" "$OPENFGA_EXISTING_AUTHORIZATION_MODEL_ID" || true)"
+    if [[ "$configured_hash" == "$expected_hash" ]]; then
+      log "using existing configured authorization model"
+      authorization_model_id="$OPENFGA_EXISTING_AUTHORIZATION_MODEL_ID"
+    elif [[ -n "$configured_hash" ]]; then
+      log "configured authorization model hash differs from git model; writing new model"
+    fi
+  fi
+
+  if [[ -z "$authorization_model_id" ]]; then
+    if [[ -n "$OPENFGA_EXISTING_AUTHORIZATION_MODEL_HASH" && "$OPENFGA_EXISTING_AUTHORIZATION_MODEL_HASH" != "$expected_hash" ]]; then
+      log "stored authorization model hash differs from git model; writing new model"
+    fi
     log "writing RBAC authorization model"
     authorization_model_id="$(curl_json POST "/stores/${store_id}/authorization-models" -d "$canonical" | jq -r '.authorization_model_id')"
   fi
