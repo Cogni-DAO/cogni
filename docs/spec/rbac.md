@@ -79,9 +79,10 @@ constructs the OpenFGA adapter when both `OPENFGA_API_URL` and
 `OPENFGA_STORE_ID` are present, so service reachability can ship before policy
 activation.
 
-OpenFGA authorization models are immutable. The bootstrap compares the
-canonical JSON model before writing, so re-running deploys reuses an identical
-model ID instead of creating a new version each time.
+OpenFGA authorization models are immutable. The bootstrap hashes the canonical
+JSON model and records that hash with the resolved model ID. Re-running deploys
+reuse the existing model ID when the authored model hash is unchanged; a new
+immutable model is written only when the hash changes or no prior model exists.
 
 ---
 

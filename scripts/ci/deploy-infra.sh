@@ -695,6 +695,18 @@ LITELLM_IMAGE=${LITELLM_IMAGE:?LITELLM_IMAGE required (resolved on the runner fr
 
 # Runtime env (full config — compose validates all vars even for services we don't start)
 RUNTIME_ENV=/opt/cogni-template-runtime/.env
+previous_runtime_env_value() {
+  local key="$1"
+  [[ -f "$RUNTIME_ENV" ]] || return 0
+  awk -v key="$key" '
+    index($0, key "=") == 1 { value = substr($0, length(key) + 2) }
+    END { print value }
+  ' "$RUNTIME_ENV"
+}
+
+PREVIOUS_OPENFGA_AUTHORIZATION_MODEL_ID="$(previous_runtime_env_value OPENFGA_AUTHORIZATION_MODEL_ID)"
+PREVIOUS_OPENFGA_AUTHORIZATION_MODEL_HASH="$(previous_runtime_env_value OPENFGA_AUTHORIZATION_MODEL_HASH)"
+
 cat > "$RUNTIME_ENV" << ENV_EOF
 # Required vars
 DOMAIN=${DOMAIN}
@@ -1107,6 +1119,8 @@ OPENFGA_BOOTSTRAP_ENV=$(OPENFGA_API_URL=http://127.0.0.1:8080 \
   OPENFGA_STORE_NAME="cogni-${DEPLOY_ENVIRONMENT}-rbac" \
   OPENFGA_MODEL_FILE=/tmp/rbac-model.json \
   OPENFGA_API_TOKEN="${OPENFGA_API_TOKEN:-}" \
+  OPENFGA_AUTHORIZATION_MODEL_ID="$PREVIOUS_OPENFGA_AUTHORIZATION_MODEL_ID" \
+  OPENFGA_AUTHORIZATION_MODEL_HASH="$PREVIOUS_OPENFGA_AUTHORIZATION_MODEL_HASH" \
   bash /tmp/bootstrap-openfga.sh)
 eval "$OPENFGA_BOOTSTRAP_ENV"
 printf '%s\n' "$OPENFGA_BOOTSTRAP_ENV" >> "$RUNTIME_ENV"
@@ -1143,7 +1157,8 @@ patch_operator_openfga_config() {
   timeout 20 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN="${tok}" \
     bao kv "$op" "cogni/${DEPLOY_ENVIRONMENT}/operator" \
       "OPENFGA_STORE_ID=${OPENFGA_STORE_ID}" \
-      "OPENFGA_AUTHORIZATION_MODEL_ID=${OPENFGA_AUTHORIZATION_MODEL_ID}" >/dev/null || return 1
+      "OPENFGA_AUTHORIZATION_MODEL_ID=${OPENFGA_AUTHORIZATION_MODEL_ID}" \
+      "OPENFGA_AUTHORIZATION_MODEL_HASH=${OPENFGA_AUTHORIZATION_MODEL_HASH}" >/dev/null || return 1
 }
 
 refresh_operator_openfga_secret() {

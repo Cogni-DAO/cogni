@@ -14,6 +14,8 @@ OPENFGA_API_URL="${OPENFGA_API_URL:-http://127.0.0.1:8080}"
 OPENFGA_STORE_NAME="${OPENFGA_STORE_NAME:-cogni-${DEPLOY_ENVIRONMENT:-local}-rbac}"
 OPENFGA_MODEL_FILE="${OPENFGA_MODEL_FILE:-$REPO_ROOT/infra/openfga/rbac-model.json}"
 OPENFGA_BOOTSTRAP_TIMEOUT_SECONDS="${OPENFGA_BOOTSTRAP_TIMEOUT_SECONDS:-60}"
+OPENFGA_EXISTING_AUTHORIZATION_MODEL_ID="${OPENFGA_AUTHORIZATION_MODEL_ID:-}"
+OPENFGA_EXISTING_AUTHORIZATION_MODEL_HASH="${OPENFGA_AUTHORIZATION_MODEL_HASH:-}"
 
 log() {
   printf '[openfga-bootstrap] %s\n' "$*" >&2
@@ -117,6 +119,12 @@ authorization_model_id_for_hash() {
   done < <(printf '%s' "$models_json" | jq -r '.authorization_models[]?.id')
 }
 
+authorization_model_id_exists() {
+  local store_id="$1" model_id="$2"
+  [[ -n "$model_id" ]] || return 1
+  curl_json GET "/stores/${store_id}/authorization-models/${model_id}" >/dev/null 2>&1
+}
+
 wait_for_openfga
 
 store_id="$(store_id_for_name)"
@@ -132,8 +140,15 @@ canonical="$(canonical_model_json < "$OPENFGA_MODEL_FILE")"
 expected_hash="$(printf '%s' "$canonical" | model_hash)"
 authorization_model_id="$(authorization_model_id_for_hash "$store_id" "$expected_hash")"
 if [[ -z "$authorization_model_id" ]]; then
-  log "writing RBAC authorization model"
-  authorization_model_id="$(curl_json POST "/stores/${store_id}/authorization-models" -d "$canonical" | jq -r '.authorization_model_id')"
+  if [[ -n "$OPENFGA_EXISTING_AUTHORIZATION_MODEL_ID" ]] \
+    && authorization_model_id_exists "$store_id" "$OPENFGA_EXISTING_AUTHORIZATION_MODEL_ID" \
+    && { [[ -z "$OPENFGA_EXISTING_AUTHORIZATION_MODEL_HASH" ]] || [[ "$OPENFGA_EXISTING_AUTHORIZATION_MODEL_HASH" == "$expected_hash" ]]; }; then
+    log "using existing configured authorization model"
+    authorization_model_id="$OPENFGA_EXISTING_AUTHORIZATION_MODEL_ID"
+  else
+    log "writing RBAC authorization model"
+    authorization_model_id="$(curl_json POST "/stores/${store_id}/authorization-models" -d "$canonical" | jq -r '.authorization_model_id')"
+  fi
 else
   log "using existing matching authorization model"
 fi
@@ -141,3 +156,4 @@ fi
 
 printf 'OPENFGA_STORE_ID=%s\n' "$store_id"
 printf 'OPENFGA_AUTHORIZATION_MODEL_ID=%s\n' "$authorization_model_id"
+printf 'OPENFGA_AUTHORIZATION_MODEL_HASH=%s\n' "$expected_hash"
