@@ -281,7 +281,7 @@ if [ "$failed" -ne 0 ]; then
   echo ""
   echo "Node substrate is not ready for ${node} in ${env_name}: ${#failures[@]} failure(s)."
   printf '  - %s\n' "${failures[@]}"
-  echo "Remediation: run the env provisioning lane or candidate-flight-infra.yml; app candidate-flight will not run deploy-infra implicitly."
+  echo "Remediation: inspect the preceding reconcile-substrate summary. Owned target-local rows should converge there; remaining failures usually mean a missing base VM, OpenBao/ESO/db-reader prerequisite, OpenBao secret value, or reconciler defect."
   exit 1
 fi
 
