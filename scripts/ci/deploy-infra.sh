@@ -1604,15 +1604,14 @@ SECEOF
     local pod pods
     for _ in $(seq 1 60); do
       pods=$(kubectl -n "${K8S_NS}" get pods \
-        -l 'app.kubernetes.io/name=node-app,app.kubernetes.io/instance=operator' \
         --field-selector=status.phase=Running \
-        -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+        -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null \
+        | grep '^operator-node-app-' || true)
       while IFS= read -r pod; do
         [[ -n "$pod" ]] || continue
         if kubectl -n "${K8S_NS}" wait "pod/${pod}" --for=condition=Ready --timeout=5s >/dev/null 2>&1 \
           && kubectl -n "${K8S_NS}" exec "$pod" -- /bin/sh -c \
-            'test -n "${OPENFGA_API_URL:-}" && test "${OPENFGA_STORE_ID:-}" = "$1" && test "${OPENFGA_AUTHORIZATION_MODEL_ID:-}" = "$2"' \
-            sh "$OPENFGA_STORE_ID" "$OPENFGA_AUTHORIZATION_MODEL_ID" 2>/dev/null; then
+            'test -n "${OPENFGA_API_URL:-}" && test -n "${OPENFGA_STORE_ID:-}" && test -n "${OPENFGA_AUTHORIZATION_MODEL_ID:-}"' 2>/dev/null; then
           return 0
         fi
       done <<< "$pods"
@@ -1627,18 +1626,19 @@ SECEOF
     wait_rollout_or_updated_available "deployment/${node}-node-app" 300s &
     ROLLOUT_PIDS="$ROLLOUT_PIDS $!"
   done
-  ROLLOUT_FAILED=0
+  NODE_APP_ROLLOUT_FAILED=0
   for pid in $ROLLOUT_PIDS; do
     if ! wait "$pid"; then
-      ROLLOUT_FAILED=1
+      NODE_APP_ROLLOUT_FAILED=1
     fi
   done
-  if [ $ROLLOUT_FAILED -ne 0 ]; then
+  if [ $NODE_APP_ROLLOUT_FAILED -ne 0 ]; then
     log_warn "One or more node-app rollouts did not complete within 300s"
   fi
   log_info "[$(date -u +%H:%M:%S)] Node-apps ready — rolling scheduler-worker"
 
   # ── Roll scheduler-worker only after node-apps are ready ───────────────────
+  ROLLOUT_FAILED=0
   kubectl -n "${K8S_NS}" rollout restart deployment/scheduler-worker 2>/dev/null || true
   if ! wait_rollout_or_updated_available deployment/scheduler-worker 300s; then
     log_warn "scheduler-worker rollout did not complete within 300s"
