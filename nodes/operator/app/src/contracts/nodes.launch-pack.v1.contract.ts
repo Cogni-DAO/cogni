@@ -35,6 +35,7 @@ export const nodeLaunchPackOperation = {
     operatorBaseUrl: z.string().url(),
     launchPackUrl: z.string().url(),
     nodeRepoUrl: z.string().url().nullable(),
+    knowledgeRepoUrl: z.string().url().nullable(),
     parentDeploymentPrUrl: z.string().url().nullable(),
     candidateUrl: z.string().url(),
     knowledgeBlock: z.object({

@@ -18,6 +18,7 @@ export const NODE_LAUNCH_PACK_KNOWLEDGE_ID = "node-launch-handoff";
 
 const KNOWLEDGE_TITLE = "AI assistant launch pack for node birth";
 const KNOWLEDGE_BASE_URL = "https://cognidao.org";
+const OPERATOR_API_ROOT = "https://cognidao.org";
 
 export interface NodeLaunchPackInput {
   readonly nodeId: string;
@@ -25,11 +26,36 @@ export interface NodeLaunchPackInput {
   readonly status: NodeStatus;
   readonly operatorOrigin: string;
   readonly nodeRepoUrl: string | null;
+  readonly knowledgeRepoUrl: string | null;
   readonly publishPrUrl: string | null;
 }
 
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+export function ownerFromGithubPrUrl(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  try {
+    const url = new URL(value);
+    if (url.hostname !== "github.com") {
+      return null;
+    }
+    return url.pathname.split("/").find(Boolean) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function nodeRepoUrlForSlug(input: {
+  readonly slug: string;
+  readonly mintOwner: string | undefined;
+  readonly publishPrUrl: string | null;
+}): string | null {
+  const owner = input.mintOwner ?? ownerFromGithubPrUrl(input.publishPrUrl);
+  return owner ? `https://github.com/${owner}/${input.slug}` : null;
 }
 
 export function candidateUrlForSlug(slug: string): string {
@@ -49,25 +75,38 @@ export function buildNodeLaunchPack(
   const parentPrLine = input.publishPrUrl
     ? `Parent deployment PR: ${input.publishPrUrl}`
     : "Parent deployment PR: not published yet";
+  const knowledgeRepoLine = input.knowledgeRepoUrl
+    ? `DoltHub knowledge repo: ${input.knowledgeRepoUrl}`
+    : "DoltHub knowledge repo: recover it from the node repo-spec `knowledge.remote` block";
 
   const prompt = [
     `Launch Cogni node ${input.slug}.`,
     "",
     nodeRepoLine,
+    `Cogni operator endpoint root: ${OPERATOR_API_ROOT}`,
     `Cogni knowledge block: ${knowledgeUrl}`,
+    knowledgeRepoLine,
     parentPrLine,
     `Candidate URL: ${candidateUrl}`,
     "",
-    "Start with @node-wizard-scorecard. Post its matrix before editing code.",
-    "Required path:",
-    "1. Ensure the parent deployment PR is merged before treating this node as deployable.",
-    "2. Create a node customization PR in the node repo. Do not push directly to main or hand-edit the operator gitlink.",
-    "3. Verify the node repo-spec contains `knowledge.remote` for the Cogni-owned DoltHub mirror; do not add a DOLTHUB_REMOTE_URL env override.",
-    "4. Let the node repo CI build normally after that PR merges.",
-    "5. Request candidate-a flight through the operator API only when the operator reports the launch is eligible.",
-    "6. Verify the deployed /version at the candidate URL and report the URL only after it matches the launched node SHA.",
+    "You are the AI developer taking this node from spawned scaffold to first deployed customization.",
+    "Your goal is to make a simple node style-kit customization, open a PR in the node repo, get that PR deployed to Cogni operator candidate-a via a flight, then report the node spawn scorecard/status and any useful URLs to the human.",
     "",
-    "Use @node-formation-styling-guide for the customization PR and /contribute-to-cogni for the agent lifecycle. If parent merge, child image, parent pin, or flight eligibility is blocked, report the exact blocked scorecard row instead of inventing privileged manual steps.",
+    "The Cogni operator is the coordination service at the endpoint root above. Use it for contributor registration and candidate-a flight requests.",
+    "Before editing, recall the Cogni knowledge block above and use `.claude/skills/node-wizard-scorecard/SKILL.md` when that skill exists in your workspace.",
+    "If this workspace lacks `.env.cogni`, run /contribute-to-cogni against the production operator endpoint root first and save the file at the repo root.",
+    "",
+    "Required path:",
+    "1. Create a node customization PR in the node repo. Do not push directly to main, merge your own PR, or hand-edit the operator gitlink.",
+    "2. Verify the node repo-spec contains `knowledge.remote` for the Cogni-owned DoltHub mirror; do not add a DOLTHUB_REMOTE_URL env override.",
+    "3. Let the node repo CI build normally after that PR merges; use the child repo `main` SHA and `ghcr.io/<owner>/<repo>:sha-<sourceSha>` as the deploy identity.",
+    "4. Right before flighting, ensure the parent deployment PR is merged and the parent pin agrees with the image-producing child main SHA.",
+    "5. Request candidate-a flight through the operator API only after the child image tag exists and the parent pin agrees.",
+    "6. Verify the deployed /version at the candidate URL.",
+    "7. Run agent-first API validation against that candidate.",
+    "8. Present the human scorecard only after flight, /version, and agent-first validation are green.",
+    "",
+    "Use `.claude/skills/node-formation-styling-guide/SKILL.md` when present for the customization PR. If parent merge, child image, parent pin, or flight eligibility is blocked, report the exact blocked scorecard row instead of inventing privileged manual steps.",
   ].join("\n");
 
   return {
@@ -78,6 +117,7 @@ export function buildNodeLaunchPack(
     operatorBaseUrl,
     launchPackUrl,
     nodeRepoUrl: input.nodeRepoUrl,
+    knowledgeRepoUrl: input.knowledgeRepoUrl,
     parentDeploymentPrUrl: input.publishPrUrl,
     candidateUrl,
     knowledgeBlock: {

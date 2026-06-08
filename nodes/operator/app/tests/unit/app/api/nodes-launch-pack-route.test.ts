@@ -24,6 +24,7 @@ const dbState = vi.hoisted(() => ({
 
 const envState = vi.hoisted(() => ({
   NODE_MINT_OWNER: "Cogni-DAO" as string | undefined,
+  DOLTHUB_OWNER: "cogni-dao" as string | undefined,
 }));
 
 const mockGetServerSessionUser = vi.hoisted(() => vi.fn());
@@ -66,6 +67,7 @@ describe("GET /api/v1/nodes/[id]/launch-pack", () => {
     mockGetServerSessionUser.mockReset();
     mockGetServerSessionUser.mockResolvedValue({ id: "user-1" });
     envState.NODE_MINT_OWNER = "Cogni-DAO";
+    envState.DOLTHUB_OWNER = "cogni-dao";
   });
 
   it("returns the launch pack with node repo, parent PR, scorecard prompt, and candidate URL", async () => {
@@ -83,11 +85,22 @@ describe("GET /api/v1/nodes/[id]/launch-pack", () => {
 
     expect(response.status).toBe(200);
     expect(body.nodeRepoUrl).toBe("https://github.com/Cogni-DAO/atlas");
+    expect(body.knowledgeRepoUrl).toBe(
+      "https://www.dolthub.com/repositories/cogni-dao/knowledge-atlas"
+    );
     expect(body.parentDeploymentPrUrl).toBe(
       "https://github.com/Cogni-DAO/cogni/pull/42"
     );
     expect(body.candidateUrl).toBe("https://atlas-test.cognidao.org");
-    expect(body.prompt).toContain("@node-wizard-scorecard");
+    expect(body.prompt).toContain(
+      "Cogni operator endpoint root: https://cognidao.org"
+    );
+    expect(body.prompt).toContain(
+      "DoltHub knowledge repo: https://www.dolthub.com/repositories/cogni-dao/knowledge-atlas"
+    );
+    expect(body.prompt).toContain(
+      ".claude/skills/node-wizard-scorecard/SKILL.md"
+    );
     expect(body.prompt).toContain("blocked scorecard row");
   });
 

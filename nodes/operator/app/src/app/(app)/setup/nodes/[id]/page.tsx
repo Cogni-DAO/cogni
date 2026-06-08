@@ -18,8 +18,14 @@ import { notFound, redirect } from "next/navigation";
 import { Fragment, type ReactElement } from "react";
 import { resolveAppDb } from "@/bootstrap/container";
 import { PageContainer, SectionCard } from "@/components";
+import { nodeRepoUrlForSlug } from "@/features/nodes/launch-pack";
 import { getServerSessionUser } from "@/lib/auth/server";
 import { type NodeStatus, nodes } from "@/shared/db/nodes";
+import { serverEnv } from "@/shared/env";
+import {
+  buildNodeKnowledgeRemote,
+  knowledgeRemoteWebUrl,
+} from "@/shared/node-app-scaffold/knowledge-remote";
 
 import { NODE_STATUS_DISPLAY } from "../node-display";
 import { NodeActionPanel } from "./NodeActionPanel.client";
@@ -61,7 +67,18 @@ export default async function NodeDashboardPage({
 
   const status = node.status as NodeStatus;
   const display = NODE_STATUS_DISPLAY[status];
-
+  const env = serverEnv();
+  const nodeRepoUrl = nodeRepoUrlForSlug({
+    slug: node.slug,
+    mintOwner: env.NODE_MINT_OWNER,
+    publishPrUrl: node.publishPrUrl,
+  });
+  const knowledgeRemote = env.DOLTHUB_OWNER
+    ? buildNodeKnowledgeRemote(node.slug, env.DOLTHUB_OWNER)
+    : null;
+  const knowledgeRepoUrl = knowledgeRemote
+    ? knowledgeRemoteWebUrl(knowledgeRemote)
+    : null;
   const repoPath = `Cogni-DAO/cogni/nodes/${node.slug}`;
   const technical: ReadonlyArray<{
     label: string;
@@ -105,16 +122,6 @@ export default async function NodeDashboardPage({
       <SectionCard title={node.slug}>
         <NodeStatusBar status={status} />
         <p className="text-muted-foreground text-sm">{display.description}</p>
-        {node.publishPrUrl ? (
-          <a
-            className="inline-flex text-primary text-sm underline"
-            href={node.publishPrUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            View deployment PR →
-          </a>
-        ) : null}
         {node.failureReason ? (
           <p className="text-destructive text-sm">{node.failureReason}</p>
         ) : null}
@@ -128,9 +135,8 @@ export default async function NodeDashboardPage({
             nodeId={node.id}
             status={status}
             publishedHandoff={{
-              daoAddress: node.daoAddress,
-              nodeSlug: node.slug,
-              parentRepoUrl: node.repoUrl,
+              nodeRepoUrl,
+              knowledgeRepoUrl,
               publishPrUrl: node.publishPrUrl,
             }}
           />

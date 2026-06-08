@@ -17,6 +17,8 @@ import {
   buildNodeLaunchPack,
   candidateUrlForSlug,
   NODE_LAUNCH_PACK_KNOWLEDGE_ID,
+  nodeRepoUrlForSlug,
+  ownerFromGithubPrUrl,
 } from "@/features/nodes/launch-pack";
 
 describe("candidateUrlForSlug", () => {
@@ -24,6 +26,54 @@ describe("candidateUrlForSlug", () => {
     expect(candidateUrlForSlug("atlas")).toBe(
       "https://atlas-test.cognidao.org"
     );
+  });
+});
+
+describe("ownerFromGithubPrUrl", () => {
+  it("extracts the GitHub owner from a PR URL", () => {
+    expect(
+      ownerFromGithubPrUrl("https://github.com/cogni-test-org/cogni/pull/1559")
+    ).toBe("cogni-test-org");
+  });
+
+  it("returns null for absent, invalid, or non-GitHub URLs", () => {
+    expect(ownerFromGithubPrUrl(null)).toBeNull();
+    expect(ownerFromGithubPrUrl("not a url")).toBeNull();
+    expect(
+      ownerFromGithubPrUrl("https://gitlab.com/cogni-test-org/cogni/pull/1559")
+    ).toBeNull();
+  });
+});
+
+describe("nodeRepoUrlForSlug", () => {
+  it("uses the configured mint owner when present", () => {
+    expect(
+      nodeRepoUrlForSlug({
+        slug: "atlas",
+        mintOwner: "cogni-nodes",
+        publishPrUrl: "https://github.com/cogni-test-org/cogni/pull/1559",
+      })
+    ).toBe("https://github.com/cogni-nodes/atlas");
+  });
+
+  it("falls back to the parent PR owner when mint owner is absent", () => {
+    expect(
+      nodeRepoUrlForSlug({
+        slug: "atlas",
+        mintOwner: undefined,
+        publishPrUrl: "https://github.com/cogni-test-org/cogni/pull/1559",
+      })
+    ).toBe("https://github.com/cogni-test-org/atlas");
+  });
+
+  it("returns null when no owner can be recovered", () => {
+    expect(
+      nodeRepoUrlForSlug({
+        slug: "atlas",
+        mintOwner: undefined,
+        publishPrUrl: null,
+      })
+    ).toBeNull();
   });
 });
 
@@ -35,6 +85,8 @@ describe("buildNodeLaunchPack", () => {
       status: "published",
       operatorOrigin: "https://test.cognidao.org/",
       nodeRepoUrl: "https://github.com/Cogni-DAO/atlas",
+      knowledgeRepoUrl:
+        "https://www.dolthub.com/repositories/cogni-dao/knowledge-atlas",
       publishPrUrl: "https://github.com/Cogni-DAO/cogni/pull/42",
     });
 
@@ -51,6 +103,9 @@ describe("buildNodeLaunchPack", () => {
       "https://github.com/Cogni-DAO/cogni/pull/42"
     );
     expect(pack.nodeRepoUrl).toBe("https://github.com/Cogni-DAO/atlas");
+    expect(pack.knowledgeRepoUrl).toBe(
+      "https://www.dolthub.com/repositories/cogni-dao/knowledge-atlas"
+    );
     expect(pack.prompt).toContain("Launch Cogni node atlas.");
     expect(pack.prompt).toContain(
       "Node repo URL: https://github.com/Cogni-DAO/atlas"
@@ -58,21 +113,59 @@ describe("buildNodeLaunchPack", () => {
     expect(pack.prompt).not.toContain("Launch pack URL:");
     expect(pack.prompt).not.toContain(pack.launchPackUrl);
     expect(pack.prompt).toContain(
+      "Cogni operator endpoint root: https://cognidao.org"
+    );
+    expect(pack.prompt).toContain(
       "Cogni knowledge block: https://cognidao.org/knowledge/node-launch-handoff"
+    );
+    expect(pack.prompt).toContain(
+      "DoltHub knowledge repo: https://www.dolthub.com/repositories/cogni-dao/knowledge-atlas"
     );
     expect(pack.prompt).toContain("Parent deployment PR:");
     expect(pack.prompt).toContain("Candidate URL:");
-    expect(pack.prompt).toContain("@node-wizard-scorecard");
-    expect(pack.prompt).toContain("Ensure the parent deployment PR is merged");
+    expect(pack.prompt).toContain(
+      "You are the AI developer taking this node from spawned scaffold to first deployed customization."
+    );
+    expect(pack.prompt).toContain("make a simple node style-kit customization");
+    expect(pack.prompt).toContain(
+      "get that PR deployed to Cogni operator candidate-a via a flight"
+    );
+    expect(pack.prompt).toContain(
+      "report the node spawn scorecard/status and any useful URLs"
+    );
+    expect(pack.prompt).toContain(
+      "The Cogni operator is the coordination service"
+    );
+    expect(pack.prompt).toContain(
+      ".claude/skills/node-wizard-scorecard/SKILL.md"
+    );
+    expect(pack.prompt).not.toContain("@node-wizard-scorecard");
+    expect(pack.prompt).not.toContain("Its first response");
+    expect(pack.prompt).toContain(".env.cogni");
+    expect(pack.prompt).toContain("/contribute-to-cogni");
+    expect(pack.prompt).toContain("recall the Cogni knowledge block above");
     expect(pack.prompt).toContain("Create a node customization PR");
     expect(pack.prompt).toContain("Do not push directly to main");
+    expect(pack.prompt).toContain("merge your own PR");
     expect(pack.prompt).toContain("knowledge.remote");
     expect(pack.prompt).toContain("Cogni-owned DoltHub mirror");
     expect(pack.prompt).toContain("do not add a DOLTHUB_REMOTE_URL");
     expect(pack.prompt).toContain("Let the node repo CI build normally");
-    expect(pack.prompt).toContain("operator reports the launch is eligible");
-    expect(pack.prompt).toContain("@node-formation-styling-guide");
-    expect(pack.prompt).toContain("/contribute-to-cogni");
+    expect(pack.prompt).toContain("child repo `main` SHA");
+    expect(pack.prompt).toContain("ghcr.io/<owner>/<repo>:sha-<sourceSha>");
+    expect(pack.prompt.indexOf("Create a node customization PR")).toBeLessThan(
+      pack.prompt.indexOf("ensure the parent deployment PR is merged")
+    );
+    expect(pack.prompt).toContain("Right before flighting");
+    expect(pack.prompt).toContain("ensure the parent deployment PR is merged");
+    expect(pack.prompt).toContain("operator API");
+    expect(pack.prompt).toContain("child image tag exists");
+    expect(pack.prompt).toContain("parent pin agrees");
+    expect(pack.prompt).toContain(
+      ".claude/skills/node-formation-styling-guide/SKILL.md"
+    );
+    expect(pack.prompt).toContain("agent-first API validation");
+    expect(pack.prompt).toContain("human scorecard");
     expect(pack.prompt).toContain("blocked scorecard row");
     expect(pack.prompt).toContain("Verify the deployed /version");
   });
