@@ -1569,10 +1569,62 @@ SECEOF
   kubectl -n "${K8S_NS}" rollout restart ${NODE_APP_DEPLOYMENTS} 2>/dev/null || true
   log_info "[$(date -u +%H:%M:%S)] Node-app pods restarting (scheduler-worker waits)..."
 
+  int_or_zero() {
+    case "${1:-}" in
+      ""|*[!0-9]*) printf '0\n' ;;
+      *) printf '%s\n' "$1" ;;
+    esac
+  }
+
+  deployment_updated_available() {
+    local deployment="$1"
+    local spec updated available observed generation
+    spec=$(int_or_zero "$(kubectl -n "${K8S_NS}" get "$deployment" -o jsonpath='{.spec.replicas}' 2>/dev/null || true)")
+    updated=$(int_or_zero "$(kubectl -n "${K8S_NS}" get "$deployment" -o jsonpath='{.status.updatedReplicas}' 2>/dev/null || true)")
+    available=$(int_or_zero "$(kubectl -n "${K8S_NS}" get "$deployment" -o jsonpath='{.status.availableReplicas}' 2>/dev/null || true)")
+    observed=$(int_or_zero "$(kubectl -n "${K8S_NS}" get "$deployment" -o jsonpath='{.status.observedGeneration}' 2>/dev/null || true)")
+    generation=$(int_or_zero "$(kubectl -n "${K8S_NS}" get "$deployment" -o jsonpath='{.metadata.generation}' 2>/dev/null || true)")
+    [[ "$spec" -eq 0 ]] && spec=1
+    [[ "$observed" -ge "$generation" && "$updated" -ge "$spec" && "$available" -ge "$spec" ]]
+  }
+
+  wait_rollout_or_updated_available() {
+    local deployment="$1" timeout="$2"
+    if kubectl -n "${K8S_NS}" rollout status "$deployment" --timeout="$timeout" 2>/dev/null; then
+      return 0
+    fi
+    if deployment_updated_available "$deployment"; then
+      log_warn "$deployment rollout status timed out, but updated replicas are available; continuing"
+      return 0
+    fi
+    return 1
+  }
+
+  operator_openfga_process_env_ready() {
+    local pod pods
+    for _ in $(seq 1 60); do
+      pods=$(kubectl -n "${K8S_NS}" get pods \
+        -l 'app.kubernetes.io/name=node-app,app.kubernetes.io/instance=operator' \
+        --field-selector=status.phase=Running \
+        -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+      while IFS= read -r pod; do
+        [[ -n "$pod" ]] || continue
+        if kubectl -n "${K8S_NS}" wait "pod/${pod}" --for=condition=Ready --timeout=5s >/dev/null 2>&1 \
+          && kubectl -n "${K8S_NS}" exec "$pod" -- /bin/sh -c \
+            'test -n "${OPENFGA_API_URL:-}" && test "${OPENFGA_STORE_ID:-}" = "$1" && test "${OPENFGA_AUTHORIZATION_MODEL_ID:-}" = "$2"' \
+            sh "$OPENFGA_STORE_ID" "$OPENFGA_AUTHORIZATION_MODEL_ID" 2>/dev/null; then
+          return 0
+        fi
+      done <<< "$pods"
+      sleep 2
+    done
+    return 1
+  }
+
   # ── Wait for node-app rollouts first ───────────────────────────────────────
   ROLLOUT_PIDS=""
   for node in ${NODE_APP_TARGETS}; do
-    kubectl -n "${K8S_NS}" rollout status "deployment/${node}-node-app" --timeout=300s 2>/dev/null &
+    wait_rollout_or_updated_available "deployment/${node}-node-app" 300s &
     ROLLOUT_PIDS="$ROLLOUT_PIDS $!"
   done
   ROLLOUT_FAILED=0
@@ -1588,13 +1640,12 @@ SECEOF
 
   # ── Roll scheduler-worker only after node-apps are ready ───────────────────
   kubectl -n "${K8S_NS}" rollout restart deployment/scheduler-worker 2>/dev/null || true
-  if ! kubectl -n "${K8S_NS}" rollout status deployment/scheduler-worker --timeout=300s 2>/dev/null; then
+  if ! wait_rollout_or_updated_available deployment/scheduler-worker 300s; then
     log_warn "scheduler-worker rollout did not complete within 300s"
     ROLLOUT_FAILED=1
   fi
   if [[ " ${NODE_APP_TARGETS} " == *" operator "* ]]; then
-    if kubectl -n "${K8S_NS}" exec deployment/operator-node-app -- /bin/sh -c \
-      'test -n "${OPENFGA_API_URL:-}" && test -n "${OPENFGA_STORE_ID:-}" && test -n "${OPENFGA_AUTHORIZATION_MODEL_ID:-}"' 2>/dev/null; then
+    if operator_openfga_process_env_ready; then
       log_info "operator pod process env contains OpenFGA URL, store ID, and model ID"
     else
       log_error "operator pod process env is missing OpenFGA URL, store ID, or model ID"
