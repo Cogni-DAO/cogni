@@ -551,6 +551,7 @@ jobs:
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
           FORK_DOMAIN_ROOT: ${{ vars.FORK_DOMAIN_ROOT || 'cognidao.org' }}
           DOMAIN: ${{ vars.DOMAIN }}
+          DNS_RECONCILE_SUMMARY_FILE: ${{ runner.temp }}/dns-reconcile-summary.json
         run: |
           set -euo pipefail
           # Flights run on a main-merge ref; a pre-#1445 head lacks this script.
@@ -564,6 +565,17 @@ jobs:
             exit 0
           fi
           bash scripts/ci/reconcile-node-dns.sh candidate-a
+
+      - name: Push DNS reconcile telemetry to Loki
+        if: always()
+        uses: ./.github/actions/loki-push
+        with:
+          loki_url: ${{ secrets.GRAFANA_CLOUD_LOKI_URL }}
+          loki_user: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
+          loki_token: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
+          log_file: ${{ runner.temp }}/dns-reconcile-summary.json
+          job_name: reconcile-dns
+          labels: workflow=candidate-flight ref=${{ github.ref_name }} run_id=${{ github.run_id }} attempt=${{ github.run_attempt }} sha8=${{ github.sha }} kind=dns_reconcile slot=candidate-a
 
   # Node BIRTH only (mochi gap): a flight that ADDS a catalog node must
   # provision that node's Compose infra — edge route + DB + secret — in the SAME

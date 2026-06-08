@@ -177,7 +177,8 @@ assert_eq "$(CF_ALLOW_PROTECTED=1 cf_upsert_a_record test-token zone123 cognidao
 printf '{"records":[],"next_id":1}' >"$CF_STORE"
 cf_upsert_a_record test-token zone123 test.cognidao.org "$VM_IP_FIXTURE" true >/dev/null
 
-bash scripts/ci/reconcile-node-dns.sh candidate-a >/dev/null \
+summary_file="$TMPROOT/dns-reconcile-summary.json"
+DNS_RECONCILE_SUMMARY_FILE="$summary_file" bash scripts/ci/reconcile-node-dns.sh candidate-a >/dev/null \
   || { echo "FAIL reconcile exited non-zero"; fail=$((fail + 1)); }
 
 # host_for_node(node, test.cognidao.org) → <node>-test.cognidao.org for non-primary.
@@ -185,6 +186,12 @@ for host in resy-test.cognidao.org node-template-test.cognidao.org canary-test.c
   assert_eq "$(cf_a_record_content test-token zone123 "$host")" "$VM_IP_FIXTURE" \
     "reconcile created $host → VM IP"
 done
+assert_eq "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["type"])' "$summary_file")" \
+  "dns_reconcile_summary" "reconcile writes Grafana DNS summary type"
+assert_eq "$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d["states"].get("created", 0) > 0)' "$summary_file")" \
+  "True" "Grafana DNS summary records created states"
+assert_eq "$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(any(r.get("host") == "resy-test.cognidao.org" and r.get("state") == "created" for r in d["records"]))' "$summary_file")" \
+  "True" "Grafana DNS summary includes per-host state"
 # operator is is_primary_host (apex) — it must NOT get an operator-test record.
 assert_eq "$(count_name operator-test.cognidao.org)" "0" "primary node skipped (no operator-test record)"
 
