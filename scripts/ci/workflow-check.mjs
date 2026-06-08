@@ -114,6 +114,7 @@ const workflowFiles = readdirSync(WORKFLOW_DIR)
   .sort();
 
 const candidateFlightText = readWorkflowText("candidate-flight.yml");
+const candidateFlight = readWorkflow("candidate-flight.yml");
 if (
   candidateFlightText.includes(
     "REMOTE_SOURCE_ARTIFACT_TARGETS_FILE: ${{ steps.remote-source-artifact-targets.outputs.targets_file }}"
@@ -162,6 +163,93 @@ if (
   fail(
     "candidate-flight GHCR login must prefer GHCR_DEPLOY_* secrets with GitHub token fallback"
   );
+}
+
+if (
+  !/run:\s*[^\n]*deploy-infra\.sh/.test(candidateFlightText) &&
+  !/bash\s+[^\n]*deploy-infra\.sh/.test(candidateFlightText)
+) {
+  pass("candidate-flight does not execute deploy-infra.sh");
+} else {
+  fail("candidate-flight must not execute deploy-infra.sh from the app flight");
+}
+
+const candidateJobs = candidateFlight?.jobs ?? {};
+const reconcileSubstrate = candidateJobs["reconcile-substrate"];
+const assertSubstrate = candidateJobs["assert-substrate"];
+const flight = candidateJobs.flight;
+const verifyCandidate = candidateJobs["verify-candidate"];
+
+function needsList(job) {
+  const needs = job?.needs;
+  if (Array.isArray(needs)) {
+    return needs;
+  }
+  if (typeof needs === "string") {
+    return [needs];
+  }
+  return [];
+}
+
+if (reconcileSubstrate) {
+  pass("candidate-flight defines reconcile-substrate");
+} else {
+  fail(
+    "candidate-flight must define reconcile-substrate before substrate assertion"
+  );
+}
+
+const reconcileNeeds = new Set(needsList(reconcileSubstrate));
+if (
+  reconcileNeeds.has("decide") &&
+  reconcileNeeds.has("reconcile-appset") &&
+  reconcileNeeds.has("reconcile-dns")
+) {
+  pass("reconcile-substrate waits for decide, AppSet, and DNS reconciliation");
+} else {
+  fail(
+    "reconcile-substrate must need decide, reconcile-appset, and reconcile-dns"
+  );
+}
+
+const assertNeeds = new Set(needsList(assertSubstrate));
+if (
+  assertNeeds.has("reconcile-substrate") &&
+  String(assertSubstrate?.if ?? "").includes(
+    "needs.reconcile-substrate.result == 'success'"
+  )
+) {
+  pass("assert-substrate is gated on reconcile-substrate success");
+} else {
+  fail(
+    "assert-substrate must depend on and require reconcile-substrate success"
+  );
+}
+
+const flightNeeds = new Set(needsList(flight));
+if (
+  flightNeeds.has("reconcile-substrate") &&
+  String(flight?.if ?? "").includes(
+    "needs.reconcile-substrate.result == 'success'"
+  )
+) {
+  pass("flight cannot promote when required substrate reconciliation failed");
+} else {
+  fail(
+    "flight must depend on reconcile-substrate and gate promotion on its success"
+  );
+}
+
+const verifyNeeds = new Set(needsList(verifyCandidate));
+if (
+  verifyNeeds.has("reconcile-substrate") &&
+  String(verifyCandidate?.if ?? "").includes(
+    "needs.reconcile-substrate.result == 'success'"
+  )
+) {
+  pass("verify-candidate carries the reconcile-substrate gate");
+} else {
+  fail("verify-candidate must carry the reconcile-substrate gate");
 }
 
 console.log(`workflows: ${workflowFiles.join(", ")}`);

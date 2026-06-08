@@ -59,6 +59,7 @@ appset_file="${APP_SOURCE_DIR}/infra/k8s/argocd/${DEPLOY_ENVIRONMENT}-${node}-ap
 [ -f "$appset_file" ] || fail "missing per-target AppSet file: $appset_file"
 
 node_db="$(node_database_for_target "$node")" || exit 1
+knowledge_db="knowledge_${node_db#cogni_}"
 node_host="$(host_for_node "$node" "$domain")"
 node_port="$(node_port_for_target "$node")" || exit 1
 edge_key="$(printf '%s' "$node" | tr '[:lower:]-' '[:upper:]_')"
@@ -89,17 +90,20 @@ set -uo pipefail
 env_name="$1"
 node="$2"
 node_db="$3"
-node_host="$4"
-edge_key="$5"
-node_port="$6"
-app_wait_attempts="$7"
-app_wait_sleep_seconds="$8"
-remote_root="${9:-}"
+knowledge_db="$4"
+node_host="$5"
+edge_key="$6"
+node_port="$7"
+app_wait_attempts="$8"
+app_wait_sleep_seconds="$9"
+remote_root="${10:-}"
 
 namespace="cogni-${env_name}"
 app_name="${env_name}-${node}"
 appset_name="cogni-${env_name}-${node}"
 workload_name="${node}-node-app"
+expected_secret="${node}-env-secrets"
+legacy_secret="${node}-node-app-secrets"
 edge_env="${remote_root}/opt/cogni-template-edge/.env"
 caddyfile="${remote_root}/opt/cogni-template-edge/configs/Caddyfile.tmpl"
 runtime_env="${remote_root}/opt/cogni-template-runtime/.env"
@@ -177,23 +181,31 @@ consumed_secret_names="$(
 if [ -z "$consumed_secret_names" ]; then
   mark_fail "Deployment has no consumed Secret refs: $workload_name"
 else
-  while IFS= read -r consumed_secret; do
-    [ -n "$consumed_secret" ] || continue
-    if kubectl -n "$namespace" get secret "$consumed_secret" >/dev/null 2>&1; then
-      mark_ok "Deployment-consumed Secret exists: $consumed_secret"
-    else
-      mark_fail "Deployment-consumed Secret missing: $consumed_secret"
-    fi
+  if printf '%s\n' "$consumed_secret_names" | grep -Fxq "$legacy_secret"; then
+    mark_fail "Deployment consumes legacy plain Secret $legacy_secret; node-ref flight requires ESO Secret $expected_secret"
+  fi
+  if printf '%s\n' "$consumed_secret_names" | grep -Fxq "$expected_secret"; then
+    mark_ok "Deployment consumes expected ESO Secret: $expected_secret"
+  else
+    mark_fail "Deployment does not consume expected ESO Secret: $expected_secret"
+  fi
+fi
 
-    if kubectl -n "$namespace" get externalsecret "$consumed_secret" >/dev/null 2>&1; then
-      ready_status="$(kubectl -n "$namespace" get externalsecret "$consumed_secret" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || true)"
-      if [ "$ready_status" = "True" ]; then
-        mark_ok "Deployment-consumed ExternalSecret Ready=True: $consumed_secret"
-      else
-        mark_fail "Deployment-consumed ExternalSecret not Ready=True: $consumed_secret"
-      fi
-    fi
-  done <<< "$consumed_secret_names"
+if kubectl -n "$namespace" get secret "$expected_secret" >/dev/null 2>&1; then
+  mark_ok "ESO-synced Secret exists: $expected_secret"
+else
+  mark_fail "ESO-synced Secret missing: $expected_secret"
+fi
+
+if kubectl -n "$namespace" get externalsecret "$expected_secret" >/dev/null 2>&1; then
+  ready_status="$(kubectl -n "$namespace" get externalsecret "$expected_secret" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || true)"
+  if [ "$ready_status" = "True" ]; then
+    mark_ok "ExternalSecret Ready=True: $expected_secret"
+  else
+    mark_fail "ExternalSecret not Ready=True: $expected_secret"
+  fi
+else
+  mark_fail "ExternalSecret missing: $expected_secret"
 fi
 
 if [ -f "$edge_env" ]; then
@@ -255,6 +267,16 @@ else
   mark_fail "Postgres compose service not present"
 fi
 
+if "${runtime_compose[@]}" ps -q doltgres >/dev/null 2>&1; then
+  if "${runtime_compose[@]}" exec -T doltgres psql -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='${knowledge_db}'" </dev/null 2>/dev/null | tr -d '[:space:]' | grep -qx 1; then
+    mark_ok "Doltgres database exists: $knowledge_db"
+  else
+    mark_fail "Doltgres database missing: $knowledge_db"
+  fi
+else
+  mark_fail "Doltgres compose service not present"
+fi
+
 if [ "$failed" -ne 0 ]; then
   echo ""
   echo "Node substrate is not ready for ${node} in ${env_name}: ${#failures[@]} failure(s)."
@@ -271,7 +293,7 @@ read -r -a ssh_opts <<< "$ssh_opts_raw"
 probe_log=$(mktemp)
 set +e
 "$ssh_bin" "${ssh_opts[@]}" "root@${vm_host}" bash -s -- \
-  "$DEPLOY_ENVIRONMENT" "$node" "$node_db" "$node_host" "$edge_key" "$node_port" \
+  "$DEPLOY_ENVIRONMENT" "$node" "$node_db" "$knowledge_db" "$node_host" "$edge_key" "$node_port" \
   "$app_wait_attempts" "$app_wait_sleep_seconds" "$remote_root" < "$remote_script" 2>&1 | tee "$probe_log"
 ssh_rc=${PIPESTATUS[0]}
 set -e

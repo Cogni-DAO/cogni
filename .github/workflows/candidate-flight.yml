@@ -358,12 +358,13 @@ jobs:
           ci_ssh_retry ssh "${ssh_opts[@]}" "root@${VM_HOST}" "kubectl delete applicationset cogni-candidate-a -n argocd --cascade=orphan --ignore-not-found && kubectl apply -f /tmp/appset-${NODE}.yaml -n argocd && rm -f /tmp/appset-${NODE}.yaml"
 
   assert-substrate:
-    needs: [decide, reconcile-appset, reconcile-dns]
+    needs: [decide, reconcile-appset, reconcile-dns, reconcile-substrate]
     if: |
       always() &&
       needs.decide.outputs.needs_substrate_check == 'true' &&
       needs.reconcile-appset.result == 'success' &&
-      needs.reconcile-dns.result == 'success'
+      needs.reconcile-dns.result == 'success' &&
+      needs.reconcile-substrate.result == 'success'
     strategy:
       fail-fast: false
       matrix:
@@ -414,11 +415,15 @@ jobs:
         run: bash ci-src/scripts/ci/assert-target-substrate.sh
 
   flight:
-    needs: [decide, reconcile-appset, assert-substrate]
+    needs: [decide, reconcile-appset, reconcile-substrate, assert-substrate]
     if: |
       always() &&
       needs.decide.outputs.has_flight_targets == 'true' &&
       needs.reconcile-appset.result == 'success' &&
+      (
+        needs.decide.outputs.needs_substrate_check != 'true' ||
+        needs.reconcile-substrate.result == 'success'
+      ) &&
       (
         (needs.decide.outputs.needs_substrate_check == 'true' && needs.assert-substrate.result == 'success') ||
         (needs.decide.outputs.needs_substrate_check != 'true' && needs.assert-substrate.result == 'skipped')
@@ -591,6 +596,74 @@ jobs:
           path: deploy-sha-out/deploy-sha-${{ matrix.node }}.txt
           retention-days: 1
 
+  reconcile-substrate:
+    needs: [decide, reconcile-appset, reconcile-dns]
+    if: |
+      always() &&
+      needs.decide.outputs.needs_substrate_check == 'true' &&
+      needs.reconcile-appset.result == 'success' &&
+      needs.reconcile-dns.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJson(needs.decide.outputs.flight_targets_json) }}
+    concurrency:
+      group: reconcile-substrate-candidate-a-${{ matrix.node }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    environment: candidate-a
+    steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          path: ci-src
+
+      - name: Checkout app source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          ref: ${{ needs.decide.outputs.head_sha }}
+          path: app-src
+
+      - name: Setup SSH to candidate-a VM
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+          NODE_SOURCE_SHA: ${{ needs.decide.outputs.node_source_sha }}
+          DEPLOY_ENVIRONMENT: candidate-a
+        run: |
+          set -euo pipefail
+          bash ci-src/scripts/ci/require-node-ref-vm.sh
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "$SSH_DEPLOY_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Reconcile target substrate
+        env:
+          TARGET: ${{ matrix.node }}
+          VM_HOST: ${{ secrets.VM_HOST }}
+          SSH_OPTS: "-i /home/runner/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
+          DEPLOY_ENVIRONMENT: candidate-a
+          DOMAIN: ${{ vars.DOMAIN }}
+          APP_SOURCE_DIR: app-src
+          COGNI_CATALOG_ROOT: app-src/infra/catalog
+          HEAD_SHA: ${{ needs.decide.outputs.head_sha }}
+          NODE_SOURCE_SHA: ${{ needs.decide.outputs.node_source_sha }}
+          STATUS_URL: ${{ needs.decide.outputs.status_url }}
+          SUBSTRATE_RECONCILE_SUMMARY_FILE: ${{ runner.temp }}/target-substrate-reconcile-${{ matrix.node }}.json
+        run: bash ci-src/scripts/ci/reconcile-target-substrate.sh
+
+      - name: Push substrate reconcile telemetry to Loki
+        if: always()
+        uses: ./ci-src/.github/actions/loki-push
+        with:
+          loki_url: ${{ secrets.GRAFANA_CLOUD_LOKI_URL }}
+          loki_user: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
+          loki_token: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
+          log_file: ${{ runner.temp }}/target-substrate-reconcile-${{ matrix.node }}.json
+          job_name: reconcile-substrate
+          labels: workflow=candidate-flight kind=target_substrate_reconcile slot=candidate-a
+
   # Per-node public DNS. The node's overlay/secrets/DB all auto-fan on flight,
   # but `<node>-test.<root>` only resolved if someone hand-made a Cloudflare A
   # record (no `*-test` wildcard) — so a freshly-created node deployed but its
@@ -694,12 +767,17 @@ jobs:
           labels: workflow=candidate-flight kind=dns_reconcile slot=candidate-a
 
   verify-candidate:
-    needs: [decide, flight, reconcile-dns, assert-substrate]
+    needs:
+      [decide, flight, reconcile-dns, reconcile-substrate, assert-substrate]
     if: |
       always() &&
       needs.decide.outputs.has_flight_targets == 'true' &&
       needs.flight.result == 'success' &&
       needs.reconcile-dns.result == 'success' &&
+      (
+        needs.decide.outputs.needs_substrate_check != 'true' ||
+        needs.reconcile-substrate.result == 'success'
+      ) &&
       (
         (needs.decide.outputs.needs_substrate_check == 'true' && needs.assert-substrate.result == 'success') ||
         (needs.decide.outputs.needs_substrate_check != 'true' && needs.assert-substrate.result == 'skipped')

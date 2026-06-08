@@ -73,7 +73,13 @@ if [ "${1:-}" = "get" ]; then
     "cogni-candidate-a:deployment:canary-node-app")
       [ "${FAKE_MISSING_DEPLOYMENT:-}" = "1" ] && exit 1
       if printf '%s\n' "$*" | grep -Fq 'jsonpath='; then
-        echo "canary-node-app-secrets"
+        if [ "${FAKE_LEGACY_SECRET_CONSUMER:-}" = "1" ]; then
+          echo "canary-node-app-secrets"
+        elif [ "${FAKE_WRONG_SECRET_CONSUMER:-}" = "1" ]; then
+          echo "other-secret"
+        else
+          echo "canary-env-secrets"
+        fi
       fi
       exit 0
       ;;
@@ -92,8 +98,17 @@ if [ "${1:-}" = "get" ]; then
       [ "${FAKE_MISSING_SECRET:-}" = "1" ] && exit 1
       exit 0
       ;;
-    "cogni-candidate-a:secret:canary-env-secrets") exit 1 ;;
-    "cogni-candidate-a:externalsecret:canary-env-secrets") exit 1 ;;
+    "cogni-candidate-a:secret:canary-env-secrets")
+      [ "${FAKE_MISSING_SECRET:-}" = "1" ] && exit 1
+      exit 0
+      ;;
+    "cogni-candidate-a:externalsecret:canary-env-secrets")
+      [ "${FAKE_MISSING_EXTERNAL_SECRET:-}" = "1" ] && exit 1
+      if printf '%s\n' "$*" | grep -Fq 'jsonpath='; then
+        [ "${FAKE_EXTERNAL_SECRET_NOT_READY:-}" = "1" ] || echo True
+      fi
+      exit 0
+      ;;
   esac
 fi
 echo "fake kubectl: unexpected args ns=${ns} args=$*" >&2
@@ -119,8 +134,16 @@ if printf '%s\n' "$*" | grep -q ' ps -q postgres'; then
   echo postgres123
   exit 0
 fi
+if printf '%s\n' "$*" | grep -q ' ps -q doltgres'; then
+  echo doltgres123
+  exit 0
+fi
 if printf '%s\n' "$*" | grep -q ' exec -T postgres psql '; then
   [ "${FAKE_MISSING_DB:-}" = "1" ] || echo 1
+  exit 0
+fi
+if printf '%s\n' "$*" | grep -q ' exec -T doltgres psql '; then
+  [ "${FAKE_MISSING_DOLTGRES_DB:-}" = "1" ] || echo 1
   exit 0
 fi
 echo "fake docker: unexpected args $*" >&2
@@ -241,13 +264,31 @@ if env "${BASE_ENV[@]}" FAKE_MISSING_SECRET=1 bash scripts/ci/assert-target-subs
   echo "expected missing secret to fail" >&2
   exit 1
 fi
-grep -q "Deployment-consumed Secret missing" "$TMPROOT/missing-secret.out"
+grep -q "ESO-synced Secret missing" "$TMPROOT/missing-secret.out"
+
+if env "${BASE_ENV[@]}" FAKE_MISSING_EXTERNAL_SECRET=1 bash scripts/ci/assert-target-substrate.sh >"$TMPROOT/missing-external-secret.out" 2>&1; then
+  echo "expected missing ExternalSecret to fail" >&2
+  exit 1
+fi
+grep -q "ExternalSecret missing" "$TMPROOT/missing-external-secret.out"
+
+if env "${BASE_ENV[@]}" FAKE_LEGACY_SECRET_CONSUMER=1 bash scripts/ci/assert-target-substrate.sh >"$TMPROOT/legacy-secret-consumer.out" 2>&1; then
+  echo "expected legacy Secret consumer to fail" >&2
+  exit 1
+fi
+grep -q "Deployment consumes legacy plain Secret canary-node-app-secrets" "$TMPROOT/legacy-secret-consumer.out"
 
 if env "${BASE_ENV[@]}" FAKE_MISSING_DB=1 bash scripts/ci/assert-target-substrate.sh >"$TMPROOT/missing-db.out" 2>&1; then
   echo "expected missing DB to fail" >&2
   exit 1
 fi
 grep -q "Postgres database missing" "$TMPROOT/missing-db.out"
+
+if env "${BASE_ENV[@]}" FAKE_MISSING_DOLTGRES_DB=1 bash scripts/ci/assert-target-substrate.sh >"$TMPROOT/missing-doltgres-db.out" 2>&1; then
+  echo "expected missing Doltgres DB to fail" >&2
+  exit 1
+fi
+grep -q "Doltgres database missing" "$TMPROOT/missing-doltgres-db.out"
 
 cp "$REMOTE_ROOT/opt/cogni-template-runtime/.env" "$REMOTE_ROOT/opt/cogni-template-runtime/.env.bak"
 cat > "$REMOTE_ROOT/opt/cogni-template-runtime/.env" <<'EOF'
