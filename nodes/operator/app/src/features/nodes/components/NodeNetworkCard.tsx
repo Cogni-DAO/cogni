@@ -81,7 +81,7 @@ export function NodeNetworkCard({
   return (
     <Card className="flex h-full flex-col overflow-hidden transition-colors hover:border-primary">
       <Link
-        href={`/nodes/${node.slug}`}
+        href={`/explore/nodes/${node.slug}`}
         aria-label={`View ${node.title} details`}
         className="group flex flex-1 flex-col focus-visible:outline-2 focus-visible:outline-ring"
       >

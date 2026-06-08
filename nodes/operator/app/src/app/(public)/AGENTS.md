@@ -9,7 +9,7 @@
 
 ## Purpose
 
-Public pages wrapped in `AppHeader` + `AppFooter` shell. `/` redirects signed-in users to `/chat`; `/nodes` remains public but renders auth-aware account chrome.
+Public pages wrapped in `AppHeader` + `AppFooter` shell. `/` redirects signed-in users to `/chat`; `/explore/nodes` is the public node gallery.
 
 ## Pointers
 
@@ -29,7 +29,7 @@ Public pages wrapped in `AppHeader` + `AppFooter` shell. `/` redirects signed-in
 ## Public Surface
 
 - **Exports:** none
-- **Routes:** `/` (homepage — redirects signed-in users to `/chat`), `/nodes`, `/nodes/[slug]`
+- **Routes:** `/` (homepage — redirects signed-in users to `/chat`), `/explore` (redirects to `/explore/nodes`), `/explore/nodes`, `/explore/nodes/[slug]`
 - **Files considered API:** `layout.tsx`, `page.tsx`
 - **Deleted:** `AuthRedirect.tsx` — replaced by server-side proxy routing
 

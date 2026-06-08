@@ -7,7 +7,7 @@
  * Scope: Posts to the existing nodes API and routes to the canonical setup page for the new row.
  * Invariants: v0 only supports managed monorepo nodes on Base mainnet.
  * Side-effects: IO (POST /api/v1/nodes)
- * Links: src/app/api/v1/nodes/route.ts, src/app/(app)/setup/nodes/page.tsx
+ * Links: src/app/api/v1/nodes/route.ts, src/app/(app)/nodes/page.tsx
  * @public
  */
 
@@ -46,7 +46,7 @@ export function NodeRegistrationForm(): ReactElement {
         return;
       }
       const { node } = await res.json();
-      router.push(`/setup/nodes/${node.id}`);
+      router.push(`/nodes/${node.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "request failed");
     } finally {

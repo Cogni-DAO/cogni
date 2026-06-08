@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/(app)/setup/nodes/page`
+ * Module: `@app/(app)/nodes/page`
  * Purpose: Landing page for the node setup wizard. Lists the user's in-flight + active node
  *   rows and offers a form to register a new managed node.
  * Scope: Server component. Owner-scoped DB read; delegates create UX to client component.
@@ -71,7 +71,7 @@ export default async function SetupNodesPage(): Promise<ReactElement> {
                   node={{
                     title: n.slug,
                     tagline: display.description,
-                    href: `/setup/nodes/${n.id}`,
+                    href: `/nodes/${n.id}`,
                     status: { label: display.label, intent: display.intent },
                   }}
                 />

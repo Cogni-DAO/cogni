@@ -114,7 +114,7 @@ describe("nodes feature components", () => {
     expect(screen.getByText("12 / 30d")).toBeVisible();
     expect(screen.getByText("3 epochs")).toBeVisible();
     expect(screen.getByText("44 / 30d")).toBeVisible();
-    expect(detailsLink).toHaveAttribute("href", "/nodes/alpha");
+    expect(detailsLink).toHaveAttribute("href", "/explore/nodes/alpha");
     expect(screen.queryByText("View details")).toBeNull();
     expect(detailsLink).not.toContainElement(visitLink);
     expect(visitLink).toHaveAttribute(
@@ -131,7 +131,7 @@ describe("nodes feature components", () => {
     expect(screen.getByText("Pending")).toBeVisible();
     expect(
       screen.getByRole("link", { name: "View Beta Node details" })
-    ).toHaveAttribute("href", "/nodes/beta");
+    ).toHaveAttribute("href", "/explore/nodes/beta");
     expect(screen.queryByRole("link", { name: /Visit app/ })).toBeNull();
   });
 
@@ -227,7 +227,7 @@ describe("nodes feature components", () => {
 
     await waitFor(() => {
       expect(router.push).toHaveBeenCalledWith(
-        "/setup/nodes/33333333-3333-4333-8333-333333333333"
+        "/nodes/33333333-3333-4333-8333-333333333333"
       );
     });
     expect(fetch).toHaveBeenCalledWith(

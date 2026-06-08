@@ -6,7 +6,7 @@
  * Purpose: Public network gallery layout for Cogni nodes.
  * Scope: Presentational composition over supplied node metrics and registration form slot.
  * Side-effects: none
- * Links: src/app/(public)/nodes/page.tsx
+ * Links: src/app/(public)/explore/nodes/page.tsx
  * @public
  */
 
