@@ -70,6 +70,37 @@ model_hash() {
   fi
 }
 
+canonical_model_json() {
+  jq -S '
+    def normalize_keys:
+      walk(
+        if type == "object" then
+          with_entries(
+            .key |= (
+              if . == "computed_userset" then "computedUserset"
+              elif . == "tuple_to_userset" then "tupleToUserset"
+              else .
+              end
+            )
+          )
+        else .
+        end
+      );
+    def strip_nulls:
+      walk(
+        if type == "object" then
+          with_entries(select(.value != null))
+        else .
+        end
+      );
+
+    if has("authorization_model") then .authorization_model else . end
+    | {schema_version, type_definitions, conditions}
+    | strip_nulls
+    | normalize_keys
+  '
+}
+
 authorization_model_id_for_hash() {
   local store_id="$1" expected_hash="$2"
   local models_json model_id model_json hash
@@ -78,11 +109,7 @@ authorization_model_id_for_hash() {
   while IFS= read -r model_id; do
     [[ -n "$model_id" ]] || continue
     model_json="$(curl_json GET "/stores/${store_id}/authorization-models/${model_id}")"
-    hash="$(printf '%s' "$model_json" | jq -S '
-      if has("authorization_model") then .authorization_model else . end
-      | {schema_version, type_definitions, conditions}
-      | with_entries(select(.value != null))
-    ' | model_hash)"
+    hash="$(printf '%s' "$model_json" | canonical_model_json | model_hash)"
     if [[ "$hash" == "$expected_hash" ]]; then
       printf '%s\n' "$model_id"
       return 0
@@ -101,7 +128,7 @@ else
 fi
 [[ -n "$store_id" && "$store_id" != "null" ]] || die "could not resolve store id"
 
-canonical="$(jq -S '.' "$OPENFGA_MODEL_FILE")"
+canonical="$(canonical_model_json < "$OPENFGA_MODEL_FILE")"
 expected_hash="$(printf '%s' "$canonical" | model_hash)"
 authorization_model_id="$(authorization_model_id_for_hash "$store_id" "$expected_hash")"
 if [[ -z "$authorization_model_id" ]]; then

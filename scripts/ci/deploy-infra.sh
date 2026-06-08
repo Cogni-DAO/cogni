@@ -1610,7 +1610,7 @@ SECEOF
       while IFS= read -r pod; do
         [[ -n "$pod" ]] || continue
         if kubectl -n "${K8S_NS}" wait "pod/${pod}" --for=condition=Ready --timeout=5s >/dev/null 2>&1 \
-          && kubectl -n "${K8S_NS}" exec "$pod" -- /bin/sh -c \
+          && kubectl -n "${K8S_NS}" exec "$pod" -c app -- /bin/sh -c \
             'test -n "${OPENFGA_API_URL:-}" && test -n "${OPENFGA_STORE_ID:-}" && test -n "${OPENFGA_AUTHORIZATION_MODEL_ID:-}"' 2>/dev/null; then
           return 0
         fi
@@ -1618,6 +1618,44 @@ SECEOF
       sleep 2
     done
     return 1
+  }
+
+  operator_deployment_declares_openfga_config() {
+    local api_url secret_refs
+    api_url="$(kubectl -n "${K8S_NS}" get configmap operator-node-app-config \
+      -o jsonpath='{.data.OPENFGA_API_URL}' 2>/dev/null || true)"
+    secret_refs="$(kubectl -n "${K8S_NS}" get deployment operator-node-app \
+      -o jsonpath='{range .spec.template.spec.containers[*].envFrom[*]}{.secretRef.name}{"\n"}{end}' 2>/dev/null || true)"
+    [[ -n "$api_url" ]] && grep -qx 'operator-env-secrets' <<< "$secret_refs"
+  }
+
+  log_operator_openfga_env_diagnostics() {
+    local secret_refs pod pods
+    log_warn "operator OpenFGA process-env diagnostics follow (key presence only)"
+    kubectl -n "${K8S_NS}" get configmap operator-node-app-config \
+      -o jsonpath='operator-node-app-config.OPENFGA_API_URL={.data.OPENFGA_API_URL}{"\n"}' 2>/dev/null || true
+    secret_refs="$(kubectl -n "${K8S_NS}" get deployment operator-node-app \
+      -o jsonpath='{range .spec.template.spec.containers[*].envFrom[*]}{.secretRef.name}{"\n"}{end}' 2>/dev/null || true)"
+    printf 'operator-node-app container secretRefs:\n%s\n' "${secret_refs:-<none>}"
+    kubectl -n "${K8S_NS}" get pods -o wide | grep '^operator-node-app-' || true
+    pods=$(kubectl -n "${K8S_NS}" get pods \
+      --field-selector=status.phase=Running \
+      -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null \
+      | grep '^operator-node-app-' || true)
+    while IFS= read -r pod; do
+      [[ -n "$pod" ]] || continue
+      printf 'operator pod %s env key presence:\n' "$pod"
+      kubectl -n "${K8S_NS}" exec "$pod" -c app -- /bin/sh -c '
+        for key in OPENFGA_API_URL OPENFGA_STORE_ID OPENFGA_AUTHORIZATION_MODEL_ID; do
+          eval "value=\${$key:-}"
+          if [ -n "$value" ]; then
+            printf "%s=present\n" "$key"
+          else
+            printf "%s=missing\n" "$key"
+          fi
+        done
+      ' 2>/dev/null || true
+    done <<< "$pods"
   }
 
   # ── Wait for node-app rollouts first ───────────────────────────────────────
@@ -1645,9 +1683,12 @@ SECEOF
     ROLLOUT_FAILED=1
   fi
   if [[ " ${NODE_APP_TARGETS} " == *" operator "* ]]; then
-    if operator_openfga_process_env_ready; then
+    if ! operator_deployment_declares_openfga_config; then
+      log_warn "operator deployment does not yet declare OpenFGA config; skipping process-env proof until the app flight applies the OpenFGA-aware overlay"
+    elif operator_openfga_process_env_ready; then
       log_info "operator pod process env contains OpenFGA URL, store ID, and model ID"
     else
+      log_operator_openfga_env_diagnostics
       log_error "operator pod process env is missing OpenFGA URL, store ID, or model ID"
       ROLLOUT_FAILED=1
     fi
