@@ -55,7 +55,7 @@ The simplification target is one artifact contract and one promotion primitive. 
 
 7. **SINGLE_RESPONSIBILITY**: Each workflow file owns one concern (build, promote+deploy, E2E+release). No monoliths.
 
-8. **SINGLE_DOMAIN_HARD_FAIL**: Source-code PRs happen in the source repo that owns the artifact. Parent repo PRs for hosted artifacts are operator control-plane changes: gitlink/pin acceptance, catalog rows, overlays, AppSets, DNS/provisioning wiring, and deploy-state machinery. Legacy in-tree node directories remain transitional and are still guarded by `single-node-scope`; they are not the future build model. See `## Single-Domain Scope` below.
+8. **SINGLE_DOMAIN_HARD_FAIL**: Source-code PRs happen in the source repo that owns the artifact. Parent repo PRs for hosted artifacts are operator control-plane changes: gitlink/pin acceptance, catalog rows, overlays, AppSets, DNS/provisioning wiring, and deploy-state machinery. Legacy in-tree node directories remain transitional and are still guarded by `single-node-scope`; submodule gitlinks are operator pins, not parent source domains. See `## Single-Domain Scope` below.
 
 9. **SOURCE_SHA_IS_DEPLOY_IDENTITY**: `sourceSha` is the deployment coordinate for every deployable artifact. Every flightable artifact for that source revision must be published as `<image_repository>:sha-<40-char-sourceSha>`. The operator resolves that tag to `image@sha256:<digest>` before writing deploy state.
 
@@ -70,12 +70,12 @@ Every path in the operator control-plane repo belongs to **exactly one review do
 ### Transitional domains
 
 ```
-4 disjoint domains. PR scope = exactly 1 column.
+Remaining legacy in-tree domains plus the operator control plane. PR scope = exactly 1 column.
 
   ┌─────────────────────────────────────────────────────────────┐
-  │  poly         resy         node-template       operator     │
-  │  ────         ────         ─────────────       ────────     │
-  │  nodes/poly/  nodes/resy/  nodes/node-tmpl/    nodes/opr/   │
+  │  legacy-a          legacy-b                    operator    │
+  │  ────────          ────────                    ────────    │
+  │  nodes/legacy-a/   nodes/legacy-b/             nodes/operator/ │
   │                                                  ∪          │
   │                                                EVERYTHING   │
   │                                                ELSE         │
@@ -88,7 +88,7 @@ Every path in the operator control-plane repo belongs to **exactly one review do
 
 The broad `operator` domain is the control plane, not the operator app artifact. It owns the substrate every hosted artifact consumes. The operator app image is just one deployable artifact within that control plane and should not be used as the mental model for every operator-owned file.
 
-Future node source changes happen in child repos, not in `nodes/<X>/**` inside this repo. The in-tree `poly`, `resy`, and `node-template` domains are legacy migration surfaces. New hosted node PRs in this repo should be pin/deploy-state/control-plane changes and therefore route as operator-domain work.
+Future node source changes happen in child repos, not in `nodes/<X>/**` inside this repo. Remaining in-tree non-operator node domains are legacy migration surfaces. New hosted node PRs in this repo should be pin/deploy-state/control-plane changes and therefore route as operator-domain work.
 
 ### Rule
 
@@ -133,7 +133,7 @@ Sovereignty contracts only hold when the false-positive cost is accepted. Carvin
 
 Cross-domain rejections must do half the contributor's work in the failure annotation:
 
-1. **Name the conflicting domains** explicitly (e.g., `poly + operator`, not just "scope error").
+1. **Name the conflicting domains** explicitly (e.g., `legacy-node + operator`, not just "scope error").
 2. **Name the operator-territory paths** that triggered the operator domain match, when operator is one of the conflicting domains. The contributor needs to know which file they touched is "operator's intent."
 3. **Suggest the split**: "file an operator PR with `<paths>` first; rebase your `<other-domain>` PR on it."
 4. **Link the substrate-request convention** so the rejected change becomes a roadmap input rather than dropped friction. (Convention TBD; until it lands, link this spec section.)
@@ -146,7 +146,7 @@ Each gate firing is a feedback loop, not a barrier. Future: rejections logged st
 
 The target model is artifact-first. A hosted node's source lives in the repo that owns it, and that repo publishes the artifact the operator deploys. A git submodule at `nodes/<slug>` is only the current approval-pin mechanism: a node-template fork the operator pins by SHA. It is not a build context, not a workflow execution surface, and not the long-term identity model.
 
-Legacy in-tree nodes (`resy`, `poly`, `node-template`, and any remaining similar rows) are transitional. They should be migrated toward the same `source_repo + image_repository + sourceSha + digest` contract instead of being preserved as a parallel first-class model.
+Legacy in-tree node source directories, if any remain, are transitional. They should be migrated toward the same `source_repo + image_repository + sourceSha + digest` contract instead of being preserved as a parallel first-class model. `node-template` is no longer an in-tree source domain; it is the external template repo plus an operator pin/deployment row.
 
 ### Plain-English authority model
 
@@ -307,11 +307,11 @@ Two `full-app` templates differ **only by integration** (fork-whole vs submodule
 
 All three repos carry the node **app + its merge-gate CI + image build**. They differ on **one axis: how much of the deploy/infra plane they carry.**
 
-| Repo                                        | Node app                                  | Node CI (merge-gate + build→GHCR)         | Deploy/infra plane¹      | Who deploys it                                           |
-| ------------------------------------------- | ----------------------------------------- | ----------------------------------------- | ------------------------ | -------------------------------------------------------- |
-| **cogni monorepo**                          | operator + inline nodes (`nodes/poly`, …) | yes (shared root configs)                 | **owns it — every node** | itself                                                   |
-| **standalone-node** (fork-whole)            | node nested at `nodes/node-template/`     | yes                                       | **yes — you self-host**  | itself (you _are_ an operator)                           |
-| **node-template** (submodule, node-at-root) | node at repo root                         | **yes — own `pr-build.yml` + build→GHCR** | **no**                   | the shared operator (pin → provision → flight → promote) |
+| Repo                                        | Node app                               | Node CI (merge-gate + build→GHCR)         | Deploy/infra plane¹      | Who deploys it                                           |
+| ------------------------------------------- | -------------------------------------- | ----------------------------------------- | ------------------------ | -------------------------------------------------------- |
+| **cogni monorepo**                          | operator + legacy inline nodes, if any | yes (shared root configs)                 | **owns it — every node** | itself                                                   |
+| **standalone-node** (fork-whole)            | node nested at `nodes/node-template/`  | yes                                       | **yes — you self-host**  | itself (you _are_ an operator)                           |
+| **node-template** (submodule, node-at-root) | node at repo root                      | **yes — own `pr-build.yml` + build→GHCR** | **no**                   | the shared operator (pin → provision → flight → promote) |
 
 ¹ Deploy/infra plane = `provision-env`, Argo AppSets + k8s overlays, `deploy-infra`, `candidate-flight`, OpenBao/ESO substrate, the operator app, `infra/catalog`, root monorepo tooling.
 
@@ -328,7 +328,7 @@ All three repos carry the node **app + its merge-gate CI + image build**. They d
 
 > **Born-reviewable (the `ay` gap).** A minted node must ship its own `.cogni/rules/` + review gate, or a PR in it routes to _nothing_ — the failure observed on the first mint (`cogni-test-org/ay`), where the review bot triggered but had no node-local rules to apply. The P1 projection must carry these from the canonical node, not just `app/`.
 
-**Derivation (this is P1).** `node-template` = the canonical node source in the cogni monorepo (`nodes/node-template/{app,graphs,k8s,packages}`) **projected to repo root**, plus the node-level CI/policy, **minus the deploy/infra plane**. The projection is path-identical (the sync feature `detect-sync-drift.mjs` lacks; #1366); the omit-column above _is_ the projection's exclusion list. This keeps `node-template` in lockstep with the canonical node without ever shipping it the operator's plane.
+**Derivation (this is P1).** `node-template` is the canonical node-at-root source repo. It carries the node-level app, graphs, package layer, CI, and policy that were ported from the retired in-tree template shape, **minus the deploy/infra plane**. Future template changes land in `Cogni-DAO/node-template`; the operator repo carries only the catalog/deploy wiring and gitlink pin for approval.
 
 ### Node-dev vs operator split — adding a secret or service to a submodule node
 
