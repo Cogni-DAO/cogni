@@ -123,6 +123,10 @@ export interface PackageImageTagExistsInput {
   readonly tag: string;
 }
 
+type PackageImageTagStatus =
+  | { readonly status: "ready" }
+  | { readonly status: "missing" };
+
 /** Input to {@link GitHubRepoWriter.forkFromTemplate}: mint a node repo from `node-template`. */
 export interface ForkFromTemplateInput {
   /** Org/user owning the `node-template` source repo (e.g. `Cogni-DAO`). */
@@ -288,6 +292,18 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
     }
 
     const sourceRepo = parseGithubRepoUrl(catalog.data.source_repo);
+    const imageRepo = parseGhcrImageRepository(catalog.data.image_repository);
+    if (
+      imageRepo.owner.toLowerCase() !== sourceRepo.owner.toLowerCase() ||
+      imageRepo.packageName.toLowerCase() !== sourceRepo.repo.toLowerCase()
+    ) {
+      throw deployPlaneError(
+        "image_repository_mismatch",
+        `catalog image_repository must match source_repo: expected ghcr.io/${sourceRepo.owner.toLowerCase()}/${sourceRepo.repo.toLowerCase()}`,
+        409
+      );
+    }
+
     const sourceExists = await this.commitExists({
       owner: sourceRepo.owner,
       repo: sourceRepo.repo,
@@ -333,21 +349,6 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
       );
     }
 
-    const tag = `sha-${sourceSha}`;
-    const imageExists = await this.packageImageTagExists({
-      owner: parentOwner,
-      repo: parentRepo,
-      imageRepository: catalog.data.image_repository,
-      tag,
-    });
-    if (!imageExists) {
-      throw deployPlaneError(
-        "image_missing",
-        `external artifact image not found: ${catalog.data.image_repository}:${tag}`,
-        422
-      );
-    }
-
     const parentPin = await this.ensureNodeSubmodulePin({
       owner: parentOwner,
       repo: parentRepo,
@@ -361,7 +362,7 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
       slug,
       sourceSha,
       sourceRepo: catalog.data.source_repo,
-      image: `${catalog.data.image_repository}:${tag}`,
+      image: `${catalog.data.image_repository}:sha-${sourceSha}`,
       parentPin,
     };
   }
@@ -877,10 +878,25 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
   async packageImageTagExists(
     input: PackageImageTagExistsInput
   ): Promise<boolean> {
+    return (await this.packageImageTagStatus(input)).status === "ready";
+  }
+
+  async packageImageTagStatus(
+    input: PackageImageTagExistsInput
+  ): Promise<PackageImageTagStatus> {
     const parsed = parseGhcrImageRepository(input.imageRepository);
     const octokit = await this.getOctokit(input.owner, input.repo);
 
     try {
+      await octokit.request(
+        "GET /orgs/{org}/packages/{package_type}/{package_name}",
+        {
+          org: parsed.owner,
+          package_type: "container",
+          package_name: parsed.packageName,
+        }
+      );
+
       for (let page = 1; page <= 10; page += 1) {
         const { data } = await octokit.request(
           "GET /orgs/{org}/packages/{package_type}/{package_name}/versions",
@@ -897,14 +913,14 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
             version.metadata?.container?.tags?.includes(input.tag)
           )
         ) {
-          return true;
+          return { status: "ready" };
         }
-        if (data.length < 100) return false;
+        if (data.length < 100) return { status: "missing" };
       }
-      return false;
+      return { status: "missing" };
     } catch (err) {
       const status = (err as { status?: number })?.status;
-      if (status === 403 || status === 404) return false;
+      if (status === 403 || status === 404) return { status: "missing" };
       throw err;
     }
   }

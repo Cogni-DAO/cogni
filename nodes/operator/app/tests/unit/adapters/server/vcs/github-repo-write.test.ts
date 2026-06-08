@@ -487,9 +487,277 @@ describe("GitHubRepoWriter.ensureNodeSubmodulePin", () => {
   });
 });
 
+describe("GitHubRepoWriter.prepareNodeRefCandidateFlight", () => {
+  it("prepares node-ref flights from source repo identity without GHCR metadata", async () => {
+    const sourceSha = "0123456789012345678901234567890123456789";
+    const nodeId = "11111111-1111-4111-8111-111111111111";
+    const encode = (value: string) =>
+      Buffer.from(value, "utf-8").toString("base64");
+    routeHandlers = {
+      "GET /repos/{owner}/{repo}/contents/{path}": (params) => {
+        if (
+          params.owner === "cogni-test-org" &&
+          params.repo === "cogni-monorepo" &&
+          params.path === "infra/catalog/ghcr.yaml"
+        ) {
+          return {
+            type: "file",
+            encoding: "base64",
+            content: encode(`name: ghcr
+type: node
+path_prefix: nodes/ghcr/
+source_repo: https://github.com/cogni-test-org/ghcr
+image_repository: ghcr.io/cogni-test-org/ghcr
+`),
+          };
+        }
+        if (
+          params.owner === "cogni-test-org" &&
+          params.repo === "ghcr" &&
+          params.path === ".cogni/repo-spec.yaml"
+        ) {
+          expect(params.ref).toBe(sourceSha);
+          return {
+            type: "file",
+            encoding: "base64",
+            content: encode(`node_id: "${nodeId}"
+cogni_dao:
+  chain_id: "8453"
+payments_in:
+  credits_topup:
+    provider: cogni-usdc-backend-v1
+    receiving_address: "0x1111111111111111111111111111111111111111"
+`),
+          };
+        }
+        throw statusError(404, `not found: ${String(params.path)}`);
+      },
+      "GET /repos/{owner}/{repo}/commits/{ref}": (params) => {
+        expect(params).toMatchObject({
+          owner: "cogni-test-org",
+          repo: "ghcr",
+          ref: sourceSha,
+        });
+        return { sha: sourceSha };
+      },
+      "GET /repos/{owner}/{repo}/git/ref/{ref}": (params) => {
+        expect(params).toMatchObject({
+          owner: "cogni-test-org",
+          repo: "cogni-monorepo",
+          ref: "heads/main",
+        });
+        return { object: { sha: "parent-main" } };
+      },
+      "GET /repos/{owner}/{repo}/git/commits/{commit_sha}": (params) => {
+        expect(params).toMatchObject({
+          owner: "cogni-test-org",
+          repo: "cogni-monorepo",
+          commit_sha: "parent-main",
+        });
+        return { tree: { sha: "parent-tree" } };
+      },
+      "GET /repos/{owner}/{repo}/git/trees/{tree_sha}": (params) => {
+        if (params.tree_sha === "parent-tree") {
+          return {
+            tree: [
+              {
+                path: "nodes",
+                type: "tree",
+                mode: "040000",
+                sha: "nodes-tree",
+              },
+            ],
+          };
+        }
+        expect(params.tree_sha).toBe("nodes-tree");
+        return {
+          tree: [
+            { path: "ghcr", type: "commit", mode: "160000", sha: sourceSha },
+          ],
+        };
+      },
+    };
+
+    await expect(
+      makeWriter().prepareNodeRefCandidateFlight({
+        parentOwner: "cogni-test-org",
+        parentRepo: "cogni-monorepo",
+        nodeId,
+        slug: "ghcr",
+        sourceSha,
+      })
+    ).resolves.toMatchObject({
+      nodeId,
+      slug: "ghcr",
+      sourceSha,
+      sourceRepo: "https://github.com/cogni-test-org/ghcr",
+      image: `ghcr.io/cogni-test-org/ghcr:sha-${sourceSha}`,
+      parentPin: { status: "already_pinned", currentSha: sourceSha },
+    });
+
+    const installUrls = vi
+      .mocked(fetch)
+      .mock.calls.map(([input]) => String(input));
+    expect(
+      installUrls.filter(
+        (url) =>
+          url ===
+          "https://api.github.com/repos/cogni-test-org/ghcr/installation"
+      )
+    ).toHaveLength(2);
+    expect(
+      installUrls.filter(
+        (url) =>
+          url ===
+          "https://api.github.com/repos/cogni-test-org/cogni-monorepo/installation"
+      )
+    ).toHaveLength(2);
+  });
+
+  it("does not require source repo GHCR package metadata before flight", async () => {
+    const sourceSha = "0123456789012345678901234567890123456789";
+    const nodeId = "11111111-1111-4111-8111-111111111111";
+    const encode = (value: string) =>
+      Buffer.from(value, "utf-8").toString("base64");
+    routeHandlers = {
+      "GET /repos/{owner}/{repo}/contents/{path}": (params) => {
+        if (params.path === "infra/catalog/ghcr.yaml") {
+          return {
+            type: "file",
+            encoding: "base64",
+            content: encode(`name: ghcr
+type: node
+path_prefix: nodes/ghcr/
+source_repo: https://github.com/cogni-test-org/ghcr
+image_repository: ghcr.io/cogni-test-org/ghcr
+`),
+          };
+        }
+        if (params.path === ".cogni/repo-spec.yaml") {
+          return {
+            type: "file",
+            encoding: "base64",
+            content: encode(`node_id: "${nodeId}"
+cogni_dao:
+  chain_id: "8453"
+payments_in:
+  credits_topup:
+    provider: cogni-usdc-backend-v1
+    receiving_address: "0x1111111111111111111111111111111111111111"
+`),
+          };
+        }
+        throw statusError(404, `not found: ${String(params.path)}`);
+      },
+      "GET /repos/{owner}/{repo}/commits/{ref}": () => ({ sha: sourceSha }),
+      "GET /repos/{owner}/{repo}/git/ref/{ref}": () => ({
+        ref: "refs/heads/main",
+        object: { type: "commit", sha: "parent-main" },
+      }),
+      "GET /repos/{owner}/{repo}/git/commits/{commit_sha}": () => ({
+        sha: "parent-main",
+        tree: { sha: "tree-main" },
+      }),
+      "GET /repos/{owner}/{repo}/git/trees/{tree_sha}": () => ({
+        tree: [
+          { path: ".gitmodules", type: "blob", sha: "gitmodules-sha" },
+          { path: "nodes", type: "tree", sha: "nodes-tree-sha" },
+        ],
+      }),
+      "GET /repos/{owner}/{repo}/git/blobs/{file_sha}": () => ({
+        content: encode(``),
+        encoding: "base64",
+      }),
+      "POST /repos/{owner}/{repo}/git/blobs": () => ({ sha: "blob-sha" }),
+      "POST /repos/{owner}/{repo}/git/trees": () => ({ sha: "new-tree" }),
+      "POST /repos/{owner}/{repo}/git/commits": () => ({ sha: "new-commit" }),
+      "POST /repos/{owner}/{repo}/git/refs": () => ({}),
+      "PATCH /repos/{owner}/{repo}/git/refs/{ref}": () => ({}),
+      "GET /repos/{owner}/{repo}/pulls": () => [],
+      "POST /repos/{owner}/{repo}/pulls": () => ({
+        number: 42,
+        html_url: "https://github.com/cogni-test-org/cogni-monorepo/pull/42",
+      }),
+    };
+
+    await expect(
+      makeWriter().prepareNodeRefCandidateFlight({
+        parentOwner: "cogni-test-org",
+        parentRepo: "cogni-monorepo",
+        nodeId,
+        slug: "ghcr",
+        sourceSha,
+      })
+    ).resolves.toMatchObject({
+      nodeId,
+      slug: "ghcr",
+      sourceSha,
+      sourceRepo: "https://github.com/cogni-test-org/ghcr",
+      image: `ghcr.io/cogni-test-org/ghcr:sha-${sourceSha}`,
+    });
+
+    expect(requests.map((request) => request.route)).toContain(
+      "POST /repos/{owner}/{repo}/pulls"
+    );
+    expect(requests.map((request) => request.route)).not.toContain(
+      "GET /orgs/{org}/packages/{package_type}/{package_name}"
+    );
+    expect(requests.map((request) => request.route)).not.toContain(
+      "GET /orgs/{org}/packages/{package_type}/{package_name}/versions"
+    );
+  });
+
+  it("rejects catalogs that point source refs at a different GHCR package", async () => {
+    const sourceSha = "0123456789012345678901234567890123456789";
+    const nodeId = "11111111-1111-4111-8111-111111111111";
+    const encode = (value: string) =>
+      Buffer.from(value, "utf-8").toString("base64");
+    routeHandlers = {
+      "GET /repos/{owner}/{repo}/contents/{path}": (params) => {
+        expect(params.path).toBe("infra/catalog/ghcr.yaml");
+        return {
+          type: "file",
+          encoding: "base64",
+          content: encode(`name: ghcr
+type: node
+path_prefix: nodes/ghcr/
+source_repo: https://github.com/cogni-test-org/ghcr
+image_repository: ghcr.io/cogni-test-org/other
+`),
+        };
+      },
+    };
+
+    await expect(
+      makeWriter().prepareNodeRefCandidateFlight({
+        parentOwner: "cogni-test-org",
+        parentRepo: "cogni-monorepo",
+        nodeId,
+        slug: "ghcr",
+        sourceSha,
+      })
+    ).rejects.toMatchObject({
+      code: "image_repository_mismatch",
+      status: 409,
+    });
+
+    expect(requests.map((request) => request.route)).not.toContain(
+      "GET /repos/{owner}/{repo}/commits/{ref}"
+    );
+  });
+});
+
 describe("GitHubRepoWriter.packageImageTagExists", () => {
   it("probes GHCR tags through GitHub Packages REST with installation auth", async () => {
     routeHandlers = {
+      "GET /orgs/{org}/packages/{package_type}/{package_name}": (params) => {
+        expect(params).toMatchObject({
+          org: "cogni-dao",
+          package_type: "container",
+          package_name: "creative",
+        });
+        return { visibility: "public" };
+      },
       "GET /orgs/{org}/packages/{package_type}/{package_name}/versions": (
         params
       ) => {
@@ -526,6 +794,7 @@ describe("GitHubRepoWriter.packageImageTagExists", () => {
     ).resolves.toBe(true);
 
     expect(requests.map((request) => request.route)).toEqual([
+      "GET /orgs/{org}/packages/{package_type}/{package_name}",
       "GET /orgs/{org}/packages/{package_type}/{package_name}/versions",
       "GET /orgs/{org}/packages/{package_type}/{package_name}/versions",
     ]);
@@ -541,7 +810,7 @@ describe("GitHubRepoWriter.packageImageTagExists", () => {
 
   it("fails closed when GitHub Packages denies or hides the image package", async () => {
     routeHandlers = {
-      "GET /orgs/{org}/packages/{package_type}/{package_name}/versions": () =>
+      "GET /orgs/{org}/packages/{package_type}/{package_name}": () =>
         Promise.reject(statusError(403, "Resource not accessible")),
     };
 
@@ -553,5 +822,36 @@ describe("GitHubRepoWriter.packageImageTagExists", () => {
         tag: "sha-0123456789012345678901234567890123456789",
       })
     ).resolves.toBe(false);
+  });
+
+  it("does not reject readable private GHCR packages", async () => {
+    routeHandlers = {
+      "GET /orgs/{org}/packages/{package_type}/{package_name}": () => ({
+        visibility: "private",
+      }),
+      "GET /orgs/{org}/packages/{package_type}/{package_name}/versions": () => [
+        {
+          metadata: {
+            container: {
+              tags: ["sha-0123456789012345678901234567890123456789"],
+            },
+          },
+        },
+      ],
+    };
+
+    await expect(
+      makeWriter().packageImageTagExists({
+        owner: "cogni-test-org",
+        repo: "ghcr",
+        imageRepository: "ghcr.io/cogni-test-org/ghcr",
+        tag: "sha-0123456789012345678901234567890123456789",
+      })
+    ).resolves.toBe(true);
+
+    expect(requests.map((request) => request.route)).toEqual([
+      "GET /orgs/{org}/packages/{package_type}/{package_name}",
+      "GET /orgs/{org}/packages/{package_type}/{package_name}/versions",
+    ]);
   });
 });
