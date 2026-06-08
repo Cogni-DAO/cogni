@@ -3,7 +3,7 @@
 
 /**
  * Module: `@app/(app)/setup/dao/page`
- * Purpose: Legacy DAO formation URL. Redirects to the registry-aware node wizard.
+ * Purpose: Legacy DAO formation URL. Redirects to the node manager.
  * Scope: Server redirect only; node birth must start from a DB-backed node row.
  * Invariants: Requires authenticated session (wallet connected) via (app) route group.
  * Side-effects: redirect
@@ -14,5 +14,5 @@
 import { redirect } from "next/navigation";
 
 export default function DAOFormationPage(): never {
-  redirect("/setup/nodes");
+  redirect("/nodes");
 }

@@ -114,7 +114,7 @@ describe("nodes feature components", () => {
     expect(screen.getByText("12 / 30d")).toBeVisible();
     expect(screen.getByText("3 epochs")).toBeVisible();
     expect(screen.getByText("44 / 30d")).toBeVisible();
-    expect(detailsLink).toHaveAttribute("href", "/nodes/alpha");
+    expect(detailsLink).toHaveAttribute("href", "/explore/nodes/alpha");
     expect(screen.queryByText("View details")).toBeNull();
     expect(detailsLink).not.toContainElement(visitLink);
     expect(visitLink).toHaveAttribute(
@@ -131,18 +131,18 @@ describe("nodes feature components", () => {
     expect(screen.getByText("Pending")).toBeVisible();
     expect(
       screen.getByRole("link", { name: "View Beta Node details" })
-    ).toHaveAttribute("href", "/nodes/beta");
+    ).toHaveAttribute("href", "/explore/nodes/beta");
     expect(screen.queryByRole("link", { name: /Visit app/ })).toBeNull();
   });
 
-  it("renders gallery summary, cards, and registration slot", () => {
+  it("renders gallery summary, cards, and non-expandable start CTA", () => {
     render(
       <NodesGallery
         items={[
           { node: alpha, metrics: alphaMetrics },
           { node: beta, metrics: betaMetrics },
         ]}
-        registrationForm={<div>Registration Form Slot</div>}
+        callToAction={<a href="/nodes">Start a node</a>}
       />
     );
 
@@ -152,8 +152,11 @@ describe("nodes feature components", () => {
     expect(screen.getByText(/2 listed/)).toBeVisible();
     expect(screen.getByText(/12 tracked events in 30d/)).toBeVisible();
     expect(screen.getByText(/3 finalized epochs/)).toBeVisible();
-    fireEvent.click(screen.getByText("Start a node"));
-    expect(screen.getByText("Registration Form Slot")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Start a node" })).toHaveAttribute(
+      "href",
+      "/nodes"
+    );
+    expect(screen.queryByText("Expand")).toBeNull();
   });
 
   it("renders node detail metrics, repo link, epoch, and ownership table", () => {
@@ -227,7 +230,7 @@ describe("nodes feature components", () => {
 
     await waitFor(() => {
       expect(router.push).toHaveBeenCalledWith(
-        "/setup/nodes/33333333-3333-4333-8333-333333333333"
+        "/nodes/33333333-3333-4333-8333-333333333333"
       );
     });
     expect(fetch).toHaveBeenCalledWith(

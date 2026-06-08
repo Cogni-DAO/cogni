@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/(public)/nodes/[slug]/page`
+ * Module: `@app/(public)/explore/nodes/[slug]/page`
  * Purpose: Public detail page for one node's transparency read model.
  * Scope: Server component. Resolves detail data through the nodes facade.
  * Side-effects: IO (registry and metric reads through facade)

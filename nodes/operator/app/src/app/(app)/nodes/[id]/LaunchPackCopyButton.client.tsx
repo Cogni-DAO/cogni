@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/(app)/setup/nodes/[id]/LaunchPackCopyButton.client`
+ * Module: `@app/(app)/nodes/[id]/LaunchPackCopyButton.client`
  * Purpose: Launch prompt copy affordance for the node wizard after publish.
  *   Fetches the canonical launch pack at click time.
  * Scope: Client clipboard action only.

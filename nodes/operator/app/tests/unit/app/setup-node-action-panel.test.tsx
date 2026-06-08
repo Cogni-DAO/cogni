@@ -6,7 +6,7 @@
  * Purpose: Unit coverage for the node wizard next-action panel handoff copy.
  * Scope: Client component behavior with router/fetch/clipboard mocked.
  * Side-effects: none
- * Links: src/app/(app)/setup/nodes/[id]/NodeActionPanel.client.tsx
+ * Links: src/app/(app)/nodes/[id]/NodeActionPanel.client.tsx
  * @public
  */
 
@@ -54,7 +54,7 @@ vi.mock("@/components", () => ({
   },
 }));
 
-import { NodeActionPanel } from "@/app/(app)/setup/nodes/[id]/NodeActionPanel.client";
+import { NodeActionPanel } from "@/app/(app)/nodes/[id]/NodeActionPanel.client";
 
 describe("NodeActionPanel", () => {
   beforeEach(() => {

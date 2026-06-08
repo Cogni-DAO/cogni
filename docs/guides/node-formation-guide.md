@@ -27,7 +27,7 @@ This guide covers the **monorepo node** path — a node born into the Cogni mono
 The arc this guide drives:
 
 ```
-1. Register    wizard at /setup/nodes → DB-backed node row (Step 1)
+1. Register    wizard at /nodes → DB-backed node row (Step 1)
        ↓
 2. Formation   per-node wizard page → DAO + token + CogniSignal on-chain, server-verified (Steps 2-7)
        ↓
@@ -51,7 +51,7 @@ Registration makes the operator DB-aware before any wallet transaction. Formatio
 
 ### 1. Register a Node
 
-Open `/setup/nodes` in the application, choose a slug, and create the node row. The canonical per-node wizard page is `src/app/(app)/setup/nodes/[id]/page.tsx`.
+Open `/nodes` in the application, choose a slug, and create the node row. The canonical per-node wizard page is `src/app/(app)/nodes/[id]/page.tsx`.
 
 ### 2. Fill in Token Details (3 fields)
 

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/(app)/setup/nodes/[id]/NodeStatusBar`
+ * Module: `@app/(app)/nodes/[id]/NodeStatusBar`
  * Purpose: Horizontal dot-line-dot progress header for the node setup wizard.
  * Scope: Pure presentational. Maps a NodeStatus to the governance-only milestones; `failed` renders an error tint.
  *   Token-only styling (no raw colors) per ui-governance.

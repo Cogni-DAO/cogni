@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/(app)/setup/nodes/node-display`
+ * Module: `@app/(app)/nodes/node-display`
  * Purpose: Human-facing labels for each node-setup status — keeps the raw status enum
  *   (e.g. `dao_pending`) out of the UI in favor of plain copy + a Badge intent.
  * Scope: Presentation-only mapping shared by the list + detail pages.
