@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/(app)/setup/dao/payments/PaymentActivationPage.client`
+ * Module: `@app/(app)/nodes/payments/PaymentActivationPage.client`
  * Purpose: Client-side payment activation — deploy Split contract via user's connected wallet.
  * Scope: Reads operator wallet + DAO treasury from server props (repo-spec), deploys Split via wagmi. Does not handle Privy provisioning.
  * Invariants: SPLIT_CONTROLLER_IS_ADMIN — user's wallet is the Split controller. Addresses from repo-spec, not user input.
@@ -221,7 +221,7 @@ export function PaymentActivationPageClient({
           }),
         });
       } finally {
-        router.push(`/setup/nodes/${nodeId}`);
+        router.push(`/nodes/${nodeId}`);
       }
     })();
   }, [nodeId, phase, splitAddress, txHash, router]);

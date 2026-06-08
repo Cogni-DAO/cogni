@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/(app)/setup/nodes/[id]/NodeActionPanel.client`
+ * Module: `@app/(app)/nodes/[id]/NodeActionPanel.client`
  * Purpose: Client island that renders the next-step action button for a node, keyed by status.
  * Scope: One button per status. The publish action POSTs to the operator's API and
  *   `router.refresh()` after success so the server-rendered dashboard re-fetches the row.

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/(app)/setup/nodes/[id]/NodeDaoFormationPanel.client`
+ * Module: `@app/(app)/nodes/[id]/NodeDaoFormationPanel.client`
  * Purpose: Node-registry DAO formation panel with form input and wallet-signed transaction flow.
  * Scope: Renders form for DAO config, triggers formation via useDAOFormation hook, shows dialog for progress. Does not contain transaction logic or state machine implementation.
  * Invariants: Form validation inline; initialHolder defaults to connected wallet address.
@@ -126,7 +126,7 @@ export function NodeDaoFormationPanel({ nodeId }: Props): ReactElement {
           setPatchError(body?.reason ?? body?.error ?? `HTTP ${res.status}`);
           return;
         }
-        router.replace(`/setup/nodes/${nodeId}`);
+        router.replace(`/nodes/${nodeId}`);
         router.refresh();
       } catch (e) {
         setPatchError(e instanceof Error ? e.message : "request failed");

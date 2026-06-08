@@ -386,31 +386,32 @@ Payment activation runs in the child node's own repo after formation + infra set
 
 ### File Pointers
 
-| File                                                              | Purpose                                                |
-| ----------------------------------------------------------------- | ------------------------------------------------------ |
-| `packages/aragon-osx/src/aragon.ts`                               | OSx address constants (BASE + SEPOLIA only)            |
-| `packages/aragon-osx/src/encoding.ts`                             | TokenVoting struct encoding (viem, v1.3/v1.4 support)  |
-| `packages/aragon-osx/src/osx/events.ts`                           | OSx event ABIs + topic constants                       |
-| `packages/aragon-osx/src/osx/receipt.ts`                          | Strict receipt decoders (throws if events not found)   |
-| `packages/aragon-osx/src/osx/version.ts`                          | Pinned OSx version constants                           |
-| `src/shared/web3/node-formation/aragon-abi.ts`                    | Minimal ABIs: DAOFactory, TokenVoting, GovernanceERC20 |
-| `src/shared/web3/node-formation/bytecode.ts`                      | CogniSignal bytecode + ABI                             |
-| `src/features/setup/daoFormation/formation.reducer.ts`            | Pure reducer + types (state machine)                   |
-| `src/features/setup/daoFormation/txBuilders.ts`                   | Pure tx argument builders                              |
-| `src/features/setup/daoFormation/api.ts`                          | Server verification API client                         |
-| `src/features/setup/hooks/useAragonPreflight.ts`                  | Preflight validation hook                              |
-| `src/features/setup/hooks/useDAOFormation.ts`                     | Thin wiring layer (wagmi → reducer)                    |
-| `src/app/api/setup/verify/route.ts`                               | Server derives addresses from receipts, verifies state |
-| `src/contracts/setup.verify.v1.contract.ts`                       | Zod schemas for verify request/response                |
-| `src/app/(app)/setup/nodes/page.tsx`                              | DB-backed wizard entry point                           |
-| `src/app/(app)/setup/nodes/[id]/page.tsx`                         | Canonical per-node setup page                          |
-| `src/app/(app)/setup/nodes/[id]/NodeDaoFormationPanel.client.tsx` | Client component with form + flow orchestration        |
-| `src/app/(app)/setup/dao/page.tsx`                                | Legacy redirect to `/setup/nodes`                      |
-| `src/features/setup/components/FormationFlowDialog.tsx`           | Modal dialog for progress/success/error states         |
-| `scripts/node-activate-payments.ts`                               | Payment activation CLI (child node)                    |
-| `scripts/provision-operator-wallet.ts`                            | Standalone Privy wallet provisioning                   |
-| `scripts/deploy-split.ts`                                         | Standalone Split deployment                            |
-| `docs/guides/operator-wallet-setup.md`                            | Operator wallet + payment activation guide             |
+| File                                                        | Purpose                                                |
+| ----------------------------------------------------------- | ------------------------------------------------------ |
+| `packages/aragon-osx/src/aragon.ts`                         | OSx address constants (BASE + SEPOLIA only)            |
+| `packages/aragon-osx/src/encoding.ts`                       | TokenVoting struct encoding (viem, v1.3/v1.4 support)  |
+| `packages/aragon-osx/src/osx/events.ts`                     | OSx event ABIs + topic constants                       |
+| `packages/aragon-osx/src/osx/receipt.ts`                    | Strict receipt decoders (throws if events not found)   |
+| `packages/aragon-osx/src/osx/version.ts`                    | Pinned OSx version constants                           |
+| `src/shared/web3/node-formation/aragon-abi.ts`              | Minimal ABIs: DAOFactory, TokenVoting, GovernanceERC20 |
+| `src/shared/web3/node-formation/bytecode.ts`                | CogniSignal bytecode + ABI                             |
+| `src/features/setup/daoFormation/formation.reducer.ts`      | Pure reducer + types (state machine)                   |
+| `src/features/setup/daoFormation/txBuilders.ts`             | Pure tx argument builders                              |
+| `src/features/setup/daoFormation/api.ts`                    | Server verification API client                         |
+| `src/features/setup/hooks/useAragonPreflight.ts`            | Preflight validation hook                              |
+| `src/features/setup/hooks/useDAOFormation.ts`               | Thin wiring layer (wagmi → reducer)                    |
+| `src/app/api/setup/verify/route.ts`                         | Server derives addresses from receipts, verifies state |
+| `src/contracts/setup.verify.v1.contract.ts`                 | Zod schemas for verify request/response                |
+| `src/app/(app)/nodes/page.tsx`                              | DB-backed wizard entry point                           |
+| `src/app/(app)/nodes/[id]/page.tsx`                         | Canonical per-node setup page                          |
+| `src/app/(app)/nodes/[id]/NodeDaoFormationPanel.client.tsx` | Client component with form + flow orchestration        |
+| `src/app/(app)/nodes/payments/page.tsx`                     | Payment activation page                                |
+| `src/app/(app)/setup/dao/page.tsx`                          | Legacy redirect to `/nodes`                            |
+| `src/features/setup/components/FormationFlowDialog.tsx`     | Modal dialog for progress/success/error states         |
+| `scripts/node-activate-payments.ts`                         | Payment activation CLI (child node)                    |
+| `scripts/provision-operator-wallet.ts`                      | Standalone Privy wallet provisioning                   |
+| `scripts/deploy-split.ts`                                   | Standalone Split deployment                            |
+| `docs/guides/operator-wallet-setup.md`                      | Operator wallet + payment activation guide             |
 
 ### Appendix: Aragon OSx Addresses
 

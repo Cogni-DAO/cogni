@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/(app)/setup/nodes/[id]/page`
+ * Module: `@app/(app)/nodes/[id]/page`
  * Purpose: Dashboard for a single registered node — renders state + the appropriate action button.
  * Scope: Server fetch; client island for the action button so the user can click without page flicker.
  * Links: task.5083
@@ -112,7 +112,7 @@ export default async function NodeDashboardPage({
   return (
     <PageContainer maxWidth="3xl">
       <Link
-        href="/setup/nodes"
+        href="/nodes"
         className="inline-flex items-center gap-1.5 text-muted-foreground text-sm hover:text-foreground"
       >
         <ArrowLeft className="size-4" />

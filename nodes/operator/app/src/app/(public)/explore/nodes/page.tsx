@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/(public)/nodes/page`
+ * Module: `@app/(public)/explore/nodes/page`
  * Purpose: Public operator-owned node gallery with attribution and activity metrics.
  * Scope: Server component. Reads via app facade and renders feature components.
  * Side-effects: IO (registry and metric reads through facade)

@@ -114,12 +114,12 @@ describe("progress display", () => {
 describe("wizardUrlForStatus", () => {
   it("routes each status to the canonical wizard page", () => {
     const id = "abc-123";
-    expect(wizardUrlForStatus(id, "dao_pending")).toBe(`/setup/nodes/${id}`);
-    expect(wizardUrlForStatus(id, "dao_formed")).toBe(`/setup/nodes/${id}`);
-    expect(wizardUrlForStatus(id, "published")).toBe(`/setup/nodes/${id}`);
-    expect(wizardUrlForStatus(id, "wallet_ready")).toBe(`/setup/nodes/${id}`);
-    expect(wizardUrlForStatus(id, "payments_ready")).toBe(`/setup/nodes/${id}`);
-    expect(wizardUrlForStatus(id, "active")).toBe(`/setup/nodes/${id}`);
-    expect(wizardUrlForStatus(id, "failed")).toBe(`/setup/nodes/${id}`);
+    expect(wizardUrlForStatus(id, "dao_pending")).toBe(`/nodes/${id}`);
+    expect(wizardUrlForStatus(id, "dao_formed")).toBe(`/nodes/${id}`);
+    expect(wizardUrlForStatus(id, "published")).toBe(`/nodes/${id}`);
+    expect(wizardUrlForStatus(id, "wallet_ready")).toBe(`/nodes/${id}`);
+    expect(wizardUrlForStatus(id, "payments_ready")).toBe(`/nodes/${id}`);
+    expect(wizardUrlForStatus(id, "active")).toBe(`/nodes/${id}`);
+    expect(wizardUrlForStatus(id, "failed")).toBe(`/nodes/${id}`);
   });
 });

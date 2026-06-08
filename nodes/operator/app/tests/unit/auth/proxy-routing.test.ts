@@ -73,6 +73,31 @@ describe("proxy — page-level routing", () => {
     expect(res.status).toBe(200);
   });
 
+  it("redirects unauthenticated user on /nodes to /", async () => {
+    mockGetToken.mockResolvedValue(null);
+
+    const res = await proxy(makeRequest("/nodes"));
+
+    expectRedirectTo(res, "/");
+  });
+
+  it("passes through authenticated user on /nodes", async () => {
+    mockGetToken.mockResolvedValue({ id: "user-1" });
+
+    const res = await proxy(makeRequest("/nodes"));
+
+    expect(res.status).toBe(200);
+  });
+
+  it("passes through public /explore/nodes without checking auth", async () => {
+    mockGetToken.mockResolvedValue(null);
+
+    const res = await proxy(makeRequest("/explore/nodes"));
+
+    expect(res.status).toBe(200);
+    expect(mockGetToken).not.toHaveBeenCalled();
+  });
+
   it("redirects unauthenticated user on /chat to /", async () => {
     mockGetToken.mockResolvedValue(null);
 
@@ -93,6 +118,8 @@ describe("proxy — page-level routing", () => {
     "/dashboard",
     "/knowledge",
     "/knowledge/entry-1",
+    "/nodes/payments",
+    "/nodes/11111111-1111-4111-8111-111111111111",
   ])("redirects unauthenticated user on %s to /", async (path) => {
     mockGetToken.mockResolvedValue(null);
 
@@ -129,6 +156,8 @@ describe("proxy — page-level routing", () => {
     "/dashboard",
     "/knowledge",
     "/knowledge/entry-1",
+    "/nodes/payments",
+    "/nodes/11111111-1111-4111-8111-111111111111",
   ])("passes through authenticated user on %s", async (path) => {
     mockGetToken.mockResolvedValue({ id: "user-1" });
 

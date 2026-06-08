@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/(app)/setup/nodes/NewNodeForm`
+ * Module: `@app/(app)/nodes/NewNodeForm`
  * Purpose: Compatibility export for the setup route's node registration form.
  * Scope: Re-exports the shared feature component used by both setup and public nodes surfaces.
  * Side-effects: none

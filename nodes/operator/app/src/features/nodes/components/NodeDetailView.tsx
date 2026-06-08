@@ -6,7 +6,7 @@
  * Purpose: Public detail layout for one Cogni node's transparency read model.
  * Scope: Presentational only. Shows supplied metrics, links, and ownership summary rows.
  * Side-effects: none
- * Links: src/app/(public)/nodes/[slug]/page.tsx
+ * Links: src/app/(public)/explore/nodes/[slug]/page.tsx
  * @public
  */
 
@@ -113,7 +113,7 @@ export function NodeDetailView({
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-10 sm:px-6">
       <div>
         <Button asChild variant="ghost" size="sm" className="mb-4">
-          <Link href="/nodes">
+          <Link href="/explore/nodes">
             <ArrowLeft className="size-4" />
             Nodes
           </Link>
