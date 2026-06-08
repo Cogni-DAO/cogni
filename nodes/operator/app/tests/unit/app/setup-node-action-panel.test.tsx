@@ -76,6 +76,8 @@ describe("NodeActionPanel", () => {
         status="published"
         publishedHandoff={{
           nodeRepoUrl: "https://github.com/cogni-test-org/atlas",
+          knowledgeRepoUrl:
+            "https://www.dolthub.com/repositories/cogni-dao/knowledge-atlas",
           publishPrUrl: "https://github.com/Cogni-DAO/cogni/pull/42",
         }}
       />
@@ -91,7 +93,10 @@ describe("NodeActionPanel", () => {
       "href",
       "https://github.com/cogni-test-org/atlas"
     );
-    expect(screen.queryByRole("link", { name: /DoltHub repo/ })).toBeNull();
+    expect(screen.getByRole("link", { name: /DoltHub repo/ })).toHaveAttribute(
+      "href",
+      "https://www.dolthub.com/repositories/cogni-dao/knowledge-atlas"
+    );
     expect(screen.getByRole("link", { name: /Deployment PR/ })).toHaveAttribute(
       "href",
       "https://github.com/Cogni-DAO/cogni/pull/42"
@@ -114,6 +119,7 @@ describe("NodeActionPanel", () => {
         status="published"
         publishedHandoff={{
           nodeRepoUrl: null,
+          knowledgeRepoUrl: null,
           publishPrUrl: null,
         }}
       />

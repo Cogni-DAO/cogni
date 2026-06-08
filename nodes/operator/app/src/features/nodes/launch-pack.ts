@@ -26,6 +26,7 @@ export interface NodeLaunchPackInput {
   readonly status: NodeStatus;
   readonly operatorOrigin: string;
   readonly nodeRepoUrl: string | null;
+  readonly knowledgeRepoUrl: string | null;
   readonly publishPrUrl: string | null;
 }
 
@@ -74,6 +75,9 @@ export function buildNodeLaunchPack(
   const parentPrLine = input.publishPrUrl
     ? `Parent deployment PR: ${input.publishPrUrl}`
     : "Parent deployment PR: not published yet";
+  const knowledgeRepoLine = input.knowledgeRepoUrl
+    ? `DoltHub knowledge repo: ${input.knowledgeRepoUrl}`
+    : "DoltHub knowledge repo: recover it from the node repo-spec `knowledge.remote` block";
 
   const prompt = [
     `Launch Cogni node ${input.slug}.`,
@@ -81,6 +85,7 @@ export function buildNodeLaunchPack(
     nodeRepoLine,
     `Cogni operator endpoint root: ${OPERATOR_API_ROOT}`,
     `Cogni knowledge block: ${knowledgeUrl}`,
+    knowledgeRepoLine,
     parentPrLine,
     `Candidate URL: ${candidateUrl}`,
     "",
@@ -112,6 +117,7 @@ export function buildNodeLaunchPack(
     operatorBaseUrl,
     launchPackUrl,
     nodeRepoUrl: input.nodeRepoUrl,
+    knowledgeRepoUrl: input.knowledgeRepoUrl,
     parentDeploymentPrUrl: input.publishPrUrl,
     candidateUrl,
     knowledgeBlock: {

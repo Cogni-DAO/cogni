@@ -26,6 +26,7 @@ interface Props {
   readonly status: NodeStatus;
   readonly publishedHandoff?: {
     readonly nodeRepoUrl: string | null;
+    readonly knowledgeRepoUrl: string | null;
     readonly publishPrUrl: string | null;
   };
 }
@@ -111,7 +112,7 @@ export function NodeActionPanel({
 
           <LaunchPackCopyButton nodeId={nodeId} />
 
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-3">
             {publishedHandoff?.nodeRepoUrl ? (
               <Button asChild size="xl" variant="outline" className="w-full">
                 <a
@@ -120,6 +121,18 @@ export function NodeActionPanel({
                   rel="noopener noreferrer"
                 >
                   Node repo
+                  <ExternalLink className="size-4" />
+                </a>
+              </Button>
+            ) : null}
+            {publishedHandoff?.knowledgeRepoUrl ? (
+              <Button asChild size="xl" variant="outline" className="w-full">
+                <a
+                  href={publishedHandoff.knowledgeRepoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  DoltHub repo
                   <ExternalLink className="size-4" />
                 </a>
               </Button>

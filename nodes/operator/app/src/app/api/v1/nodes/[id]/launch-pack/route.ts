@@ -25,6 +25,10 @@ import {
 import { getServerSessionUser } from "@/lib/auth/server";
 import { type NodeStatus, nodes } from "@/shared/db/nodes";
 import { serverEnv } from "@/shared/env";
+import {
+  buildNodeKnowledgeRemote,
+  knowledgeRemoteWebUrl,
+} from "@/shared/node-app-scaffold/knowledge-remote";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,6 +76,9 @@ export async function GET(request: Request, ctx: RouteParams) {
   }
 
   const env = serverEnv();
+  const knowledgeRemote = env.DOLTHUB_OWNER
+    ? buildNodeKnowledgeRemote(node.slug, env.DOLTHUB_OWNER)
+    : null;
 
   return NextResponse.json(
     nodeLaunchPackOperation.output.parse(
@@ -84,6 +91,9 @@ export async function GET(request: Request, ctx: RouteParams) {
           mintOwner: env.NODE_MINT_OWNER,
           publishPrUrl: node.publishPrUrl,
         }),
+        knowledgeRepoUrl: knowledgeRemote
+          ? knowledgeRemoteWebUrl(knowledgeRemote)
+          : null,
         publishPrUrl: node.publishPrUrl,
         operatorOrigin: new URL(request.url).origin,
       })
