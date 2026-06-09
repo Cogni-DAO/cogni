@@ -48,44 +48,66 @@ that govern this runbook:
   Doltgres superuser password stay **Compose/bootstrap-only**; no pod consumes
   them, so they are out of scope for this OpenBao migration (`_system` at most, if
   ever removed from GH env — never `_shared`).
+- **Doltgres stays derive-from-master (B), not per-node (A) — for now.** The
+  north star is per-node Doltgres roles (A), but Doltgres 0.56 RBAC is vestigial:
+  `GRANT` reports success yet the role cannot even `SELECT current_user`, so
+  `deploy-infra.sh` ships `knowledge_<node>` access as the `postgres` superuser
+  (task.0311 / dolthub/doltgresql). So `DOLTGRES_PASSWORD` stays the **env-level
+  Doltgres superuser** (bootstrap-level like `POSTGRES_ROOT_PASSWORD` — not a
+  per-node secret, not `_shared`); the pod's per-node `DOLTGRES_URL` (its own
+  `knowledge_<node>` DB) is composed from it. Migrate to A when Doltgres `GRANT`
+  works. **Not blocking** the Postgres per-node-role purge below.
 
 > An earlier draft of this runbook imported the superuser + four derived passwords
 > into `cogni/<env>/_shared`. That was wrong: it adopted the deferred shared-bank
 > and propped up the shared `app_user` we are removing. Removed.
 
-## Precondition — per-node roles (the crux, not yet built)
+## The crux — per-node roles
 
 `provision.sh` today creates **three env-shared roles** —
 `app_user` / `app_service` / `app_readonly` (`postgres-init/provision.sh:143,159,173`)
-— and grants them onto every `cogni_<node>` database. Making OpenBao the sole
-source **without** a shared OpenBao DB path therefore **requires per-node roles**
+— and grants them onto every `cogni_<node>` database (the database is the only
+per-node boundary; the roles are shared). Making OpenBao the sole source
+**without** a shared OpenBao DB path therefore **requires per-node roles**
 (`app_<node>` / `service_<node>`, each with its own `source: agent` password the
-node generates). That `db-provision` change is the per-node-role step #1582
-deferred and is the **precondition for this repair**. Until it lands, the only
-available "fix" would reintroduce a shared OpenBao DB path — which this runbook
-explicitly does not do.
+node generates). That per-node-role `db-provision` change — deferred by #1582 — is
+**this lane's central work** (Step 2 below), not an external dependency. The
+alternative (a shared OpenBao DB path) is explicitly rejected.
 
-## Per-env procedure (once per-node roles exist)
+## Implementation — additive cutover (each step independently safe)
 
-Order: **candidate-a** (reprovision-friendly) → **preview** → **production**
-(maintenance-aware).
+The change spans three files that ship together and the falsifying gate spans
+all of them (Invariant 16), so it lands as one PR. But the **per-step ordering is
+additive**: the new per-node role is created and granted *alongside* the shared
+`app_user` before anything cuts over, so no step has a broken intermediate state.
 
-1. **Materialize** — `secret-materialize <env> <node>` generates the node's own
-   `APP_DB_PASSWORD` / `APP_DB_SERVICE_PASSWORD` (`source: agent`) and composes the
-   DSNs into `cogni/<env>/<node>` (the DSN is self-composable from the node's own
-   creds — no shared read).
-2. **Provision per-node roles** — the per-node-role `db-provision` creates
-   `app_<node>` / `service_<node>` from the OpenBao values (`<env>-db-reader`),
-   grants them onto `cogni_<node>`, and the node's pod reconnects under its own
-   role. The shared `app_user` grants are retired once every node has migrated.
-3. **Provisioners read OpenBao only** — delete the in-script `derive_secret`
-   block (`deploy-infra.sh:838-860`) and the `${X:-$(remote_env_value …)}` `.env`
-   fallbacks. On an OpenBao read miss, **fail loud and skip** the role create —
-   never fall back to `.env` (the bug.5002 anti-fix).
-4. **Remove DB passwords from GitHub Environment secrets** — once OpenBao is
-   authoritative, delete the `APP_DB_*_PASSWORD` env secrets so no parallel store
-   can re-diverge a deploy.
-5. **Falsifying gate** (below).
+Order: **candidate-a** (reprovision-friendly, gate first) → **preview** →
+**production** (maintenance-aware, no real users — purge fast).
+
+1. **Generate per-node app creds** — move `APP_DB_PASSWORD` /
+   `APP_DB_SERVICE_PASSWORD` out of `reconcile-secrets.sh::COMPOSE_ONLY_KEYS` into
+   the per-node `source: agent` set so `secret-materialize` generates them into
+   `cogni/<env>/<node>` (preserve-existing). `APP_DB_USER` becomes the **derived**
+   `app_<node>` (node name, not a secret). *Additive: writes new OpenBao keys; the
+   shared `app_user` DSN is still live.*
+2. **Create per-node roles alongside** — `provision.sh` creates `app_<node>` /
+   `service_<node>` from the OpenBao values (`<env>-db-reader`) and applies the
+   same per-DB GRANT/RLS/ownership it gives `app_user`, **without dropping
+   `app_user`**. *Additive: both roles can log in; the pod hasn't switched yet.*
+3. **Compose + cut over the DSN** — un-defer the three DSN keys in
+   `secret-materialize` (`DSN_DEFER_KEYS`) so it composes `DATABASE_URL` /
+   `DATABASE_SERVICE_URL` from the node's own `app_<node>` creds; strip the
+   `<env>-writer` mint + VM-`.env` reads + DSN seed from
+   `reconcile-node-substrate.sh` → **reconcile is now read-only** (kills the
+   Invariant 16 transitional exception — the finish line). ESO syncs the new DSN;
+   pod reconnects as `app_<node>`.
+4. **Provisioners read OpenBao only** — delete the `deploy-infra.sh:838-860`
+   `derive_secret` block + `${X:-$(remote_env_value …)}` `.env` fallbacks;
+   fail-loud-skip on read miss, never `.env` (the bug.5002 anti-fix).
+5. **Retire the legacy** — once every node is green under its own role, drop the
+   shared `app_user`/`app_service` grants and delete the `APP_DB_*_PASSWORD` GitHub
+   Environment secrets (Invariant 5). No destructive change before green.
+6. **Falsifying gate** (below).
 
 ## Safety rules
 
