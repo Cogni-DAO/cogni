@@ -73,6 +73,7 @@ export type {
 } from "./types";
 // VCS capability (per VCS_WRITE_CAPABLE)
 export type {
+  ApproveForkChecksResult,
   CheckInfo,
   CiStatusResult,
   CreateBranchResult,
