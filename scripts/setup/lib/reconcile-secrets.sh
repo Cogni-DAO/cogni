@@ -143,11 +143,14 @@ _resolve_node_value() {
   db="cogni_${node//-/_}"
   case "$k" in
     DATABASE_URL)
-      printf 'postgresql://%s:%s@%s:5432/%s?sslmode=disable' \
-        "${APP_DB_USER}" "${APP_DB_PASSWORD}" "${VM_IP}" "${db}"; return 0 ;;
+      # Per-node: app_<node> role + the node's own source:agent password (OpenBao).
+      # Role name is computed from the node; the password is read from
+      # cogni/<env>/<node> (materialize generated it before this composition).
+      printf 'postgresql://app_%s:%s@%s:5432/%s?sslmode=disable' \
+        "${node//-/_}" "$(bao_get_field "$node" APP_DB_PASSWORD)" "${VM_IP}" "${db}"; return 0 ;;
     DATABASE_SERVICE_URL)
-      printf 'postgresql://%s:%s@%s:5432/%s?sslmode=disable' \
-        "${APP_DB_SERVICE_USER}" "${APP_DB_SERVICE_PASSWORD}" "${VM_IP}" "${db}"; return 0 ;;
+      printf 'postgresql://service_%s:%s@%s:5432/%s?sslmode=disable' \
+        "${node//-/_}" "$(bao_get_field "$node" APP_DB_SERVICE_PASSWORD)" "${VM_IP}" "${db}"; return 0 ;;
     DOLTGRES_URL)
       printf 'postgresql://postgres:%s@%s:5435/knowledge_%s?sslmode=disable' \
         "${DOLTGRES_PASSWORD:-$(derive_secret doltgres-root)}" "${VM_IP}" "${node//-/_}"; return 0 ;;
