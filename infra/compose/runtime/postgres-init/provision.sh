@@ -170,12 +170,28 @@ ALTER ROLE "$APP_READONLY_USER" SET default_transaction_read_only = on;
 ALTER ROLE "$APP_READONLY_USER" SET statement_timeout = '30s';
 SQL
 
-# NOTE: this provisioner is steady-state only — it creates fresh DBs owned by
-# app_<node> from CREATE. It deliberately does NOT migrate ownership of an
-# already-app_user-owned DB: that is one-shot cutover work, not recurring-flight
-# code. candidate-a (throwaway) takes a REPROVISION; a data-preserving env takes a
-# one-shot, audited REASSIGN OWNED migration run once and removed. See
-# docs/guides/vm-secrets-repair.md.
+# migrate_owned <db> <from_role> <to_role>
+#   In-provisioner cutover for an ALREADY-provisioned DB: transfer objects owned by
+#   a legacy shared role to the per-node role, then drop the legacy role's remaining
+#   objects/privileges in THIS db. Lives in the recurring provisioner ON PURPOSE:
+#   the owner requires ZERO per-env manual steps — every env (candidate-a, preview,
+#   production) cuts over by the same flight, not by a hand-run one-shot migration.
+#   Idempotent + guarded: no-op on a fresh node (legacy role absent) and after the
+#   first run (the legacy role owns nothing here, so REASSIGN/DROP OWNED are no-ops)
+#   until the role is finally DROPped cluster-wide (runbook Step 5). DROP OWNED is
+#   per-db, so it never touches other nodes' grants on the shared role. Without this,
+#   existing tables stay owned by app_user → future ALTER-table migrations fail and
+#   DROP ROLE app_user can never complete. The declarative endgame (CloudNativePG /
+#   Terraform postgresql provider, task.5016) retires this bash. See
+#   docs/guides/vm-secrets-repair.md.
+migrate_owned() {
+  local db="$1" from="$2" to="$3" exists
+  exists=$(run_sql_as_root "postgres" "SELECT 1 FROM pg_roles WHERE rolname = '$from'" | grep -c 1 || true)
+  [ "$exists" -eq 0 ] && return 0
+  echo "   -> Reassigning objects owned by legacy '$from' → '$to' in '$db'..."
+  run_sql_as_root "$db" "REASSIGN OWNED BY \"$from\" TO \"$to\";"
+  run_sql_as_root "$db" "DROP OWNED BY \"$from\";"
+}
 
 # ── Per-Node Database Provisioning (DB_PER_NODE) ──────────────────────────
 # Each node gets its own database AND its own roles. The database IS the node
@@ -214,6 +230,13 @@ function provision_node_db() {
     run_sql_as_root "postgres" "ALTER DATABASE \"$db_name\" OWNER TO \"$app_role\";"
     run_sql_as_root "postgres" "GRANT CONNECT, CREATE, TEMP ON DATABASE \"$db_name\" TO \"$app_role\";"
   fi
+
+  # Cutover an already-provisioned DB: existing tables/schema are owned by the
+  # legacy shared roles; move them to the per-node roles BEFORE re-keying grants so
+  # the per-node role is the true owner (migrations + the eventual DROP ROLE work).
+  # Idempotent no-op once cut over / on fresh nodes (see migrate_owned).
+  migrate_owned "$db_name" "app_user" "$app_role"
+  migrate_owned "$db_name" "app_service" "$svc_role"
 
   # App role hardening (owner; tenant-isolated under FORCE RLS from migrations).
   echo "   -> Applying grants on '$db_name'..."
