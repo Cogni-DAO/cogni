@@ -78,4 +78,20 @@ describe("renderOverlay", () => {
     // No monorepo /app/nodes/<slug>/app paths survive in the generated overlay.
     expect(out).not.toContain("/app/nodes/$(NODE_NAME)/app");
   });
+
+  it("fails closed when the migrate initContainer secret-ref patch is absent", () => {
+    const noAnchor = `namePrefix: node-template-
+patches:
+  - target:
+      kind: Service
+      name: node-app
+    patch: |
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30200
+`;
+    expect(() => renderOverlay(noAnchor, "coulditbe", 30500, 3500)).toThrow(
+      /NODE_AT_ROOT_MIGRATE_PATH/
+    );
+  });
 });

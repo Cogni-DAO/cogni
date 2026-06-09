@@ -94,6 +94,9 @@ for env in "${ENVS[@]}"; do
   # Parity: gens/overlay.ts renderOverlay applies the identical transforms.
   perl -0pi -e 's{/app/nodes/\$\(NODE_NAME\)/app}{/app/app}g' "$f"
   perl -0pi -e 's{(        path: /spec/template/spec/initContainers/0/envFrom/1/secretRef/name\n        value: [^\n]*\n)}{$1      - op: replace\n        path: /spec/template/spec/initContainers/0/command/2\n        value: exec node /app/app/migrate.mjs /app/app/migrations\n}' "$f"
+  # Fail closed: a node whose migrate override didn't inject would crash-loop silently.
+  grep -q "exec node /app/app/migrate.mjs" "$f" \
+    || { echo "FAIL: $f missing node-at-root migrate override (NODE_AT_ROOT_MIGRATE_PATH)"; exit 1; }
 done
 
 echo "==> 6. per-node AppSets + bootstrap kustomization (catalog-derived, LANE_ISOLATION)"

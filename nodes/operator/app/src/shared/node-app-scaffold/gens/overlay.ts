@@ -45,12 +45,17 @@ const POSTGRES_MIGRATE_OVERRIDE =
  * Rewrite a cloned node-template overlay so its migrate initContainers target the node-at-root
  * image layout (`/app/app`). The Doltgres command lives in the overlay and is rewritten in place;
  * the Postgres migrate command lives in the shared base, so the override is injected as a patch
- * after the migrate initContainer's secret ref. Idempotent.
+ * after the migrate initContainer's secret ref. Throws if the source overlay no longer carries the
+ * migrate initContainer's secret-ref patch — minting a node whose migrate runs the wrong path is a
+ * silent crash-loop, so this fails closed instead.
  */
 function applyNodeAtRootMigratePaths(overlay: string): string {
   const doltFixed = overlay.replace(MONOREPO_APP_DIR_RE, STANDALONE_APP_DIR);
-  if (doltFixed.includes("/spec/template/spec/initContainers/0/command/2")) {
-    return doltFixed;
+  if (!MIGRATE_SECRET_ANCHOR_RE.test(doltFixed)) {
+    throw new Error(
+      "renderOverlay: node-template overlay is missing the migrate initContainer secret-ref " +
+        "patch; cannot inject the node-at-root migrate override (NODE_AT_ROOT_MIGRATE_PATH)."
+    );
   }
   return doltFixed.replace(
     MIGRATE_SECRET_ANCHOR_RE,
