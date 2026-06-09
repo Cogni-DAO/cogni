@@ -77,25 +77,11 @@ authority model.
 
 For a standard non-payment wizard node: **none per node**.
 
-The already-provisioned environment must have substrate facts and any shared
-org/runtime unlocks its enabled features need:
-
-| Input                               | Class                   | Node-wizard meaning                                                                                 |
-| ----------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------- |
-| `DOMAIN` / `FORK_DOMAIN_ROOT`       | derived config          | Public host derivation, DNS, `APP_BASE_URL`, and `NEXTAUTH_URL`; not a secret.                      |
-| `VM_HOST`                           | environment substrate   | Workflow SSH target for candidate/promotion lanes; produced/recorded by environment provisioning.   |
-| `SSH_DEPLOY_KEY`                    | environment substrate   | Workflow SSH credential for the VM; not node-specific.                                              |
-| image pull/deploy credential        | deploy substrate        | Existing GHCR/git credential used by environment deploy paths when needed; not a pod app secret.    |
-| Postgres/Doltgres role material     | existing runtime bank   | Used by v0 reconciliation to create `cogni_<slug>` / `knowledge_<slug>` and node DSNs.              |
-| `LITELLM_MASTER_KEY`                | shared runtime secret   | Copied/denormalized so the node app can call the shared LiteLLM proxy.                              |
-| `OPENROUTER_API_KEY`                | LiteLLM/provider secret | Primarily consumed by LiteLLM Compose; node apps may use it for optional provider-funding features. |
-| `POSTHOG_API_KEY` / `POSTHOG_HOST`  | optional telemetry      | Enables analytics capture; absence should not block basic `/version` or `/readyz`.                  |
-| `EVM_RPC_URL`                       | feature/runtime config  | Required only when on-chain/payment rails are active; not ordinary wizard-node baseline.            |
-| `POLYGON_RPC_URL` + wallet material | payments/custody        | Required only for `poly` / explicitly payment-enabled nodes.                                        |
-
+Use the canonical input classification in
+[`secrets-classification.md`](../spec/secrets-classification.md#node-wizard-formation-input-classification).
 The v0 candidate-a proof should not ask anyone for a new value during node
-birth. If a shared value is needed and absent, that is an environment-bank
-repair, not a node-wizard form field.
+birth. If a shared/environment value is needed and absent, that is an
+environment-bank repair, not a node-wizard form field.
 
 ## Why This Exists
 
@@ -217,14 +203,8 @@ Examples:
 Shared values come from the environment's existing authority, then fan out
 through the catalog/provisioning model. The wizard does not copy them.
 
-Examples:
-
-- `OPENROUTER_API_KEY`
-- `EVM_RPC_URL`
-- `POSTHOG_API_KEY`
-- `POSTHOG_HOST`
-- `LANGFUSE_*`
-- non-custody GitHub App/OAuth configuration
+The concrete key classification is canonical in
+[`secrets-classification.md`](../spec/secrets-classification.md#node-wizard-formation-input-classification).
 
 Today the provisioner may denormalize some shared values into
 `cogni/<env>/<node>` so a single `<node>-env-secrets` extract can feed the pod.
@@ -258,9 +238,8 @@ The wizard ignores these for v0 node birth:
 - Compose-infra values unless the infra/provision lane owns the write. If a
   Compose-rendered value creates or supports a pod-facing dependency, its
   custody is OpenBao, not Compose.
-- D-tier CI-only values such as `VM_HOST` and `SSH_DEPLOY_KEY`.
-- E-tier repo-level values such as `GHCR_DEPLOY_TOKEN` and
-  `CHERRY_AUTH_TOKEN`.
+- D-tier CI-only values.
+- E-tier repo-level values.
 - F-tier `.env.local` values.
 
 These are environment or repository substrate concerns, not per-node birth
@@ -271,14 +250,8 @@ facts.
 Payment/wallet/signing keys are never baseline. A node receives them only when
 its node spec/catalog explicitly opts into the relevant capability.
 
-The wizard must not give every new node:
-
-- `PRIVY_APP_SECRET`
-- `PRIVY_SIGNING_KEY`
-- user-wallet signing material
-- custody or trading keys
-
-This is a hard custody boundary, not a convenience choice.
+The wizard must not give every new node wallet, signing, custody, or trading
+material. This is a hard custody boundary, not a convenience choice.
 
 ### Dual-plane values
 

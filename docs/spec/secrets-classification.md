@@ -35,7 +35,11 @@ rendered copy.
 
 ## Non-Goals
 
-- Listing every secret in markdown. The per-secret data lives in YAML — `nodes/<node>/.cogni/secrets-catalog.yaml` (node-domain) and `infra/secrets-catalog.yaml` (operator-domain). This spec defines the categories; the YAML binds each secret to one.
+- Maintaining a second full inventory of every catalog secret in markdown. The
+  per-secret data lives in YAML — `nodes/<node>/.cogni/secrets-catalog.yaml`
+  (node-domain) and `infra/secrets-catalog.yaml` (operator-domain). This spec
+  defines the categories, the node-formation input classification, and the
+  exceptions worth remembering; the YAML binds each secret to one.
 - Defining OpenBao install topology, ESO chart pinning, or rotation cadence — those live in [`secrets-management.md`](./secrets-management.md).
 - Specifying GitHub-side secret naming conventions for CI-only secrets — [`node-ci-cd-contract.md`](./node-ci-cd-contract.md) §Workflow Entrypoints owns that.
 
@@ -100,6 +104,74 @@ writes OpenBao.
 | **E — Repo-level (cross-env)**   | Repo-scope GH secret/variable (not environment-scoped)                                                           | Shared across `candidate-a` / `preview` / `production`; one value per repo. Almost always CI consumption (`GHCR_DEPLOY_TOKEN`, `SONAR_TOKEN`, `CHERRY_AUTH_TOKEN`, etc.).                                                                                                   |
 | **F — Local-only**               | `.env.local` (gitignored)                                                                                        | Pure dev convenience. Never enters CI or any deployed runtime. Not in `setup-secrets.ts` (no `gh secret set` call).                                                                                                                                                         |
 | **G — Derived**                  | Auto-generated from repo state at provision time                                                                 | Output of walking `nodes/*/.cogni/repo-spec.yaml` or similar repo metadata. Re-runs of setup pick up new nodes automatically. Example: `COGNI_NODE_DBS`, `COGNI_NODE_ENDPOINTS`.                                                                                            |
+
+### Node-wizard formation input classification
+
+This is the canonical list for "what does a fresh ordinary wizard node need?"
+Other docs should link here instead of re-enumerating these keys.
+
+For a non-payment wizard-created node, the per-node human-secret list is empty.
+The new node consumes existing environment substrate and receives generated or
+derived node-local values from the substrate lane.
+
+1. **Derived/public config — not secrets.**
+   `DOMAIN` and/or `FORK_DOMAIN_ROOT` derive public hosts, DNS records,
+   `APP_BASE_URL`, and `NEXTAUTH_URL`. A wizard node needs the derived facts,
+   not a human-entered secret value.
+
+2. **Environment access substrate — not pod runtime secrets.**
+   `VM_HOST` and `SSH_DEPLOY_KEY` let CI reach the candidate/preview/prod VM.
+   They are D-tier workflow inputs produced or recorded by environment
+   provisioning. They are required for candidate-flight reconciliation and
+   verification, but they are not copied into the node pod and are not
+   node-specific.
+
+3. **Deploy/image-pull substrate — not node secrets.**
+   Existing GHCR/git credentials let CI and/or the VM fetch artifacts. In
+   GitHub Actions, `candidate-flight.yml` can fall back to `github.token` for
+   registry login; some deploy paths still require the environment's existing
+   deploy/image-pull credential. This is deploy substrate, not a wizard-node
+   app secret.
+
+4. **DB role material — required v0 runtime bank, transitional authority.**
+   `APP_DB_USER`, `APP_DB_PASSWORD`, `APP_DB_SERVICE_USER`,
+   `APP_DB_SERVICE_PASSWORD`, `APP_DB_READONLY_USER`,
+   `APP_DB_READONLY_PASSWORD`, `DOLTGRES_PASSWORD`,
+   `DOLTGRES_READER_PASSWORD`, and `DOLTGRES_WRITER_PASSWORD` create or support
+   pod-facing DSNs. Target custody is OpenBao. In PR #1582 v0, the narrow node
+   substrate lane still relies on the already-provisioned environment's runtime
+   bank while creating `cogni_<slug>`, `knowledge_<slug>`, `DATABASE_URL`,
+   `DATABASE_SERVICE_URL`, and `DOLTGRES_URL` for the new node. That coupling is
+   transitional and must not be mistaken for the final authority model.
+
+5. **Generated node-local app material — no human input.**
+   Examples: `AUTH_SECRET`, `CONNECTIONS_ENCRYPTION_KEY`,
+   `INTERNAL_OPS_TOKEN`, `METRICS_TOKEN`, and `GH_WEBHOOK_SECRET`. These are
+   generated or preserved by the substrate lane for the node path. The wizard
+   never stores or asks for the value.
+
+6. **Shared app/runtime unlocks — feature-dependent.**
+   `LITELLM_MASTER_KEY` lets the node app call the shared LiteLLM proxy.
+   `OPENROUTER_API_KEY` is primarily consumed by LiteLLM Compose; node apps may
+   read it for optional provider-funding flows. These values are not basic
+   `/version` or `/readyz` blockers for an ordinary node, but feature paths
+   that call LLM/provider-funding infrastructure may require them.
+
+7. **Telemetry — optional for basic readiness.**
+   `POSTHOG_API_KEY` and `POSTHOG_HOST` enable analytics capture. Their absence
+   should not block candidate-a `/version` or `/readyz` for a new ordinary node.
+
+8. **On-chain/payment rails — not ordinary baseline.**
+   `EVM_RPC_URL` is required only when payment/on-chain rails are active;
+   `/readyz` treats missing RPC config as fatal only for active payment rails.
+   `POLYGON_RPC_URL`, Privy keys, wallet auth/signing material, and Poly wallet
+   AEAD material belong only to `poly` or another explicitly payment-enabled
+   node. They are never baseline for an ordinary wizard node.
+
+9. **Genesis-only provisioning.**
+   `CHERRY_AUTH_TOKEN` creates/provisions VMs. It is not a runtime value and is
+   irrelevant to a node birth inside an already-provisioned candidate-a
+   environment.
 
 ### A1 capability-gating + value-distinctness (`appliesTo` / `shared`)
 

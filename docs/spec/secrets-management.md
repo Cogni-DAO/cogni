@@ -139,24 +139,11 @@ that node. Node formation is allowed to consume the environment's existing
 DAO/org values, but node-local material is generated or derived by the secrets
 substrate.
 
-Node formation has separate prerequisite classes:
-
-| Input                               | Class                   | Required for                                                                             |
-| ----------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------- |
-| `DOMAIN` / `FORK_DOMAIN_ROOT`       | derived config          | Public host derivation, DNS, `APP_BASE_URL`, and `NEXTAUTH_URL`; not a secret.           |
-| `VM_HOST`                           | environment substrate   | Workflow SSH target; produced/recorded by environment provisioning.                      |
-| `SSH_DEPLOY_KEY`                    | environment substrate   | Workflow SSH credential for the VM; not node-specific.                                   |
-| image pull/deploy credential        | deploy substrate        | Existing GHCR/git credential for deploy paths when needed; not a pod app secret.         |
-| Postgres/Doltgres role material     | existing runtime bank   | v0 DB/DSN creation for the new node.                                                     |
-| `LITELLM_MASTER_KEY`                | shared runtime secret   | Shared LiteLLM proxy auth for node app calls.                                            |
-| `OPENROUTER_API_KEY`                | LiteLLM/provider secret | Primarily LiteLLM Compose; optional node-app provider-funding features may also read it. |
-| `POSTHOG_API_KEY` / `POSTHOG_HOST`  | optional telemetry      | Analytics capture; not a basic `/version` or `/readyz` blocker.                          |
-| `EVM_RPC_URL`                       | feature/runtime config  | Required only when on-chain/payment rails are active.                                    |
-| `POLYGON_RPC_URL` + wallet material | payments/custody        | `poly` / explicitly payment-enabled nodes only; never ordinary wizard-node baseline.     |
-
+The canonical classification of node-formation inputs lives in
+[`secrets-classification.md`](./secrets-classification.md#node-wizard-formation-input-classification).
 For a normal non-payment wizard node, the per-node human-secret list is empty.
-If a shared value is needed and absent, the correct fix is to provision or
-repair the environment bank before flight. Candidate flight must not accept
+If a shared/environment value is needed and absent, the correct fix is to
+repair that environment bank before flight. Candidate flight must not accept
 the value as a workflow input and the wizard must not store it.
 
 V0 implementation checkpoint for PR #1582:
@@ -232,19 +219,22 @@ lane as transitional.
 
 ### Path convention
 
-```
-cogni/<env>/<service>           ← KV v2 path
-   ├─ OPENAI_API_KEY            ← key 1
-   ├─ DATABASE_URL              ← key 2
-   ├─ AUTH_SECRET               ← key 3
-   └─ …
+```text
+cogni/<env>/<service>           # KV v2 path
+  <KEY_1>                       # key 1
+  <KEY_2>                       # key 2
+  <KEY_3>                       # key 3
 ```
 
 `<env>` ∈ `candidate-a` | `preview` | `production`. `<service>` matches `infra/catalog/<service>.yaml::name`. Multiple keys per path; one path per (service, env).
 
-Cross-service secrets (e.g., a shared `OPENROUTER_API_KEY` consumed by both node-template and scheduler-worker) live at `cogni/<env>/_shared` and are referenced by services that explicitly opt in. Use sparingly — per-service paths are the default.
+Cross-service secrets live at `cogni/<env>/_shared` and are referenced by
+services that explicitly opt in. Use sparingly — per-service paths are the
+default. Concrete key classifications live in
+[`secrets-classification.md`](./secrets-classification.md).
 
-System-level secrets (Cherry token, Cloudflare token, GH PAT, ESO seed token) live at `cogni/<env>/_system`, written by `bootstrap.sh`, read by CI workflows via OIDC.
+System-level secrets live at `cogni/<env>/_system`, written by provisioning
+lanes and read by CI workflows via OIDC.
 
 ### Consumption pattern — ExternalSecret with `dataFrom: extract`
 

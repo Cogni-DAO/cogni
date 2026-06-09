@@ -92,16 +92,10 @@ For DB material, this means:
 Do not use this guide to invent a per-node human secret for a freshly wizarded
 ordinary node. The per-node human-secret list is empty.
 
-A new node may rely on existing environment inputs:
-
-- Derived config: `DOMAIN` / `FORK_DOMAIN_ROOT` for public hosts and app URLs.
-- Environment substrate: `VM_HOST`, `SSH_DEPLOY_KEY`, and existing deploy/image
-  pull credentials.
-- Existing runtime bank: DB role material and `LITELLM_MASTER_KEY`.
-- Optional feature unlocks: `OPENROUTER_API_KEY`, PostHog keys, and `EVM_RPC_URL`
-  only when the corresponding feature path is active.
-- Payments-only nodes: `POLYGON_RPC_URL` and explicitly capability-gated
-  wallet/custody values.
+Use the canonical input classification in
+[`secrets-classification.md`](../spec/secrets-classification.md#node-wizard-formation-input-classification)
+to decide whether a missing value is node-local, environment substrate,
+feature-specific, or payments-only.
 
 If a needed environment value is missing, repair the environment bank before
 rerunning flight. Do not pass the value through candidate-flight inputs, save
