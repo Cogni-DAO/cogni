@@ -550,12 +550,81 @@ jobs:
           ASSERT_TARGET_SUBSTRATE_APP_WAIT_SLEEP_SECONDS: 5
         run: bash ci-src/scripts/ci/assert-target-substrate.sh
 
+  materialize-substrate:
+    needs: [decide]
+    if: |
+      always() &&
+      needs.decide.outputs.needs_substrate_check == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJson(needs.decide.outputs.flight_targets_json) }}
+    concurrency:
+      group: materialize-substrate-candidate-a-${{ matrix.node }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    environment: candidate-a
+    steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          path: ci-src
+
+      - name: Checkout app source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          ref: ${{ needs.decide.outputs.head_sha }}
+          fetch-depth: 0
+          path: app-src
+
+      - name: Initialize node submodule when present
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NODE: ${{ matrix.node }}
+        run: |
+          set -euo pipefail
+          if git -C app-src config -f .gitmodules --get "submodule.nodes/${NODE}.path" >/dev/null 2>&1; then
+            git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+            git -C app-src submodule update --init --depth 1 "nodes/${NODE}"
+          fi
+
+      - name: Setup SSH to candidate-a VM
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+          NODE_SOURCE_SHA: ${{ needs.decide.outputs.node_source_sha }}
+          DEPLOY_ENVIRONMENT: candidate-a
+        run: |
+          set -euo pipefail
+          bash ci-src/scripts/ci/require-node-ref-vm.sh
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "$SSH_DEPLOY_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Materialize node-owned OpenBao secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          SSH_OPTS: "-i /home/runner/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
+          DEPLOY_ENVIRONMENT: candidate-a
+          TARGET: ${{ matrix.node }}
+          DOMAIN: ${{ vars.DOMAIN }}
+          APP_SOURCE_DIR: app-src
+        run: bash ci-src/scripts/ci/secret-materialize.sh candidate-a "${TARGET}"
+
   reconcile-substrate:
     needs:
-      [decide, reconcile-appset, reconcile-dns, prepare-substrate-deploy-branch]
+      [
+        decide,
+        reconcile-appset,
+        reconcile-dns,
+        prepare-substrate-deploy-branch,
+        materialize-substrate,
+      ]
     if: |
       always() &&
       needs.decide.outputs.needs_substrate_check == 'true' &&
+      needs.materialize-substrate.result == 'success' &&
       needs.prepare-substrate-deploy-branch.result == 'success' &&
       needs.reconcile-appset.result == 'success' &&
       needs.reconcile-dns.result == 'success'
@@ -1032,6 +1101,7 @@ jobs:
       [
         decide,
         prepare-substrate-deploy-branch,
+        materialize-substrate,
         reconcile-substrate,
         assert-substrate,
         flight,
@@ -1050,6 +1120,7 @@ jobs:
           HAS_FLIGHT_TARGETS: ${{ needs.decide.outputs.has_flight_targets }}
           NEEDS_SUBSTRATE_CHECK: ${{ needs.decide.outputs.needs_substrate_check }}
           PREPARE_SUBSTRATE_DEPLOY_BRANCH_RESULT: ${{ needs.prepare-substrate-deploy-branch.result }}
+          MATERIALIZE_SUBSTRATE_RESULT: ${{ needs.materialize-substrate.result }}
           RECONCILE_SUBSTRATE_RESULT: ${{ needs.reconcile-substrate.result }}
           ASSERT_SUBSTRATE_RESULT: ${{ needs.assert-substrate.result }}
           FLIGHT_RESULT: ${{ needs.flight.result }}
@@ -1057,7 +1128,7 @@ jobs:
           TARGETS_JSON: ${{ needs.decide.outputs.flight_targets_json }}
         run: |
           set -euo pipefail
-          echo "has_targets=${HAS_TARGETS} has_flight_targets=${HAS_FLIGHT_TARGETS} substrate=${NEEDS_SUBSTRATE_CHECK} prepare_substrate_deploy_branch=${PREPARE_SUBSTRATE_DEPLOY_BRANCH_RESULT} reconcile_substrate=${RECONCILE_SUBSTRATE_RESULT} assert_substrate=${ASSERT_SUBSTRATE_RESULT} flight=${FLIGHT_RESULT} verify=${VERIFY_RESULT} flight_targets=${TARGETS_JSON}"
+          echo "has_targets=${HAS_TARGETS} has_flight_targets=${HAS_FLIGHT_TARGETS} substrate=${NEEDS_SUBSTRATE_CHECK} prepare_substrate_deploy_branch=${PREPARE_SUBSTRATE_DEPLOY_BRANCH_RESULT} materialize_substrate=${MATERIALIZE_SUBSTRATE_RESULT} reconcile_substrate=${RECONCILE_SUBSTRATE_RESULT} assert_substrate=${ASSERT_SUBSTRATE_RESULT} flight=${FLIGHT_RESULT} verify=${VERIFY_RESULT} flight_targets=${TARGETS_JSON}"
           if [ "$HAS_FLIGHT_TARGETS" != "true" ]; then
             # No k8s app-lever targets. Either nothing affected, or the affected
             # set is type:infra only (e.g. litellm) — which deploys via the
@@ -1071,6 +1142,9 @@ jobs:
           elif [ "$NEEDS_SUBSTRATE_CHECK" = "true" ] && [ "$PREPARE_SUBSTRATE_DEPLOY_BRANCH_RESULT" != "success" ]; then
             STATE=failure
             DESC="Candidate flight failed before promotion (prepare-substrate-deploy-branch=${PREPARE_SUBSTRATE_DEPLOY_BRANCH_RESULT})"
+          elif [ "$NEEDS_SUBSTRATE_CHECK" = "true" ] && [ "$MATERIALIZE_SUBSTRATE_RESULT" != "success" ]; then
+            STATE=failure
+            DESC="Candidate flight failed before promotion (materialize-substrate=${MATERIALIZE_SUBSTRATE_RESULT})"
           elif [ "$NEEDS_SUBSTRATE_CHECK" = "true" ] && [ "$RECONCILE_SUBSTRATE_RESULT" != "success" ]; then
             STATE=failure
             DESC="Candidate flight failed before promotion (reconcile-substrate=${RECONCILE_SUBSTRATE_RESULT})"
