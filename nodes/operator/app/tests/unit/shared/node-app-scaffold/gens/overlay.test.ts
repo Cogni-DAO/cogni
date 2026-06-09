@@ -23,6 +23,11 @@ patches:
       - op: add
         path: /spec/template/spec/initContainers/-
         value:
+          name: migrate-doltgres
+          command:
+            - /bin/sh
+            - -c
+            - exec node /app/nodes/$(NODE_NAME)/app/migrate-doltgres.mjs /app/nodes/$(NODE_NAME)/app/doltgres-migrations
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -58,5 +63,35 @@ describe("renderOverlay", () => {
     expect(out).toContain('value: "coulditbe-env-secrets"');
     expect(out).toContain("name: coulditbe-env-secrets");
     expect(out).not.toContain("coulditbe-node-app-secrets");
+  });
+
+  it("targets the node-at-root image layout for both migrate runners", () => {
+    const out = renderOverlay(TEMPLATE, "coulditbe", 30500, 3500);
+
+    // Doltgres runner rewritten in place; Postgres runner injected as a base override.
+    expect(out).toContain(
+      "value: exec node /app/app/migrate.mjs /app/app/migrations"
+    );
+    expect(out).toContain(
+      "exec node /app/app/migrate-doltgres.mjs /app/app/doltgres-migrations"
+    );
+    // No monorepo /app/nodes/<slug>/app paths survive in the generated overlay.
+    expect(out).not.toContain("/app/nodes/$(NODE_NAME)/app");
+  });
+
+  it("fails closed when the migrate initContainer secret-ref patch is absent", () => {
+    const noAnchor = `namePrefix: node-template-
+patches:
+  - target:
+      kind: Service
+      name: node-app
+    patch: |
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30200
+`;
+    expect(() => renderOverlay(noAnchor, "coulditbe", 30500, 3500)).toThrow(
+      /NODE_AT_ROOT_MIGRATE_PATH/
+    );
   });
 });
