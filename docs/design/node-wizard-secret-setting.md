@@ -297,6 +297,62 @@ reads OpenBao and provisions dependent substrate: DBs/roles, edge routing,
 `COGNI_NODE_DBS`, and the node ExternalSecret leaf. `assert-substrate` is
 read-only.
 
+### Phase custody contract (the load-bearing split)
+
+The v0 `reconcile-node-substrate.sh` collapses materialize into reconcile and is
+the anti-pattern this design retires. The split below is the merge target, not a
+nice-to-have; each row is verified against current code.
+
+| Phase                 | Token             | OpenBao       | VM `.env`            | Owns                                                                      |
+| --------------------- | ----------------- | ------------- | -------------------- | ------------------------------------------------------------------------- |
+| `secret-materialize`  | `<env>-writer`    | writes        | **never reads**      | generate/patch `source: agent` catalog keys; fail-loud on `source: human` |
+| `reconcile-substrate` | `<env>-db-reader` | **read-only** | reads inventory only | DB roles (delegated to provisioners), edge, `COGNI_NODE_DBS`, ESO leaf    |
+| `assert-substrate`    | reader            | read-only     | none                 | verify ESO Ready, ESO-only contract, DB/edge shape                        |
+
+`secret-materialize` input is `infra/secrets-catalog.yaml` **only**. The writer
+token is allowed in this phase and nowhere else; `reconcile-substrate` must hold
+no OpenBao write capability.
+
+### DB-credential custody (do not invent OpenBao keys)
+
+DB credentials split three ways. Getting this wrong is how both PRs drifted:
+
+- **Catalog `source: agent`, materialize owns:** `APP_DB_PASSWORD`,
+  `APP_DB_SERVICE_PASSWORD`. Present in `secrets-catalog.yaml`; generate when
+  missing.
+- **Provisioner-derived, NOT catalog, leave alone:** `DOLTGRES_PASSWORD`,
+  `DOLTGRES_READER_PASSWORD`, `DOLTGRES_WRITER_PASSWORD`. Absent from the catalog
+  by design; deterministically derived from `POSTGRES_ROOT_PASSWORD` by
+  `doltgres-provision`. Materialize must not generate or read these, and the
+  reconcile engine must not `CREATE ROLE` for them.
+- **Catalog-present with a derive fallback:** `APP_DB_READONLY_PASSWORD` (tier B,
+  `required: false`, `generate.kind: hex`; deploy-infra derives one from
+  `POSTGRES_ROOT_PASSWORD` when unset). Materialize may generate it but must
+  **not** fail-loud on its absence.
+- **DSN composites, derived not stored as input:** `DATABASE_URL`,
+  `DATABASE_SERVICE_URL`, `DOLTGRES_URL`. Composed from OpenBao-owned components,
+  never read from VM `.env`.
+
+DB role/database creation stays delegated to the standard `db-provision` /
+`doltgres-provision` Compose bootstrap. Neither phase hand-rolls `CREATE ROLE`.
+
+### Inheritance: explicit `inheritFrom`, not blind scan
+
+The v0 path inherits via a blind `TARGET_NODE -> node-template -> operator ->
+_shared` OpenBao scan (`preload_value`). That silently grants a node any value an
+ancestor happens to hold. Replace it with an explicit per-entry `inheritFrom`
+catalog field (does not exist yet — proposed). Until it lands, **generate
+per-node** rather than inherit caller-identity keys: `SCHEDULER_API_TOKEN`,
+`BILLING_INGEST_TOKEN`, `GH_WEBHOOK_SECRET`, `INTERNAL_OPS_TOKEN`.
+
+### Falsifying merge gate
+
+Before either substrate PR merges, prove split-brain is dead: delete the VM
+`.env` `APP_DB_PASSWORD`, run `secret-materialize` + `reconcile-substrate`, and
+prove the node deploys green from OpenBao only. DB roles are unaffected (they
+derive from `POSTGRES_ROOT_PASSWORD`). The lane stays gated to `candidate-a`
+until materialize + reader are clean.
+
 The wizard proves that a new node has:
 
 - child repo ExternalSecret leaves for `candidate-a`, `preview`, and
@@ -333,15 +389,35 @@ proven by the env substrate lane.
 
 ## Remaining Work
 
-1. Use a fresh throwaway node to prove candidate-a publish logs
-   `feature.node_publish.secret_shape_generated`, the child repo contains all
-   three ExternalSecret leaves, the parent PR overlays consume
-   `<slug>-env-secrets`, and candidate flight runs materialize -> reconcile ->
-   assert without manual secret bridging.
-2. Extend or verify the preview/production substrate lane so node-domain leaves
-   from `nodes/<slug>/k8s/external-secrets/{preview,production}/` reach the
+Wizard shape is proven: a fresh throwaway node (`gizmo`) produced a forked child
+repo with all three ESO leaves and a parent birth PR whose overlays consume
+`<slug>-env-secrets` with no legacy `<slug>-node-app-secrets` and no secret
+values. The remaining work is the substrate engine, sequenced:
+
+1. Keep `#1582` as the base: candidate-flight graph,
+   `prepare-substrate-deploy-branch`, and provisioner-delegated DB creation.
+2. Fold in only `#1579`'s contract/observability wrapper — structured redacted
+   `target_substrate_reconcile_summary` to Loki, ESO-only hard fail on
+   `<slug>-node-app-secrets`, read-only reconcile posture. Do not adopt its
+   six-password `CREATE ROLE` logic. Close `#1579` once these are absorbed.
+3. Add `secret-materialize <env> <node>` as a pre-reconcile step per the phase
+   custody contract above. Neither PR has it yet; this is where "zero per-node
+   human secrets" actually lives.
+4. Make `reconcile-substrate` read-only: strip the `<env>-writer` mint, the VM
+   `.env` reads, and the blind `preload_value` scan from
+   `reconcile-node-substrate.sh`.
+5. Pass the falsifying merge gate; keep the lane gated to `candidate-a`.
+6. Extend the preview/production substrate lane so node-domain leaves from
+   `nodes/<slug>/k8s/external-secrets/{preview,production}/` reach the
    corresponding deploy branch or cluster before those envs assert
    `<slug>-env-secrets`.
+7. Fix the `please` `migrate` initContainer crash-loop so `verify-candidate` is
+   green, not downstream-red (tracked separately; not a secret-shape blocker).
+
+A known test-harness gap: generated AppSets pin `repoURL:
+https://github.com/cogni-dao/cogni.git`, so a test-org node's overlay (added in
+`cogni-test-org/cogni-monorepo`) is not what Argo reconciles. Correct for the
+production parent (`cogni-dao/cogni`); flag for test-org E2E isolation.
 
 ## Non-Goals
 
