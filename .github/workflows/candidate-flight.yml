@@ -444,7 +444,52 @@ jobs:
           # Anti-resurrection: the legacy shared `cogni-candidate-a` AppSet is
           # retired. Orphan-delete (never prune its live Applications) so it can
           # never reappear to re-clobber this lane, then apply the per-node object.
-          ci_ssh_retry ssh "${ssh_opts[@]}" "root@${VM_HOST}" "kubectl delete applicationset cogni-candidate-a -n argocd --cascade=orphan --ignore-not-found && kubectl apply -f /tmp/appset-${NODE}.yaml -n argocd && rm -f /tmp/appset-${NODE}.yaml"
+          ci_ssh_retry ssh "${ssh_opts[@]}" "root@${VM_HOST}" "kubectl delete applicationset cogni-candidate-a -n argocd --cascade=orphan --ignore-not-found && kubectl apply -f /tmp/appset-${NODE}.yaml -n argocd && kubectl -n argocd annotate applicationset cogni-candidate-a-${NODE} argocd.argoproj.io/application-set-refresh='true' --overwrite && rm -f /tmp/appset-${NODE}.yaml"
+
+      - name: Wait for candidate-a-${{ matrix.node }} Application
+        if: steps.ssh-setup.outputs.has_vm == 'true'
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          SSH_OPTS: "-i /home/runner/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
+          NODE: ${{ matrix.node }}
+        run: |
+          set -euo pipefail
+          # shellcheck source=ci-src/scripts/ci/lib/ssh-retry.sh
+          . ci-src/scripts/ci/lib/ssh-retry.sh
+          read -r -a ssh_opts <<< "$SSH_OPTS"
+          app_name="candidate-a-${NODE}"
+          appset_name="cogni-candidate-a-${NODE}"
+          remote_script="$(mktemp)"
+          cat >"$remote_script" <<'REMOTE_SCRIPT'
+          set -euo pipefail
+          app_name="$1"
+          appset_name="$2"
+          for _ in $(seq 1 60); do
+            if kubectl -n argocd get application "$app_name" >/dev/null 2>&1; then
+              echo "ApplicationSet generated Application: $app_name"
+              exit 0
+            fi
+            sleep 5
+          done
+
+          echo "::error::ApplicationSet did not generate Application: ${appset_name} -> ${app_name}"
+          echo "::group::ApplicationSet"
+          kubectl -n argocd get applicationset "$appset_name" -o yaml || true
+          echo "::endgroup::"
+          echo "::group::ApplicationSet describe"
+          kubectl -n argocd describe applicationset "$appset_name" || true
+          echo "::endgroup::"
+          echo "::group::Related Applications"
+          kubectl -n argocd get applications -o wide | grep -E "NAME|${app_name}|candidate-a" || true
+          echo "::endgroup::"
+          echo "::group::ApplicationSet controller logs"
+          kubectl -n argocd logs deployment/argocd-applicationset-controller --tail=200 || true
+          echo "::endgroup::"
+          exit 1
+          REMOTE_SCRIPT
+          ci_ssh_retry scp "${ssh_opts[@]}" "$remote_script" "root@${VM_HOST}:/tmp/wait-appset-${NODE}.sh"
+          rm -f "$remote_script"
+          ci_ssh_retry ssh "${ssh_opts[@]}" "root@${VM_HOST}" "bash /tmp/wait-appset-${NODE}.sh '$app_name' '$appset_name'; status=\$?; rm -f /tmp/wait-appset-${NODE}.sh; exit \$status"
 
   assert-substrate:
     needs: [decide, reconcile-appset, reconcile-dns, reconcile-substrate]
@@ -501,6 +546,8 @@ jobs:
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
           APP_SOURCE_DIR: app-src
           COGNI_CATALOG_ROOT: app-src/infra/catalog
+          ASSERT_TARGET_SUBSTRATE_APP_WAIT_ATTEMPTS: 60
+          ASSERT_TARGET_SUBSTRATE_APP_WAIT_SLEEP_SECONDS: 5
         run: bash ci-src/scripts/ci/assert-target-substrate.sh
 
   reconcile-substrate:
