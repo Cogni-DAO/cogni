@@ -43,7 +43,9 @@ declare -ga NODE_BASELINE_KEYS=(
   SCHEDULER_API_TOKEN BILLING_INGEST_TOKEN
   INTERNAL_OPS_TOKEN METRICS_TOKEN GH_WEBHOOK_SECRET
   CONNECTIONS_ENCRYPTION_KEY POLY_WALLET_AEAD_KEY_HEX
-  POLY_WALLET_AEAD_KEY_ID DATABASE_URL DATABASE_SERVICE_URL
+  POLY_WALLET_AEAD_KEY_ID
+  APP_DB_PASSWORD APP_DB_SERVICE_PASSWORD
+  DATABASE_URL DATABASE_SERVICE_URL
   DOLTGRES_URL
   POSTHOG_API_KEY POSTHOG_HOST OPENROUTER_API_KEY
   EVM_RPC_URL POLYGON_RPC_URL
@@ -77,9 +79,13 @@ declare -ga SCHEDULER_WORKER_KEYS=(
 # never seeded to OpenBao. Truth lives on the VM after first provision.
 declare -ga COMPOSE_ONLY_KEYS=(
   POSTGRES_ROOT_PASSWORD
-  APP_DB_PASSWORD APP_DB_SERVICE_PASSWORD APP_DB_READONLY_PASSWORD
+  APP_DB_READONLY_PASSWORD
   TEMPORAL_DB_PASSWORD DOLTGRES_PASSWORD
 )
+# APP_DB_PASSWORD / APP_DB_SERVICE_PASSWORD moved to NODE_BASELINE_KEYS (per-node
+# source:agent, materialized to cogni/<env>/<node>) — they precede DATABASE_URL so
+# the DSN composition reads the generated password. APP_DB_READONLY_PASSWORD stays
+# Compose-only (env-level Grafana role, superuser-derived; not per-node).
 
 # ── Catalog-gated per-node fan-out (task.5094) ────────────────────────────────
 # The OpenBao seed fans NODE_BASELINE_KEYS to every type:node, gating + valuing
@@ -143,11 +149,14 @@ _resolve_node_value() {
   db="cogni_${node//-/_}"
   case "$k" in
     DATABASE_URL)
-      printf 'postgresql://%s:%s@%s:5432/%s?sslmode=disable' \
-        "${APP_DB_USER}" "${APP_DB_PASSWORD}" "${VM_IP}" "${db}"; return 0 ;;
+      # Per-node: app_<node> role + the node's own source:agent password (OpenBao).
+      # Role name is computed from the node; the password is read from
+      # cogni/<env>/<node> (materialize generated it before this composition).
+      printf 'postgresql://app_%s:%s@%s:5432/%s?sslmode=disable' \
+        "${node//-/_}" "$(bao_get_field "$node" APP_DB_PASSWORD)" "${VM_IP}" "${db}"; return 0 ;;
     DATABASE_SERVICE_URL)
-      printf 'postgresql://%s:%s@%s:5432/%s?sslmode=disable' \
-        "${APP_DB_SERVICE_USER}" "${APP_DB_SERVICE_PASSWORD}" "${VM_IP}" "${db}"; return 0 ;;
+      printf 'postgresql://service_%s:%s@%s:5432/%s?sslmode=disable' \
+        "${node//-/_}" "$(bao_get_field "$node" APP_DB_SERVICE_PASSWORD)" "${VM_IP}" "${db}"; return 0 ;;
     DOLTGRES_URL)
       printf 'postgresql://postgres:%s@%s:5435/knowledge_%s?sslmode=disable' \
         "${DOLTGRES_PASSWORD:-$(derive_secret doltgres-root)}" "${VM_IP}" "${node//-/_}"; return 0 ;;
