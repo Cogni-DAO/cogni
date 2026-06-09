@@ -438,6 +438,15 @@ jobs:
           path: out/
           retention-days: 1
 
+  # TRANSITIONAL (PR #1582 / #1584): reconcile-node-substrate.sh now seeds DSNs
+  # only — secret-materialize owns source:agent app keys. There is NO materialize
+  # phase here yet, so this is correct only for STEADY-STATE nodes whose app keys
+  # already exist in cogni/<env>/<node> (genesis / provision-env). A brand-new
+  # node promoted straight to preview/production would get DSNs but no app keys →
+  # incomplete ESO Secret. Wiring materialize-substrate into preview/prod lands
+  # with the env-repair lane (#1584, vm-secrets-repair.md), which owns the
+  # per-node DB-cred model that per-env materialize depends on. The #1582 lane is
+  # gated to candidate-a, where materialize-substrate runs.
   reconcile-substrate:
     needs: [decide, reconcile-appset, reconcile-dns]
     if: |

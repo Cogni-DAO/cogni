@@ -2,22 +2,25 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 #
-# secret-materialize.sh — the ONLY OpenBao writer in the node substrate lane.
+# secret-materialize.sh — writer of node-owned source:agent app secrets.
 #
-# Runs before reconcile-substrate for one catalog node. It is the sole holder of
-# the <env>-writer role. Per docs/spec/secrets-management.md Invariants 15/16 and
-# docs/design/node-wizard-secret-setting.md:
+# Runs before reconcile-substrate for one catalog node. Per
+# docs/spec/secrets-management.md Invariants 15/16 and
+# docs/design/node-wizard-secret-setting.md, AS BUILT today:
 #   - input is the secrets catalog ONLY; it never reads the VM runtime .env;
-#   - source:agent keys are generated once and preserved on re-run (0 pod churn);
-#   - source:derived keys (DB DSNs, DOLTGRES_*, APP_DB_READONLY) are computed from
-#     OpenBao-owned inputs and written back to OpenBao;
-#   - DB component inputs (POSTGRES_ROOT_PASSWORD, APP_DB_*) are read from OpenBao
-#     and FAIL LOUD if absent — a missing env-bank value is an environment
-#     precondition failure, never a VM .env fallback (the bug.5002 anti-fix);
+#   - source:agent app keys are generated once and preserved on re-run (0 pod churn);
+#   - shared/human values are inherited transitionally (see inherit_shared_value);
 #   - it logs key NAMES only, never values.
 #
+# TRANSITIONAL (not yet the target): the DB DSNs (DATABASE_URL, DATABASE_SERVICE_URL,
+# DOLTGRES_URL) are still seeded by reconcile-substrate (which mints <env>-writer
+# for that one write) until the env-repair lane lands cogni/<env>/<node> DB creds
+# (docs/guides/vm-secrets-repair.md, #1584). Only after that does this become the
+# SOLE OpenBao writer and reconcile go fully read-only. Until then the falsifying
+# gate cannot pass and this PR must not claim deploy_verified via that gate.
+#
 # It does NOT apply ExternalSecrets, touch edge/DB inventory, or run provisioners
-# — those are reconcile-substrate's read-only responsibilities.
+# — those are reconcile-substrate's responsibilities.
 
 set -euo pipefail
 
@@ -82,8 +85,9 @@ remote() {
   "$SSH_BIN" "${SSH_OPTS_ARR[@]}" "root@${VM_HOST}" "$@"
 }
 
-# Mint the <env>-writer token via the sanctioned k8s-auth seam. This script is
-# the only phase permitted to hold it (Invariant 16 token boundary).
+# Mint the <env>-writer token via the sanctioned k8s-auth seam. Target: this is
+# the only phase permitted to hold it (Invariant 16 token boundary). Transitional:
+# reconcile-substrate also mints it to seed DSNs until the env-repair lane lands.
 BAO_TOKEN="$(
   remote "set -euo pipefail
     jwt=\$(kubectl create token openbao-operator -n default)
@@ -97,7 +101,11 @@ export DEPLOY_ENV="$DEPLOY_ENVIRONMENT"
 export VM_IP="${VM_IP:-$(remote "hostname -I | awk '{print \$1}'" | tr -d '[:space:]')}"
 export CATALOG_FILE="${APP_SOURCE_DIR}/infra/secrets-catalog.yaml"
 export PAYMENT_NODES="${PAYMENT_NODES:-poly}"
-export DOMAIN="${DOMAIN:-}"
+# DOMAIN is required: derive-env keys (APP_BASE_URL, NEXTAUTH_URL) build the
+# node FQDN from it. Empty DOMAIN would silently materialize broken https://<host>
+# values, so fail loud (mirrors reconcile-node-substrate.sh).
+[[ -n "${DOMAIN:-}" ]] || fail "DOMAIN is required (derive-env keys build the node FQDN)"
+export DOMAIN
 
 # shellcheck source=../setup/lib/reconcile-secrets.sh
 # Provides NODE_BASELINE_KEYS, derive_secret, _resolve_node_value (preserve-
@@ -160,6 +168,10 @@ materialized=0
 for k in "${NODE_BASELINE_KEYS[@]}"; do
   case "$DSN_DEFER_KEYS" in *" $k "*) continue ;; esac
   _node_gets_key "$TARGET_NODE" "$k" || continue
+  # TODO(inheritFrom): blind ancestor scan + copy-inheritance — anti-pattern the
+  # north star deletes. Each node freezes its own copy, so rotating a shared key
+  # never propagates. Replace with explicit catalog inheritFrom + read grants
+  # (secrets-classification.md owner-scoped paths; catalog-custody lane).
   inherit_shared_value "$k"
   v="$(_resolve_node_value "$TARGET_NODE" "$k")"
   [[ -z "$v" ]] && continue
