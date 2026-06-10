@@ -110,3 +110,37 @@ Substrate plumbing **beneath** the app-layer RBAC product flow, not a competitor
 - **`rbac-model.json` to the Job (B):** ConfigMap (rendered from the repo file) vs baked into the OpenFGA image.
 - **One store per env vs per node (C+):** today a single `cogni-<env>-rbac` store serves all nodes. Keep env-shared unless per-node isolation is required.
 - **C trigger:** what demand signal promotes C off the backlog (e.g. a second stateful Compose-infra service, or `ExternalName` causing an incident).
+
+---
+
+## Design Review — pass 2 (provision/deploy-split + BaaS lens, reviewer 2026-06-10)
+
+Pass-1 corrections all landed cleanly (resolution table is accurate). This pass reviews Phase A against two things pass-1 didn't weigh: the **provision-vs-deploy separation mission** and [`node-baas-architecture.md`](../spec/node-baas-architecture.md). One finding rewrites Phase-A's framing; it directly answers fga-dev's two open asks.
+
+### 🔴 Finding 1 — "Phase A rides Phase-0's read-path" is too optimistic. The dedicated infra-DB role is **net-new plumbing**, not a free ride on task.5052.
+
+Verified in the as-built:
+
+- `provision.sh` has a dedicated **infra-DB pass** (`PROVISION_INFRA_ONLY=1`, `provision.sh:30`) — "set by deploy-infra.sh's dedicated infra-DB pass." In that pass, litellm and openfga DBs are created **root-owned, no role** (`provision.sh:306`, `:317`).
+- The `provision_app_role <role> <openbao-password>` pattern (`provision.sh:152`, called `:232`) — the set-once, OpenBao-sourced login role — exists **only in the per-node pass** (`INFRA_ONLY != 1`).
+- task.5052 / Invariant-15 threads the **superuser** password from OpenBao into the infra pass (so root stops drifting). It does **not** create dedicated litellm/openfga login roles.
+
+**Therefore:** a dedicated `openfga` login role with an OpenBao-sourced password requires introducing the `provision_app_role` pattern **into the `INFRA_ONLY` branch for the first time** — seed `OPENFGA_DB_PASSWORD` to OpenBao, thread it into the infra-pass env, call `provision_app_role openfga "$OPENFGA_DB_PASSWORD"`, then flip the Compose DSN. That plumbing is the real Phase-A substrate work. Reframe Move 1 / Migration-A from "joins task.5052's read-path" to **"extends `db-provision`'s `INFRA_ONLY` branch with the per-role OpenBao pattern that today only the per-node pass has."** (litellm is the symmetric twin — the same new pattern serves both; consider doing both in one pass so the infra-DB-role shape is defined once, not openfga-bespoke.)
+
+### Answers to fga-dev's asks
+
+**Q1 — does task.5052 thread OpenBao into the infra-DB pass, or do these roles need their own wiring?** → **Their own wiring.** task.5052 covers root-from-OpenBao; the dedicated infra-DB *role* is the new pattern above. You were right to hold and not guess the mechanism. The OpenBao read itself is already available at infra-pass time — the `${DEPLOY_ENV}-db-reader` role is bound to the `db-provisioner` SA at `provision-env-vm.sh:1434` (5b.4c), and the infra pass runs in Phase 5f **after** the 5c OpenBao seed — so the only gaps are (a) seed `OPENFGA_DB_PASSWORD` at 5c, (b) confirm the `*-db-reader` policy glob grants the openfga path, (c) add the `provision_app_role` call in the `INFRA_ONLY` branch.
+
+**Q2 — draft Phase-A code now, or hold?** → **Hold the `provision.sh` / `db-provision` edit; draft only the non-colliding declarations.** Reasons: the infra-DB-role pattern is net-new (above), the file is mid-split (Finding 2), and the freeze is imminent. What you *can* write now without collision: the `infra/secrets-catalog.yaml` `OPENFGA_DB_PASSWORD` entry (Finding 3) and the design of the `INFRA_ONLY` `provision_app_role` change. Do **not** open a draft PR that edits `provision.sh` against the pre-split shape — it will rebase into rework the moment dev2's split moves the lane.
+
+### 🟡 Finding 2 — Phase A edits a file whose lane ownership is in flux; state the post-split target.
+
+The `INFRA_ONLY` pass is invoked by `deploy-infra.sh`, which today runs **inside** provision-env Phase 5f (`provision-env-vm.sh:1690`). provision-env explicitly "owns the SUBSTRATE (…**Compose**, DB-cred gate)" (`:2057`). The active mission — separate VM provisioning from deploy-infra/pod deploys (dev2, PR #1607) — is pulling exactly this apart. Since OpenFGA is **"likely the last allowed substrate feature"** before the freeze, Phase A must declare which **post-split** lane owns infra-DB-role creation (VM-provision infra pass vs a decoupled deploy-infra vs a substrate-materialization step) and target *that*, or be explicitly sequenced to land **before** the split freezes. It can't safely do both — this is the coordination point to settle with dev2 before writing the provision-script edit, beyond the existing "ping before substrate scripts."
+
+### 🟡 Finding 3 — BaaS lens: OpenFGA is operator-plane substrate, not a node. Name the catalog file + path.
+
+`node-baas-architecture.md` invariant: *node declares shape; operator wires environment.* OpenFGA is operator-plane infra (peer of litellm/temporal/redis), **not** a node — so its secret declaration goes in **`infra/secrets-catalog.yaml`** (operator-domain), at `cogni/<env>/openfga/OPENFGA_DB_PASSWORD` (dedicated service path; `_shared` only if litellm/openfga deliberately share), **never** a `nodes/<node>/.cogni/secrets-catalog.yaml`. This is consistent with the design's `type: infra` stance — just make the catalog file + path explicit in Migration-A so it doesn't get filed as a node secret. (The BaaS substrate map's "operator provides per-node DB, roles, RLS, backups" also confirms the `db-backup` parity you pulled into A is correctly operator-plane.)
+
+### Verdict
+
+**APPROVE the direction; REQUEST one doc edit before code:** reframe Phase A per Finding 1 (net-new infra-DB-role pattern, not a task.5052 ride) and add the post-split lane-ownership call (Finding 2) + catalog file/path (Finding 3). Then: declarations can be drafted now; the `provision.sh` edit holds for dev2's split + manager sequencing. The store/tuple-continuity invariant and the one-PR-with-code constraint remain correct as written.
