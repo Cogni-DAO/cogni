@@ -72,14 +72,14 @@ Boundaries that must hold:
 
 ## Pointers
 
-| File / Resource | Why it matters |
-| --- | --- |
-| `docs/research/2026-06-10-vm-pod-memory-efficiency.md` | dev2's capacity numbers + the actual levers (per-pod requests, what fits) |
-| `.claude/skills/devops-expert/SKILL.md` → "Node capacity per VM" | the over-commit model: k3s can't see Compose's RAM |
-| `.claude/skills/provision-env/SKILL.md` (Gotchas 18/19/20) | ESO leaf existence, per-env node membership, monitoring discipline |
-| `infra/k8s/argocd/preview-<node>-applicationset.yaml` | the per-env AppSet set to prune for an operator-only preview |
-| `infra/k8s/overlays/preview/<node>/` | per-node overlays; per-env node membership lives here (Gotcha 19) |
-| `nodes/<node>/k8s/external-secrets/preview/` | per-(svc,env) ESO leaves; the stray `env-secrets` ES collision (Gotcha 18) |
-| `scripts/ci/set-preview-review-state.sh` | preview lease lock/unlock (orphans as `dispatching`) |
-| flight-preview `27263263017` / promote-and-deploy `27263292160` | in-flight operator promote (image lands, pods stay Pending until capacity is freed) |
-| run `27259379198` | the green substrate provision (Phase 9 soft) — proves provision-env reliability |
+| File / Resource                                                  | Why it matters                                                                      |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `docs/research/2026-06-10-vm-pod-memory-efficiency.md`           | dev2's capacity numbers + the actual levers (per-pod requests, what fits)           |
+| `.claude/skills/devops-expert/SKILL.md` → "Node capacity per VM" | the over-commit model: k3s can't see Compose's RAM                                  |
+| `.claude/skills/provision-env/SKILL.md` (Gotchas 18/19/20)       | ESO leaf existence, per-env node membership, monitoring discipline                  |
+| `infra/k8s/argocd/preview-<node>-applicationset.yaml`            | the per-env AppSet set to prune for an operator-only preview                        |
+| `infra/k8s/overlays/preview/<node>/`                             | per-node overlays; per-env node membership lives here (Gotcha 19)                   |
+| `nodes/<node>/k8s/external-secrets/preview/`                     | per-(svc,env) ESO leaves; the stray `env-secrets` ES collision (Gotcha 18)          |
+| `scripts/ci/set-preview-review-state.sh`                         | preview lease lock/unlock (orphans as `dispatching`)                                |
+| flight-preview `27263263017` / promote-and-deploy `27263292160`  | in-flight operator promote (image lands, pods stay Pending until capacity is freed) |
+| run `27259379198`                                                | the green substrate provision (Phase 9 soft) — proves provision-env reliability     |
