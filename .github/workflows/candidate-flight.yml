@@ -218,7 +218,15 @@ jobs:
           # shellcheck source=app-src/scripts/ci/lib/image-tags.sh
           . app-src/scripts/ci/lib/image-tags.sh
           node_targets_json=$(printf '%s\n' "${NODE_TARGETS[@]}" | jq -R . | jq -sc .)
-          substrate=$(python3 -c 'import json, sys; flight = json.loads(sys.argv[1] or "[]"); nodes = set(json.loads(sys.argv[2] or "[]")); print(json.dumps([t for t in flight if t in nodes]))' "$FLIGHT_TARGETS_JSON" "$node_targets_json")
+          # task.5017 — deploy ⊆ provisioned: flight only nodes whose candidate-a
+          # AppSet exists (candidate-a ∈ their catalog envs). A node affected by a
+          # shared change but NOT in candidate-a's node-set has no candidate-a
+          # deploy-shape and must not be flighted here (else prepare-substrate fails
+          # on its missing overlay/ExternalSecret leaf).
+          ca_set_json=$(for f in app-src/infra/k8s/argocd/candidate-a-*-applicationset.yaml; do
+            [ -e "$f" ] || continue; b=$(basename "$f"); b=${b#candidate-a-}; printf '%s\n' "${b%-applicationset.yaml}"
+          done | jq -R . | jq -sc .)
+          substrate=$(python3 -c 'import json, sys; flight = json.loads(sys.argv[1] or "[]"); nodes = set(json.loads(sys.argv[2] or "[]")); ca = set(json.loads(sys.argv[3] or "[]")); print(json.dumps([t for t in flight if t in nodes and t in ca]))' "$FLIGHT_TARGETS_JSON" "$node_targets_json" "$ca_set_json")
           has_substrate_node_targets=false
           [ "$substrate" != "[]" ] && has_substrate_node_targets=true
           echo "substrate_node_targets_json=$substrate" >> "$GITHUB_OUTPUT"
