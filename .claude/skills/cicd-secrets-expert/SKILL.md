@@ -13,7 +13,7 @@ One-page reference for anyone touching secrets in node-template. Read this BEFOR
 
 ## Load-bearing invariants — gate every secrets decision
 
-From [`docs/spec/secrets-management.md`](../../../docs/spec/secrets-management.md):
+Load-bearing subset — canonical numbering is [`docs/spec/secrets-management.md`](../../../docs/spec/secrets-management.md) Invariants 1–16; the rows below are the ones that gate day-to-day secrets work (7, 10–12, 14 omitted — read the spec for the full set):
 
 | #   | Rule                                                                                           | Where it bites                                                |
 | --- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -98,6 +98,24 @@ must already have the substrate/runtime inputs classified in
 If an environment-bank value is missing, repair that bank; do not pass values
 through candidate-flight inputs or store them in the wizard.
 
+**"Read-only" applies to `assert`, not the whole flight.** Distinct from the
+read-only assertion, `candidate-flight.yml` / `promote-and-deploy.yml` run a
+**`materialize-substrate`** job _first_ — the **sole OpenBao writer in the flight**
+(`scripts/ci/secret-materialize.sh`, `<env>-writer` token) — which generates the
+node's `source: agent` secrets at `cogni/<env>/<node>/*` idempotently before
+reconcile/assert, **including the per-node DB creds** (`app_<node>`/`service_<node>`
+passwords) and the composed Postgres DSNs (`DATABASE_URL`/`DATABASE_SERVICE_URL`;
+only `DOLTGRES_URL` is still deferred) since **#1584** (canonical:
+[`ci-cd.md` Axiom 22](../../../docs/spec/ci-cd.md),
+`SUBSTRATE_IS_RECONCILED_BEFORE_PROMOTION`). Since #1584 `reconcile-substrate` is
+**read-only on OpenBao** (`<env>-db-reader` token, zero `bao kv put/patch`) and
+`assert-target-substrate.sh` is read-only too — so only `materialize-substrate`
+writes. **Prod gap (bug.5007):**
+`materialize-substrate` mints `<env>-writer` via the `openbao-operator`
+ServiceAccount, which `candidate-a` has but **production does not** — a prod
+promote currently fails there until prod is provisioned with the writer SA or the
+job is made env-tolerant.
+
 The target shape matters. Today the implemented branch is `type=node`; a future
 `type=service` branch should assert the service's declared Secret /
 ExternalSecret / ConfigMap contract without inheriting node DNS, Caddy, NodePort,
@@ -105,14 +123,14 @@ or node-DB assumptions.
 
 ## Decision tree — how do I write / rotate the value?
 
-| Operation                                             | Right pattern                                                                                                           | Today's reality                                                                                                            |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Add new secret SHAPE (service X consumes key A)       | PR → `vault-config-operator` CRD → Argo reconciles                                                                      | Not built; tracked in `proj.agentic-fork-bootstrap` Walk                                                                   |
-| Materialize a new wizard node's runtime secrets       | Generate/derive node-local values and inherit only explicit org/env grants; no per-node human values for ordinary nodes | PR #1582 v0 does this inside narrow substrate reconcile; standalone `secret-materialize` + shared-bank split is follow-up  |
-| Rotate AUTO-GENERATED value (e.g., `AUTH_SECRET`)     | `rotate-secret.yml` workflow with env-protection; auto-generates value; **human approves event, never sees value**      | Not built; do manual `openssl rand` + `pnpm secrets:set` per [`secrets-rotate.md`](../../../docs/guides/secrets-rotate.md) |
-| Rotate VENDOR-MINTED value (OpenAI key, Cherry token) | Operator-app UI (in `cogni` repo, not node-template)                                                                    | Today: CLI on candidate-a; preview/prod TBD                                                                                |
-| Candidate-a experimentation                           | `pnpm secrets:set <env> <service> <KEY>` via port-forward + writer-role JWT                                             | Shipped — see [`secrets-add-new.md`](../../../docs/guides/secrets-add-new.md)                                              |
-| Dynamic DB credentials                                | OpenBao DB engine, no human in loop                                                                                     | Future (Crawl row 3 of `proj.security-hardening`)                                                                          |
+| Operation                                             | Right pattern                                                                                                           | Today's reality                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Add new secret SHAPE (service X consumes key A)       | PR → `vault-config-operator` CRD → Argo reconciles                                                                      | Not built; tracked in `proj.agentic-fork-bootstrap` Walk                                                                                                                                                                                                           |
+| Materialize a new wizard node's runtime secrets       | Generate/derive node-local values and inherit only explicit org/env grants; no per-node human values for ordinary nodes | Shipped: `materialize-substrate` is its own flight job (`scripts/ci/secret-materialize.sh`, `<env>-writer` token), idempotent read-once→diff→write-missing (#1582/#1585; ci-cd.md Axiom 22). The shared-bank / explicit `inheritFrom`-grant model is the follow-up |
+| Rotate AUTO-GENERATED value (e.g., `AUTH_SECRET`)     | `rotate-secret.yml` workflow with env-protection; auto-generates value; **human approves event, never sees value**      | Not built; do manual `openssl rand` + `pnpm secrets:set` per [`secrets-rotate.md`](../../../docs/guides/secrets-rotate.md)                                                                                                                                         |
+| Rotate VENDOR-MINTED value (OpenAI key, Cherry token) | Operator-app UI (in `cogni` repo, not node-template)                                                                    | Today: CLI on candidate-a; preview/prod TBD                                                                                                                                                                                                                        |
+| Candidate-a experimentation                           | `pnpm secrets:set <env> <service> <KEY>` via port-forward + writer-role JWT                                             | Shipped — see [`secrets-add-new.md`](../../../docs/guides/secrets-add-new.md)                                                                                                                                                                                      |
+| Dynamic DB credentials                                | OpenBao DB engine, no human in loop                                                                                     | Future (Crawl row 3 of `proj.security-hardening`)                                                                                                                                                                                                                  |
 
 The killer rule: **no human types a secret VALUE into a UI in production.** Auto-generated, vendor-minted via operator-app, or dynamic. Form-input is the anti-pattern.
 
@@ -173,13 +191,13 @@ No-human-secret done right: agent generates, agent pushes, **zero human, self-he
 
 `scripts/setup-secrets.ts` does NOT hold a hardcoded SECRETS array. It calls a Zod-validated loader that walks YAML catalogs:
 
-| File                                       | Domain                                                                             | Holds                                                                      |
-| ------------------------------------------ | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `nodes/<node>/.cogni/secrets-catalog.yaml` | **node-domain** (single-node-scope: poly engineer can add a poly secret in ONE PR) | A1/A2 entries the node owns; `service:` auto-fills from parent dir         |
-| `infra/secrets-catalog.yaml`               | **operator-domain**                                                                | `_shared`, `_system`, B/D/E/G entries + A2 placeholders for unported nodes |
-| `scripts/lib/secrets-catalog-loader.ts`    | **operator-domain (substrate)**                                                    | Zod schema + walker + uniqueness + service-allowlist assertions            |
+| File                                       | Domain                                                                             | Holds                                                                                                                                                                  |
+| ------------------------------------------ | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `infra/secrets-catalog.yaml`               | **operator-domain**                                                                | `_shared`, `_system`, B/D/E/G entries, A2 placeholders, **and (today) all node A1/A2 entries** — node-template's catalog was migrated here by task.5094                |
+| `nodes/<node>/.cogni/secrets-catalog.yaml` | **node-domain** (single-node-scope: poly engineer can add a poly secret in ONE PR) | A1/A2 entries the node owns; `service:` auto-fills from parent dir. **Loader-supported but currently empty** — no node populates it yet (post-task.5094 consolidation) |
+| `scripts/lib/secrets-catalog-loader.ts`    | **operator-domain (substrate)**                                                    | Zod schema + walker (walks both paths above) + uniqueness + service-allowlist assertions                                                                               |
 
-**To add a secret to your node:** edit `nodes/<your-node>/.cogni/secrets-catalog.yaml`. One PR, your node domain. Don't touch operator-domain files.
+**To add a node secret today:** edit `infra/secrets-catalog.yaml` — node entries are consolidated there post-task.5094 (per-node `.cogni/secrets-catalog.yaml` is loader-supported and is the sovereignty target, but no node uses it yet).
 **To add an operator-domain secret (B/D/E/G, or `_shared` cross-cutting):** edit `infra/secrets-catalog.yaml`. Operator-domain PR.
 **The loader rejects at module load:** missing `tier`, name collision across files, per-node `service:` mismatch with parent dir, unknown `service:` value not in the allowlist (`_shared`/`_system` + present nodes + canonical-future-domain names from `node-ci-cd-contract.md`).
 
