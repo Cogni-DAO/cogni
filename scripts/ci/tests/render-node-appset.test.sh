@@ -57,14 +57,17 @@ preview="$(appsets_for_env preview | paste -sd, -)"
   || fail "preview node-set should be operator,scheduler-worker — got '$preview'"
 pass "preview node-set is minimal backbone ($preview)"
 
-# 1b. candidate-a + production carry every deployable node.
+# 1b. candidate-a is the small test backbone (operator + node-template + scheduler-worker);
+# other nodes opt in to flight-test there. production carries every deployable node.
+candidatea="$(appsets_for_env candidate-a | paste -sd, -)"
+[ "$candidatea" = "canary,node-template,operator,scheduler-worker" ] \
+  || fail "candidate-a node-set should be canary,node-template,operator,scheduler-worker — got '$candidatea'"
+pass "candidate-a node-set is the small test backbone ($candidatea)"
 deployable="$(all_deployable | paste -sd, -)"
-for env in candidate-a production; do
-  got="$(appsets_for_env "$env" | paste -sd, -)"
-  [ "$got" = "$deployable" ] \
-    || fail "$env node-set should equal all deployable ($deployable) — got '$got'"
-  pass "$env deploys every node"
-done
+got="$(appsets_for_env production | paste -sd, -)"
+[ "$got" = "$deployable" ] \
+  || fail "production node-set should equal all deployable ($deployable) — got '$got'"
+pass "production deploys every node"
 
 # 2. SCHEDULER_WITH_OPERATOR for every env.
 for env in candidate-a preview production; do
@@ -75,13 +78,13 @@ for env in candidate-a preview production; do
 done
 pass "SCHEDULER_WITH_OPERATOR holds for all envs"
 
-# 3. CANDIDATE_A_ALWAYS — every deployable node lists candidate-a.
+# 3. Every deployable node lists at least one env (minItems) and production carries it.
 while read -r node; do
   [ -n "$node" ] || continue
-  grep -qx "$node" <<<"$(appsets_for_env candidate-a)" \
-    || fail "$node is deployable but absent from candidate-a (CANDIDATE_A_ALWAYS)"
+  grep -qx "$node" <<<"$(appsets_for_env production)" \
+    || fail "$node is deployable but absent from production"
 done <<<"$(all_deployable)"
-pass "CANDIDATE_A_ALWAYS holds"
+pass "every deployable node is in production"
 
 # 4. DETERMINISM — --check is stable across repeats.
 for _ in 1 2 3 4 5; do
