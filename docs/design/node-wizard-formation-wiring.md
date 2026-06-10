@@ -1,156 +1,121 @@
 ---
 id: design.node-wizard-formation-wiring
 type: design
-title: "Node-Wizard Formation Wiring — born-green Temporal endpoint via node_id projection"
+title: "Graph-Execution Routing as a Per-Node Substrate (born-green Temporal wiring)"
 status: draft
 created: 2026-06-10
 skills:
   - ../../.claude/skills/node-wizard-expert/SKILL.md
   - ../../.claude/skills/devops-expert/SKILL.md
 spec_refs:
+  - ../spec/node-baas-architecture.md
   - ../spec/node-formation.md
-  - ../spec/multi-node-tenancy.md
 related:
   - ../../work/handoffs/manual-edits-ledger.node-wizard-2026-06-10.md
 ---
 
-# Node-Wizard Formation Wiring
+# Graph-Execution Routing as a Per-Node Substrate
 
 ## Outcome
 
-Success is when **a wizard-spawned submodule node is born with its scheduler-worker
-Temporal endpoint registered**, so `chat/completions` works on candidate-a /
-preview / production with **zero hand-edits** — the last formation gap to a
-reproducibly-green node spawn.
+Success is when **a wizard-spawned node's Temporal worker routing is provisioned
+as substrate** — so `chat/completions` works on candidate-a / preview / production
+with **zero hand-edits**, the last gap to a reproducibly-green node spawn.
 
-## Problem (evidence)
+## The reframe (why the earlier draft was wrong)
 
-The node-wizard mint **deliberately skips** splicing the scheduler-worker endpoint
-(`nodes/operator/app/src/adapters/server/vcs/github-repo-write.ts:1184`):
+The first draft of this design invented a catalog `node_id` projection + a "web3
+merkle → gitops merkle" SSOT story. That mis-modeled the problem. **There was never
+a SSOT for Temporal wiring** — `COGNI_NODE_ENDPOINTS` was a hand-maintained,
+catalog-rendered configmap (stale at 3 of 10 nodes). The correct model, from
+[`node-baas-architecture.md`](../spec/node-baas-architecture.md) §BaaS Substrate Map:
 
-> "a submodule node's identity lives in the minted repo's `.cogni/repo-spec.yaml`,
-> not in the parent checkout. The parent renderer skips `.gitmodules` nodes until
-> the catalog → NodeRegistry metadata projection lands, so inserting this endpoint
-> here would make the generated PR fail the scheduler endpoint drift check."
+| Substrate | Node declares | Operator provides |
+| --- | --- | --- |
+| Postgres | migrations, DSNs | per-node DB, roles → `COGNI_NODE_DBS` |
+| Doltgres | migrations, domains | per-node `knowledge_<node>` |
+| **Graphs** | `packages/graphs` | **execution host, ROUTING, observability** |
+| Gateway | ports, health | Caddy route |
+| Secrets | key shape | OpenBao values, ESO |
 
-Chain: `node_id` lives in the child repo-spec (`REPO_SPEC_IS_IDENTITY_SSOT`).
-`image-tags.sh:69` reads it from `${path_prefix}.cogni/repo-spec.yaml`; for a
-submodule that file is **absent at PR-gen + CI-render time** → `node_id=""` → the
-node is dropped from `COGNI_NODE_ENDPOINTS`. The worker spins one Temporal worker
-per `node_id` in that CSV, so the spawned node has **no worker** → `chat/completions`
-enqueues a workflow nothing polls → hangs forever. Proven on candidate-a: oss
-returned a haiku **only** after the endpoint was hand-added (ledger row 12).
+**Graph execution is a managed substrate**, and the scheduler-worker polling a
+node's `scheduler-tasks-<node_id>` queue **is the "routing" the operator provides.**
+So Temporal wiring belongs exactly where Postgres/Doltgres/Secrets/Gateway wiring
+already lives — the **per-node substrate reconciler**, not a git-rendered configmap
+and not the mint.
 
-The drift gate (`render-scheduler-worker-endpoints.sh --check`) passes anyway,
-because configmap == renderer (both exclude the node). So CI is green while the
-node is broken — a silent-success seam.
-
-## SSOT model — web3 merkle → gitops merkle (the load-bearing rationalization)
-
-`.cogni/repo-spec.yaml` is the node's **identity source of truth** and must stay
-that way: it defines the node's **web3 mappings** — `node_id`, `scope_id`,
-`dao_contract` / `plugin_contract` / `signal_contract`, `chain_id` — the
-cryptographic, merkle-rooted identity that binds the on-chain DAO to its git tree.
-Those bytes live in the minted repo and nowhere else. `REPO_SPEC_IS_IDENTITY_SSOT`
-is unchanged.
-
-But the *gitops deployment* also keys off that identity (Temporal queue =
-`scheduler-tasks-<node_id>`, DB attribution, billing). The parent operator repo
-needs `node_id` at **gitops-time** — PR-gen (Git Data API) and CI-render — exactly
-where a submodule's repo-spec is unreadable. So we let identity **flow one way**:
-
-```
-repo-spec (web3 merkle root, in the minted repo)
-   │  projected once, at mint, by the operator that authored both
-   ▼
-catalog node_id (gitops-merkle projection, in the parent repo)
-   │  consumed by renderers/mint at gitops-time
-   ▼  ── drift gate: catalog.node_id MUST equal repo-spec.node_id ──
-```
-
-The catalog `node_id` is a **one-way, drift-gated mirror** — never an authority. If
-it disagrees with the repo-spec, the gate fails and the **web3 root wins** (CI red,
-not a silent fork). This is the "web3 merkle → gitops merkle" bridge: the repo-spec
-is the root; the catalog is a verified gitops-side hash of one field, present only
-because the parent cannot read across the submodule boundary at render time. The
-node-wizard mint — which generates *both* the repo-spec and the catalog entry in one
-act — is the only writer, so the projection cannot drift at birth.
+Identity is untouched: `repo-spec.yaml` stays the node's identity SSOT (`node_id` +
+on-chain bindings), already consumed at runtime for **billing attribution**. The
+reconciler simply **reads `node_id` from repo-spec at reconcile time** — when the
+submodule IS initialized (during flight), unlike at PR-gen — and uses it to
+provision routing. `node_id` flows repo-spec → substrate exactly as it flows
+repo-spec → billing. No projection, no new SSOT.
 
 ## Approach
 
-**Project only `node_id` into the catalog as the drift-gated gitops mirror** above.
-The catalog (`infra/catalog/<slug>.yaml`) is always parent-readable at PR-gen and
-CI-render time. No other repo-spec field moves — identity stays whole in the
-repo-spec; the catalog carries the single field gitops must resolve before the
-submodule is checked out.
+Make graph-execution routing a per-node substrate, parallel to `COGNI_NODE_DBS`.
 
-**Reuses:** the catalog-as-per-node-metadata pattern that **#1607** establishes
-(`envs:` field, `task.5017`); the existing scheduler-endpoints generator
-(`gens/scheduler-endpoints.ts`) + drift gate (`render-scheduler-worker-endpoints.sh`);
-the mint's existing gen pipeline.
+1. **`reconcile-node-substrate.sh`** — when it reconciles a node (it already appends
+   the node's DB to `COGNI_NODE_DBS` at line ~314), it also **registers the node's
+   Temporal routing**: read `node_id` from `nodes/<slug>/.cogni/repo-spec.yaml`,
+   add `<slug>=<url>,<node_id>=<url>` to the scheduler-worker's endpoint inventory,
+   bounce the worker.
+2. **Scheduler-worker reads its inventory from the provision-owned source** (a
+   reconciler-managed ConfigMap, or — endgame — the node registry), **not** the
+   catalog-rendered Argo configmap. This is the same provision-vs-deploy split that
+   #1607 drew for AppSets: the node inventory is provision-owned, not deploy-owned.
+3. **Retire** the catalog-rendered `COGNI_NODE_ENDPOINTS` configmap +
+   `render-scheduler-worker-endpoints.sh` drift gate — wrong plane (deploy-time git
+   for a provision-time substrate). The drift class disappears with it.
+4. **Keep the mint's skip** (`github-repo-write.ts:1184`) — the mint correctly does
+   NOT author routing; substrate is the operator/reconciler's job. The comment's
+   "until the projection lands" resolves to "the reconciler provisions it."
 
-### Changes
+### Endgame (top-0.1%)
 
-1. **`infra/catalog/_schema.json`** — add optional `node_id` (uuid). It is a
-   projection field, allowed only for `type:node` with a `path_prefix`.
-2. **`gens/catalog.ts`** — emit `node_id` (the mint already generates it in
-   `gens/repo-spec.ts`; thread it through). Drop the "schema forbids node_id" note.
-3. **`scripts/ci/lib/image-tags.sh`** — `node_id_for_target` reads `node_id` from
-   the **catalog** (parent-readable) with the repo-spec as fallback for in-repo
-   nodes. Submodule nodes resolve from the catalog projection.
-4. **Drift gate** — a CI check verifies `catalog.node_id == <node>/.cogni/repo-spec.yaml
-   node_id` (submodule initialized in this one check, or verified against the child
-   repo head) so the projection can never silently lie. `REPO_SPEC_IS_IDENTITY_SSOT`
-   preserved.
-5. **`github-repo-write.ts`** — remove the deliberate scheduler-endpoint skip
-   (:1184); the mint now splices the endpoint using the catalog-projected `node_id`
-   → matches the renderer → drift-clean.
-6. **`render-scheduler-worker-endpoints.sh`** — **fail loud** when a `type:node`
-   catalog entry has no resolvable `node_id` (kills the silent-drop seam).
+The scheduler-worker **dynamically discovers** its node set from the node registry
+(Postgres `nodes` table, task.5083), starting/stopping a per-node worker as nodes
+register/deregister and scaling concurrency by per-node queue depth. Then "wired" =
+"provisioned + registered" — zero static config, zero drift class, load auto-scales.
+Step 1–3 above are the substrate-reconcile increment that gets us there without the
+runtime registry dependency.
 
-### Rejected
+## Rejected
 
-- **Submodule init in CI render** — adds recursive-checkout cost to every render and
-  still doesn't help the **operator mint** (Git Data API composes a tree; it cannot
-  `git submodule update`). The mint already *has* `node_id` in memory; it just needs
-  a parent-readable place to put it.
-- **Runtime NodeRegistry (Postgres `nodes` table, task.5083)** — not available at
-  CI-render / PR-gen time; it is a runtime view, not a git-time projection.
-- **Hand-adding the endpoint (#1608)** — the drift gate correctly rejects it; the
-  fix must be in the formation, not per-node.
+- **Catalog `node_id` projection / "gitops merkle" SSOT (this design's own first
+  draft):** invents a git-time identity SSOT for what is reconcile-time substrate.
+  `node_id` is identity (repo-spec, billing); routing is substrate (reconciler).
+  Conflating them added a catalog field, a drift gate, and an invariant change to
+  solve a problem that vanishes once routing is reconciled.
+- **Mint-time endpoint splice:** the mint can't read submodule `node_id` at PR-gen,
+  AND shouldn't — routing isn't formation git.
+- **Hand-adding the endpoint (#1608) / hand-editing the live configmap:** the drift
+  gate correctly rejects it; ledger row 12 was a proof, not a fix.
 
 ## Invariants (review criteria)
 
-- [ ] REPO_SPEC_IS_IDENTITY_SSOT: repo-spec remains the sole authority for the
-      node's web3 identity (node_id, scope_id, dao/plugin/signal contracts, chain_id).
-      Only `node_id` projects to the catalog, as a mirror (spec: multi-node-tenancy)
-- [ ] IDENTITY_FLOWS_ONE_WAY: repo-spec → catalog `node_id`, never the reverse;
-      drift gate fails CI on mismatch (web3 root wins, no silent fork)
-- [ ] CATALOG_IS_SSOT: catalog is the parent-readable per-node *gitops* metadata SSOT
-      (aligns with #1607 `envs:`); it mirrors — never defines — identity
-- [ ] NO_SILENT_DROP: a `type:node` entry with unresolvable `node_id` fails the
-      render/drift gate loudly (no node silently missing its worker)
-- [ ] BORN_GREEN: the formation PR a wizard mints includes the scheduler endpoint;
-      a flighted spawn reaches `chat/completions` success with zero hand-edits
-- [ ] SIMPLE_SOLUTION: extends the catalog (one field) + reuses the existing
-      generator/drift-gate; no new service or store
-- [ ] ALIGNMENT_1606_1607: lands on/after #1607 (`envs:`); orthogonal to #1606
-      (capacity)
+- [ ] REPO_SPEC_IS_IDENTITY_SSOT: unchanged — `node_id`/on-chain bindings stay in
+      repo-spec; the reconciler reads, never projects, identity (spec: node-baas)
+- [ ] GRAPH_ROUTING_IS_SUBSTRATE: scheduler-worker routing is provisioned by the
+      per-node reconciler, parallel to `COGNI_NODE_DBS` (spec: node-baas §substrate)
+- [ ] PROVISION_OWNS_NODE_INVENTORY: node endpoint inventory is provision-owned, not
+      a deploy-time catalog/Argo artifact (aligns with #1607 provision/deploy split)
+- [ ] NO_SILENT_DROP: a reconciled node missing from the worker inventory fails loud
+- [ ] BORN_GREEN: a flighted spawn reaches `chat/completions` success with zero
+      hand-edits
+- [ ] SIMPLE_SOLUTION: reuses the `COGNI_NODE_DBS` reconcile pattern; deletes the
+      catalog-render + drift-gate rather than adding to it
 
 ## Files
 
-- Modify: `infra/catalog/_schema.json` — allow `node_id` (projection field)
-- Modify: `nodes/operator/app/src/shared/node-app-scaffold/gens/catalog.ts` — emit `node_id`
-- Modify: `scripts/ci/lib/image-tags.sh` — resolve `node_id` from catalog (repo-spec fallback)
-- Modify: `scripts/ci/render-scheduler-worker-endpoints.sh` — fail-loud on missing `node_id`
-- Modify: `nodes/operator/app/src/adapters/server/vcs/github-repo-write.ts` — splice endpoint (remove :1184 skip)
-- Add: catalog `node_id` ↔ repo-spec drift check (CI)
-- Backfill: `node_id` into existing `type:node` catalog entries (incl oss)
-- Test: scheduler-endpoints gen includes a submodule node; drift gate fails on mismatch/missing
+- Modify: `scripts/ci/reconcile-node-substrate.sh` — register node Temporal routing (read node_id from repo-spec; parallel to the `COGNI_NODE_DBS` append)
+- Modify: `services/scheduler-worker/*` — consume node inventory from the provision-owned source
+- Remove/retire: `scripts/ci/render-scheduler-worker-endpoints.sh` drift gate + the catalog-rendered `COGNI_NODE_ENDPOINTS` base configmap
+- Keep: `github-repo-write.ts:1184` skip (correct)
+- Test: reconcile a node → worker polls its `scheduler-tasks-<node_id>` queue; reconcile-only path adds the endpoint with no git/catalog edit
 
 ## E2E validation signal
 
-After implement: flight a fresh spawn (or re-flight oss) to candidate-a with **no
-manual scheduler edit** → `COGNI_NODE_ENDPOINTS` carries the node from the formation
-PR → worker polls its queue → `chat/completions` returns a completion. Repeat on
-preview (born-correct #1584) to prove env-independence.
+Re-flight oss to candidate-a with **no manual scheduler edit** → the substrate
+reconcile registers oss's Temporal routing → worker polls oss's queue →
+`chat/completions` returns a completion. Repeat on preview (born-correct #1584).
