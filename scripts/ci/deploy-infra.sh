@@ -1751,11 +1751,22 @@ SECEOF
   log_info "[$(date -u +%H:%M:%S)] Node-apps ready — rolling scheduler-worker"
 
   # ── Roll scheduler-worker only after node-apps are ready ───────────────────
+  # Fresh-env ordering: deploy-infra runs in provision-env-vm.sh Phase 5f, BEFORE
+  # Phase 7 applies the ApplicationSets that create the Argo Apps → Deployments. So
+  # on a fresh provision this Deployment legitimately does not exist yet. Tolerate
+  # that (the AppSet sync + the deploy/flight verify lane own app-tier health); stay
+  # fatal only when the Deployment EXISTS but fails to roll out (established-env
+  # regression). Same benign-on-absent / fatal-on-real-failure shape as the OpenFGA
+  # ExternalSecret refresh above.
   ROLLOUT_FAILED=0
-  kubectl -n "${K8S_NS}" rollout restart deployment/scheduler-worker 2>/dev/null || true
-  if ! wait_rollout_or_updated_available deployment/scheduler-worker 300s; then
-    log_warn "scheduler-worker rollout did not complete within 300s"
-    ROLLOUT_FAILED=1
+  if ! kubectl -n "${K8S_NS}" get deployment/scheduler-worker >/dev/null 2>&1; then
+    log_warn "scheduler-worker Deployment not present yet (fresh env; ApplicationSets apply in Phase 7, after this) — skipping rollout verification; the AppSet sync + deploy/flight lane own app-tier health"
+  else
+    kubectl -n "${K8S_NS}" rollout restart deployment/scheduler-worker 2>/dev/null || true
+    if ! wait_rollout_or_updated_available deployment/scheduler-worker 300s; then
+      log_warn "scheduler-worker rollout did not complete within 300s"
+      ROLLOUT_FAILED=1
+    fi
   fi
   if [[ " ${NODE_APP_TARGETS} " == *" operator "* ]]; then
     if ! operator_deployment_declares_openfga_config; then
