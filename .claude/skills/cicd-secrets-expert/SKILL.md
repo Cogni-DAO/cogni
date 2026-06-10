@@ -100,17 +100,17 @@ through candidate-flight inputs or store them in the wizard.
 
 **"Read-only" applies to `assert`, not the whole flight.** Distinct from the
 read-only assertion, `candidate-flight.yml` / `promote-and-deploy.yml` run a
-**`materialize-substrate`** job _first_ — the OpenBao writer in the flight
+**`materialize-substrate`** job _first_ — the **sole OpenBao writer in the flight**
 (`scripts/ci/secret-materialize.sh`, `<env>-writer` token) — which generates the
-node's `source: agent` catalog secrets at `cogni/<env>/<node>/*` idempotently
-before reconcile/assert (canonical: [`ci-cd.md` Axiom 22](../../../docs/spec/ci-cd.md),
-`SUBSTRATE_IS_RECONCILED_BEFORE_PROMOTION`). The `assert-target-substrate.sh` gate
-stays read-only; the _workflow_ is not. **Transitional exception (as-built, PR #1582):**
-`materialize-substrate` is not yet the _sole_ writer — `reconcile-substrate` still
-mints `<env>-writer` to seed the DB DSNs (`DATABASE_URL`, `DATABASE_SERVICE_URL`,
-`DOLTGRES_URL`) until the env-repair lane lands per-node DB creds at `cogni/<env>/<node>`
-([`secrets-management.md` Inv 15](../../../docs/spec/secrets-management.md), #1584). The
-sole-writer / read-only-reconcile shape is the target, not today's state. **Prod gap (bug.5007):**
+node's `source: agent` secrets at `cogni/<env>/<node>/*` idempotently before
+reconcile/assert, **including the per-node DB creds** (`app_<node>`/`service_<node>`
+passwords) and the composed Postgres DSNs (`DATABASE_URL`/`DATABASE_SERVICE_URL`;
+only `DOLTGRES_URL` is still deferred) since **#1584** (canonical:
+[`ci-cd.md` Axiom 22](../../../docs/spec/ci-cd.md),
+`SUBSTRATE_IS_RECONCILED_BEFORE_PROMOTION`). Since #1584 `reconcile-substrate` is
+**read-only on OpenBao** (`<env>-db-reader` token, zero `bao kv put/patch`) and
+`assert-target-substrate.sh` is read-only too — so only `materialize-substrate`
+writes. **Prod gap (bug.5007):**
 `materialize-substrate` mints `<env>-writer` via the `openbao-operator`
 ServiceAccount, which `candidate-a` has but **production does not** — a prod
 promote currently fails there until prod is provisioned with the writer SA or the
