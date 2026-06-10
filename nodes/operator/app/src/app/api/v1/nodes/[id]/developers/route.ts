@@ -227,13 +227,29 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       );
     }
 
-    // Reflect the decision into the tracking row when the agent filed one. Best-effort UX state;
-    // the tuple write above is the authority, so a missing row is a no-op, never an error.
-    await transitionAccessRequestOnDecision(serviceDb, {
-      nodeId: id,
-      agentUserId: parsed.data.agentUserId,
-      decision: parsed.data.decision,
-    });
+    // Reflect the decision into the tracking row when the agent filed one. Best-effort UX state:
+    // the tuple write above is the authority, so a tracking-row failure must not fail the decision
+    // (a missing row is already a no-op). Log and continue.
+    try {
+      await transitionAccessRequestOnDecision(serviceDb, {
+        nodeId: id,
+        agentUserId: parsed.data.agentUserId,
+        decision: parsed.data.decision,
+      });
+    } catch (error) {
+      ctx.log.warn(
+        {
+          event: EVENT_NAMES.NODE_DEVELOPER_DECISION_COMPLETE,
+          reqId: ctx.reqId,
+          routeId: ctx.routeId,
+          nodeId: id,
+          agentUserId: parsed.data.agentUserId,
+          errorCode: "access_request_transition_failed",
+          err: error instanceof Error ? error.message : String(error),
+        },
+        "node_access_request_transition_failed"
+      );
+    }
 
     logTerminal({
       outcome: "success",
