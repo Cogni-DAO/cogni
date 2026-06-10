@@ -275,8 +275,18 @@ fi
 CURRENT_ROW="caddyfile"
 caddy_tmp="$(mktemp)"
 COGNI_CATALOG_ROOT="$COGNI_CATALOG_ROOT" bash "$REPO_ROOT/scripts/ci/render-caddyfile.sh" > "$caddy_tmp"
-if ! grep -Fq "{\$${edge_key}:" "$caddy_tmp" || ! grep -Fq "host.docker.internal:${node_port}" "$caddy_tmp"; then
-  fail "rendered Caddyfile missing route for ${node_host} / host.docker.internal:${node_port}"
+# The primary node (operator) renders as the bare {$DOMAIN} block with a
+# {$<SLUG>_UPSTREAM:app:3000} default — the host.docker.internal:<port> value is
+# the per-env edge .env override, NOT the template default. Only non-primary
+# nodes bake host.docker.internal:<port> into the rendered template, so assert it
+# only for them. (The edge_key block presence covers the primary.)
+caddy_route_ok=true
+grep -Fq "{\$${edge_key}:" "$caddy_tmp" || caddy_route_ok=false
+if ! is_primary_host "$TARGET_NODE"; then
+  grep -Fq "host.docker.internal:${node_port}" "$caddy_tmp" || caddy_route_ok=false
+fi
+if ! "$caddy_route_ok"; then
+  fail "rendered Caddyfile missing route for ${node_host} (edge_key=${edge_key})"
 fi
 copy_to_remote "$caddy_tmp" "/tmp/Caddyfile.${DEPLOY_ENVIRONMENT}.${TARGET_NODE}.tmpl"
 mark_row caddyfile updated "rendered + staged Caddyfile route for ${node_host}"
