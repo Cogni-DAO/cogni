@@ -1224,8 +1224,14 @@ refresh_operator_openfga_secret() {
     fi
   done
   if [[ -z "$es_name" ]]; then
-    log_error "No operator ExternalSecret found in ${k8s_ns}; cannot deliver OpenFGA runtime IDs"
-    return 1
+    # Fresh-env benign case: no operator app has synced yet, so its ExternalSecret
+    # does not exist. The runtime IDs are already durably in OpenBao (patch above,
+    # the SSOT) — ESO will pull them into the secret on the operator's FIRST rollout.
+    # This force-refresh is only an ACCELERATION for an already-running operator, so
+    # its absence is not a failure. Returning 1 here under set -e wrongly hard-fails
+    # the whole fresh-env provision (same fresh-env coupling class as the infra-DB gap).
+    log_warn "No operator ExternalSecret in ${k8s_ns} yet (fresh env); OpenFGA runtime IDs are in OpenBao — ESO will sync them on the operator's first rollout"
+    return 0
   fi
 
   kubectl -n "$k8s_ns" annotate externalsecret "$es_name" \
