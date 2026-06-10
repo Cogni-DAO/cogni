@@ -10,4 +10,7 @@ image_repository: ghcr.io/cogni-dao/creative
 candidate_a_branch: deploy/candidate-a-creative
 preview_branch: deploy/preview-creative
 production_branch: deploy/production-creative
+# task.5017 — per-env node-set: candidate-a (flightable) + production. Not preview
+# (6 GB preview fits ~2-3 nodes; opt in here when preview is sized for it).
+envs: [candidate-a, production]
 path_prefix: nodes/creative/
