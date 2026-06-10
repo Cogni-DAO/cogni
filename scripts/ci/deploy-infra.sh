@@ -1605,6 +1605,23 @@ SECEOF
   rm -f "$SECRET_FILE"
   log_info "  Applied scheduler-worker-secrets"
 
+  # ── Knowledge-sync secret ──────────────────────────────────────────────────
+  # The DoltHub mirror reconciliation worker. DOLTGRES_URL points at the
+  # operator's knowledge DB (v0 mirrors operator only). DOLTHUB_REMOTE_URL is
+  # the push gate (MIRROR_PROD_ONLY_WRITER) — only the production secret scope
+  # grants it, so candidate-a/preview boot with the mirror disabled (healthy
+  # no-op). The push creds live in the doltgres container (install-creds.sh),
+  # never in this worker. Non-secret knobs live in the overlay ConfigMap.
+  SECRET_FILE=$(mktemp)
+  cat > "$SECRET_FILE" <<SECEOF
+DOLTGRES_URL=postgresql://postgres:${DOLTGRES_PASSWORD}@${HOST_IP}:5435/knowledge_operator?sslmode=disable
+DOLTHUB_REMOTE_URL=${DOLTHUB_REMOTE_URL:-}
+SECEOF
+  kubectl -n "${K8S_NS}" create secret generic knowledge-sync-secrets \
+    --from-env-file="$SECRET_FILE" --dry-run=client -o yaml | kubectl apply -f -
+  rm -f "$SECRET_FILE"
+  log_info "  Applied knowledge-sync-secrets"
+
   # Sandbox-openclaw secret removed — sandbox-openclaw disabled.
 
   log_info "[$(date -u +%H:%M:%S)] k8s secrets applied"

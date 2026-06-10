@@ -27,6 +27,7 @@ resources:
   - candidate-a-canary-applicationset.yaml
   - candidate-a-coulditbe-applicationset.yaml
   - candidate-a-creative-applicationset.yaml
+  - candidate-a-knowledge-sync-applicationset.yaml
   - candidate-a-node-template-applicationset.yaml
   - candidate-a-operator-applicationset.yaml
   - candidate-a-oss-applicationset.yaml
@@ -38,6 +39,7 @@ resources:
   - preview-canary-applicationset.yaml
   - preview-coulditbe-applicationset.yaml
   - preview-creative-applicationset.yaml
+  - preview-knowledge-sync-applicationset.yaml
   - preview-node-template-applicationset.yaml
   - preview-operator-applicationset.yaml
   - preview-oss-applicationset.yaml
@@ -49,6 +51,7 @@ resources:
   - production-canary-applicationset.yaml
   - production-coulditbe-applicationset.yaml
   - production-creative-applicationset.yaml
+  - production-knowledge-sync-applicationset.yaml
   - production-node-template-applicationset.yaml
   - production-operator-applicationset.yaml
   - production-oss-applicationset.yaml

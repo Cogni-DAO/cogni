@@ -727,6 +727,49 @@ services:
       start_period: 30s
 
   # =============================================================================
+  # knowledge-sync (DoltHub mirror reconciliation worker)
+  # Periodically dolt_push's the operator knowledge DB to its DoltHub remote.
+  # Mirror is gated on DOLTHUB_REMOTE_URL — unset in dev → healthy no-op.
+  # =============================================================================
+  knowledge-sync:
+    image: ${KNOWLEDGE_SYNC_IMAGE:-cogni-knowledge-sync-local}
+    build:
+      context: ../../..
+      dockerfile: services/knowledge-sync/Dockerfile
+    container_name: knowledge-sync
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    networks:
+      - internal
+    ports:
+      - "127.0.0.1:9002:9000" # Health endpoint for stack test wait-for-probes
+    environment:
+      # Operator knowledge DB. The DoltHub push creds live in the doltgres
+      # container (install-creds.sh), not here — this only triggers dolt_push.
+      - DOLTGRES_URL=${DOLTGRES_URL_OPERATOR:-postgresql://postgres:${DOLTGRES_PASSWORD:-doltgres}@doltgres:5432/knowledge_operator?sslmode=disable}
+      # Push gate. Bare passthrough: unset → mirror disabled (healthy no-op).
+      - DOLTHUB_REMOTE_URL
+      - SYNC_NODE=operator
+      - SYNC_INTERVAL_SECONDS=${KNOWLEDGE_SYNC_INTERVAL_SECONDS:-900}
+      - LOG_LEVEL=${PINO_LOG_LEVEL:-info}
+      - SERVICE_NAME=knowledge-sync
+      - HEALTH_PORT=9000
+    depends_on:
+      doltgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "require(''http'').get(''http://localhost:9000/livez'',r=>{process.exit(r.statusCode===200?0:1)}).on(''error'',()=>process.exit(1))"',
+        ]
+      interval: 10s
+      timeout: 2s
+      retries: 5
+      start_period: 30s
+
+  # =============================================================================
   # TigerBeetle (Financial Ledger)
   # Per financial-ledger-spec: double-entry ledger engine
   # Self-initializing: formats data file on first boot, then starts.
