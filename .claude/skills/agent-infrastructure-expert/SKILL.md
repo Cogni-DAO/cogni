@@ -81,9 +81,15 @@ Temporal (schedule/webhook) → GraphRunWorkflow ─HTTP─► node app /api/int
 - **Writes behind Temporal.** Graphs return recomputable decision artifacts; material/external writes live in post-graph Activities with business-key idempotency.
 - **Don't overstate the eval gate.** Nothing currently scores or blocks on graph quality. Treat "eval gate" as a roadmap item, not a control.
 
-## Known Gaps to Fix (planned, not yet done)
+## DRY, Drift & Consolidation — agent/langgraph cluster (verified 2026-06-09)
 
-- **CI/CD build dimension undocumented.** The "graph ships in app image / new graph = no worker rebuild" fact lives only here + in code/catalog. Fold one paragraph into `unified-graph-launch.md` (or the `agent-development.md` ship/run section) rather than spawning a new doc.
-- **Path drift.** `unified-graph-launch.md` → `apps/operator`; several specs → `../LANGGRAPH_SERVER.md`. Correct to `nodes/<node>/app` / `docs/spec/langgraph-server.md`.
-- **`agent-development.md` is operator-centric** (leads with shared Tier 1a, no ship/run link). Node devs should lead with node-local `packages/graphs`.
-- **Evals greenfield.** `proj.ai-evals-pipeline.md` Crawl/P0 (task.0286) is the entry point if anyone picks it up.
+This cluster is the repo's worst doc-sprawl offender. Findings are evidence-backed, not impressions. **CICD docs are out of scope and on HOLD until the pipeline is green** — no edits to `ci-cd.md` / `cd-pipeline-*` / `legacy-cicd-to-remove.md`.
+
+1. **Invariant duplication — `graph-execution.md` is SSOT; others must link, not redefine.** `GraphExecutorPort` and `AiEvent` are re-described across **all four** of graph-execution / langgraph-patterns / langgraph-server / unified-graph-launch; `PACKAGES_NO_SRC_IMPORTS` across three; `NO_LANGCHAIN_IN_SRC` across two. graph-execution already claims authority yet the others restate. → each restated invariant collapses to a one-line link.
+2. **Speculative executor specs (premature abstraction — 4 draft docs for code that doesn't exist).** `claude-sdk-adapter` (*not implemented*), `n8n-adapter` (*P2, not yet*), `multi-provider-llm` (*future*), `completions-api` (*proposed*). → collapse to one "Future Executors" stub under graph-execution until one actually ships.
+3. **`ai-evals.md` status lie + proj overlap.** `status: active` with a full evals charter (evals/ structure, golden format, CI gate) for a pipeline that is **0/8 built**; also fuses "AI Architecture" + "Evals". → roadmap content belongs to `proj.ai-evals-pipeline.md`; keep ai-evals arch-only or fold arch into graph-execution.
+4. **Path drift.** `apps/operator` (real: `nodes/<node>/app`) in `unified-graph-launch.md`, `ai-pipeline-e2e.md`, `multi-provider-llm.md`. `../LANGGRAPH_SERVER.md` (real: `docs/spec/langgraph-server.md`) in `langgraph-patterns.md`.
+5. **`agent-development.md` is operator-centric + missing ship/run.** Lead node-local `packages/graphs`; add the one Build→Ship→Run paragraph from above.
+6. **Paradigm → operator knowledge Dolt.** `agent-design.md` (KPIs/paradigm) is "why we think", not a runbook. Rule that stops the next bloom: **guide = executable runbook; paradigm = knowledge entry.**
+
+**Target shape:** ~6 core specs (graph-execution as the single invariant SSOT, + langgraph-patterns, langgraph-server, temporal-patterns, unified-graph-launch, ai-pipeline-e2e) and 3 guides (agent-development, tools-authoring, langgraph-server). Everything else links up or merges; nothing restates invariants.
