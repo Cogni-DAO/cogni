@@ -148,9 +148,19 @@ _node_gets_key() {
 # binds the node's FQDN; agent-random distinct keys mint a FRESH value per node
 # (isolation); _shared / shared:true / human keys pass through the .env value.
 _resolve_node_value() {
-  local node="$1" k="$2" existing kind source shared service db
+  local node="$1" k="$2" existing
   existing=$(bao_get_field "$node" "$k")
   if [[ -n "$existing" ]]; then printf '%s' "$existing"; return 0; fi
+  _compose_node_value "$node" "$k"
+}
+
+# Authoritative composer: build (node, key)'s value from canonical inputs,
+# IGNORING any existing OpenBao value. _resolve_node_value preserves an existing
+# value (0 churn on re-runs); secret-materialize uses THIS to overwrite a DRIFTED
+# composed DSN — e.g. a pre-#1584 DATABASE_URL still naming the legacy app_user
+# instead of the per-node app_<node> role (#1584 half-rollout self-heal).
+_compose_node_value() {
+  local node="$1" k="$2" kind source shared service db
   db="cogni_${node//-/_}"
   case "$k" in
     DATABASE_URL)
