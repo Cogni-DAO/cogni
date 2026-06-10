@@ -18,8 +18,10 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { ReactElement } from "react";
-import { resolveAppDb } from "@/bootstrap/container";
+import { resolveAppDb, resolveServiceDb } from "@/bootstrap/container";
 import { PageContainer } from "@/components";
+import { listDeveloperRequests } from "@/features/nodes/developer-requests";
+import { NodeDevelopers } from "@/features/nodes/developers/NodeDevelopers";
 import { nodeRepoUrlForSlug } from "@/features/nodes/launch-pack";
 import { NodeWizard } from "@/features/nodes/wizard/NodeWizard.client";
 import { getServerSessionUser } from "@/lib/auth/server";
@@ -84,6 +86,13 @@ export default async function NodeDashboardPage({
       ? getDaoUrl(node.chainId, node.daoAddress)
       : null;
 
+  // Owner-only Developers section, mounted once the node is handed off to an AI dev. Ownership is
+  // already proven by the scoped node read above, so the service-role request read is safe.
+  const showDevelopers = status === "published" || status === "active";
+  const developerRequests = showDevelopers
+    ? await listDeveloperRequests(resolveServiceDb(), node.id)
+    : [];
+
   return (
     <PageContainer maxWidth="3xl">
       <Link
@@ -111,6 +120,10 @@ export default async function NodeDashboardPage({
           daoUrl,
         }}
       />
+
+      {showDevelopers ? (
+        <NodeDevelopers nodeId={node.id} requests={developerRequests} />
+      ) : null}
     </PageContainer>
   );
 }
