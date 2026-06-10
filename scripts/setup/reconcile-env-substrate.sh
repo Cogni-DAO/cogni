@@ -69,9 +69,15 @@ ensure_sa() {
 # record) otherwise surfaces as a cryptic mid-run SSH timeout or 'Permission denied'. Catch
 # it up front with a diagnosis. See .claude/skills/devops-expert 'VM migration orphans deploy pointers'.
 if ! ssh $SSH_OPTS -o BatchMode=yes -o ConnectTimeout=15 "root@${VM_IP}" true 2>/tmp/_vmprobe; then
-  echo "::error::${DEPLOY_ENV}: cannot SSH root@${VM_IP} ($(tr -d '\n' </tmp/_vmprobe)). Deploy-pointer drift: the env VM was likely migrated/rebuilt without updating VM_HOST, SSH_DEPLOY_KEY, and the ${DEPLOY_ENV}.vm.cognidao.org DNS record. Verify VM_HOST resolves to the live Cherry VM for ${DEPLOY_ENV} and SSH_DEPLOY_KEY matches it." >&2
+  # Classify into a stable reason; NEVER echo the host/IP or raw ssh stderr
+  # (privacy: docs/spec/observability.md §5 — stable fields only, no secrets).
+  reason=unreachable
+  grep -qi 'permission denied' /tmp/_vmprobe && reason=auth_denied
+  rm -f /tmp/_vmprobe
+  echo "::error::${DEPLOY_ENV}: VM SSH preflight failed (reason=${reason}) — deploy-pointer drift. The ${DEPLOY_ENV} VM was likely migrated/rebuilt without re-pointing VM_HOST, SSH_DEPLOY_KEY, and the ${DEPLOY_ENV}.vm.cognidao.org DNS record. Verify VM_HOST resolves to the live Cherry VM and SSH_DEPLOY_KEY matches it. See .claude/skills/devops-expert." >&2
   exit 1
 fi
+rm -f /tmp/_vmprobe
 
 log "reconciling OpenBao substrate for env '${DEPLOY_ENV}' on ${VM_IP}"
 
