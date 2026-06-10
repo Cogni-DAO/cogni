@@ -210,6 +210,17 @@ export const serverSchema = z.object({
   LANGFUSE_SECRET_KEY: optionalString,
   LANGFUSE_BASE_URL: optionalUrl,
 
+  // Export AI-developer transcripts to Langfuse as a navigable session VIEW.
+  // ON by default (the operator's own dogfood — same Langfuse instance already
+  // receiving graph traces); set "false" to opt out (e.g. a future production
+  // posture before external-dev egress consent is formalized). Content is always
+  // scrubbed + capped; the raw corpus (Postgres) is unaffected either way.
+  // See agent-transcript-telemetry.md.
+  TRANSCRIPT_LANGFUSE_EXPORT_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
+
   // AI Telemetry - Router policy version for reproducibility
   // Per AI_SETUP_SPEC.md: semver or git SHA identifying model routing policy
   ROUTER_POLICY_VERSION: z.string().default("1.0.0"),

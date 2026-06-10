@@ -207,6 +207,11 @@ export type {
   ToolExecResult,
 } from "./tool-exec.port";
 export type {
+  TranscriptAppendResult,
+  TranscriptChunkInput,
+  TranscriptIngestPort,
+} from "./transcript-ingest.port";
+export type {
   TokenBalance,
   TreasuryReadPort,
   TreasurySnapshot,
