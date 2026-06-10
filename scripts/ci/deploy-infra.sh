@@ -996,6 +996,17 @@ fi
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 log_info "[$(date -u +%H:%M:%S)] Running DB provisioning..."
 emit_deployment_event "infra_deployment.db_provision_started" "in_progress" "Provisioning database users and schemas"
+# Shared infra DBs FIRST, decoupled from per-node creds. The litellm/openfga
+# root-owned DBs depend only on the root Postgres creds (.env) — never OpenBao,
+# never a node DB. On a fresh env the per-node loop below is fully fail-soft
+# (every node skips until its OpenBao creds materialize), so coupling infra-DB
+# creation to that loop left openfga uncreated → openfga-migrate hard-fails with
+# `database "openfga" does not exist`. This dedicated INFRA_ONLY pass guarantees
+# openfga + litellm exist before openfga-migrate regardless of node-cred state.
+log_info "  Provisioning shared infra DBs (litellm, openfga) — decoupled from per-node creds..."
+$RUNTIME_COMPOSE --profile bootstrap run --rm \
+  -e "PROVISION_INFRA_ONLY=1" \
+  db-provision
 # Per-node db-provision (#1584): provision.sh now reconciles per-node roles
 # app_<node>/service_<node> to the per-node passwords OpenBao holds at
 # cogni/<env>/<node>, and refuses a multi-node COGNI_NODE_DBS so one shared
