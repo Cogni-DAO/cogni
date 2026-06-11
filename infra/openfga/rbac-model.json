@@ -93,6 +93,11 @@
           "computedUserset": {
             "relation": "developer"
           }
+        },
+        "can_manage_secrets": {
+          "computedUserset": {
+            "relation": "developer"
+          }
         }
       },
       "metadata": {
