@@ -707,6 +707,26 @@ previous_runtime_env_value() {
 PREVIOUS_OPENFGA_AUTHORIZATION_MODEL_ID="$(previous_runtime_env_value OPENFGA_AUTHORIZATION_MODEL_ID)"
 PREVIOUS_OPENFGA_AUTHORIZATION_MODEL_HASH="$(previous_runtime_env_value OPENFGA_AUTHORIZATION_MODEL_HASH)"
 
+# OpenFGA DB password is OpenBao-custodied (Invariant 15) — it provisions the
+# openfga login role + backs the datastore DSN. Source it here, the same env-wide
+# ${DEPLOY_ENVIRONMENT}-db-reader seam the per-node loop uses (read-only k8s-auth
+# token; value never echoed), from the service's own path cogni/<env>/openfga.
+# The openfga Compose service reads it from the rendered .env below — it never
+# reads OpenBao directly. Empty (unseeded / OpenBao sealed) → provision.sh fails
+# loud at the role step; we never fall back to root.
+OPENFGA_DB_PASSWORD="$(
+  jwt="$(timeout 10 kubectl create token db-provisioner -n default 2>/dev/null || true)"
+  [ -n "$jwt" ] || exit 0
+  tok="$(timeout 10 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
+    bao write -field=token auth/kubernetes/login \
+    "role=${DEPLOY_ENVIRONMENT}-db-reader" "jwt=${jwt}" 2>/dev/null || true)"
+  [ -n "$tok" ] || exit 0
+  timeout 10 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
+    BAO_TOKEN="${tok}" bao kv get -format=json "cogni/${DEPLOY_ENVIRONMENT}/openfga" 2>/dev/null \
+    | jq -r '.data.data.OPENFGA_DB_PASSWORD // empty' 2>/dev/null || true
+)"
+export OPENFGA_DB_PASSWORD
+
 cat > "$RUNTIME_ENV" << ENV_EOF
 # Required vars
 DOMAIN=${DOMAIN}
