@@ -45,6 +45,24 @@ export {
   shapeGate,
   V0_DETERMINISTIC_GATES,
 } from "./domain/gates/index.js";
+// Goal + KPI loop seam (proj.knowledge-syntropy — goal-loop, design-only v0)
+export {
+  DEFAULT_LOOP_BUDGET,
+  type Goal,
+  GoalSchema,
+  haltEdge,
+  kpiIdFromStrategy,
+  type LoopBudget,
+  LoopBudgetSchema,
+  type LoopHaltReason,
+  LoopHaltReasonSchema,
+  loopHaltReason,
+  type LoopState,
+  LoopStateSchema,
+  METRIC_STRATEGY_PREFIX,
+  type MetricResolutionStrategy,
+  MetricResolutionStrategySchema,
+} from "./domain/goal-loop.js";
 // Domain types & schemas
 export {
   type Citation,
@@ -70,24 +88,6 @@ export {
   type SourceType,
   SourceTypeSchema,
 } from "./domain/schemas.js";
-// Goal + KPI loop seam (proj.knowledge-syntropy — goal-loop, design-only v0)
-export {
-  DEFAULT_LOOP_BUDGET,
-  type Goal,
-  GoalSchema,
-  haltEdge,
-  kpiIdFromStrategy,
-  type LoopBudget,
-  LoopBudgetSchema,
-  type LoopHaltReason,
-  LoopHaltReasonSchema,
-  loopHaltReason,
-  type LoopState,
-  LoopStateSchema,
-  METRIC_STRATEGY_PREFIX,
-  type MetricResolutionStrategy,
-  MetricResolutionStrategySchema,
-} from "./domain/goal-loop.js";
 export { createEdoCapability } from "./edo-capability.js";
 export {
   ContributionConflictError,
