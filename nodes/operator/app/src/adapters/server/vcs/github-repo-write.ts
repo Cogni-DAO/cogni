@@ -33,11 +33,11 @@ import type {
 import {
   insertAppsetKustomization,
   insertCaddyBlock,
+  insertSchedulerEndpoint,
   NODE_FORMATION_ENVS,
   nextFreeNodePort,
   renderCatalog,
   renderGitmodules,
-  insertSchedulerEndpoint,
   renderNodeAppset,
   renderNodeExternalSecret,
   renderNodeExternalSecretKustomization,
