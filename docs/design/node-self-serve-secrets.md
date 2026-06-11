@@ -121,22 +121,22 @@ work; the rest is reuse.
 
 ## Reuse map
 
-| Surface                                                                           | Verdict                       | Anchor                                                                         |
-| --------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------ |
-| OpenFGA `check` call-site (`action`/`resource`/`context`, 503-vs-403)             | **reuse verbatim**            | `vcs/flight/route.ts:206-221`                                                  |
-| `developer` grant loop (approve → `writeRelation` tuple)                          | **reuse — no new tuple/role** | `nodes/[id]/developers/route.ts:202-211`                                       |
-| `relationForAuthzAction` SSOT + immutable-model auto-roll                         | **reuse**                     | `authorization-core/src/index.ts:115`, `bootstrap-openfga.sh:141-164`          |
-| Capability/port + bootstrap factory + stub-on-non-operator                        | **reuse pattern**             | `bootstrap/capabilities/vcs.ts:61`, `operator-deploy-plane.ts:17`              |
-| `wrapRouteHandlerWithLogging` + owner-gating + Loki events                        | **reuse pattern**             | `nodes/[id]/developers/route.ts`                                               |
-| `set-secret.sh` guards (env enum, `_system` refusal, KEY regex, put-vs-patch)     | **reuse logic**               | `scripts/secrets/set-secret.sh:51-137`                                         |
-| `openBaoPathFor()` path resolution                                                | **reuse**                     | `secrets-catalog-loader.ts:327-344`                                            |
-| Per-node catalog = the allowlist                                                  | **reuse as data**             | `infra/secrets-catalog.yaml` (A2 entries)                                      |
-| ExternalSecret + Reloader closed loop (cluster-wide, opt-in, already on node-app) | **reuse — already live**      | `infra/k8s/argocd/reloader/values.yaml`, `base/node-app/deployment.yaml:15-20` |
-| **Operator-pod OpenBao machine identity**                                         | **NET-NEW**                   | —                                                                              |
-| `SecretsCapability` + `OpenBaoSecretsAdapter`                                     | **NET-NEW**                   | —                                                                              |
-| `node.manage_secrets` action + `can_manage_secrets` relation                      | **NET-NEW (tiny)**            | —                                                                              |
-| Catalog-membership + path-scope + tier guard in the write path                    | **NET-NEW**                   | —                                                                              |
-| `POST /api/v1/nodes/[id]/secrets` route                                           | **NET-NEW**                   | —                                                                              |
+| Surface                                                                                                        | Verdict                       | Anchor                                                                         |
+| -------------------------------------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------ |
+| OpenFGA `check` call-site (`action`/`resource`/`context`, 503-vs-403)                                          | **reuse verbatim**            | `vcs/flight/route.ts:206-221`                                                  |
+| `developer` grant loop (approve → `writeRelation` tuple)                                                       | **reuse — no new tuple/role** | `nodes/[id]/developers/route.ts:202-211`                                       |
+| `relationForAuthzAction` SSOT + immutable-model auto-roll                                                      | **reuse**                     | `authorization-core/src/index.ts:115`, `bootstrap-openfga.sh:141-164`          |
+| Capability/port + bootstrap factory + stub-on-non-operator                                                     | **reuse pattern**             | `bootstrap/capabilities/vcs.ts:61`, `operator-deploy-plane.ts:17`              |
+| `wrapRouteHandlerWithLogging` + owner-gating + Loki events                                                     | **reuse pattern**             | `nodes/[id]/developers/route.ts`                                               |
+| `set-secret.sh` guards (env enum, `_system` refusal, KEY regex, put-vs-patch)                                  | **reuse logic**               | `scripts/secrets/set-secret.sh:51-137`                                         |
+| `openBaoPathFor()` path resolution                                                                             | **reuse**                     | `secrets-catalog-loader.ts:327-344`                                            |
+| Per-node catalog = the allowlist                                                                               | **reuse as data**             | `infra/secrets-catalog.yaml` (A2 entries)                                      |
+| ExternalSecret + Reloader closed loop (cluster-wide, opt-in, already on node-app)                              | **reuse — already live**      | `infra/k8s/argocd/reloader/values.yaml`, `base/node-app/deployment.yaml:15-20` |
+| **Operator-pod OpenBao machine identity**                                                                      | **NET-NEW**                   | —                                                                              |
+| `SecretsCapability` + `OpenBaoSecretsAdapter`                                                                  | **NET-NEW**                   | —                                                                              |
+| `node.manage_secrets` action + `can_manage_secrets` relation                                                   | **NET-NEW (tiny)**            | —                                                                              |
+| Catalog-membership + path-scope + tier guard (build-time-codegen'd allowlist; runtime image lacks the catalog) | **NET-NEW**                   | #1479 typed-module codegen pattern                                             |
+| `POST /api/v1/nodes/[id]/secrets` route                                                                        | **NET-NEW**                   | —                                                                              |
 
 ## Phase 1 — the irreducible minimum
 
@@ -215,9 +215,12 @@ does not need (`packages-architecture.md`: packages are cross-node, ≥2 consume
   `createOperatorDeployPlane`: throws → 503 if unconfigured). No shared-node stub
   needed — non-operator nodes do not expose this route.
 - `POST /api/v1/nodes/[id]/secrets` — `wrapRouteHandlerWithLogging` + owner/authz
-  gate → allowlist guard → port. **The target node slug is taken from the
-  OpenFGA-authorized `resource`, never from the request body** (no path injection).
-  Write/rotate only; a key-name listing (`GET`) is **not** in the minimum — defer.
+  gate → allowlist guard → port. **Both path coordinates are operator-derived, never
+  caller-supplied: the node slug comes from the OpenFGA-authorized `resource` (the
+  `[id]` the check passed for) and the env from the operator pod's own
+  `serverEnv().APP_ENV`** — neither is read from the request body (no node- or
+  env-path injection). Write/rotate only; a key-name listing (`GET`) is **not** in the
+  minimum — defer.
 
 ## Security boundary — defense in depth (the #1 risk)
 
@@ -230,16 +233,39 @@ A scoping bug = cross-tenant secret write. Three independent gates, all mandator
    store today, so every check there is `authz_unavailable` → the feature is
    **candidate-a-only** until OpenFGA is provisioned on those envs (same gating as
    the OpenBao identity gap — see Open Questions).
-2. **Catalog allowlist** — resolve `<KEY>` in the granted node's catalog; require
-   `tier == "A2"` and that `openBaoPathFor()` yields exactly `cogni/<env>/<node>/<KEY>`
-   for the **granted** node slug. Refuse undeclared keys and any `B/D/E/F/G` tier.
-   (`set-secret.sh` validates `_system`/KEY-regex but **not** catalog membership —
-   that check is net-new and lives here.)
+2. **Catalog allowlist (defense-in-depth, not the floor).** Resolve `<KEY>` in the
+   granted node's A2 catalog and require `openBaoPathFor()` to yield exactly
+   `cogni/<env>/<node>/<KEY>` for the **granted** slug; refuse undeclared keys and any
+   `B/D/E/F/G` tier. (`set-secret.sh` validates `_system`/KEY-regex but **not** catalog
+   membership — that check is net-new and lives here.) **Runtime-image constraint:** the
+   operator container copies only `nodes/operator/.cogni` — **not**
+   `infra/secrets-catalog.yaml` nor `secrets-catalog-loader.ts` (verified against
+   `nodes/operator/app/Dockerfile`; same finding as the #1479 homepage showcase). So
+   this gate **must not** `fs`-read the consolidated catalog at runtime. It reads a
+   **build-time-generated typed allowlist module** bundled into the app — codegen at
+   build from `infra/secrets-catalog.yaml`'s A2 entries (the #1479 typed-module pattern)
+   — never a runtime glob, never the empty per-node `.cogni/*.yaml`. If that module is
+   absent, **fail closed** (refuse the write); never fall back to a runtime read.
+   **This gate is depth, not the security floor:** gates 1 + 3 already bound the blast
+   radius — an undeclared key can only land at `cogni/<env>/<node>/*` (the granted
+   node's own path → its own namespace/pod), so a missing or stale allowlist is
+   self-inflicted on the caller's own node, never cross-tenant.
 3. **OpenBao policy** — explicit `deny` on `_system/*` and `_shared/*` (§B), so even
    an app-layer bypass cannot touch system seed or cross-node shared values.
 
 Cross-node, shared-infra (`POSTGRES_ROOT`, `LITELLM_MASTER_KEY`, openfga/litellm
 DB creds), and CI-tier keys are unreachable by construction.
+
+**Cross-pollination is closed on both axes — node and env.** A `developer` grant is a
+single OpenFGA tuple `{user, developer, node:X}`; gate 1 checks the **exact** `node:<id>`
+from the URL, so a caller authorized on X gets 403 targeting Y. The **env** axis is closed
+by deployment topology, not a tuple: each env runs its **own** operator pod against its
+**own** OpenFGA store and self-logins with its **own** `<env>-node-secrets-writer` identity
+(OpenBao policy scoped to `cogni/data/<env>/*`). The operator stamps the env from its own
+`serverEnv().APP_ENV`, never the request body, so a candidate-a caller cannot write
+preview/prod even by forging a path. And on any env with no OpenFGA store (preview/prod
+today) **every** check is `authz_unavailable` → 503 — fail-closed by default until that
+env is provisioned. Net: an unauthorized (node, env) pair never reaches the write step.
 
 > **Per-node isolation is tuple-based, not token-based.** A `developer` grant on
 > node X confers `can_manage_secrets` on **X only** (OpenFGA tuple
@@ -319,6 +345,9 @@ don't assume complete Loki rotation history until it closes).
       even `openbao-operator` today — `bug.5007`). Candidate-a first.
 - [ ] Confirm `audience: cogni-openbao` matches OpenBao's `bound_audiences` on the
       k8s auth backend before wiring the projected token.
-- [ ] Per-node catalog files are empty today (A2 entries consolidated in
-      `infra/secrets-catalog.yaml`); the allowlist check must read the consolidated
-      catalog, not assume `nodes/<node>/.cogni/secrets-catalog.yaml` exists.
+- [x] Allowlist source resolved: A2 entries live in `infra/secrets-catalog.yaml`
+      (per-node `.cogni/*.yaml` empty today) **and** the operator runtime image carries
+      neither that file nor the loader — so gate 2 reads a **build-time-generated typed
+      allowlist module** (codegen at build from the consolidated catalog's A2 entries,
+      #1479 pattern), failing closed if absent. Never a runtime `fs` read. See
+      §Security boundary gate 2.
