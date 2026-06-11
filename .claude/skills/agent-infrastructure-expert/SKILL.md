@@ -43,4 +43,3 @@ Temporal (schedule/webhook) → GraphRunWorkflow ─HTTP─► node app /api/int
 - **Writes behind Temporal.** Graphs return recomputable decision artifacts; material/external writes live in post-graph Activities with business-key idempotency.
 - **`graph-execution.md` is the invariant SSOT.** Other specs link to it; they must not restate `GraphExecutorPort` / `AiEvent` / `PACKAGES_NO_SRC_IMPORTS` definitions.
 - **Don't overstate the eval gate.** Nothing currently scores or blocks on graph quality. Treat "eval gate" as roadmap, not a control.
-- **CICD docs are HELD until the pipeline is green.** No consolidation edits to `ci-cd.md` / `cd-pipeline-*` / `legacy-cicd-to-remove.md`.

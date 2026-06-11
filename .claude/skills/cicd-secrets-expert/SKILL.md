@@ -164,6 +164,12 @@ No-human-secret done right: agent generates, agent pushes, **zero human, self-he
 
 **Heal-proof test** = redeploy twice; a PR on the test repo must still post a `cogni-git-review` review.
 
+## Substrate gotchas — OpenFGA + the deploy-infra read seam
+
+- **OpenFGA is a first-class per-env substrate.** Sole authz authority, deny-by-default; store/model + `OPENFGA_*` config operator-provisioned, DB password OpenBao-custodied (Inv 15) at `cogni/<env>/openfga`. Authz model + tuples → [`rbac-expert`](../rbac-expert/SKILL.md); product shape → [`node-baas-architecture.md`](../../../docs/spec/node-baas-architecture.md).
+- **`deploy-infra.sh` runs on the runner (SSH key only, no kubeconfig) — cluster/OpenBao access MUST go through the SSH-to-VM seam.** A bare runner `kubectl exec -n openbao` silently empties → fail-loud downstream. `reconcile-node-substrate.sh::bao_get_field` (`remote()`) is the reference seam.
+- **DB superuser/role creds are OpenBao-owned (Inv 15) — never GH-`.env`-rendered.** deploy-infra rendering a root password drifts from the live DB → `28P01`. One SSOT: OpenBao.
+
 ## Anti-patterns — instant reject
 
 - Human typing a secret VALUE into a production UI or GitHub workflow input. See killer rule.
