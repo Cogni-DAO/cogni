@@ -1,7 +1,7 @@
 ---
 id: design.node-wizard-formation-wiring
 type: design
-title: "Graph-Execution Routing as a Per-Node Substrate (registry-driven, aligned with OpenFGA)"
+title: "Born-green Temporal routing — node_id projection + is_built_by_this_repo lift"
 status: draft
 created: 2026-06-10
 skills:
@@ -15,106 +15,86 @@ related:
   - ../../work/handoffs/manual-edits-ledger.node-wizard-2026-06-10.md
 ---
 
-# Graph-Execution Routing as a Per-Node Substrate
+# Born-green Temporal Routing
 
 ## Outcome
 
-Success is when **a wizard-spawned node's Temporal worker routing is provisioned as
-substrate, read from shared per-node membership data** — so `chat/completions` works
-on candidate-a / preview / production with **zero hand-edits**, and the scheduler-worker
-learns its node set the same way OpenFGA learns its `node:` objects.
+A wizard-spawned **submodule** node is born with its scheduler-worker Temporal
+routing — so `chat/completions` works on candidate-a / preview / production with
+**zero hand-edits**. (Graph routing is the node-baas **Graphs** substrate, peer of
+OpenFGA's **Authorization** row, #1613.)
 
-## Framing (node-baas substrate, aligned with #1613)
+## Root cause (the load-bearing correction)
 
-[`node-baas-architecture.md`](../spec/node-baas-architecture.md) §BaaS Substrate Map:
-**Graphs** = managed substrate — operator provides "execution host, **routing**,
-observability." The scheduler-worker polling `scheduler-tasks-<node_id>` **is** that
-routing. This is the peer of the **Authorization** row #1613 adds for OpenFGA.
+`is_built_by_this_repo` — a **build-target** filter — was wrongly gating the
+**routing** CSVs (`node_internal_service_endpoint_csv` + `node_billing_endpoint_csv`,
+`image-tags.sh`). It `continue`d past every submodule node, so the scheduler-worker
+never learned their `scheduler-tasks-<node_id>` queues (chat hangs) **and** billing
+lost their attribution endpoint. The drift gate stayed green because the rendered
+CSV and the configmap both excluded them. Proven on candidate-a: oss returned a
+haiku only after the endpoint was hand-added (ledger row 12).
 
-The two designs must wire per-node-ness the **same way**. #1613's load-bearing shape:
+## Approach (as-built)
 
-> Shared substrate, owned by no node. **One env-shared store; per-node identity is
-> `node:` objects (data) in that store** — never a per-node-provisioned server.
+1. **Lift `is_built_by_this_repo` from the routing CSVs** — they now enumerate
+   **every** catalog `type:node`. The filter stays in build-target selection, where
+   "what does THIS repo build" belongs.
+2. **node_id projection onto submodule rows only.** A submodule node's `node_id`
+   lives in its minted repo-spec, unreadable from the parent at render time. So the
+   catalog carries a `node_id` PROJECTION on submodule rows (`source_repo` set);
+   in-repo rows keep reading the repo-spec (schema **forbids** `node_id` there).
+   `image-tags.sh` resolves submodule `node_id` from the catalog, in-repo from the
+   repo-spec. `REPO_SPEC_IS_IDENTITY_SSOT` holds — repo-spec is the authority; the
+   catalog field is a verified mirror, also consumed for **billing**.
+3. **Hard CI drift gate** (`render-scheduler-worker-endpoints.sh --check`):
+   initialises each submodule and asserts `catalog.node_id == repo-spec.node_id`
+   (repo-spec wins on mismatch) — the projection can never silently fork the identity.
+4. **The mint self-projects + self-splices.** `gens/catalog.ts` emits `node_id` for
+   the minted submodule node; `github-repo-write.ts` splices the endpoint into the
+   base configmap via `insertSchedulerEndpoint` (the `:1184` "until the projection
+   lands" skip is now resolved). Every future spawn's formation PR is drift-clean +
+   born-green.
 
-So the corrected Temporal design follows the same rule: **per-node membership is
-DATA the shared worker reads — not a per-node infra reconcile of a configmap.**
+## Alignment with #1613 / #1607
 
-## What was wrong, what's right
+- **Graphs substrate** (this) is the peer of **Authorization** (#1613): both shared,
+  operator-provisioned, owned-by-no-node; identity stays in repo-spec/SSOT and
+  per-node membership is read as data.
+- **#1607** added the catalog `envs:` per-node field; this adds `node_id` — same
+  catalog-as-per-node-metadata direction. Temporal keeps per-node **queues** for
+  failure isolation (task.0280), unlike OpenFGA's single graph — a data-shape
+  choice, not a wiring divergence.
 
-- ❌ **First drafts** (catalog `node_id` projection; then `reconcile-node-substrate.sh`
-  mutating a provision-owned configmap) were both **per-node infra wiring** — exactly
-  the bespoke-per-node pattern #1613 retires.
-- ✅ **Right:** the scheduler-worker **discovers its node set from shared per-node
-  membership data** (the node registry), exactly as OpenFGA reads `node:` objects
-  from its shared store. Membership is data; the worker is a stateless reader.
+## Endgame (deferred, demand-gated like #1613)
 
-Identity is untouched: `repo-spec.yaml` stays the `node_id`/on-chain SSOT, already
-consumed for **billing attribution**; the membership record carries the resolved
-`node_id` so the worker never reads across a submodule boundary. (Temporal keeps
-per-node **queues** for failure isolation — task.0280 — vs OpenFGA's single graph;
-that is a data-shape choice, not a wiring divergence.)
-
-## The convergence — one per-node membership SSOT
-
-Today "which nodes does X serve" is answered three disconnected ways:
-
-| Plane | Source today | Should read |
-| --- | --- | --- |
-| Deploy (AppSets) | catalog `envs:` (#1607) | membership SSOT |
-| Authz (OpenFGA) | `_shared` fan + `node:` objects (#1613) | membership SSOT |
-| Graph routing (this) | `COGNI_NODE_ENDPOINTS` configmap | membership SSOT |
-
-**Converge on one per-node membership SSOT: the node registry** (`nodes` table,
-task.5083) as the **runtime projection** of the provisioned set — populated from
-catalog `envs:` (which nodes per env) + repo-spec (`node_id`/URL) at
-provision/registration. All three substrates then read the *same* truth. This is a
-cross-cutting decision to settle once with dev2 (#1607) + fga-dev (#1613), not a
-third bespoke list.
-
-## Staged plan (demand-gated, like #1613)
-
-- **Stage 1 — membership becomes data.** Scheduler-worker reads its node set from the
-  membership SSOT (operator-owned API/projection over the `nodes` registry) at boot +
-  on a refresh interval, replacing the catalog-rendered `COGNI_NODE_ENDPOINTS`. **Retire**
-  `render-scheduler-worker-endpoints.sh` + the drift gate — the whole drift class goes.
-  Keep the mint's skip (`github-repo-write.ts:1184`) — correct; routing isn't formation git.
-- **Stage 2 — dynamic lifecycle (endgame).** Worker starts/stops a per-node worker as
-  membership changes and scales concurrency by per-node queue depth. "Wired" =
-  "registered." Demand-gated on >1 active node beyond operator (same trigger #1613 uses
-  for its Argo move).
-
-## Rejected
-
-- **Catalog `node_id` projection / configmap reconcile (this design's own earlier
-  drafts):** per-node infra wiring; diverges from #1613's "membership is data" rule.
-- **Mint-time endpoint splice:** mint can't read submodule `node_id` at PR-gen and
-  shouldn't — routing isn't formation git.
-- **A third bespoke per-node list:** the explicit anti-goal; converge on the registry.
+Converge all three per-node-membership readers (deploy `envs:`, authz `node:`
+objects, graph routing) onto **one membership SSOT** — the node registry (`nodes`
+table, task.5083) as the runtime projection — and have the scheduler-worker
+**dynamically discover + scale** per-node workers from it. The projection above is
+the static, git-time increment that makes spawns born-green today without the
+runtime-registry dependency.
 
 ## Invariants (review criteria)
 
-- [ ] REPO_SPEC_IS_IDENTITY_SSOT: unchanged; reconciler/registry *reads* `node_id`,
-      never re-declares identity (spec: node-baas)
-- [ ] MEMBERSHIP_IS_DATA: per-node membership is shared data the worker reads, not a
-      per-node infra mutation — same shape as OpenFGA `node:` objects (#1613)
-- [ ] ONE_MEMBERSHIP_SSOT: graph routing, authz, and deploy read one per-node
-      membership source (the registry); no new bespoke list
-- [ ] NO_SILENT_DROP: a node present in the membership SSOT but absent from the worker
-      (or vice-versa) fails loud
+- [ ] REPO_SPEC_IS_IDENTITY_SSOT: identity stays in repo-spec; catalog `node_id` is a
+      drift-gated projection on submodule rows only (verify-scheduler-endpoints)
+- [ ] ROUTING_NOT_BUILD: `is_built_by_this_repo` gates build selection only, never
+      routing/billing CSVs
+- [ ] NO_SILENT_DROP: a `type:node` with unresolvable `node_id` fails the CSV + gate
 - [ ] BORN_GREEN: a flighted spawn reaches `chat/completions` with zero hand-edits
-- [ ] SIMPLE_SOLUTION: net-deletes the catalog-render + drift-gate; reuses the registry
+- [ ] SIMPLE_SOLUTION: reuses the existing generator + drift-gate; one catalog field
 
-## Files (Stage 1)
+## Files (implemented)
 
-- Modify: `services/scheduler-worker/*` — read node set from the membership SSOT (API/projection) at boot + refresh; drop the configmap dependency
-- Add: operator membership projection/endpoint over the `nodes` registry (slug, node_id, internal URL) — the shared source the worker + OpenFGA read
-- Remove: `scripts/ci/render-scheduler-worker-endpoints.sh` drift gate + catalog-rendered `COGNI_NODE_ENDPOINTS` base configmap
-- Keep: `github-repo-write.ts:1184` skip
-- Test: registry has node X → worker polls `scheduler-tasks-<node_id>`; registry empty → worker idles; no git/catalog edit anywhere in the path
+- `scripts/ci/lib/image-tags.sh` — lift `is_built_by_this_repo` from both routing CSVs; resolve submodule `node_id` from the catalog projection
+- `scripts/ci/render-scheduler-worker-endpoints.sh` — `verify_projection` hard gate (catalog == repo-spec)
+- `infra/catalog/_schema.json` — `node_id` allowed on submodule rows (source_repo), forbidden on in-repo
+- `infra/catalog/{ayo,coulditbe,creative,node-template,oss,pandora,please}.yaml` — backfill `node_id`
+- `infra/k8s/base/scheduler-worker/configmap.yaml` — regenerated (all 10 nodes)
+- `nodes/operator/app/src/shared/node-app-scaffold/gens/catalog.ts` — emit `node_id`
+- `nodes/operator/app/src/adapters/server/vcs/github-repo-write.ts` — thread `nodeId` + splice endpoint (resolve the `:1184` skip)
 
 ## E2E validation signal
 
-Re-flight oss with **no manual scheduler edit** → the registry carries oss (from its
-provisioned membership) → the worker polls oss's queue → `chat/completions` returns a
-completion. Cross-check: OpenFGA's `node:oss` object resolves from the same membership.
-Repeat on preview (born-correct #1584).
+Re-flight oss with **no manual scheduler edit** → catalog projection feeds the
+configmap → worker polls oss's queue → `chat/completions` returns a completion.
