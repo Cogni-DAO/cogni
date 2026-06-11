@@ -226,14 +226,6 @@ else
     SSH_OPTS="-o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=12"
 fi
 
-# OpenBao reads/writes run kubectl ON THE VM (in-cluster) via SSH — this script runs
-# on the GitHub runner, which has NO kubeconfig (only the SSH key). Bare runner
-# `kubectl exec -n openbao` silently empties → openfga/doltgres reads returned blank
-# and deploy-infra never completed on prod. Mirrors the proven SSH seam in
-# reconcile-node-substrate.sh::bao_get_field (which is why node-substrate passed).
-# Inside vm "...": escape \$var to expand on the VM; ${LOCAL} expands here first.
-vm() { ssh $SSH_OPTS root@"$VM_HOST" "$@"; }
-
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Validate environment
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -489,6 +481,14 @@ cat > "$ARTIFACT_DIR/deploy-infra-remote.sh" << 'EOF'
 
 set -euo pipefail
 
+# This script runs ON THE VM (scp'd here by deploy-infra.sh). `vm "<cmd>"` executes
+# <cmd> LOCALLY on this host — kubectl/bao are in-cluster (k3s on this VM), so the
+# OpenBao read/write blocks below need no SSH. An earlier rev defined vm() as an
+# ssh-to-VM helper OUTSIDE this heredoc, so on the VM `vm` was command-not-found and
+# every read emptied silently (|| true), poisoning OPENFGA_DB_PASSWORD/.env and
+# deadlocking the promote. This shim is the fix.
+vm() { bash -c "$1"; }
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Error capture: Show exactly what failed (line number + command)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -730,9 +730,9 @@ OPENFGA_DB_PASSWORD="$(
       bao write -field=token auth/kubernetes/login role='${DEPLOY_ENVIRONMENT}-db-reader' jwt=\"\$jwt\" 2>/dev/null) || exit 0
     [ -n \"\$tok\" ] || exit 0
     kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
-      BAO_TOKEN=\"\$tok\" bao kv get -format=json 'cogni/${DEPLOY_ENVIRONMENT}/openfga' 2>/dev/null" \
-    | jq -r '.data.data.OPENFGA_DB_PASSWORD // empty' 2>/dev/null || true
+      BAO_TOKEN=\"\$tok\" bao kv get -field=OPENFGA_DB_PASSWORD 'cogni/${DEPLOY_ENVIRONMENT}/openfga' 2>/dev/null" || true
 )"
+[ -n "$OPENFGA_DB_PASSWORD" ] || log_warn "OPENFGA_DB_PASSWORD read EMPTY from cogni/${DEPLOY_ENVIRONMENT}/openfga (db-reader via in-cluster SSH) — openfga db-provision will fail loud; check db-provisioner SA / ${DEPLOY_ENVIRONMENT}-db-reader role / openbao seal"
 export OPENFGA_DB_PASSWORD
 
 cat > "$RUNTIME_ENV" << ENV_EOF
@@ -898,8 +898,7 @@ DOLTGRES_PASSWORD_SSOT="$(
       bao write -field=token auth/kubernetes/login role='${DEPLOY_ENVIRONMENT}-db-reader' jwt=\"\$jwt\" 2>/dev/null) || exit 0
     [ -n \"\$tok\" ] || exit 0
     kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
-      BAO_TOKEN=\"\$tok\" bao kv get -format=json 'cogni/${DEPLOY_ENVIRONMENT}/operator' 2>/dev/null" \
-    | jq -r '.data.data.DOLTGRES_PASSWORD // empty' 2>/dev/null || true
+      BAO_TOKEN=\"\$tok\" bao kv get -field=DOLTGRES_PASSWORD 'cogni/${DEPLOY_ENVIRONMENT}/operator' 2>/dev/null" || true
 )"
 if [ -n "$DOLTGRES_PASSWORD_SSOT" ]; then
   DOLTGRES_PASSWORD="$DOLTGRES_PASSWORD_SSOT"
