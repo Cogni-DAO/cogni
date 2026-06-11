@@ -354,9 +354,13 @@ remote "set -euo pipefail
   fi
   rm -f \"\$runtime_env.bak\"
 
-  if \"\${edge_compose[@]}\" ps -q caddy >/dev/null 2>&1; then
-    \"\${edge_compose[@]}\" up -d --force-recreate caddy >/dev/null
-  fi
+  # Born-reachable: the new node's edge route must land during the app-flight,
+  # WITHOUT a separate (slow) flight-infra. force-recreate re-reads the edge .env
+  # (the just-written \$${edge_key}=${edge_value} upstream) and re-templates the
+  # Caddyfile.tmpl — a single ~5s caddy-container cutover, started if down. The
+  # old 'if ps -q caddy' gate silently skipped the reload when caddy wasn't
+  # detected, leaving a born node Healthy + DNS-resolving but edge-unreachable (000).
+  \"\${edge_compose[@]}\" up -d --force-recreate caddy >/dev/null
   \"\${runtime_compose[@]}\" up -d postgres >/dev/null
   # Single-node db-provision: override COGNI_NODE_DBS to THIS node and inject its
   # per-node OpenBao passwords (read above) via -e, so provision.sh reconciles the
