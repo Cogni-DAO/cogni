@@ -269,6 +269,20 @@ app_db_service_password="$(bao_get_field "$TARGET_NODE" APP_DB_SERVICE_PASSWORD)
   || fail "per-node DB creds absent at cogni/${DEPLOY_ENVIRONMENT}/${TARGET_NODE} — run secret-materialize first (it owns per-node APP_DB_PASSWORD/APP_DB_SERVICE_PASSWORD)"
 mark_row db_creds read "read per-node DB creds from OpenBao (key names only)"
 
+# Doltgres superuser password — the OpenBao-custodied SSOT at the canonical operator
+# path (cogni/<env>/operator/DOLTGRES_PASSWORD). The superuser is shared env-wide
+# (one server, every node's knowledge_<node> DB), so operator holds the single
+# authoritative value and all consumers read it there — mirrors the #1613
+# OPENFGA_DB_PASSWORD pattern. It is immutable post-init (Doltgres 0.56.3 cannot
+# ALTER it — databases.md §5.2); a restored/rotated volume is reconciled to the live
+# value via `pnpm secrets:set <env> operator DOLTGRES_PASSWORD` (secrets-rotate.md),
+# never re-derived. Passed to doltgres-provision so it connects as the live superuser.
+# Fail-loud if the SSOT is empty — never silently fall back to a poisoned VM .env.
+doltgres_superuser_password="$(bao_get_field operator DOLTGRES_PASSWORD)"
+[[ -n "$doltgres_superuser_password" ]] \
+  || fail "doltgres superuser SSOT absent at cogni/${DEPLOY_ENVIRONMENT}/operator/DOLTGRES_PASSWORD — run secret-materialize, or seed/reconcile it via 'pnpm secrets:set ${DEPLOY_ENVIRONMENT} operator DOLTGRES_PASSWORD' (never fall back to a derived/.env value)"
+dg_pw_env="-e DOLTGRES_PASSWORD='${doltgres_superuser_password}'"
+
 # DSN seeding removed: secret-materialize composes + writes the per-node DSNs
 # (DATABASE_URL/DATABASE_SERVICE_URL/DOLTGRES_URL) to cogni/<env>/<node>. This phase
 # holds a read-only db-reader token and performs zero OpenBao writes — it consumes
@@ -356,7 +370,7 @@ remote "set -euo pipefail
     db-provision >/dev/null
   if \"\${runtime_compose[@]}\" config --services 2>/dev/null | grep -q '^doltgres$'; then
     \"\${runtime_compose[@]}\" up -d doltgres >/dev/null
-    \"\${runtime_compose[@]}\" --profile bootstrap run --rm doltgres-provision >/dev/null
+    \"\${runtime_compose[@]}\" --profile bootstrap run --rm ${dg_pw_env} doltgres-provision >/dev/null
   fi"
 
 mark_row remote_reconcile updated "edge route, DB inventory, and DB provisioners reconciled on VM"

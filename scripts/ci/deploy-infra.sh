@@ -871,9 +871,34 @@ APP_DB_READONLY_PASSWORD="${APP_DB_READONLY_PASSWORD:-$(derive_secret postgres-r
 printf '%s=%s\n' APP_DB_READONLY_USER "$APP_DB_READONLY_USER" >> "$RUNTIME_ENV"
 printf '%s=%s\n' APP_DB_READONLY_PASSWORD "$APP_DB_READONLY_PASSWORD" >> "$RUNTIME_ENV"
 
-# Doltgres has weak GRANT support so roles are near-permissive today; derived
-# secrets are still a least-privilege improvement over a shared root pw.
-DOLTGRES_PASSWORD="${DOLTGRES_PASSWORD:-$(derive_secret doltgres-root)}"
+# Doltgres superuser password — OpenBao-custodied SSOT at the canonical operator
+# path (cogni/<env>/operator/DOLTGRES_PASSWORD). Shared env-wide (one server, every
+# node's knowledge_<node> DB), immutable post-init (Doltgres 0.56.3 can't ALTER it;
+# databases.md §5.2). Source it via the same ${DEPLOY_ENVIRONMENT}-db-reader seam as
+# OPENFGA_DB_PASSWORD above so the rendered VM .env carries the LIVE value, not a
+# re-derived one that drifts after a volume restore / root-cred rotation (the
+# 2026-06-10 prod node-substrate 28P01). A drifted volume is reconciled via
+# `pnpm secrets:set <env> operator DOLTGRES_PASSWORD` (secrets-rotate.md), never
+# re-derived. derive_secret survives ONLY as the genesis default for a fresh volume
+# OpenBao has not seeded yet (first provision, pre-materialize). The reader/writer
+# roles are CREATEd fresh each provision (ALTERable, not the superuser) — left derived.
+DOLTGRES_PASSWORD_SSOT="$(
+  jwt="$(timeout 10 kubectl create token db-provisioner -n default 2>/dev/null || true)"
+  [ -n "$jwt" ] || exit 0
+  tok="$(timeout 10 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
+    bao write -field=token auth/kubernetes/login \
+    "role=${DEPLOY_ENVIRONMENT}-db-reader" "jwt=${jwt}" 2>/dev/null || true)"
+  [ -n "$tok" ] || exit 0
+  timeout 10 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
+    BAO_TOKEN="${tok}" bao kv get -format=json "cogni/${DEPLOY_ENVIRONMENT}/operator" 2>/dev/null \
+    | jq -r '.data.data.DOLTGRES_PASSWORD // empty' 2>/dev/null || true
+)"
+if [ -n "$DOLTGRES_PASSWORD_SSOT" ]; then
+  DOLTGRES_PASSWORD="$DOLTGRES_PASSWORD_SSOT"
+else
+  log_warn "Doltgres superuser SSOT empty at cogni/${DEPLOY_ENVIRONMENT}/operator/DOLTGRES_PASSWORD — using genesis derive (valid only for a fresh volume; reconcile via 'pnpm secrets:set ${DEPLOY_ENVIRONMENT} operator DOLTGRES_PASSWORD' if the volume already exists)"
+  DOLTGRES_PASSWORD="${DOLTGRES_PASSWORD:-$(derive_secret doltgres-root)}"
+fi
 DOLTGRES_READER_PASSWORD="${DOLTGRES_READER_PASSWORD:-$(derive_secret doltgres-reader)}"
 DOLTGRES_WRITER_PASSWORD="${DOLTGRES_WRITER_PASSWORD:-$(derive_secret doltgres-writer)}"
 printf '%s=%s\n' DOLTGRES_PASSWORD "$DOLTGRES_PASSWORD" >> "$RUNTIME_ENV"
@@ -1083,13 +1108,18 @@ $RUNTIME_COMPOSE --profile bootstrap run --rm openfga-migrate
 # runs before the poly Deployment syncs. Same pattern as the Postgres
 # migrator Job (infra/k8s/base/node-app/migration-job.yaml).
 # Guarded on compose presence — tolerates envs where doltgres is not in the compose file.
+# DOLTGRES_PASSWORD was resolved from the operator-canonical OpenBao SSOT above (the
+# same value rendered into RUNTIME_ENV), so the provisioner connects as the live
+# superuser — no late sed-parse of DOLTGRES_URL, no derived-vs-live reconciliation here.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 if $RUNTIME_COMPOSE config --services 2>/dev/null | grep -q '^doltgres$'; then
   log_info "[$(date -u +%H:%M:%S)] Bringing up doltgres..."
   $RUNTIME_COMPOSE up -d doltgres
 
   log_info "[$(date -u +%H:%M:%S)] Provisioning Doltgres DBs + roles..."
-  $RUNTIME_COMPOSE --profile bootstrap run --rm doltgres-provision
+  $RUNTIME_COMPOSE --profile bootstrap run --rm \
+    -e DOLTGRES_PASSWORD="$DOLTGRES_PASSWORD" \
+    doltgres-provision
 
   log_info "[$(date -u +%H:%M:%S)] Doltgres up + DBs provisioned. Schema migration runs as k8s PreSync Job."
 else

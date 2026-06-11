@@ -66,6 +66,9 @@ put_secret node-template BILLING_INGEST_TOKEN existing-billing
 # hands them to db-provision. Distinct sentinels so the leak checks below are real.
 put_secret canary APP_DB_PASSWORD pernode-app-pw-sentinel
 put_secret canary APP_DB_SERVICE_PASSWORD pernode-svc-pw-sentinel
+# Doltgres superuser SSOT is operator-canonical (cogni/<env>/operator/DOLTGRES_PASSWORD),
+# shared env-wide; reconcile reads it from operator and injects it into doltgres-provision.
+put_secret operator DOLTGRES_PASSWORD doltgres-super-sentinel
 
 cat > "$FAKEBIN/ssh" <<'EOF'
 #!/usr/bin/env bash
@@ -220,11 +223,13 @@ grep -q 'COGNI_NODE_DBS=cogni_operator,cogni_canary' "$REMOTE_ROOT/opt/cogni-tem
 # per-node OpenBao passwords injected via -e (provision.sh computes app_<node>).
 grep -q -- '-e COGNI_NODE_DBS=cogni_canary' "$REMOTE_ROOT/docker.log"
 grep -qE -- '--profile bootstrap run --rm .* db-provision' "$REMOTE_ROOT/docker.log"
-grep -q -- '--profile bootstrap run --rm doltgres-provision' "$REMOTE_ROOT/docker.log"
+# doltgres-provision gets the operator-canonical superuser injected via -e (fail-loud
+# if absent; never the poisoned VM .env value).
+grep -qE -- '--profile bootstrap run --rm -e DOLTGRES_PASSWORD=.* doltgres-provision' "$REMOTE_ROOT/docker.log"
 
-# Per-node DB passwords transit the VM-local SSH/docker env (by design), but must
-# NEVER reach CI stdout. The db-reader token must not leak either.
-if grep -q 'sk-or-existing\|pernode-app-pw-sentinel\|pernode-svc-pw-sentinel\|dolt-token\|writer-token' "$TMPROOT/out.txt"; then
+# Per-node DB passwords + the doltgres superuser transit the VM-local SSH/docker env
+# (by design), but must NEVER reach CI stdout. The db-reader token must not leak either.
+if grep -q 'sk-or-existing\|pernode-app-pw-sentinel\|pernode-svc-pw-sentinel\|doltgres-super-sentinel\|dolt-token\|writer-token' "$TMPROOT/out.txt"; then
   echo "secret value leaked to output" >&2
   exit 1
 fi
