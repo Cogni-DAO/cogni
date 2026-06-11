@@ -224,10 +224,13 @@ DSN_DEFER_KEYS=" "
 #
 # DOLTGRES_URL is deliberately EXCLUDED: its password is the env Doltgres SUPERUSER
 # (immutable post-init — Doltgres 0.56.3 can't ALTER it; databases.md §5.2), NOT a
-# per-node app role, so it is not a #1584 victim. Authoritatively recomposing it from
-# the derived DOLTGRES_PASSWORD clobbers the live superuser on any env whose Doltgres
-# was initialized before the current derivation (candidate-a drift) → 28P01. That
-# derived-vs-live reconciliation is the separate Doltgres-reinit lane, not this fix.
+# per-node app role, so it is not a #1584 victim. The superuser is the operator-
+# canonical stored SSOT (cogni/<env>/operator/DOLTGRES_PASSWORD); a drifted volume is
+# reconciled by writing that one field (`pnpm secrets:set <env> operator
+# DOLTGRES_PASSWORD`; secrets-rotate.md), after which every node's DOLTGRES_URL
+# recomposes from it on the next materialize. Recompose stays write-once here so an
+# unreconciled field can't clobber a healthy per-node URL mid-flight (the 2026-06-10
+# prod 28P01 was a re-derive, not a recompose).
 COMPOSED_DSN_KEYS=" DATABASE_URL DATABASE_SERVICE_URL "
 
 # Transitional shared/human inheritance — the blind ancestor scan the north star

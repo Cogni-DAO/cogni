@@ -141,11 +141,12 @@ grep -q '://app_canary:' "$BAO_ROOT/cogni/candidate-a/canary/DATABASE_URL" \
   || { echo "DATABASE_URL must embed per-node role app_canary, not shared app_user" >&2; exit 1; }
 grep -q '://service_canary:' "$BAO_ROOT/cogni/candidate-a/canary/DATABASE_SERVICE_URL" \
   || { echo "DATABASE_SERVICE_URL must embed per-node role service_canary" >&2; exit 1; }
-# Doltgres half of the cutover: the env superuser password is materialized per-node
-# (DOLTGRES_PASSWORD, derived from POSTGRES_ROOT_PASSWORD) and DOLTGRES_URL is composed
-# sole-source here from it. The pod reaches its own knowledge_<node> DB as the
-# `postgres` superuser — Doltgres 0.56.3 RBAC is table-DML-only (databases.md §5.2),
-# so a per-node role is not yet possible.
+# Doltgres half of the cutover: the env superuser is the operator-canonical SSOT
+# (cogni/<env>/operator/DOLTGRES_PASSWORD); with operator unseeded in this isolated
+# materialize the composer falls back to the deterministic genesis derive, and
+# DOLTGRES_URL is composed sole-source from it (non-empty superuser pw). The pod
+# reaches its own knowledge_<node> DB as the `postgres` superuser — Doltgres 0.56.3
+# RBAC is table-DML-only (databases.md §5.2), so a per-node role is not yet possible.
 test -f "$BAO_ROOT/cogni/candidate-a/canary/DOLTGRES_PASSWORD" \
   || { echo "materialize did not materialize per-node DOLTGRES_PASSWORD" >&2; exit 1; }
 test -f "$BAO_ROOT/cogni/candidate-a/canary/DOLTGRES_URL" \

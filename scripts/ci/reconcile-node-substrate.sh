@@ -269,24 +269,19 @@ app_db_service_password="$(bao_get_field "$TARGET_NODE" APP_DB_SERVICE_PASSWORD)
   || fail "per-node DB creds absent at cogni/${DEPLOY_ENVIRONMENT}/${TARGET_NODE} — run secret-materialize first (it owns per-node APP_DB_PASSWORD/APP_DB_SERVICE_PASSWORD)"
 mark_row db_creds read "read per-node DB creds from OpenBao (key names only)"
 
-# Doltgres superuser password — sourced from the authoritative OpenBao SSOT
-# (DOLTGRES_URL, the #1610 recompose-excluded value the live volume + running apps
-# already use). The Doltgres superuser is shared across all nodes, so read it from
-# the primary (operator) whose URL tracks the live volume; per-node URLs can diverge
-# (recomposed to a new derived value). Fall back to this node on non-operator-primary
-# envs. Passed to doltgres-provision below so it connects with the live volume's
-# password instead of a possibly-drifted derived value (prod node-substrate 28P01'd
-# here on 2026-06-10). Empty on fresh envs → provisioner falls back to the VM .env
-# DOLTGRES_PASSWORD. Non-destructive: never re-keys the volume, never ALTERs.
-doltgres_url="$(bao_get_field operator DOLTGRES_URL)"
-[[ -n "$doltgres_url" ]] || doltgres_url="$(bao_get_field "$TARGET_NODE" DOLTGRES_URL)"
-doltgres_superuser_password=""
-if [[ -n "$doltgres_url" ]]; then
-  doltgres_superuser_password="$(printf '%s' "$doltgres_url" | sed -E 's#^postgresql://[^:]+:([^@]+)@.*#\1#')"
-  [[ "$doltgres_superuser_password" == "$doltgres_url" ]] && doltgres_superuser_password=""
-fi
-dg_pw_env=""
-[[ -n "$doltgres_superuser_password" ]] && dg_pw_env="-e DOLTGRES_PASSWORD='${doltgres_superuser_password}'"
+# Doltgres superuser password — the OpenBao-custodied SSOT at the canonical operator
+# path (cogni/<env>/operator/DOLTGRES_PASSWORD). The superuser is shared env-wide
+# (one server, every node's knowledge_<node> DB), so operator holds the single
+# authoritative value and all consumers read it there — mirrors the #1613
+# OPENFGA_DB_PASSWORD pattern. It is immutable post-init (Doltgres 0.56.3 cannot
+# ALTER it — databases.md §5.2); a restored/rotated volume is reconciled to the live
+# value via `pnpm secrets:set <env> operator DOLTGRES_PASSWORD` (secrets-rotate.md),
+# never re-derived. Passed to doltgres-provision so it connects as the live superuser.
+# Fail-loud if the SSOT is empty — never silently fall back to a poisoned VM .env.
+doltgres_superuser_password="$(bao_get_field operator DOLTGRES_PASSWORD)"
+[[ -n "$doltgres_superuser_password" ]] \
+  || fail "doltgres superuser SSOT absent at cogni/${DEPLOY_ENVIRONMENT}/operator/DOLTGRES_PASSWORD — run secret-materialize, or seed/reconcile it via 'pnpm secrets:set ${DEPLOY_ENVIRONMENT} operator DOLTGRES_PASSWORD' (never fall back to a derived/.env value)"
+dg_pw_env="-e DOLTGRES_PASSWORD='${doltgres_superuser_password}'"
 
 # DSN seeding removed: secret-materialize composes + writes the per-node DSNs
 # (DATABASE_URL/DATABASE_SERVICE_URL/DOLTGRES_URL) to cogni/<env>/<node>. This phase
