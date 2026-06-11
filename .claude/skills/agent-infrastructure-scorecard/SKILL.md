@@ -7,7 +7,7 @@ description: Living status scorecard for Cogni agent infrastructure — InProc�
 
 > Living state under [`agent-infrastructure-expert`](../agent-infrastructure-expert/SKILL.md). The expert skill holds the stable mental model + operating rules; this scorecard holds dated status that moves as things ship. **When something changes, refine this file — the skill stays constant.**
 
-**Last verified:** 2026-06-09
+**Last verified:** 2026-06-11
 
 ## InProc ↔ LangGraph Server Alignment
 
@@ -40,7 +40,7 @@ description: Living status scorecard for Cogni agent infrastructure — InProc�
 
 ## DRY, Drift & Consolidation — agent/langgraph cluster
 
-Evidence-backed. **CICD docs are out of scope and on HOLD until the pipeline is green** — no edits to `ci-cd.md` / `cd-pipeline-*` / `legacy-cicd-to-remove.md`.
+Evidence-backed.
 
 | #   | Finding                                                                | Evidence                                                                                                                                                                                      | Fix                                                                          |
 | --- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |

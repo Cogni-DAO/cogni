@@ -164,6 +164,12 @@ No-human-secret done right: agent generates, agent pushes, **zero human, self-he
 
 **Heal-proof test** = redeploy twice; a PR on the test repo must still post a `cogni-git-review` review.
 
+## Substrate gotchas — OpenFGA + the deploy-infra OpenBao read path
+
+- **OpenFGA authz substrate (#1613).** OpenFGA is now a first-class per-env substrate — sole authz authority, deny-by-default; bootstrapped by `scripts/ci/bootstrap-openfga.sh` from `infra/openfga/rbac-model.json` inside `deploy-infra`. `deploy-infra.sh` sources `OPENFGA_DB_PASSWORD` from OpenBao (`cogni/<env>/openfga`) — pod-facing DB material, so OpenBao custody (Invariant 15). Authz model + tuples → [`rbac-expert`](../rbac-expert/SKILL.md).
+- **deploy-infra reads OpenBao via bare runner-local `kubectl exec` — no kubeconfig in the deploy-infra job → empty reads → fail-loud.** `scripts/ci/deploy-infra.sh` does `kubectl exec -n openbao openbao-0` at ~6 sites (L717 openfga / L885 doltgres / L1070 per-node). node-substrate works only because `reconcile-node-substrate.sh::bao_get_field` wraps reads in `remote()` (SSH-to-VM-then-kubectl). Fix in flight = PR #1620 (route deploy-infra reads through the same SSH `remote()` seam). deploy-infra runs preview/prod only, never candidate-a.
+- **DB-superuser-password drift → 28P01 (recurring class).** deploy-infra renders DB superuser passwords from GH-secret `.env` that drift from the live DB → `28P01`. doltgres was #1615; `POSTGRES_ROOT` is next. Reliable fix = source ALL DB superuser creds from the OpenBao SSOT, never GH-rendered (Invariant 15 generalized).
+
 ## Anti-patterns — instant reject
 
 - Human typing a secret VALUE into a production UI or GitHub workflow input. See killer rule.
