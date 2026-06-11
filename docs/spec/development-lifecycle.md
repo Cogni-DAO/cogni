@@ -238,6 +238,8 @@ This is the **real** validation gate (`SELF_VALIDATE` invariant). `status: done`
 
 The contributor does **not** self-merge. Reaching `deploy_verified: true` (the posted `/validate-candidate` scorecard) is the contributor's _request_; the **operator** authorizes and enqueues the merge. See [Merge Authority](./merge-authority.md) for the full policy router and authorization classes.
 
+> **As-built today (interim — do not strand the loop).** The operator-merge path is being built incrementally: the **node-formation** class ships first (deterministic, operator-authored — the lowest-hanging fruit and the seed of operator-run gitops), then the routine work-item class. **Until the routine merge path is wired, a routine contributor still self-merges on `allGreen` + `deploy_verified`** (the prior `gh pr merge`/admin path) — that is the current reality, not a violation. This step describes the target state the operator converges to; an agent following the loop today should self-merge only after `deploy_verified`, and never a node-formation PR (those await the operator).
+
 - The operator authorizes a routine work-item PR only when CI is `allGreen` **and** `deploy_verified: true`, and the authorizer differs from the claiming contributor (`MERGE_SEPARATION_OF_DUTIES`). The decision is deterministic policy, not LLM judgment.
 - The operator enqueues; **GitHub Merge Queue** rebases onto current `main`, re-runs required checks, and merges deterministically. No one rebases by hand (`NO_AGENTIC_REBASE`).
 - Required checks must fire on **both** `pull_request:` and `merge_group:` triggers (`REPORT_OR_DON'T_REQUIRE` — see [merge-queue-config](./merge-queue-config.md)).
