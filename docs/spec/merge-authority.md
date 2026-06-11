@@ -18,7 +18,9 @@ tags: [governance, merge, operator, lifecycle, vcs]
 
 > The cogni-operator app — the AI that runs the network's gitops — is the **single authority** that merges PRs. Every merge flows through **one** capability (`VcsCapability.mergePr`); a **deterministic policy router** decides _when_ a PR may merge based on its class. The contributing agent/human never self-merges its own work. GitHub Merge Queue still owns rebase/retest/serialization.
 
-## North Star
+## Goal
+
+> **North star:** the operator is the single, accountable merge authority for the whole network.
 
 As the network grows, the operator runs its gitops deployments — and merging is the act with the most authority. Today that authority is fragmented across three disconnected paths and the merge _mechanics_ are duplicated. This spec converges them:
 
@@ -26,6 +28,14 @@ As the network grows, the operator runs its gitops deployments — and merging i
 - **The operator is the merge authority** — not the contributor who wrote the PR (separation of duties), not a passive "green CI ⇒ GitHub rubber-stamp." The operator _decides_, on deterministic gates, and _acts_.
 - **Authorization is deterministic, execution is a vendor primitive** — the merge decision is policy (gate booleans), never an LLM judgment, so the merge sequence stays auditable. GitHub Merge Queue rebases/retests/merges.
 - **One escape hatch with more authority, not less** — a PR that fails automated gates merges only through an on-chain DAO vote (the existing governance loop).
+
+## Non-Goals
+
+- **VM-capacity-aware placement** — modeling VM capacity, slotting nodes, provisioning VMs on demand. vNext; the node-formation class uses a flat count ceiling until then.
+- **Building the attribution receipt** — `MERGE_EMITS_RECEIPT` is a non-blocking seam, not implemented here (see [attribution-ledger](./attribution-ledger.md), ~1 month out).
+- **Replacing GitHub Merge Queue** — the queue still owns rebase/retest/serialization for routine + node-formation merges.
+- **Removing the on-chain governance path** — the DAO vote stays as the higher-authority override for PRs that fail automated gates.
+- **Multi-DAO / non-EVM governance** — one DAO per node deployment, per [dao-governance-loop](./dao-governance-loop.md) non-goals.
 
 ## The Problem Today (why this spec exists)
 
