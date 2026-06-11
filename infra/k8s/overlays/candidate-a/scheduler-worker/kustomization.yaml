@@ -11,7 +11,7 @@ resources:
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:aa8da67a0b72b7b90e2613ca73c490cdbdc97d45812d6bf34982991ca077b045"
+    digest: "sha256:431e90bcc2294d4ee070a576bf46ed6b5da002de26442600ffbeee2c06ae7804"
 
 patches:
   - target:
@@ -57,23 +57,6 @@ patches:
         type: ExternalName
         externalName: cogni-candidate-a.vm.cognidao.org
         clusterIP: null
-  - target: { kind: Service, name: poly-app }
-    patch: |
-      $patch: delete
-      apiVersion: v1
-      kind: Service
-      metadata:
-        name: poly-app
-  - target: { kind: Service, name: resy-app }
-    patch: |
-      apiVersion: v1
-      kind: Service
-      metadata:
-        name: resy-app
-      spec:
-        type: ExternalName
-        externalName: cogni-candidate-a.vm.cognidao.org
-        clusterIP: null
   - target: { kind: EndpointSlice, name: temporal-1 }
     patch: |
       $patch: delete
@@ -95,17 +78,3 @@ patches:
       kind: EndpointSlice
       metadata:
         name: app-1
-  - target: { kind: EndpointSlice, name: poly-app-1 }
-    patch: |
-      $patch: delete
-      apiVersion: discovery.k8s.io/v1
-      kind: EndpointSlice
-      metadata:
-        name: poly-app-1
-  - target: { kind: EndpointSlice, name: resy-app-1 }
-    patch: |
-      $patch: delete
-      apiVersion: discovery.k8s.io/v1
-      kind: EndpointSlice
-      metadata:
-        name: resy-app-1
