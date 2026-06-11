@@ -725,6 +725,7 @@ APP_DB_PASSWORD=${APP_DB_PASSWORD}
 APP_DB_SERVICE_USER=${APP_DB_SERVICE_USER}
 APP_DB_SERVICE_PASSWORD=${APP_DB_SERVICE_PASSWORD}
 APP_DB_NAME=${APP_DB_NAME}
+OPENFGA_DB_PASSWORD=${OPENFGA_DB_PASSWORD}
 DEPLOY_ENVIRONMENT=${DEPLOY_ENVIRONMENT}
 EVM_RPC_URL=${EVM_RPC_URL}
 POLYGON_RPC_URL=${POLYGON_RPC_URL}
@@ -1006,6 +1007,7 @@ emit_deployment_event "infra_deployment.db_provision_started" "in_progress" "Pro
 log_info "  Provisioning shared infra DBs (litellm, openfga) — decoupled from per-node creds..."
 $RUNTIME_COMPOSE --profile bootstrap run --rm \
   -e "PROVISION_INFRA_ONLY=1" \
+  -e "OPENFGA_DB_PASSWORD=${OPENFGA_DB_PASSWORD}" \
   db-provision
 # Per-node db-provision (#1584): provision.sh now reconciles per-node roles
 # app_<node>/service_<node> to the per-node passwords OpenBao holds at
