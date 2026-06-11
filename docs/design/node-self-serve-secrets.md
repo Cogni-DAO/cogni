@@ -9,6 +9,7 @@ skills:
   - ../../.claude/skills/rbac-expert/SKILL.md
   - ../../.claude/skills/cicd-secrets-expert/SKILL.md
 spec_refs:
+  - ../spec/node-baas-architecture.md
   - ../spec/secrets-management.md
   - ../spec/secrets-classification.md
   - ../spec/node-ci-cd-contract.md
@@ -40,6 +41,27 @@ over: `developer → can_manage_secrets` → operator-held OpenBao writer → wr
 > operator-app code on the normal app cadence. No existing role, policy, or
 > workflow is modified. Resist scope creep: this design is the minimum that
 > removes the human, not a secrets-management platform.
+
+### North-star alignment
+
+This is a direct fill-in of the BaaS substrate model
+([`node-baas-architecture.md`](../spec/node-baas-architecture.md)), invariant
+**"node declares shape; operator wires environment."** Three rows of its Substrate
+Map are exactly this feature:
+
+- **Secrets** — _node declares key names + consumers; operator provides OpenBao
+  values, ESO manifests, **rotation path**._ The node already declares the key in
+  `.cogni/secrets-catalog.yaml` (shape); this is the operator-provided path that
+  finally lets the node-owner supply/rotate the **value** through the operator —
+  not a human with a kubeconfig.
+- **Authorization** — _authz checks + protected actions in app routes; shared
+  OpenFGA store/model._ `can_manage_secrets` is that protected action.
+- **Studio/Wizard** — _operator UI + validation._ This API route is the backend
+  the operator Studio/agent both call; the human UI is a thin client over it.
+
+The Supabase analogy is load-bearing for the **proof** too: you set a Supabase
+secret in the dashboard and confirm it in the product, never by shelling into a
+pod. Hence the observable is API-plane (§Closed loop), not `kubectl exec`.
 
 ## Premise check (empirical — the human is load-bearing today)
 
@@ -129,6 +151,12 @@ The pod self-logins over ClusterIP (`http://openbao.openbao.svc:8200/v1/auth/kub
 — **zero SSH, zero `kubectl create token`, no human.** This realizes the in-cluster
 north-star already named in `secret-materialize.sh:122-131`.
 
+The same SA gets a small additive **k8s RBAC** Role in `cogni-<env>` (`get` on
+`externalsecrets` + `deployments`/`deployments/status`) so the operator can **report
+propagation in-process** for the caller (§Closed loop) — replacing the human
+`kubectl exec`. This Role can land in Phase 1 or defer to Phase 2; the synchronous
+custody confirmation (API response with the KV version) needs no extra RBAC.
+
 > Per-node scope is **not** an OpenBao policy (one shared operator identity writes
 > for N nodes); it is enforced at the app layer (§Security boundary). The
 > `_system`/`_shared` denies are the policy-layer floor of defense-in-depth.
@@ -189,16 +217,23 @@ caller (API key) → POST /api/v1/nodes/[id]/secrets
   → Stakater Reloader rolls the annotated Deployment → process.env.<KEY> live
 ```
 
-Parallel to flight's `developer→can_flight` proof:
+Parallel to flight's `developer→can_flight` proof. **The proof returns through the
+product plane, not a shell** — `node-baas-architecture.md` (Supabase analogy:
+"tools integrate through APIs and webhooks"). A caller who holds only an API key
+must be able to confirm their own write **with that same API key**; requiring
+`kubectl exec` would re-introduce the cluster custody the write step just removed.
 
-| Axis       | Value                                                                                                                                                                                                    |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Route      | `POST /api/v1/nodes/[id]/secrets`                                                                                                                                                                        |
-| Authz      | `authorization.check(action: "node.manage_secrets")` → `can_manage_secrets ← developer`                                                                                                                  |
-| Observable | **primary:** `kubectl exec <pod> -- test -n "$KEY"` on candidate-a + `/readyz` green post-roll. **secondary (only once `bug.0445` ships audit→Loki):** the agent's own write in the OpenBao audit stream |
+| Axis                     | Value                                                                                                                                                                                                                            |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Route                    | `POST /api/v1/nodes/[id]/secrets`                                                                                                                                                                                                |
+| Authz                    | `authorization.check(action: "node.manage_secrets")` → `can_manage_secrets ← developer`                                                                                                                                          |
+| Observable (custody)     | the API response: `{ written: true, version: N, path: cogni/<env>/<node>/<KEY> }` from the OpenBao KV-v2 write — synchronous, no cluster access                                                                                  |
+| Observable (propagation) | the operator reads ESO + rollout **in-process** (its SA gets `get` on `externalsecrets` + `deployments/status` in `cogni-<env>`) and reports `propagation: "Ready"` on a follow-up `GET /api/v1/nodes/[id]/secrets/<KEY>/status` |
+| Observable (running)     | the node's own product signal — `/readyz` / a value-derived behavior flips. Supabase-style "it just works."                                                                                                                      |
 
-ESO sync proves the k8s Secret; only the `kubectl exec` (or a value-derived runtime
-behavior) proves the **running process** sees it.
+`kubectl exec` is an **agent dev-time debug aid only** (e.g. inside `/validate-candidate`),
+never the contract observable. The product contract is: write is confirmed by the API
+response; propagation is reported by the operator reading cluster state for the caller.
 
 ## Rotation
 
