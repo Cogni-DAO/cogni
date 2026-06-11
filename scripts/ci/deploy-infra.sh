@@ -226,6 +226,14 @@ else
     SSH_OPTS="-o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=12"
 fi
 
+# OpenBao reads/writes run kubectl ON THE VM (in-cluster) via SSH — this script runs
+# on the GitHub runner, which has NO kubeconfig (only the SSH key). Bare runner
+# `kubectl exec -n openbao` silently empties → openfga/doltgres reads returned blank
+# and deploy-infra never completed on prod. Mirrors the proven SSH seam in
+# reconcile-node-substrate.sh::bao_get_field (which is why node-substrate passed).
+# Inside vm "...": escape \$var to expand on the VM; ${LOCAL} expands here first.
+vm() { ssh $SSH_OPTS root@"$VM_HOST" "$@"; }
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Validate environment
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -715,14 +723,14 @@ PREVIOUS_OPENFGA_AUTHORIZATION_MODEL_HASH="$(previous_runtime_env_value OPENFGA_
 # reads OpenBao directly. Empty (unseeded / OpenBao sealed) → provision.sh fails
 # loud at the role step; we never fall back to root.
 OPENFGA_DB_PASSWORD="$(
-  jwt="$(timeout 10 kubectl create token db-provisioner -n default 2>/dev/null || true)"
-  [ -n "$jwt" ] || exit 0
-  tok="$(timeout 10 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
-    bao write -field=token auth/kubernetes/login \
-    "role=${DEPLOY_ENVIRONMENT}-db-reader" "jwt=${jwt}" 2>/dev/null || true)"
-  [ -n "$tok" ] || exit 0
-  timeout 10 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
-    BAO_TOKEN="${tok}" bao kv get -format=json "cogni/${DEPLOY_ENVIRONMENT}/openfga" 2>/dev/null \
+  vm "set -euo pipefail
+    jwt=\$(kubectl create token db-provisioner -n default 2>/dev/null) || exit 0
+    [ -n \"\$jwt\" ] || exit 0
+    tok=\$(kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
+      bao write -field=token auth/kubernetes/login role='${DEPLOY_ENVIRONMENT}-db-reader' jwt=\"\$jwt\" 2>/dev/null) || exit 0
+    [ -n \"\$tok\" ] || exit 0
+    kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
+      BAO_TOKEN=\"\$tok\" bao kv get -format=json 'cogni/${DEPLOY_ENVIRONMENT}/openfga' 2>/dev/null" \
     | jq -r '.data.data.OPENFGA_DB_PASSWORD // empty' 2>/dev/null || true
 )"
 export OPENFGA_DB_PASSWORD
@@ -883,14 +891,14 @@ printf '%s=%s\n' APP_DB_READONLY_PASSWORD "$APP_DB_READONLY_PASSWORD" >> "$RUNTI
 # OpenBao has not seeded yet (first provision, pre-materialize). The reader/writer
 # roles are CREATEd fresh each provision (ALTERable, not the superuser) — left derived.
 DOLTGRES_PASSWORD_SSOT="$(
-  jwt="$(timeout 10 kubectl create token db-provisioner -n default 2>/dev/null || true)"
-  [ -n "$jwt" ] || exit 0
-  tok="$(timeout 10 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
-    bao write -field=token auth/kubernetes/login \
-    "role=${DEPLOY_ENVIRONMENT}-db-reader" "jwt=${jwt}" 2>/dev/null || true)"
-  [ -n "$tok" ] || exit 0
-  timeout 10 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
-    BAO_TOKEN="${tok}" bao kv get -format=json "cogni/${DEPLOY_ENVIRONMENT}/operator" 2>/dev/null \
+  vm "set -euo pipefail
+    jwt=\$(kubectl create token db-provisioner -n default 2>/dev/null) || exit 0
+    [ -n \"\$jwt\" ] || exit 0
+    tok=\$(kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
+      bao write -field=token auth/kubernetes/login role='${DEPLOY_ENVIRONMENT}-db-reader' jwt=\"\$jwt\" 2>/dev/null) || exit 0
+    [ -n \"\$tok\" ] || exit 0
+    kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
+      BAO_TOKEN=\"\$tok\" bao kv get -format=json 'cogni/${DEPLOY_ENVIRONMENT}/operator' 2>/dev/null" \
     | jq -r '.data.data.DOLTGRES_PASSWORD // empty' 2>/dev/null || true
 )"
 if [ -n "$DOLTGRES_PASSWORD_SSOT" ]; then
@@ -1066,17 +1074,15 @@ $RUNTIME_COMPOSE --profile bootstrap run --rm \
 # k8s-auth role proven above. Values are never echoed; only key names appear in logs.
 DB_READER_TOKEN=""
 mint_db_reader_token() {
-  local jwt
-  jwt=$(timeout 10 kubectl create token db-provisioner -n default 2>/dev/null) || return 1
-  timeout 10 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
-    bao write -field=token auth/kubernetes/login \
-    "role=${DEPLOY_ENVIRONMENT}-db-reader" "jwt=${jwt}" 2>/dev/null
+  vm "set -euo pipefail
+    jwt=\$(kubectl create token db-provisioner -n default 2>/dev/null) || exit 1
+    kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
+      bao write -field=token auth/kubernetes/login role='${DEPLOY_ENVIRONMENT}-db-reader' jwt=\"\$jwt\" 2>/dev/null"
 }
 read_node_db_secret() {
   local node="$1" key="$2"
-  timeout 10 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
-    BAO_TOKEN="${DB_READER_TOKEN}" \
-    bao kv get -format=json "cogni/${DEPLOY_ENVIRONMENT}/${node}" 2>/dev/null \
+  vm "kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
+    BAO_TOKEN='${DB_READER_TOKEN}' bao kv get -format=json 'cogni/${DEPLOY_ENVIRONMENT}/${node}' 2>/dev/null" \
     | jq -r --arg k "$key" '.data.data[$k] // empty' 2>/dev/null || true
 }
 DB_READER_TOKEN="$(mint_db_reader_token || true)"
@@ -1233,38 +1239,32 @@ printf '%s\n' "$OPENFGA_BOOTSTRAP_ENV" >> "$RUNTIME_ENV"
 log_info "OpenFGA RBAC config resolved: store=${OPENFGA_STORE_ID} model=${OPENFGA_AUTHORIZATION_MODEL_ID}"
 
 patch_operator_openfga_config() {
-  if ! command -v kubectl >/dev/null 2>&1; then
-    log_warn "kubectl not found — cannot patch OpenBao operator OpenFGA config"
-    return 1
-  fi
-  if ! timeout 10 kubectl get sa openbao-operator -n default >/dev/null 2>&1; then
+  if ! vm "kubectl get sa openbao-operator -n default >/dev/null 2>&1"; then
     log_warn "openbao-operator SA absent — cannot patch OpenBao operator OpenFGA config"
     return 1
   fi
 
-  local jwt tok op
-  jwt=$(timeout 10 kubectl create token openbao-operator -n default 2>/dev/null) || {
-    log_warn "could not mint openbao-operator token"
-    return 1
-  }
-  tok=$(timeout 10 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
-    bao write -field=token auth/kubernetes/login \
-    "role=${DEPLOY_ENVIRONMENT}-writer" "jwt=${jwt}" 2>/dev/null) || {
+  local tok op
+  tok=$(vm "set -euo pipefail
+    jwt=\$(kubectl create token openbao-operator -n default 2>/dev/null) || exit 1
+    kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
+      bao write -field=token auth/kubernetes/login role='${DEPLOY_ENVIRONMENT}-writer' jwt=\"\$jwt\" 2>/dev/null") || {
     log_warn "OpenBao writer login failed for ${DEPLOY_ENVIRONMENT}-writer"
     return 1
   }
+  [ -n "$tok" ] || { log_warn "OpenBao writer token empty for ${DEPLOY_ENVIRONMENT}-writer"; return 1; }
 
   op="patch"
-  if ! timeout 10 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN="${tok}" \
-      bao kv metadata get "cogni/${DEPLOY_ENVIRONMENT}/operator" >/dev/null 2>&1; then
+  if ! vm "kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN='${tok}' \
+      bao kv metadata get 'cogni/${DEPLOY_ENVIRONMENT}/operator' >/dev/null 2>&1"; then
     op="put"
   fi
 
-  timeout 20 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN="${tok}" \
-    bao kv "$op" "cogni/${DEPLOY_ENVIRONMENT}/operator" \
-      "OPENFGA_STORE_ID=${OPENFGA_STORE_ID}" \
-      "OPENFGA_AUTHORIZATION_MODEL_ID=${OPENFGA_AUTHORIZATION_MODEL_ID}" \
-      "OPENFGA_AUTHORIZATION_MODEL_HASH=${OPENFGA_AUTHORIZATION_MODEL_HASH}" >/dev/null || return 1
+  vm "kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN='${tok}' \
+    bao kv ${op} 'cogni/${DEPLOY_ENVIRONMENT}/operator' \
+      'OPENFGA_STORE_ID=${OPENFGA_STORE_ID}' \
+      'OPENFGA_AUTHORIZATION_MODEL_ID=${OPENFGA_AUTHORIZATION_MODEL_ID}' \
+      'OPENFGA_AUTHORIZATION_MODEL_HASH=${OPENFGA_AUTHORIZATION_MODEL_HASH}' >/dev/null" || return 1
 }
 
 refresh_operator_openfga_secret() {
@@ -1521,22 +1521,20 @@ if command -v kubectl &>/dev/null; then
     # caught (|| return 0), but a true network hang (OpenBao sealed/unreachable)
     # would stall — not abort — the deploy. The timeout converts a hang into the
     # same non-fatal skip.
-    if ! timeout 10 kubectl get sa db-provisioner -n default >/dev/null 2>&1; then
+    if ! vm "kubectl get sa db-provisioner -n default >/dev/null 2>&1"; then
       log_warn "  [openbao-read-path] db-provisioner SA absent — VM predates Phase 1; reprovision to land the db-reader role. Skipping proof (non-fatal)."
       return 0
     fi
-    jwt=$(timeout 10 kubectl create token db-provisioner -n default 2>/dev/null) || {
-      log_warn "  [openbao-read-path] could not mint db-provisioner token; skipping proof (non-fatal)."
-      return 0
-    }
-    tok=$(timeout 10 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
-      bao write -field=token auth/kubernetes/login \
-      "role=${DEPLOY_ENVIRONMENT}-db-reader" "jwt=${jwt}" 2>/dev/null) || {
+    tok=$(vm "set -euo pipefail
+      jwt=\$(kubectl create token db-provisioner -n default 2>/dev/null) || exit 1
+      kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
+        bao write -field=token auth/kubernetes/login role='${DEPLOY_ENVIRONMENT}-db-reader' jwt=\"\$jwt\" 2>/dev/null") || {
       log_warn "  [openbao-read-path] db-reader login failed (role absent / OpenBao sealed); skipping proof (non-fatal)."
       return 0
     }
-    if timeout 10 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN="${tok}" \
-        bao kv list "cogni/${DEPLOY_ENVIRONMENT}" >/dev/null 2>&1; then
+    [ -n "$tok" ] || { log_warn "  [openbao-read-path] db-reader token empty; skipping proof (non-fatal)."; return 0; }
+    if vm "kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN='${tok}' \
+        bao kv list 'cogni/${DEPLOY_ENVIRONMENT}' >/dev/null 2>&1"; then
       log_info "  [openbao-read-path] OK — db-reader listed cogni/${DEPLOY_ENVIRONMENT}/* (Phase 1 proven; no value echoed)."
     else
       log_warn "  [openbao-read-path] db-reader token minted but list returned nothing (empty tree?); path partially proven (non-fatal)."
