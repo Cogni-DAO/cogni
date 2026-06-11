@@ -4,3 +4,6 @@
 [submodule "nodes/oss"]
 	path = nodes/oss
 	url = https://github.com/Cogni-DAO/oss.git
+[submodule "nodes/blue"]
+	path = nodes/blue
+	url = https://github.com/Cogni-DAO/blue.git
