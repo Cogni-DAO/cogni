@@ -75,7 +75,17 @@ export const KnowledgeContributionEditSchema = z.discriminatedUnion("op", [
     citationType: ContributionCitationTypeSchema,
     context: z.string().max(512).optional(),
   }),
-]);
+]).superRefine((edit, ctx) => {
+  // A self-referential edge would let a row support/contradict its own
+  // confidence — reject at the wire rather than in the adapter.
+  if (edit.op === "cite" && edit.citingId === edit.citedId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "cite edge cannot be self-referential (citingId === citedId)",
+      path: ["citedId"],
+    });
+  }
+});
 export type KnowledgeContributionEdit = z.infer<
   typeof KnowledgeContributionEditSchema
 >;
