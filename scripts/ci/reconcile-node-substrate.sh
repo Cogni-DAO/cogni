@@ -319,12 +319,15 @@ fi
 copy_to_remote "$caddy_tmp" "/tmp/Caddyfile.${DEPLOY_ENVIRONMENT}.${TARGET_NODE}.tmpl"
 mark_row caddyfile updated "rendered + staged Caddyfile route for ${node_host}"
 
+# Shared VM-side edge-Caddy reconcile helper (same logic deploy-infra runs):
+# start-if-down + hash-gated force-recreate. Staged here, invoked in the heredoc.
+copy_to_remote "$REPO_ROOT/scripts/ci/reconcile-edge-caddy.remote.sh" "/tmp/reconcile-edge-caddy.remote.sh"
+
 CURRENT_ROW="remote_reconcile"
 remote "set -euo pipefail
   edge_env=/opt/cogni-template-edge/.env
   runtime_env=/opt/cogni-template-runtime/.env
   caddyfile=/opt/cogni-template-edge/configs/Caddyfile.tmpl
-  edge_compose=(docker compose --project-name cogni-edge --env-file \"\$edge_env\" -f /opt/cogni-template-edge/docker-compose.yml)
   runtime_compose=(docker compose --project-name cogni-runtime --env-file \"\$runtime_env\" -f /opt/cogni-template-runtime/docker-compose.yml)
 
   mkdir -p /opt/cogni-template-edge/configs
@@ -354,21 +357,17 @@ remote "set -euo pipefail
   fi
   rm -f \"\$runtime_env.bak\"
 
-  # Edge reconcile — mirror deploy-infra.sh's start-vs-recreate split (task.5078):
-  # a fresh substrate (first node on a new VM) has no edge caddy yet, so START it.
-  # An existing edge gets force-recreate: a new node always adds a new
-  # <SLUG>_DOMAIN env var, and a graceful 'caddy reload' resolves it to empty
-  # (Caddy's env is frozen at container start), silently dropping the new server
-  # block + its cert. The pre-existing 'if ps -q caddy' gate force-recreated only
-  # when caddy was ALREADY up, so a first-node flight onto a fresh edge never
-  # started it — node Healthy + DNS-resolving but edge-unreachable (000). Like
-  # deploy-infra this bounces the shared edge (~1s, all siblings) per flight;
-  # folding both into one hash-gated edge-reconcile helper is the follow-up.
-  if ! \"\${edge_compose[@]}\" ps -q caddy >/dev/null 2>&1; then
-    \"\${edge_compose[@]}\" up -d >/dev/null
-  else
-    \"\${edge_compose[@]}\" up -d --force-recreate caddy >/dev/null
-  fi
+  # Edge reconcile — the SAME shared helper deploy-infra runs: start-if-down on a
+  # fresh substrate (first node, no caddy yet), else hash-gated force-recreate so
+  # a new node's <SLUG>_DOMAIN actually lands (graceful 'caddy reload' resolves it
+  # to empty — Caddy's env is frozen at container start). The hash-gate means an
+  # unchanged Caddyfile + edge .env is a no-op, so per-flight reconciles no longer
+  # bounce the shared edge for every sibling (task.5078 follow-up, now folded).
+  EDGE_COMPOSE_BIN=\"docker compose --project-name cogni-edge --env-file \$edge_env -f /opt/cogni-template-edge/docker-compose.yml\" \\
+  CADDYFILE=\"\$caddyfile\" \\
+  EDGE_ENV_FILE=\"\$edge_env\" \\
+  HASH_DIR=/var/lib/cogni \\
+    bash /tmp/reconcile-edge-caddy.remote.sh >/dev/null
   \"\${runtime_compose[@]}\" up -d postgres >/dev/null
   # Single-node db-provision: override COGNI_NODE_DBS to THIS node and inject its
   # per-node OpenBao passwords (read above) via -e, so provision.sh reconciles the
