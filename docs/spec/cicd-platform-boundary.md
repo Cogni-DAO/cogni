@@ -4,7 +4,7 @@ type: spec
 title: CI/CD Platform Boundary & Freeze Policy
 status: active
 trust: draft
-summary: "Where new deployment/platform work goes and what stops growing. Classifies every CI/CD surface (scripts, workflows, OpenTofu, Kustomize, Argo, Compose, secrets) into leave-alone / freeze-expansion / future-home / danger-zone, gives a request→home routing table, and the allowed-change policy that keeps the `.sh`+YAML pseudo-platform from accreting."
+summary: "Where new deployment/platform work goes and what stops growing. Classifies every CI/CD surface (scripts, workflows, OpenTofu, Kustomize, Argo, Compose, secrets) into leave-alone / freeze-expansion / future-home / danger-zone, gives a request→home routing table, the allowed-change policy that keeps the `.sh`+YAML pseudo-platform from accreting, and the typed `.ts` operator control plane (DeployCapability + ComputeResourcePort, Cherry→Akash) that the deploy brain migrates INTO."
 read_when: "Before adding ANY new deployment, promotion, provisioning, secret, domain, or env-lifecycle behavior; reviewing a PR that touches scripts/ci/**, .github/workflows/**, infra/**, or deploy/*; or deciding whether a request is script work or platform work."
 implements: []
 owner: cogni-dev
@@ -167,6 +167,81 @@ infra/catalog/<node>.yaml           # declares: type:node, node_port, source_rep
 
 The node owns the left edge (catalog row + schema + secret declaration). The operator owns the rendering + reconciliation. **No step requires editing `deploy-infra.sh` or adding a workflow.** When a future request can't be satisfied without touching those, that gap is the platform's next real unit of work — name it, don't paper over it in bash.
 
+## The next layer: a typed operator control plane
+
+The freeze stops the bleak. This is where the deploy brain **goes instead**: into the `.ts` operator app, as a hexagonal capability the operator (and its AI brain) own — not bash, not `workflow_dispatch`. The model is Railway: the operator declares intent and sees live state; the substrate executes. The operator already mints overlays in TypeScript (`gens/overlay.ts`) — this extends that proven seam from _birth_ to _full deploy lifecycle_.
+
+Two layers, one first-class today:
+
+| Layer                 | Port                  | Owns                                                                    | Provider-coupling                                                              | Status                             |
+| --------------------- | --------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------- |
+| **App deploy**        | `DeployCapability`    | read deploy state + (later) promote/rollback/scale                      | **agnostic** — speaks Argo/k8s, so it doesn't care what's underneath           | **v0 now** (read-only)             |
+| **Compute substrate** | `ComputeResourcePort` | provision/release a cluster, report capacity + cost, **settle payment** | **pluggable** — Cherry (OpenTofu) → Akash (Cosmos multisig + SDL, crypto-paid) | **deferred** until Akash is funded |
+
+`DeployCapability` is the sibling of the existing `VcsCapability` — same `CAPABILITY_INJECTION` + `ADAPTER_SWAPPABLE` shape, same file layout (interface in `packages/ai-tools/src/capabilities/`, runtime adapter in `nodes/operator/app/src/adapters/server/`). It does **not** create a second control plane: it reads live Argo/catalog state and, for promotion, wraps the existing `dispatchCandidateFlight` seam. Argo stays the reconciler; git stays the deploy-state truth (Axioms 4 & 6).
+
+```
+   OPERATOR APP (.ts)                          THE SUBSTRATE (declarative)
+   ─────────────────                           ───────────────────────────
+   AI brain + humans + dashboard               catalog · overlays · Argo · ESO
+        │  (typed control + viz)                        ▲  (desired state in git)
+        ▼                                               │
+   DeployCapability  ──reads Argo state──────────────►  │  Argo reconciles → cluster
+        │           ──promote = dispatchCandidateFlight─┘
+        ▼
+   ComputeResourcePort ──provision/pay──► Cherry (Tofu)  →  Akash (crypto, decentralized)
+                                          ▲ MVP stopgap      ▲ the real target
+```
+
+### Prototype interfaces (sketch — not yet committed as code)
+
+```ts
+// packages/ai-tools/src/capabilities/deploy.ts  — sibling to vcs.ts
+//   Invariants: CAPABILITY_INJECTION, ADAPTER_SWAPPABLE, ARGO_IS_TRUTH (read; never a parallel control plane)
+export interface DeployCapability {
+  // v0 — READ-ONLY (powers the node-network dashboard + brain awareness)
+  listEnvironments(): Promise<readonly EnvSummary[]>;
+  getDeployState(p: { env: string; node: string }): Promise<NodeDeployState>;
+  observe(p: { env: string; node: string }): Promise<NodeHealth>; // /version.buildSha + replicas
+  // Phase 1 — CONTROL (each returns a proof; promote wraps dispatchCandidateFlight first)
+  deployNode?(p: {
+    env: string;
+    node: string;
+    sourceSha: string;
+  }): Promise<DeploymentProof>;
+  retractNode?(p: { env: string; node: string }): Promise<RetractionProof>; // git-revert deploy branch
+  scaleNode?(p: {
+    env: string;
+    node: string;
+    replicas: number;
+  }): Promise<ScaleProof>;
+}
+
+// @cogni/compute-control (DEFERRED — only when Akash is funded)
+//   Payment/settlement lives ONLY here; DeployCapability never sees it.
+export interface ComputeResourcePort {
+  provision(p: {
+    env: string;
+    spec: ResourceCapacity;
+  }): Promise<ProvisionOutput>; // → ClusterEndpoint, cost, leaseId
+  release(p: { leaseId: string }): Promise<void>;
+  capacity(p: { leaseId: string }): Promise<ResourceCapacity>; // uniform vCPU/mem/storage units, not provider units
+  settle(p: { leaseId: string }): Promise<SettlementResult>; // async side-effect; Cosmos key via ConnectionBrokerPort
+}
+```
+
+The provider seam is a **1:1 adapter swap** in the operator bootstrap — `CherryComputeAdapter` → `AkashComputeAdapter`, no change to `DeployCapability` or any port signature. The leak to avoid: never let Akash specifics (SDL, Cosmos, `pending_bid`, USDC) escape `ComputeResourcePort` into the deploy plane or the dashboard. Cluster endpoints, capacity, and cost are expressed in **provider-agnostic** types; the adapter converts.
+
+### Phased rollout (no throwaway, MVP-disciplined)
+
+| Phase  | Build                                                                                                                                                                                   | Defer                                                    |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| **v0** | read-only `DeployCapability` over live Argo state + a dashboard view; AI tools `deploy_get_state` / `deploy_observe` next to the `vcs_*` tools                                          | the registry table, control verbs, `ComputeResourcePort` |
+| **P1** | control verbs (`deployNode` wraps flight; `retractNode` = git-revert); `compute_resources` registry table (mirrors `mcp_deployments`) as the dashboard read-cache                       | multi-provider                                           |
+| **P2** | `ComputeResourcePort` + `AkashComputeAdapter` (Cosmos multisig, axlUSDC Stable Payments per `infra/provision/akash/FUTURE_AKASH_INTEGRATION.md`); Cherry becomes one adapter among many | —                                                        |
+
+**Prior art:** the Argo-GitOps foundation this builds on is [PR #628](https://github.com/Cogni-DAO/cogni/pull/628) (`task.0149`, open since 2026-03-25, superseded piecemeal by per-node flighting). The registry/adapter-swap pattern is proven in [`mcp-control-plane.md`](./mcp-control-plane.md). The decentralized-compute target is `infra/provision/akash/FUTURE_AKASH_INTEGRATION.md`. **Cherry Servers is the explicit MVP stopgap; Akash is the crypto-native end state.**
+
 ## Smallest next PR
 
 This document is the policy-establishing PR. It moves nothing and breaks nothing. The smallest enforcement step **after** it (a separate, follow-up PR) is a **growth ratchet** — the boring, inspectable entropy-stopper:
@@ -189,7 +264,7 @@ That follow-up is deliberately **out of this PR** so the policy lands first and 
 
 These are surfaced so they route correctly when touched — they are not a decomposition backlog:
 
-- Imperative Cloudflare DNS in `provision-env-vm.sh` (no Tofu resource; won't self-heal on UI drift).
+- **Cloudflare DNS is the only proprietary lock-in** in an otherwise all-OSS stack (OpenTofu/k3s/Argo/Kustomize/Caddy/OpenBao+ESO), and the only non-declarative path (imperative API curl in `provision-env-vm.sh`; won't self-heal on UI drift). OSS target: **`external-dns` (CNCF)** + cert-manager + Let's Encrypt — declarative, multi-provider, drops the bespoke curl. Same Phase-3 "move ingress into k8s" move that retires the `deploy-infra.sh` edge/Caddy responsibility.
 - ksops/SOPS age keys are placeholders (`task.0284`); secrets-at-rest encryption is not yet end-to-end.
 - Tofu state is ephemeral on the runner; re-run idempotency leans on `tofu import` lists.
 - Three byte-exact render paths (shell CI, operator TS mint, CLI scaffold) — converge to one renderer; do not add a fourth.
