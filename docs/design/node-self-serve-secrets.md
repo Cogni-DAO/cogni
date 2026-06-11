@@ -63,6 +63,40 @@ The Supabase analogy is load-bearing for the **proof** too: you set a Supabase
 secret in the dashboard and confirm it in the product, never by shelling into a
 pod. Hence the observable is API-plane (§Closed loop), not `kubectl exec`.
 
+## At a glance
+
+```text
+ NODE-OWNER  ── holds ONE thing: an API key. No kubeconfig. No vault token. ──┐
+      │                                                                       │
+      │  POST /api/v1/nodes/<id>/secrets   { key: "FOO", value: "s3cr3t" }    │
+      ▼                                                                       │
+ ┌──────────────── OPERATOR POD (one pod, serves EVERY node) ─────────────┐   │
+ │ GATE 1  OpenFGA: is THIS caller `developer` on node <id>?  ────────────┼───┼─► OpenFGA store
+ │ GATE 2  allowlist: is FOO declared in <id>'s catalog (tier A2)?        │   │  (per-node tuples)
+ │ GATE 3  self-login with the POD's OWN k8s identity  ───────────────────┼───┼─► OpenBao
+ │         bao kv patch  cogni/<env>/<id>/FOO = s3cr3t   (value on stdin) │   │
+ └────────────────────────────────────────────────────────────────────────┘   │
+      │  API response { written, version, path }  ──────────────────────────►  caller confirms
+      ▼
+ OpenBao  cogni/<env>/<id>/FOO   ◄── the value LIVES here (KV-v2, versioned)
+      │  ESO pulls it (ESO's OWN read-only token)
+      ▼
+ k8s Secret  <id>-env-secrets  ──(Stakater Reloader auto-rolls the pod)──►  NODE POD: process.env.FOO ✅
+```
+
+**Who holds which key** (nobody holds a long-lived writer secret):
+
+| Key                              | Lives                                                     | Held by               | Used when                         |
+| -------------------------------- | --------------------------------------------------------- | --------------------- | --------------------------------- |
+| OpenBao root + unseal keys       | `.local/<env>-openbao-init.json` (off-cluster)            | human / break-glass   | provision + emergencies only      |
+| OpenBao policies + roles         | OpenBao config, written once at provision                 | —                     | set at provision (git-captured)   |
+| `OPENFGA_API_TOKEN` (authz-root) | `cogni/<env>/operator/*` → ESO                            | the operator pod only | every authz check / tuple write   |
+| operator's OpenBao identity      | projected SA token (`audience: cogni-openbao`, short TTL) | the operator pod only | minted per write, 1h scoped token |
+
+Day-2 trust root = the **Kubernetes API server** (OpenBao validates projected SA
+JWTs against it). "Who can write a secret" reduces to "which SA is bound in the
+role" — controlled only by the provision script in git.
+
 ## Premise check (empirical — the human is load-bearing today)
 
 The operator pod **cannot write OpenBao autonomously today.** Proven, not assumed:
@@ -206,6 +240,20 @@ A scoping bug = cross-tenant secret write. Three independent gates, all mandator
 
 Cross-node, shared-infra (`POSTGRES_ROOT`, `LITELLM_MASTER_KEY`, openfga/litellm
 DB creds), and CI-tier keys are unreachable by construction.
+
+> **Per-node isolation is tuple-based, not token-based.** A `developer` grant on
+> node X confers `can_manage_secrets` on **X only** (OpenFGA tuple
+> `{user:X-owner, developer, node:X}`); gate 1 checks the specific `node:<id>` from
+> the URL, so a caller authorized on X cannot target Y. The shared
+> `OPENFGA_API_TOKEN` (= `OPENFGA_AUTHN_PRESHARED_KEYS`) is the operator pod's
+> **client credential to the OpenFGA _server_**, seeded at
+> `cogni/<env>/operator/OPENFGA_API_TOKEN` — it authenticates the operator _to_ the
+> authz server, is never held by a node-owner, and is **not** what scopes nodes.
+> Whoever holds it is authz-root, so it lives only in the operator pod (ESO), like
+> the GitHub App key. The Phase-1 residual is the **env-wide OpenBao writer token**
+> (OpenBao itself does not enforce node scope — the app does), mitigated by
+> deriving the path from the authorized `resource` and closed by the Phase-2
+> per-node writer role.
 
 ## Closed loop + E2E proof shape
 
