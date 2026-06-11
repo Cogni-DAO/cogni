@@ -14,7 +14,7 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { OpenBaoSecretsAdapter } from "@/adapters/server/secrets/openbao-secrets.adapter";
+import { OpenBaoSecretsAdapter } from "@/adapters/server";
 import type { OperatorSecretsPlanePort } from "@/ports";
 import type { ServerEnv } from "@/shared/env";
 
