@@ -192,10 +192,7 @@ export interface GoalLoopActivities {
    * workflow memory, so iteration/token accounting is NOT read back from Dolt —
    * this activity loads only the static goal + budget once at loop start.
    */
-  loadGoalActivity(input: {
-    nodeId: string;
-    hypothesisId: string;
-  }): Promise<{
+  loadGoalActivity(input: { nodeId: string; hypothesisId: string }): Promise<{
     goal: GoalWire;
     budget: LoopBudgetWire;
     /** Graph the per-tick step runs (from `goal-step-graph` tag, else null). */

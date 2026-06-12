@@ -18,9 +18,8 @@
 
 import { createRequire } from "node:module";
 import { NativeConnection, Worker } from "@temporalio/worker";
-
-import { createActivities } from "./activities/index.js";
 import { createGoalLoopActivities } from "./activities/goal-loop.js";
+import { createActivities } from "./activities/index.js";
 import { createReviewActivities } from "./activities/review.js";
 import { createSweepActivities } from "./activities/sweep.js";
 import { createContainer } from "./bootstrap/container.js";

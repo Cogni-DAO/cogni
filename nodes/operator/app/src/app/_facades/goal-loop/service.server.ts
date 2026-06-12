@@ -30,20 +30,20 @@
  * @public
  */
 
+import type { EdoCapability } from "@cogni/ai-tools";
 import {
   createJudgeReader,
   createKpiReaderRegistry,
   deterministicJudgeScore,
   type Goal,
   goalFromRow,
-  type JudgeEvidenceAtom,
   JUDGE_KPI_ID,
+  type JudgeEvidenceAtom,
   type KnowledgeStorePort,
   type KpiReaderRegistry,
   stepGraphIdFromTags,
   successCriterionFromTags,
 } from "@cogni/knowledge-store";
-import type { EdoCapability } from "@cogni/ai-tools";
 
 const GOAL_LOOP_SOURCE_REF = (hypothesisId: string) =>
   `goal-loop:${hypothesisId}` as const;
@@ -81,8 +81,9 @@ function buildKpiRegistry(deps: GoalLoopDeps): KpiReaderRegistry {
     kpiId: JUDGE_KPI_ID,
     source: async (goal: Goal) => {
       const criterion =
-        successCriterionFromTags((await loadRowTags(deps, goal.hypothesisId)) ?? [])
-          ?? goal.hypothesisId;
+        successCriterionFromTags(
+          (await loadRowTags(deps, goal.hypothesisId)) ?? []
+        ) ?? goal.hypothesisId;
       const evidence = await loadEvidenceAtoms(deps, goal.hypothesisId);
       return { criterion, evidence };
     },
@@ -155,7 +156,8 @@ export async function readGoalKpi(
   const row = await deps.store.getKnowledge(hypothesisId);
   if (!row) throw new Error(`goal '${hypothesisId}' not found`);
   const projected = goalFromRow(row);
-  if (projected === null) throw new Error(`row '${hypothesisId}' is not a goal`);
+  if (projected === null)
+    throw new Error(`row '${hypothesisId}' is not a goal`);
   const registry = buildKpiRegistry(deps);
   const kpi = await registry.read(projected.goal);
   if (kpi === null) {

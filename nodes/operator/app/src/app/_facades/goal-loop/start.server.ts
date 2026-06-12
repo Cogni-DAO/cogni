@@ -118,7 +118,8 @@ export async function startGoal(
   const budget: LoopBudget = {
     maxIterations: o.maxIterations ?? DEFAULT_LOOP_BUDGET.maxIterations,
     maxTokens: o.maxTokens ?? DEFAULT_LOOP_BUDGET.maxTokens,
-    maxRecursionDepth: o.maxRecursionDepth ?? DEFAULT_LOOP_BUDGET.maxRecursionDepth,
+    maxRecursionDepth:
+      o.maxRecursionDepth ?? DEFAULT_LOOP_BUDGET.maxRecursionDepth,
     maxStalledIterations:
       o.maxStalledIterations ?? DEFAULT_LOOP_BUDGET.maxStalledIterations,
   };

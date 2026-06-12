@@ -26,8 +26,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getContainer } from "@/bootstrap/container";
-import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
   fileGoalOutcome,
   type GoalLoopDeps,
@@ -35,6 +33,8 @@ import {
   readGoalKpi,
   runGoalStep,
 } from "@/app/_facades/goal-loop/service.server";
+import { getContainer } from "@/bootstrap/container";
+import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { serverEnv } from "@/shared/env";
 
 export const dynamic = "force-dynamic";
