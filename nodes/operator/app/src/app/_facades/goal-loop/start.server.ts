@@ -60,8 +60,12 @@ export interface StartGoalInput {
   domain: string;
   /** Success threshold 0–100; the loop closes (validates) when `kpi >= target`. */
   target?: number;
-  /** Loop budget; defaults to `DEFAULT_LOOP_BUDGET` when omitted. */
-  budget?: Partial<LoopBudget>;
+  /**
+   * Loop budget overrides over `DEFAULT_LOOP_BUDGET`. Each axis is independently
+   * optional; an absent axis keeps the default. (`| undefined` on the members is
+   * intentional — the route's Zod `.partial()` yields that shape.)
+   */
+  budget?: { [K in keyof LoopBudget]?: number | undefined };
   /** Graph the per-tick step runs (any registered graph id). */
   stepGraphId?: string;
   /** Hard wall-clock stop. Defaults to now + 24h. */
@@ -107,7 +111,17 @@ export async function startGoal(
 ): Promise<StartGoalResult> {
   const now = deps.now();
   const target = input.target ?? 80;
-  const budget: LoopBudget = { ...DEFAULT_LOOP_BUDGET, ...input.budget };
+  // Merge axis-by-axis so an absent (or explicitly-undefined) override keeps the
+  // default — a blanket spread would overwrite a default with `undefined` under
+  // exactOptionalPropertyTypes.
+  const o = input.budget ?? {};
+  const budget: LoopBudget = {
+    maxIterations: o.maxIterations ?? DEFAULT_LOOP_BUDGET.maxIterations,
+    maxTokens: o.maxTokens ?? DEFAULT_LOOP_BUDGET.maxTokens,
+    maxRecursionDepth: o.maxRecursionDepth ?? DEFAULT_LOOP_BUDGET.maxRecursionDepth,
+    maxStalledIterations:
+      o.maxStalledIterations ?? DEFAULT_LOOP_BUDGET.maxStalledIterations,
+  };
   const stepGraphId = input.stepGraphId ?? DEFAULT_GOAL_STEP_GRAPH_ID;
   const evaluateAt =
     input.evaluateAt ?? new Date(now.getTime() + DEFAULT_GOAL_HORIZON_MS);
