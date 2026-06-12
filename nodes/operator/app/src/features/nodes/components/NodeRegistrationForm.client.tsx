@@ -17,7 +17,7 @@ import { ArrowRight, Code2, Landmark, Rocket } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ReactElement, type ReactNode, useState } from "react";
 
-import { Button, Input } from "@/components";
+import { Button } from "@/components";
 import { CHAINS as CHAIN_CONFIG_MAP } from "@/shared/web3";
 
 const CHAIN_ID = CHAIN_CONFIG_MAP.BASE.chainId;
@@ -100,33 +100,29 @@ export function NodeRegistrationForm(): ReactElement {
         </ul>
       </div>
 
-      <div className="space-y-2 text-center">
-        <label className="block font-medium text-sm" htmlFor="slug">
+      <div className="flex flex-col items-center gap-3 pt-2">
+        <label className="font-medium text-sm" htmlFor="slug">
           Name your node
         </label>
-        <div className="mx-auto flex w-fit items-center gap-1.5">
-          <Input
+        <div className="flex h-10 w-64 items-center rounded-md border border-input bg-background px-3 transition-colors focus-within:border-ring">
+          <input
             id="slug"
             value={slug}
             onChange={(e) => setSlug(e.target.value.toLowerCase())}
             placeholder="my-node"
-            className="w-40 text-right"
+            className="h-full min-w-0 flex-1 bg-transparent text-right text-foreground text-sm outline-none placeholder:text-muted-foreground"
           />
-          <span className="whitespace-nowrap text-muted-foreground text-sm">
+          <span className="shrink-0 text-muted-foreground text-sm">
             .cognidao.org
           </span>
         </div>
-        {slug && !slugValid ? (
-          <p className="text-destructive text-sm">
-            2-32 chars, lowercase letters/numbers/dashes, starts with a letter
-          </p>
-        ) : null}
-      </div>
-
-      {error ? <p className="text-destructive text-sm">{error}</p> : null}
-
-      <div className="flex justify-center pt-1">
+        <p className="h-4 text-destructive text-xs">
+          {slug && !slugValid
+            ? "Lowercase letters, numbers and dashes, 2-32 chars."
+            : (error ?? "")}
+        </p>
         <Button
+          className="w-64"
           variant="accent"
           size="lg"
           rightIcon={<ArrowRight />}

@@ -257,9 +257,7 @@ describe("nodes feature components", () => {
     });
     expect(button).toBeDisabled();
     expect(
-      screen.getByText(
-        "2-32 chars, lowercase letters/numbers/dashes, starts with a letter"
-      )
+      screen.getByText("Lowercase letters, numbers and dashes, 2-32 chars.")
     ).toBeVisible();
 
     fireEvent.change(screen.getByLabelText("Name your node"), {
