@@ -34,6 +34,71 @@ writes) and the langgraph step graph remain deferred to a follow-up `/implement`
 
 ---
 
+## Pareto MVP — build this now (a working prototype, not a skeleton)
+
+> The goal of the MVP is **one real goal, set by an API call, that drives any
+> chosen langgraph agent in a bounded loop, writes cited evidence, is scored by an
+> independent KPI, closes validated/invalidated, and is observable** — proven on
+> candidate-a. Everything below is the Pareto cut; anything not listed is v1.
+
+**Three Pareto simplifications that kill the over-engineering:**
+
+1. **One internally-looping workflow, not a schedule-per-tick.** The MVP starts
+   ONE `GoalLoopWorkflow` when the goal is created; it loops internally (bounded by
+   `LoopBudget`) and exits when it halts. **No schedule CRUD, no resolver-cron
+   dispatch** — budget state lives in the workflow run (Temporal history), not
+   Dolt. (Schedule-per-tick + Dolt-persisted budget is v1, only for goals whose
+   horizon exceeds one workflow run.)
+2. **One KPI reader: `metric:judge`.** An independent judge model scores the goal's
+   prose success-criterion → 0–100. Reusable for ANY goal with zero new code. (v1
+   hardens it to grade against external ground truth, not just the chain; v1 adds
+   parameterized count/threshold readers.)
+3. **Observe via the existing knowledge chain.** A goal is a hypothesis with an
+   evidence chain → it already renders at `/knowledge?mode=chains`. **No new UI for
+   the MVP** — the screenshot is the chain (goal → evidence atoms → outcome). The
+   Goals lens is v1.
+
+**Extensible by construction:** the per-tick step is `stepGraphId` (any langgraph
+agent — `research` today, anything tomorrow). EDO-integrated: goal = `hypothesis`,
+evidence = `evidence_for` cited atoms, verdict = `outcome`. Worker ≠ verifier: the
+step graph writes; a separate judge scores.
+
+### MVP checklist (required for flight + validate)
+
+- [ ] **Start surface** — internal `startGoal({statement, kpi:'judge', criterion,
+      target, budget, stepGraphId})` → files the `metric:judge` hypothesis (target +
+      budget + criterion as tags) and `workflowClient.start(GoalLoopWorkflow,
+      {workflowId: hypothesisId})`. Internal-principal gated (like `core__edo_*`).
+- [ ] **`GoalLoopWorkflow` — internal bounded loop.** Deterministic: load goal →
+      `while (true) { kpi = readKpiActivity; d = goalLoopDecision(state,now); if
+      d.halt → fileGoalOutcomeActivity + break; else → executeChild(GraphRunWorkflow,
+      stepGraphId) writes ONE cited atom; state = applyStep(...) }`. All I/O in
+      activities; budget in workflow memory.
+- [ ] **Activity bodies (real I/O):** `loadGoalActivity` (read hypothesis row +
+      `goalFromRow`), `readKpiActivity` (→ `metric:judge` reader), `runStepActivity`
+      via `GraphRunWorkflow` child (research graph; idempotent write keyed
+      `${hypothesisId}/${iteration}`), `fileGoalOutcomeActivity`
+      (`core__edo_record_outcome` validates|invalidates).
+- [ ] **`metric:judge` reader** — independent judge graph/model scores
+      criterion-vs-evidence → 0–100; registered as a `KpiReader` with
+      `independent: true`. (Honest v1 caveat in code: should read external ground
+      truth, not only the chain.)
+- [ ] **Step graph writes ONE `evidence_for`-cited atom per tick** via the internal
+      `core__knowledge_write` citations path (PR #1614), idempotent per iteration.
+- [ ] **Wire the worker** — register `GoalLoopWorkflow` + its activities on the
+      `scheduler-worker` (or governance worker); `.strict()` input schema.
+- [ ] **E2E proof on candidate-a:** `startGoal` a real goal (e.g. criterion =
+      "≥3 distinct primary sources support claim X") → workflow loops → the goal's
+      knowledge chain shows accumulating cited evidence → outcome row
+      (validates|invalidates) → **screenshot the chain**; confirm budget terminated
+      it; Loki shows the workflow + graph-run markers at the deployed SHA.
+
+**Explicitly NOT in the MVP (v1):** schedule-per-tick + resolver-cron, Dolt-persisted
+budget, parameterized non-judge readers, ground-truth-hardened judge, recursive
+sub-goals, the Goals lens UI, multi-tenant goal quotas.
+
+---
+
 ## Why reuse `hypothesis`, NOT a new `goal` entry_type
 
 The spec's own rule (`knowledge-syntropy.md` § "When to Create New Tables"):
