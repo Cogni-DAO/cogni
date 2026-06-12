@@ -22,37 +22,13 @@ render() {
   node_internal_service_endpoint_csv
 }
 
-# Hard drift gate: a submodule node's catalog `node_id` is a projection of its
-# minted repo-spec (the parent can't read across the gitlink at render time). This
-# proves the projection has not drifted from the identity SSOT — initialise each
-# submodule and assert catalog.node_id == repo-spec.node_id. REPO_SPEC_IS_IDENTITY_SSOT.
-verify_projection() {
-  local f name pp rs cat_nid spec_nid fail=0
-  for f in "$REPO_ROOT"/infra/catalog/*.yaml; do
-    [ "$(yq -N '.type // ""' "$f")" = "node" ] || continue
-    cat_nid="$(yq -N '.node_id // ""' "$f")"
-    [ -n "$cat_nid" ] || continue   # in-repo nodes carry no projection; read from repo-spec
-    name="$(yq -N '.name' "$f")"; pp="$(yq -N '.path_prefix // ""' "$f")"
-    rs="$REPO_ROOT/${pp}.cogni/repo-spec.yaml"
-    if [ ! -f "$rs" ]; then
-      git -C "$REPO_ROOT" submodule update --init --depth 1 "${pp%/}" >/dev/null 2>&1 || true
-    fi
-    if [ ! -f "$rs" ]; then
-      echo "[ERROR] node_id projection for '$name' cannot be verified: repo-spec unreadable ($rs). Init the submodule in CI." >&2
-      fail=1; continue
-    fi
-    spec_nid="$(yq -N '.node_id // ""' "$rs")"
-    if [ "$cat_nid" != "$spec_nid" ]; then
-      echo "[ERROR] node_id projection drift for '$name': catalog=$cat_nid repo-spec=$spec_nid (repo-spec wins)." >&2
-      fail=1
-    fi
-  done
-  [ "$fail" -eq 0 ] || exit 1
-}
-
+# Node routing renders from catalog metadata only. A remote-source node's catalog
+# `node_id` is written at formation from the fetched repo-spec, and `node_id` is
+# immutable — so catalog == repo-spec by construction. The secret-free gate never
+# reads node source to "re-verify" it (spec.node-submodule-retirement,
+# SECRET_FREE_CI_IS_METADATA_ONLY).
 check() {
   local expected actual override_hits first_envfrom second_envfrom
-  verify_projection
   expected="$(render)"
   actual="$(yq -N '.data.COGNI_NODE_ENDPOINTS // ""' "$CONFIGMAP_PATH")"
   if [ "$actual" != "$expected" ]; then
