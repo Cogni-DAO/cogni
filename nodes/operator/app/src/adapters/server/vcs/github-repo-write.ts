@@ -4,14 +4,15 @@
 /**
  * Module: `@adapters/server/vcs/github-repo-write`
  * Purpose: Operator-only helper that mints node repos, commits files, and opens pull requests via the GitHub App.
- * Scope: Thin Octokit calls behind node formation, submodule pin, and candidate-flight prep entry points.
+ * Scope: Thin Octokit calls behind node formation, catalog source_sha pin, and candidate-flight prep.
  *   Does not belong in `VcsCapability` because that capability is shared with poly/resy/node-template stubs
  *   and these write ops are operator-only.
  * Invariants:
  *   - GH_APP_INSTALL_REQUIRED: caller must verify the app is installed on the target repo; we surface a
- *     clear error if not. Public-repo install is sufficient for v0.
- *   - NODE_FORMATION_TREE: a publish creates one reviewable tree containing the gitlink plus generated
- *     catalog, overlay, AppSet, edge-route, and ExternalSecret shape.
+ *     clear error if not. Installation must cover the node repo (private-safe).
+ *   - NODE_FORMATION_TREE: a publish creates one reviewable tree — catalog row (with source_sha pin),
+ *     overlay, AppSet, edge-route, and ExternalSecret shape. No gitlink, no .gitmodules
+ *     (spec.node-submodule-retirement).
  *   - PR_AGAINST_MAIN: opens node-formation PRs against `main`; never force-pushes review branches.
  * Side-effects: IO (GitHub REST API)
  * Links: docs/spec/node-formation.md, task.0370, task.5083
@@ -86,16 +87,16 @@ export interface OpenNodeAppPrResult {
 }
 
 /**
- * Submodule-birth variant of {@link OpenNodeAppPrInput}: the node's ~1100 files live in an
- * already-minted standalone repo (the submodule target), not inline in the operator tree. The
- * operator PR pins that repo as a gitlink at `nodes/<slug>` + registers it in `.gitmodules`.
- * Minting the repo (GitHub fork of node-template) is the caller's responsibility — it requires a
- * standalone `node-template` template repo and is injected here as `nodeRepoUrl` + `nodeRepoHeadSha`.
+ * Remote-source node registration variant of {@link OpenNodeAppPrInput}: the node's files live in an
+ * already-minted standalone repo, not inline in the operator tree. The operator PR registers it via
+ * its catalog row (`source_repo` + `source_sha` pin) + operator footprint — no gitlink, no .gitmodules
+ * (spec.node-submodule-retirement). Minting the repo (GitHub fork of node-template) is the caller's
+ * responsibility, injected here as `nodeRepoUrl` + `nodeRepoHeadSha`.
  */
 export interface OpenNodeSubmodulePrInput extends OpenNodeAppPrInput {
-  /** Clone URL of the minted node repo, written into `.gitmodules`. */
+  /** Clone URL of the minted node repo → catalog `source_repo`. */
   readonly nodeRepoUrl: string;
-  /** Default-branch HEAD commit SHA of the minted node repo — the gitlink pin. */
+  /** Default-branch HEAD commit SHA of the minted node repo → catalog `source_sha` pin. */
   readonly nodeRepoHeadSha: string;
 }
 
