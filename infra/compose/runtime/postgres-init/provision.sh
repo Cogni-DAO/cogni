@@ -64,6 +64,12 @@ if [ -n "$OPENFGA_DB" ] && [ -z "$OPENFGA_PASS" ]; then
   exit 1
 fi
 
+# NOTE: Temporal runs on a DEDICATED postgres (compose service `temporal-postgres`),
+# NOT this shared instance. Its `temporal` superuser password is reconciled by
+# deploy-infra.sh against temporal-postgres directly (idempotent ALTER USER over the
+# local-trust socket) — never here. #1625 mistakenly ALTERed a `temporal` role on
+# THIS shared postgres (the wrong DB), which fixed nothing; that misfire is removed.
+
 # Per-node app credentials. The role NAMES are COMPUTED from the node
 # (app_<node> / service_<node>); only the PASSWORDS are per-node OpenBao secrets,
 # passed by the caller (reconcile-substrate reads cogni/<env>/<node> via the

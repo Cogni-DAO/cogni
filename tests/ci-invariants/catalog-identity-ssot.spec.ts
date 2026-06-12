@@ -16,14 +16,13 @@
  * @public
  */
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import yaml from "yaml";
 
 const REPO_ROOT = path.resolve(__dirname, "../..");
 const CATALOG_DIR = path.join(REPO_ROOT, "infra/catalog");
-const GITMODULES_PATH = path.join(REPO_ROOT, ".gitmodules");
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 interface CatalogEntry {
@@ -46,19 +45,8 @@ function listCatalogEntries(): { file: string; entry: CatalogEntry }[] {
     }));
 }
 
-function listSubmodulePrefixes(): Set<string> {
-  if (!existsSync(GITMODULES_PATH)) return new Set();
-  const prefixes = new Set<string>();
-  for (const line of readFileSync(GITMODULES_PATH, "utf8").split("\n")) {
-    const match = line.match(/^\s*path\s*=\s*(nodes\/[^/\s]+)\s*$/);
-    if (match?.[1]) prefixes.add(`${match[1]}/`);
-  }
-  return prefixes;
-}
-
 describe("catalog identity SSOT (REPO_SPEC_IS_IDENTITY_SSOT)", () => {
   const entries = listCatalogEntries();
-  const submodulePrefixes = listSubmodulePrefixes();
 
   it("in-repo rows (no source_repo) do not declare node_id (identity lives in repo-spec)", () => {
     const offenders = entries
@@ -87,8 +75,11 @@ describe("catalog identity SSOT (REPO_SPEC_IS_IDENTITY_SSOT)", () => {
   it("every inline type:node entry has a repo-spec with a UUID node_id", () => {
     for (const { file, entry } of entries) {
       if (entry.type !== "node") continue;
+      // Remote-source nodes (source_repo set) live in their own repo — no
+      // in-parent repo-spec; their identity is the catalog node_id projection
+      // (asserted above). Only inline nodes carry a parent repo-spec.
+      if (Object.hasOwn(entry, "source_repo")) continue;
       const prefix = entry.path_prefix ?? `nodes/${entry.name}/`;
-      if (submodulePrefixes.has(prefix)) continue;
       const specPath = path.join(REPO_ROOT, prefix, ".cogni/repo-spec.yaml");
       const spec = yaml.parse(readFileSync(specPath, "utf8")) as {
         node_id?: string;

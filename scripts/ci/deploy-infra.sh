@@ -264,7 +264,6 @@ REQUIRED_SECRETS=(
     "EVM_RPC_URL"
     "POLYGON_RPC_URL"
     "TEMPORAL_DB_USER"
-    "TEMPORAL_DB_PASSWORD"
     "INTERNAL_OPS_TOKEN"
     "POSTHOG_API_KEY"
     "POSTHOG_HOST"
@@ -726,6 +725,26 @@ OPENFGA_DB_PASSWORD="$(
 )"
 export OPENFGA_DB_PASSWORD
 
+# Temporal DB password is OpenBao-custodied (Invariant 15) — same rationale as
+# OPENFGA_DB_PASSWORD above: it backs the shared `temporal` login role + the
+# Temporal datastore DSN. Source it from the same ${DEPLOY_ENVIRONMENT}-db-reader
+# seam, from the shared-infra path cogni/<env>/_shared (temporal is owned by no
+# node). The Temporal Compose service reads it from the rendered .env below — it
+# never reads OpenBao directly. Empty (unseeded / OpenBao sealed) → provision.sh
+# fails loud at the role step; we never fall back to a stale GH-env value (the
+# 28P01 drift that wedged prod 2026-06-11).
+TEMPORAL_DB_PASSWORD="$(
+  jwt="$(timeout 10 kubectl create token db-provisioner -n default 2>/dev/null || true)"
+  [ -n "$jwt" ] || exit 0
+  tok="$(timeout 10 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
+    bao write -field=token auth/kubernetes/login \
+    "role=${DEPLOY_ENVIRONMENT}-db-reader" "jwt=${jwt}" 2>/dev/null || true)"
+  [ -n "$tok" ] || exit 0
+  timeout 10 kubectl exec -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 \
+    BAO_TOKEN="${tok}" bao kv get -field=TEMPORAL_DB_PASSWORD "cogni/${DEPLOY_ENVIRONMENT}/_shared" 2>/dev/null || true
+)"
+export TEMPORAL_DB_PASSWORD
+
 cat > "$RUNTIME_ENV" << ENV_EOF
 # Required vars
 DOMAIN=${DOMAIN}
@@ -908,61 +927,14 @@ if [[ "${K8S_SECRETS_ONLY:-false}" != "true" ]]; then
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 2: Start edge stack (idempotent - only starts if not running)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-log_info "Ensuring edge stack (Caddy) is running..."
-if ! $EDGE_COMPOSE ps -q caddy 2>/dev/null | grep -q .; then
-  log_info "Starting edge stack..."
-  $EDGE_COMPOSE up -d
-else
-  log_info "Edge stack already running"
-  # Check for Caddyfile changes and recreate the container if needed.
-  #
-  # task.5078: previously this did `caddy reload || restart`. Reload re-reads
-  # the Caddyfile but Caddy's runtime env stays whatever was set at the
-  # original `docker compose up -d`. When deploy-infra adds a new site env
-  # var to /opt/cogni-template-edge/.env (e.g., NODE_TEMPLATE_DOMAIN), reload
-  # substitutes `{$NODE_TEMPLATE_DOMAIN}` to empty, the new server block is
-  # silently absent, no cert gets provisioned, and TLS handshake errors out
-  # for the new hostname. `docker compose up -d` (without --force-recreate)
-  # detects the env_file delta and recreates the container with the new env
-  # — fully covers the new-domain case without disturbing Caddy when only
-  # existing-site Caddyfile lines changed.
-  HASH_DIR="/var/lib/cogni"
-  CADDYFILE="/opt/cogni-template-edge/configs/Caddyfile.tmpl"
-  EDGE_ENV_FILE="/opt/cogni-template-edge/.env"
-  CADDY_HASH_FILE="$HASH_DIR/caddyfile.sha256"
-  EDGE_ENV_HASH_FILE="$HASH_DIR/edge.env.sha256"
-
-  mkdir -p "$HASH_DIR"
-  caddyfile_changed=false
-  edge_env_changed=false
-
-  if [[ -f "$CADDYFILE" ]]; then
-    NEW_CADDY_HASH=$(hash_file "$CADDYFILE")
-    OLD_CADDY_HASH=$(cat "$CADDY_HASH_FILE" 2>/dev/null || echo "none")
-    if [[ "$NEW_CADDY_HASH" != "$OLD_CADDY_HASH" && "$NEW_CADDY_HASH" != "no-hash-tool" ]]; then
-      caddyfile_changed=true
-    fi
-  fi
-  if [[ -f "$EDGE_ENV_FILE" ]]; then
-    NEW_EDGE_ENV_HASH=$(hash_file "$EDGE_ENV_FILE")
-    OLD_EDGE_ENV_HASH=$(cat "$EDGE_ENV_HASH_FILE" 2>/dev/null || echo "none")
-    if [[ "$NEW_EDGE_ENV_HASH" != "$OLD_EDGE_ENV_HASH" && "$NEW_EDGE_ENV_HASH" != "no-hash-tool" ]]; then
-      edge_env_changed=true
-    fi
-  fi
-
-  if [[ "$caddyfile_changed" == "true" || "$edge_env_changed" == "true" ]]; then
-    log_info "Edge stack config changed (caddyfile=${caddyfile_changed} env=${edge_env_changed}), recreating Caddy..."
-    # --force-recreate guarantees the container restarts even when compose's
-    # delta detector doesn't classify env_file content as a change (which is
-    # its default — env_file additions only trigger recreate via the explicit
-    # flag). Belt-and-suspenders for the new-site-env-var case from task.5078.
-    $EDGE_COMPOSE up -d --force-recreate caddy
-    [[ "$caddyfile_changed" == "true" ]] && echo "$NEW_CADDY_HASH" > "$CADDY_HASH_FILE"
-    [[ "$edge_env_changed" == "true" ]] && echo "$NEW_EDGE_ENV_HASH" > "$EDGE_ENV_HASH_FILE"
-    log_info "Caddy recreated; new env_file values + Caddyfile in effect"
-  fi
-fi
+# Edge-Caddy reconcile (start-if-down + hash-gated force-recreate) lives in one
+# shared VM-side helper that both deploy-infra and reconcile-node-substrate scp
+# + invoke. CADDYFILE is the rendered template deploy-infra writes (see Step 1).
+EDGE_COMPOSE_BIN="$EDGE_COMPOSE" \
+CADDYFILE="/opt/cogni-template-edge/configs/Caddyfile.tmpl" \
+EDGE_ENV_FILE="/opt/cogni-template-edge/.env" \
+HASH_DIR="/var/lib/cogni" \
+  bash /tmp/reconcile-edge-caddy.remote.sh
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 2.5: Disk cleanup gate (before any image pulls)
@@ -1124,6 +1096,57 @@ else
 fi
 log_info "[$(date -u +%H:%M:%S)] DB provisioning complete"
 emit_deployment_event "infra_deployment.db_provision_complete" "success" "Database provisioned successfully"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 6.5: Reconcile temporal-postgres superuser (idempotent; closes 28P01 trap)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Temporal runs on a DEDICATED postgres (compose service `temporal-postgres`) whose
+# `temporal` role is the SUPERUSER. That password is baked into the volume only at
+# first-init from TEMPORAL_DB_PASSWORD; nothing reconciles it afterward. When the env
+# value drifts from the frozen volume value (rotation / re-seed), the next deploy
+# restarts `temporal` against a password the volume superuser never adopted →
+# `pq: password authentication failed for user "temporal"` → temporal never binds
+# :7233 → every node's readiness fail-closes → all nodes 503 (prod + preview,
+# 2026-06-11). Reconcile the volume superuser to the OpenBao value BEFORE temporal
+# starts, idempotently every run, via the local-trust socket (no old password needed —
+# the manual heal both incidents). #1625 ALTERed a `temporal` role on the MAIN shared
+# postgres (the wrong DB) and never touched this volume; this is the real fix.
+if [[ -n "${TEMPORAL_DB_PASSWORD:-}" ]]; then
+  # TEMPORAL_DB_PASSWORD is catalog hex (generate: hex, bytes:24 → 48 hex chars);
+  # validate the shape so we never inject a malformed/quoted value into SQL.
+  if [[ "$TEMPORAL_DB_PASSWORD" =~ ^[0-9a-fA-F]+$ ]]; then
+    _tp_user="${TEMPORAL_DB_USER:-temporal}"
+    log_info "Bringing up temporal-postgres (dedicated) and reconciling its superuser..."
+    $RUNTIME_COMPOSE up -d temporal-postgres
+    # Wait for the dedicated postgres to accept local connections (pg_isready over
+    # the local-trust socket, no password) before ALTER — bounded, fail-loud.
+    _tp_elapsed=0
+    until $RUNTIME_COMPOSE exec -T temporal-postgres pg_isready -U "$_tp_user" -q; do
+      if [ "$_tp_elapsed" -ge 60 ]; then
+        log_fatal "temporal-postgres not ready after 60s — cannot reconcile superuser."
+      fi
+      sleep 2
+      _tp_elapsed=$((_tp_elapsed + 2))
+    done
+    # Local-trust socket: psql -U temporal -d postgres authenticates without the old
+    # password. Value embedded directly (NOT psql -v :'pw' — that interpolation form
+    # errored "syntax error at or near :" through the compose/exec layer during the
+    # 2026-06-11 manual converge); TEMPORAL_DB_PASSWORD is hex-validated above, so the
+    # single-quoted literal is injection-safe. SCRAM rehash every run is cheap + idempotent.
+    if $RUNTIME_COMPOSE exec -T temporal-postgres \
+        psql -U "$_tp_user" -d postgres -v ON_ERROR_STOP=1 \
+        -c "ALTER USER \"$_tp_user\" WITH PASSWORD '$TEMPORAL_DB_PASSWORD';" >/dev/null; then
+      log_info "temporal-postgres superuser reconciled to OpenBao value."
+    else
+      log_fatal "temporal-postgres superuser reconcile failed — refusing to start temporal against a drifted password (would 28P01)."
+    fi
+    unset _tp_user _tp_elapsed
+  else
+    log_fatal "TEMPORAL_DB_PASSWORD is not hex — refusing to reconcile temporal-postgres (malformed/unseeded value)."
+  fi
+else
+  log_warn "TEMPORAL_DB_PASSWORD unset (OpenBao sealed / unseeded) — skipping temporal-postgres reconcile; temporal will use the volume-init value."
+fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 6.6: Start/update infra services (rolling update, no down)
@@ -2011,6 +2034,7 @@ scp $SSH_OPTS "$ARTIFACT_DIR/deploy-infra-remote.sh" root@"$VM_HOST":/tmp/deploy
 scp $SSH_OPTS \
   "$REPO_ROOT/scripts/ci/ensure-temporal-namespace.sh" \
   "$REPO_ROOT/scripts/ci/bootstrap-openfga.sh" \
+  "$REPO_ROOT/scripts/ci/reconcile-edge-caddy.remote.sh" \
   "$REPO_ROOT/infra/provision/cherry/harden-docker-public-ports.sh" \
   "$REPO_ROOT/scripts/secrets/sync-app-webhook-secret.sh" \
   root@"$VM_HOST":/tmp/
@@ -2054,7 +2078,7 @@ REMOTE_ENV_VARS=(
   POSTGRES_ROOT_USER POSTGRES_ROOT_PASSWORD APP_DB_USER APP_DB_PASSWORD
   APP_DB_SERVICE_USER APP_DB_SERVICE_PASSWORD APP_DB_READONLY_USER
   APP_DB_READONLY_PASSWORD APP_DB_NAME EVM_RPC_URL POLYGON_RPC_URL
-  TEMPORAL_DB_USER TEMPORAL_DB_PASSWORD GHCR_DEPLOY_TOKEN GHCR_USERNAME
+  TEMPORAL_DB_USER GHCR_DEPLOY_TOKEN GHCR_USERNAME
   GRAFANA_CLOUD_LOKI_URL GRAFANA_CLOUD_LOKI_USER GRAFANA_CLOUD_LOKI_API_KEY
   METRICS_TOKEN SCHEDULER_API_TOKEN BILLING_INGEST_TOKEN INTERNAL_OPS_TOKEN
   WORK_ITEMS_NOTION_TOKEN WORK_ITEMS_NOTION_DATA_SOURCE_ID WORK_ITEMS_NOTION_VERSION
