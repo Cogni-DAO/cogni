@@ -2,7 +2,7 @@
 id: spec.node-submodule-retirement
 type: spec
 title: Retire the Node Submodule Gitlink
-status: active
+status: draft
 trust: draft
 summary: Operator never checks out node source; node files reach the operator only by authenticated API fetch at an exact sourceSha. Removes .gitmodules, every nodes/<slug> gitlink, pin PRs, and all classifier special-casing.
 read_when: Touching node formation, candidate-flight/promote deploy plane, single-node-scope, or any operator code that reads nodes/<slug>/ source
