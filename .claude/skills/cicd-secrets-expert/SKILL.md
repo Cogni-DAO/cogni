@@ -15,19 +15,19 @@ One-page reference for anyone touching secrets in node-template. Read this BEFOR
 
 Load-bearing subset — canonical numbering is [`docs/spec/secrets-management.md`](../../../docs/spec/secrets-management.md) Invariants 1–16; the rows below are the ones that gate day-to-day secrets work (7, 10–12, 14 omitted — read the spec for the full set):
 
-| #   | Rule                                                                                           | Where it bites                                                |
-| --- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| 1   | PATH = `cogni/<env>/<service>/<KEY>`; `<service>` = catalog name                               | New service → new ExternalSecret dir                          |
-| 2   | ONE ExternalSecret per (service, env) with `dataFrom: extract`; target `<service>-env-secrets` | Adding keys = NO YAML edit                                    |
-| 3   | Pod `envFrom: secretRef: name: <service>-env-secrets` once per container                       | Pod spec set ONCE at service creation                         |
-| 4   | NO secret value in git — ever                                                                  | Base64-in-YAML = immediate rotate + audit                     |
-| 5   | OpenBao is runtime SSOT; VM `.env` files are rendered views, not authorities                   | Don't seed runtime values in two places                       |
-| 6   | RBAC via path policy (`eso-reader`, `<env>-writer`) bound to k8s SAs                           | Phase 5b.3 + 5b.4 of `provision-env-vm.sh`                    |
-| 8   | Every access audited via OpenBao audit device → Loki                                           | Pipeline not built yet — bug.0445 follow-up                   |
-| 9   | Three entry points only: CLI / workflow_dispatch / operator-MCP. Never raw `bao kv put`        | See decision tree below                                       |
-| 13  | NO_OPERATOR_ROOT_TOKEN_ON_LAPTOP — bootstrap window only; day-2 uses writer-role JWT           | `.local/<env>-openbao-root-token` is never read post-Phase-5b |
-| 15  | Pod-facing DB role material is OpenBao-owned, even when Compose renders a copy                 | No DB password authority in GitHub env or VM `.env`           |
-| 16  | New-node secret materialization precedes substrate reconcile/assert                            | Generate safe agent values before first flight                |
+| #   | Rule                                                                                                                                                                      | Where it bites                                                |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| 1   | PATH = `cogni/<env>/<service>/<KEY>`; `<service>` = catalog name                                                                                                          | New service → new ExternalSecret dir                          |
+| 2   | ONE ExternalSecret per (service, env) with `dataFrom: extract`; target `<service>-env-secrets`                                                                            | Adding keys = NO YAML edit                                    |
+| 3   | Pod `envFrom: secretRef: name: <service>-env-secrets` once per container                                                                                                  | Pod spec set ONCE at service creation                         |
+| 4   | NO secret value in git — ever                                                                                                                                             | Base64-in-YAML = immediate rotate + audit                     |
+| 5   | OpenBao is runtime SSOT; VM `.env` files are rendered views, not authorities                                                                                              | Don't seed runtime values in two places                       |
+| 6   | RBAC via path policy (`eso-reader`, `<env>-writer`) bound to k8s SAs                                                                                                      | Phase 5b.3 + 5b.4 of `provision-env-vm.sh`                    |
+| 8   | Every access audited via OpenBao audit device → Loki                                                                                                                      | Pipeline not built yet — bug.0445 follow-up                   |
+| 9   | Three entry points only: CLI / workflow_dispatch / operator API (`POST /api/v1/nodes/<id>/secrets`, OpenFGA `can_manage_secrets` — shipped #1627). Never raw `bao kv put` | See decision tree below                                       |
+| 13  | NO_OPERATOR_ROOT_TOKEN_ON_LAPTOP — bootstrap window only; day-2 uses writer-role JWT                                                                                      | `.local/<env>-openbao-root-token` is never read post-Phase-5b |
+| 15  | Pod-facing DB role material is OpenBao-owned, even when Compose renders a copy                                                                                            | No DB password authority in GitHub env or VM `.env`           |
+| 16  | New-node secret materialization precedes substrate reconcile/assert                                                                                                       | Generate safe agent values before first flight                |
 
 ## Authority model — classify by three axes
 
@@ -201,17 +201,17 @@ Counterintuitive but load-bearing: a **sealed** OpenBao serves **nothing** — i
 - Base64-in-git "encryption" — violates Invariant 4.
 - Sealed Secrets / SOPS+ksops — explicitly rejected per `proj.security-hardening` Design Notes.
 - Editing `scripts/setup-secrets.ts` to add/remove a SECRETS array entry — there isn't one. The script loads YAML via `scripts/lib/secrets-catalog-loader.ts`. Edit the appropriate `secrets-catalog.yaml` instead.
-- ExternalSecret manifests under `infra/k8s/secrets/external-secrets/<env>/<node>/` — that pre-wizard tree is PURGED. Every node (operator, resy, scheduler-worker, canary, node-template) carries its leaf at `nodes/<node>/k8s/external-secrets/<env>/` — the single repo-wide convention. Only the cluster-scoped `ClusterSecretStore` remains under the old dir.
+- ExternalSecret manifests under `infra/k8s/secrets/external-secrets/<env>/<node>/` — that pre-wizard tree is PURGED. Every node (operator, scheduler-worker, node-template) carries its leaf at `nodes/<node>/k8s/external-secrets/<env>/` — the single repo-wide convention. Only the cluster-scoped `ClusterSecretStore` remains under the old dir.
 
 ## The catalog (per-node YAML + Zod loader)
 
 `scripts/setup-secrets.ts` does NOT hold a hardcoded SECRETS array. It calls a Zod-validated loader that walks YAML catalogs:
 
-| File                                       | Domain                                                                             | Holds                                                                                                                                                                  |
-| ------------------------------------------ | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `infra/secrets-catalog.yaml`               | **operator-domain**                                                                | `_shared`, `_system`, B/D/E/G entries, A2 placeholders, **and (today) all node A1/A2 entries** — node-template's catalog was migrated here by task.5094                |
-| `nodes/<node>/.cogni/secrets-catalog.yaml` | **node-domain** (single-node-scope: poly engineer can add a poly secret in ONE PR) | A1/A2 entries the node owns; `service:` auto-fills from parent dir. **Loader-supported but currently empty** — no node populates it yet (post-task.5094 consolidation) |
-| `scripts/lib/secrets-catalog-loader.ts`    | **operator-domain (substrate)**                                                    | Zod schema + walker (walks both paths above) + uniqueness + service-allowlist assertions                                                                               |
+| File                                       | Domain                                                                                  | Holds                                                                                                                                                                  |
+| ------------------------------------------ | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `infra/secrets-catalog.yaml`               | **operator-domain**                                                                     | `_shared`, `_system`, B/D/E/G entries, A2 placeholders, **and (today) all node A1/A2 entries** — node-template's catalog was migrated here by task.5094                |
+| `nodes/<node>/.cogni/secrets-catalog.yaml` | **node-domain** (single-node-scope: a node engineer adds their node's secret in ONE PR) | A1/A2 entries the node owns; `service:` auto-fills from parent dir. **Loader-supported but currently empty** — no node populates it yet (post-task.5094 consolidation) |
+| `scripts/lib/secrets-catalog-loader.ts`    | **operator-domain (substrate)**                                                         | Zod schema + walker (walks both paths above) + uniqueness + service-allowlist assertions                                                                               |
 
 **To add a node secret today:** edit `infra/secrets-catalog.yaml` — node entries are consolidated there post-task.5094 (per-node `.cogni/secrets-catalog.yaml` is loader-supported and is the sovereignty target, but no node uses it yet).
 **To add an operator-domain secret (B/D/E/G, or `_shared` cross-cutting):** edit `infra/secrets-catalog.yaml`. Operator-domain PR.

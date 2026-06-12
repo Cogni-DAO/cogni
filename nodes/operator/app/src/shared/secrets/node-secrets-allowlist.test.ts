@@ -8,28 +8,17 @@ import {
 } from "./node-secrets-allowlist.data";
 
 describe("node-secrets allowlist (gate 2)", () => {
-  it("allows a declared A2 key for its own node slug", () => {
-    expect(isNodeSecretAllowed("poly", "POLYGON_RPC_URL")).toBe(true);
-    expect(isNodeSecretAllowed("poly", "POLY_WALLET_AEAD_KEY_HEX")).toBe(true);
+  it("is empty post node-purge — no surviving node self-serves an A2 secret yet", () => {
+    // Codegen from the catalog (Invariant 14) seeds this once a minted node
+    // declares an A2 key; until then the load-bearing behaviour is fail-closed.
+    expect(Object.keys(NODE_SECRETS_ALLOWLIST)).toEqual([]);
   });
 
-  it("refuses an undeclared key on a known slug (fail-closed, not defaulted)", () => {
-    expect(isNodeSecretAllowed("poly", "POSTGRES_ROOT_PASSWORD")).toBe(false);
-    expect(isNodeSecretAllowed("poly", "MADE_UP_KEY")).toBe(false);
-  });
-
-  it("refuses cross-pollination: a key declared for another slug", () => {
-    // POLYGON_RPC_URL belongs to poly; operator must not be able to set it.
-    expect(isNodeSecretAllowed("operator", "POLYGON_RPC_URL")).toBe(false);
-    // NODE_MINT_OWNER belongs to operator; poly must not be able to set it.
-    expect(isNodeSecretAllowed("poly", "NODE_MINT_OWNER")).toBe(false);
-  });
-
-  it("refuses an unknown slug entirely (no default bucket)", () => {
-    expect(isNodeSecretAllowed("does-not-exist", "POLYGON_RPC_URL")).toBe(
-      false
-    );
-    expect(isNodeSecretAllowed("", "POLYGON_RPC_URL")).toBe(false);
+  it("fail-closes for every slug + key (no default bucket)", () => {
+    expect(isNodeSecretAllowed("operator", "NODE_MINT_OWNER")).toBe(false);
+    expect(isNodeSecretAllowed("scheduler-worker", "ANYTHING")).toBe(false);
+    expect(isNodeSecretAllowed("does-not-exist", "X")).toBe(false);
+    expect(isNodeSecretAllowed("", "X")).toBe(false);
   });
 
   it("never lists a reserved/shared namespace as a slug", () => {
