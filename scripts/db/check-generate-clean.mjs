@@ -6,9 +6,9 @@
  * Purpose: Fail-loud CI guard proving `drizzle-kit generate` produces NO drift — i.e. the
  *          committed migration snapshot baseline exactly matches the schema TS. This is the
  *          gate that makes "edit schema TS -> db:generate -> commit" a clean, safe forward path.
- * Scope: Runs drizzle-kit generate for operator with stdin closed; passes only on a clean
- *        "No schema changes" exit-0 with zero new files. Any drift (new migration, modified
- *        journal, or a non-zero/aborted run such as a rename prompt) fails and is reverted.
+ * Scope: Runs drizzle-kit generate for operator with stdin closed; does not connect to a DB, apply migrations, or leave artifacts behind.
+ *        Passes only on a clean "No schema changes" exit-0 with zero new files. Any drift (new
+ *        migration, modified journal, or a non-zero/aborted run such as a rename prompt) fails and is reverted.
  * Invariants: never leaves generated artifacts behind; never connects to a DB (generate is a
  *             pure schema-vs-snapshot diff — DATABASE_URL is a dummy, matching db:check:operator).
  * Side-effects: IO (spawns drizzle-kit, reads/writes the migrations dir transiently, git restore).
