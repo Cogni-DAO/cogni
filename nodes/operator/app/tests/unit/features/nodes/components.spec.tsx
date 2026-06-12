@@ -224,7 +224,7 @@ describe("nodes feature components", () => {
 
     render(<NodeRegistrationForm />);
 
-    const input = screen.getByLabelText("Node slug");
+    const input = screen.getByLabelText("Name your node");
     fireEvent.change(input, { target: { value: "Gamma" } });
     fireEvent.click(screen.getByRole("button", { name: "Register node" }));
 
@@ -252,7 +252,7 @@ describe("nodes feature components", () => {
     render(<NodeRegistrationForm />);
 
     const button = screen.getByRole("button", { name: "Register node" });
-    fireEvent.change(screen.getByLabelText("Node slug"), {
+    fireEvent.change(screen.getByLabelText("Name your node"), {
       target: { value: "-bad" },
     });
     expect(button).toBeDisabled();
@@ -262,7 +262,7 @@ describe("nodes feature components", () => {
       )
     ).toBeVisible();
 
-    fireEvent.change(screen.getByLabelText("Node slug"), {
+    fireEvent.change(screen.getByLabelText("Name your node"), {
       target: { value: "taken" },
     });
     fireEvent.click(button);
