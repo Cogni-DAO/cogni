@@ -59,7 +59,10 @@ export class OpenBaoSecretsAdapter implements OperatorSecretsPlanePort {
   ): Promise<WriteNodeSecretResult> {
     const path = `cogni/${input.env}/${input.nodeSlug}/${input.key}`;
     const token = await this.login();
-    const dataPath = `cogni/${input.env}/${input.nodeSlug}`;
+    // KV v2 data endpoint requires the `data/` infix: <mount>/data/<path>.
+    // (metadata uses <mount>/metadata/<path>; the put/patch policy grants
+    // `cogni/data/<env>/*`.) The returned `path` above stays logical for display.
+    const dataPath = `cogni/data/${input.env}/${input.nodeSlug}`;
     const exists = await this.nodePathExists(token, input.env, input.nodeSlug);
     const version = exists
       ? await this.patch(token, dataPath, input.key, input.value)

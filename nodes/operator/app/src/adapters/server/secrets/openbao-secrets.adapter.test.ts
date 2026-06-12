@@ -30,7 +30,8 @@ describe("OpenBaoSecretsAdapter", () => {
         return jsonResponse({ auth: { client_token: "s.client" } });
       }
       if (u.includes("/cogni/metadata/")) return jsonResponse({}, 404);
-      // data write
+      // data write — KV v2 requires the `data/` infix in the URL.
+      expect(u).toBe(`${ADDR}/v1/cogni/data/candidate-a/poly`);
       expect(init?.method).toBe("POST");
       return jsonResponse({ data: { version: 1 } });
     });
@@ -65,6 +66,7 @@ describe("OpenBaoSecretsAdapter", () => {
         return jsonResponse({ auth: { client_token: "s.client" } });
       }
       if (u.includes("/cogni/metadata/")) return jsonResponse({}, 200);
+      expect(u).toBe(`${ADDR}/v1/cogni/data/candidate-a/poly`);
       expect(init?.method).toBe("PATCH");
       expect(init?.headers).toMatchObject({
         "content-type": "application/merge-patch+json",
