@@ -81,7 +81,7 @@ Argo reconciles → PODS RUN (deployed)
 
 Today a node is **created, gitops'd, and forgotten** — there is **no CRUD and no management plane**. The pieces are disjoint:
 
-- **Three sources of truth that don't reconcile.** The operator `nodes` DB row (wizard working state, `status` ∈ dao_pending…active), the parent **catalog** (`infra/catalog/*.yaml` on `main` = deploy registration), and the **running pods** (Argo) are independent. A `nodes` row says `published` whether or not the catalog row ever merged or any pod runs. The catalog count (capacity) measures _registered/merged_ nodes, not what the DB thinks exists, not what's actually serving.
+- **Three sources of truth that don't reconcile.** The operator `nodes` DB row (wizard working state, `status` ∈ dao*pending…active), the parent **catalog** (`infra/catalog/*.yaml` on `main` = deploy registration), and the **running pods** (Argo) are independent. A `nodes` row says `published` whether or not the catalog row ever merged or any pod runs. The catalog count (capacity) measures \_registered/merged* nodes, not what the DB thinks exists, not what's actually serving.
 - **No update.** Once minted, there is no operator verb to rename, re-pin, re-scope envs, or change a node's identity through a management plane — it's hand-edited catalog/overlay PRs.
 - **No delete / retract.** Closing a formation PR leaves an **orphaned mint**: the forked repo, the DoltHub knowledge repo, and the `nodes` DB row all persist, unregistered and undeployed, with no cleanup. There is no "decommission a node" path.
 - **No list / status / health as data.** "Which nodes are deployed to which envs, at which SHA, healthy?" is reconstructed by hand from GitHub + GHCR + `/version` + Argo, not read from one place.
@@ -89,10 +89,10 @@ Today a node is **created, gitops'd, and forgotten** — there is **no CRUD and 
 
 ### What closes this (direction, not a backlog)
 
-The typed **`DeployCapability`** (sibling of `VcsCapability`, shipped read-only in #1643) is the seam the management plane grows into:
+The operator-local typed control plane — **`OperatorDeployPlanePort`** (`nodes/operator/app/src/ports/`, already on `main`; it owns candidate-flight dispatch today) — is the seam the management plane grows into. (An earlier read-only `DeployCapability` in `packages/ai-tools` is being consolidated into this one operator-local port, not kept as a second plane.)
 
-- **v0 (now):** read-only `getDeployState` / `listEnvironments` over live Argo — the first time "what's deployed where" is _data_, not a manual reconstruction.
-- **Next:** control verbs — `deployNode` (wraps flight), `retractNode` (git-revert the catalog row + clean the mint), `scaleNode` (overlay patch) — plus the **merge gate** moving onto `mergePr` (merge-authority) so the operator owns the merge, not a human.
+- **Now:** flight dispatch (`prepareNodeRefCandidateFlight` / `dispatchNodeRefCandidateFlight`) + read state — the first place deploy actions are typed, not shell.
+- **Next:** control verbs on the port — `promote` (prod, RBAC-gated `node.promote_production`), `promoteNodeToPreview` (the node-merge→preview tie), `retractNode` (git-revert the catalog row + clean the orphaned mint), `scaleNode` (overlay patch) — plus the **merge gate** moving onto `VcsCapability.mergePr` (merge-authority) so the operator owns the merge, not a human.
 - **Then:** the three SSOTs converge onto one node-registry membership read, and the operator gains _awareness_ (health/status) so a node has an owner for its whole life, not just its birth.
 
 Until those land, treat a wizard-born node as **born, not managed** — and expect to hold the post-birth steps by hand.
@@ -103,4 +103,5 @@ Until those land, treat a wizard-born node as **born, not managed** — and expe
 - [`node-wizard-scorecard`](../../.claude/skills/node-wizard-scorecard/SKILL.md) — live launch execution + E2E proof
 - [`node-ci-cd-contract.md`](../spec/node-ci-cd-contract.md) — the forward deployment contract (digest-addressed promotion)
 - [`merge-authority.md`](../spec/merge-authority.md) — the operator-as-merge-authority design (the 🔴 merge gate)
-- [`cicd-platform-boundary.md`](../spec/cicd-platform-boundary.md) — the `DeployCapability` freeze/route policy
+- [`cicd-platform-boundary.md`](../spec/cicd-platform-boundary.md) — the deploy-brain freeze/route policy (typed control plane = `OperatorDeployPlanePort`)
+- [`OperatorDeployPlanePort`](../../nodes/operator/app/src/ports/operator-deploy-plane.port.ts) — the operator-local typed deploy control plane
