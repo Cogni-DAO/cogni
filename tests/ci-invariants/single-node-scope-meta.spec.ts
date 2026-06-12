@@ -14,7 +14,7 @@
  * @public
  */
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import yaml from "yaml";
@@ -25,33 +25,13 @@ const NODES_DIR = path.join(REPO_ROOT, "nodes");
 const OPERATOR_NODE = "operator";
 const SHA40 = /^[0-9a-f]{40}$/;
 
-const GITMODULES_PATH = path.join(REPO_ROOT, ".gitmodules");
-
-/**
- * Submodule-pinned node slugs — `nodes/<slug>` is a gitlink declared in
- * `.gitmodules`. Their code lives in their own repo; the parent holds only the
- * operator-domain pin, so they carry NO single-node-scope filter
- * (SUBMODULE_GITLINK_IS_OPERATOR_PIN). Must mirror the same exclusion in
- * render-scope-filters.sh's `non_operator_nodes()` so the generated filter block
- * and this expected listing stay in lockstep. No-op without `.gitmodules`.
- */
-function listSubmoduleNodes(): Set<string> {
-  if (!existsSync(GITMODULES_PATH)) return new Set();
-  const slugs = new Set<string>();
-  for (const line of readFileSync(GITMODULES_PATH, "utf8").split("\n")) {
-    const m = line.match(/^\s*path\s*=\s*nodes\/([^/\s]+)\s*$/);
-    if (m) slugs.add(m[1]);
-  }
-  return slugs;
-}
-
+// Remote-source nodes live in their own repos and are absent under nodes/ (no
+// gitlink, no .gitmodules). The single-node-scope domains are exactly the
+// in-tree nodes/* directories minus operator. Stays in lockstep with
+// render-scope-filters.sh's non_operator_nodes().
 function listNonOperatorNodes(): string[] {
-  const submodules = listSubmoduleNodes();
   return readdirSync(NODES_DIR, { withFileTypes: true })
-    .filter(
-      (d) =>
-        d.isDirectory() && d.name !== OPERATOR_NODE && !submodules.has(d.name)
-    )
+    .filter((d) => d.isDirectory() && d.name !== OPERATOR_NODE)
     .map((d) => d.name)
     .sort();
 }
