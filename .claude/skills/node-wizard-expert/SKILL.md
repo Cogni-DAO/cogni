@@ -11,6 +11,11 @@ For any live throwaway-node launch, start with
 [`node-wizard-scorecard`](../node-wizard-scorecard/SKILL.md). This skill is the
 orientation layer; the scorecard is the execution and proof layer.
 
+For the **whole-flow map** — every cogni-operator App action + gate on the
+wizard→deployed spine, and the node-lifecycle shortcomings (no CRUD / no
+management plane) — see
+[`docs/guides/node-wizard-deployment-e2e.md`](../../../docs/guides/node-wizard-deployment-e2e.md).
+
 ## First Recall
 
 Before changing node-wizard launch behavior, recall the operator knowledge block:
@@ -22,6 +27,7 @@ That block is the evolving handoff contract for personal AI assistants launching
 ## Ground Truth
 
 - `.claude/skills/node-wizard-scorecard/SKILL.md`
+- `docs/guides/node-wizard-deployment-e2e.md` — wizard→deployed E2E map + lifecycle gaps
 - `docs/design/node-wizard-secret-setting.md`
 - `docs/guides/node-formation-guide.md`
 - `docs/spec/node-ci-cd-contract.md`
