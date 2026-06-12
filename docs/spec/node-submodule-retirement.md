@@ -26,7 +26,7 @@ tags:
 
 Nodes evolved in-repo → standalone repos (the dev-experience win). The `nodes/<slug>`
 **git submodule gitlink** is the leftover connective tissue from that migration. It is
-the only thing that lets operator CI/CD reach across into node *source* — and that reach
+the only thing that lets operator CI/CD reach across into node _source_ — and that reach
 is exactly what breaks for private nodes and what the sovereignty model already forbids
 ("discovery is metadata-driven, not filesystem-driven").
 
@@ -35,17 +35,17 @@ Every private-node failure observed is an operator-side submodule clone:
 - **Deploy (bug.5014):** `candidate-flight.yml` (×3) + `promote-and-deploy.yml` (×1) run
   `git submodule update --init` against the node repo.
 - **Unit gate (main-red 2026-06-12):** `render-scheduler-worker-endpoints.sh` runs an
-  *anonymous* `git submodule update --init` to read the node repo-spec. It silently
+  _anonymous_ `git submodule update --init` to read the node repo-spec. It silently
   succeeds for public nodes and hard-fails for private ones, turning the operator's own
   secret-free unit gate red — cross-node coupling the model is supposed to make impossible.
 
 The gitlink is redundant with records the operator already keeps. It carries two things,
 both relocatable:
 
-| Gitlink job today | Relocates to |
-| --- | --- |
-| Operator reads node files (`k8s/` base + external-secrets) at deploy | **`actions/checkout` of `source_repo` at `source_sha`** with the App token (`repository:` + `ref:` + `token:` + `path:`) — the OSS-native cross-repo checkout, private-safe by construction |
-| Operator reads node `repo-spec` to verify the `node_id` projection in the secret-free unit gate | **Eliminated.** The projection is written by the operator at formation from the repo-spec it fetched over the API → catalog `node_id` == repo-spec `node_id` **by construction**; `node_id` is immutable. The unit gate trusts it |
+| Gitlink job today                                                                                                                    | Relocates to                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Operator reads node files (`k8s/` base + external-secrets) at deploy                                                                 | **`actions/checkout` of `source_repo` at `source_sha`** with the App token (`repository:` + `ref:` + `token:` + `path:`) — the OSS-native cross-repo checkout, private-safe by construction                                         |
+| Operator reads node `repo-spec` to verify the `node_id` projection in the secret-free unit gate                                      | **Eliminated.** The projection is written by the operator at formation from the repo-spec it fetched over the API → catalog `node_id` == repo-spec `node_id` **by construction**; `node_id` is immutable. The unit gate trusts it   |
 | The deploy `sourceSha` record + affected-flight trigger (`detect-remote-source-artifact-targets.sh` reads `git ls-tree` mode 160000) | **A `source_sha` field on the catalog row.** Detect reads `.source_sha` from YAML; a catalog `source_sha` change is the affected-flight trigger. The operator writes the field (formation + flight) where it used to bump a gitlink |
 
 ## Outcome
@@ -128,9 +128,10 @@ classify).
 
 **Delete entirely:** `nodes/operator/app/src/shared/node-app-scaffold/gens/gitmodules.ts` (+ test +
 barrel export), `GitHubRepoWriter.ensureNodeSubmodulePin` + `treePinsNodeSubmodule` + pin-PR helpers
-+ their tests, `tests/ci-invariants/fixtures/single-node-scope/19-submodule-gitlink-operator-pin.json`,
-all `git submodule update --init` steps, the `.gitmodules` blob writes, every `nodes/<slug>` gitlink
-+ the `.gitmodules` file.
+
+- their tests, `tests/ci-invariants/fixtures/single-node-scope/19-submodule-gitlink-operator-pin.json`,
+  all `git submodule update --init` steps, the `.gitmodules` blob writes, every `nodes/<slug>` gitlink
+- the `.gitmodules` file.
 
 **Rewrite to metadata/API:** `candidate-flight.yml`, `promote-and-deploy.yml`,
 `render-scheduler-worker-endpoints.sh`, `detect-remote-source-artifact-targets.sh`,
