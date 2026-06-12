@@ -133,19 +133,22 @@ export async function setup() {
     );
   }
 
-  // ── Preflight: every table with a user FK column must have RLS enabled ───
-  // Catalog-derived (no hardcoded list): any public base table carrying a
-  // `%user_id` column (user_id, owner_user_id, agent_user_id, …) is a tenant-
-  // scoped table and MUST have row-level security. Combined with the FORCE check
-  // above: %user_id => ENABLE => FORCE. This is the floor that prevents the
-  // 0010_shallow_paibok class of leak (user-FK table shipped with no RLS at all)
-  // from recurring as new nodes/tables are added. deny-all (ENABLE+FORCE, no
-  // policy) is an accepted state for service-role-only tables — a policy is NOT
-  // required, only that RLS is enabled. See docs/spec/database-rls.md RLS_COVERAGE.
+  // ── Preflight: every table with a FK to users must have RLS enabled ──────
+  // Catalog-derived (no hardcoded list): any public base table with a foreign
+  // key referencing `users` is tenant-scoped and MUST have row-level security.
+  // Combined with the FORCE check above: FK→users => ENABLE => FORCE. This is the
+  // floor that prevents the 0010_shallow_paibok class of leak (user-FK table
+  // shipped with no RLS at all) from recurring as new nodes/tables are added.
+  // deny-all (ENABLE+FORCE, no policy) is an accepted state for service-role-only
+  // tables — a policy is NOT required, only that RLS is enabled. FK-based (not a
+  // `%user_id` column match) so external identifiers like ingestion_receipts.
+  // platform_user_id are correctly ignored. Transitive tenancy (FK to
+  // billing_accounts, not users) is covered by hand-written policies, not here.
+  // See docs/spec/database-rls.md RLS_COVERAGE.
   const coverageCheck = await c.exec([
     "bash",
     "-c",
-    `PGPASSWORD='${APP_DB_PASSWORD}' psql -h localhost -p 5432 -U ${APP_DB_USER} -d ${APP_DB_NAME} -tAc "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity AND EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped AND a.attname LIKE '%user_id')"`,
+    `PGPASSWORD='${APP_DB_PASSWORD}' psql -h localhost -p 5432 -U ${APP_DB_USER} -d ${APP_DB_NAME} -tAc "SELECT DISTINCT c.relname FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid JOIN pg_class ref ON ref.oid = con.confrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE con.contype = 'f' AND ref.relname = 'users' AND n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity"`,
   ]);
   const uncoveredUserTables = coverageCheck.output
     .trim()
@@ -154,8 +157,8 @@ export async function setup() {
     .filter(Boolean);
   if (uncoveredUserTables.length > 0) {
     throw new Error(
-      `Preflight failed: tables with a user FK column lack RLS: ${uncoveredUserTables.join(", ")}. ` +
-        `Every tenant-scoped table (a '%user_id' column) must ENABLE + FORCE row-level security. ` +
+      `Preflight failed: tables with a FK to users lack RLS: ${uncoveredUserTables.join(", ")}. ` +
+        `Every tenant-scoped table (a foreign key to users) must ENABLE + FORCE row-level security. ` +
         `Add an owner-scoped policy, or ENABLE+FORCE with no policy (deny-all) if the table is ` +
         `service-role-only. See docs/spec/database-rls.md (RLS_COVERAGE).`
     );
