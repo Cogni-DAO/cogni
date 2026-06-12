@@ -45,29 +45,6 @@ export {
   shapeGate,
   V0_DETERMINISTIC_GATES,
 } from "./domain/gates/index.js";
-// Goal + KPI loop seam (proj.knowledge-syntropy — goal-loop, design-only v0)
-export {
-  applyStep,
-  DEFAULT_LOOP_BUDGET,
-  type Goal,
-  type GoalLoopDecision,
-  goalLoopDecision,
-  type GoalLoopHaltDecision,
-  type GoalLoopStepDecision,
-  GoalSchema,
-  haltEdge,
-  kpiIdFromStrategy,
-  type LoopBudget,
-  LoopBudgetSchema,
-  type LoopHaltReason,
-  LoopHaltReasonSchema,
-  loopHaltReason,
-  type LoopState,
-  LoopStateSchema,
-  METRIC_STRATEGY_PREFIX,
-  type MetricResolutionStrategy,
-  MetricResolutionStrategySchema,
-} from "./domain/goal-loop.js";
 // Goal codec (tags ⇄ Goal) + KPI reader registry (goal-loop controller seam)
 export {
   type DecodedGoalTags,
@@ -78,12 +55,35 @@ export {
   goalFromRow,
   isGoalTag,
 } from "./domain/goal-codec.js";
+// Goal + KPI loop seam (proj.knowledge-syntropy — goal-loop, design-only v0)
 export {
-  type ExternalCountReaderConfig,
-  type ExternalCountSource,
+  applyStep,
+  DEFAULT_LOOP_BUDGET,
+  type Goal,
+  type GoalLoopDecision,
+  type GoalLoopHaltDecision,
+  type GoalLoopStepDecision,
+  GoalSchema,
+  goalLoopDecision,
+  haltEdge,
+  kpiIdFromStrategy,
+  type LoopBudget,
+  LoopBudgetSchema,
+  type LoopHaltReason,
+  LoopHaltReasonSchema,
+  type LoopState,
+  LoopStateSchema,
+  loopHaltReason,
+  METRIC_STRATEGY_PREFIX,
+  type MetricResolutionStrategy,
+  MetricResolutionStrategySchema,
+} from "./domain/goal-loop.js";
+export {
   createConfidenceSmokeReader,
   createExternalCountReader,
   createKpiReaderRegistry,
+  type ExternalCountReaderConfig,
+  type ExternalCountSource,
   type OwnConfidenceSource,
 } from "./domain/kpi-reader.js";
 // Resolver dispatch (pure namespace router: metric: → goal-loop, agent → agent)
@@ -129,8 +129,6 @@ export {
   type CreateEdoOutcomeInput,
   type KnowledgeContributionPort,
 } from "./port/contribution.port.js";
-// KPI reader port (goal-loop — verifier-independent metric read)
-export type { KpiReader, KpiReaderRegistry } from "./port/kpi-reader.port.js";
 // EDO resolver port (hypothesis loop)
 export type {
   ChainDirection,
@@ -154,6 +152,8 @@ export {
   type KnowledgeStorePort,
   type NewDomain,
 } from "./port/knowledge-store.port.js";
+// KPI reader port (goal-loop — verifier-independent metric read)
+export type { KpiReader, KpiReaderRegistry } from "./port/kpi-reader.port.js";
 // Contribution service (framework-agnostic, cross-node shared)
 export {
   type AppendCommitBody,

@@ -22,8 +22,8 @@
  * @public
  */
 
-import type { Goal } from "./goal-loop.js";
 import type { KpiReader, KpiReaderRegistry } from "../port/kpi-reader.port.js";
+import type { Goal } from "./goal-loop.js";
 
 const clamp0to100 = (n: number): number => Math.max(0, Math.min(100, n));
 

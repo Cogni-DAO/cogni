@@ -19,7 +19,7 @@
  * @public
  */
 
-import { METRIC_STRATEGY_PREFIX, kpiIdFromStrategy } from "./goal-loop.js";
+import { kpiIdFromStrategy, METRIC_STRATEGY_PREFIX } from "./goal-loop.js";
 
 export const AGENT_STRATEGY = "agent" as const;
 

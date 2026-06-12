@@ -23,9 +23,9 @@
 import {
   type Goal,
   GoalSchema,
+  kpiIdFromStrategy,
   type LoopBudget,
   LoopBudgetSchema,
-  kpiIdFromStrategy,
 } from "./goal-loop.js";
 import type { Knowledge } from "./schemas.js";
 

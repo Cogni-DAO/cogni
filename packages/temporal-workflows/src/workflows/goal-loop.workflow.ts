@@ -26,13 +26,13 @@
  * @public
  */
 
-import { executeChild, proxyActivities, uuid4 } from "@temporalio/workflow";
 import {
-  goalLoopDecision,
   type Goal,
+  goalLoopDecision,
   type LoopBudget,
   type LoopState,
 } from "@cogni/knowledge-store/goal-loop";
+import { executeChild, proxyActivities, uuid4 } from "@temporalio/workflow";
 import { STANDARD_ACTIVITY_OPTIONS } from "../activity-profiles.js";
 import type { GoalLoopActivities } from "../activity-types.js";
 import type { GraphRunResult } from "./graph-run.workflow.js";
@@ -97,7 +97,10 @@ export async function GoalLoopWorkflow(
     return { hypothesisId, outcome: "no_goal" };
   }
 
-  const goal: Goal = { ...loaded.goal, evaluateAt: new Date(loaded.goal.evaluateAt) };
+  const goal: Goal = {
+    ...loaded.goal,
+    evaluateAt: new Date(loaded.goal.evaluateAt),
+  };
   const budget: LoopBudget = loaded.budget;
 
   // 2. Read the current KPI via the independent reader (NOT recomputeConfidence).

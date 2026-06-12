@@ -15,7 +15,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { type Goal } from "../src/domain/goal-loop.js";
+import type { Goal } from "../src/domain/goal-loop.js";
 import {
   createConfidenceSmokeReader,
   createExternalCountReader,
@@ -61,7 +61,11 @@ describe("createExternalCountReader — verifier-independent", () => {
 
   it("rejects a non-positive denominator at construction", () => {
     expect(() =>
-      createExternalCountReader({ kpiId: "k", source: async () => 1, denominator: 0 })
+      createExternalCountReader({
+        kpiId: "k",
+        source: async () => 1,
+        denominator: 0,
+      })
     ).toThrow();
   });
 });
@@ -99,7 +103,11 @@ describe("createKpiReaderRegistry", () => {
 
   it("rejects duplicate readers for the same kpiId", () => {
     const make = () =>
-      createExternalCountReader({ kpiId: "dup", source: async () => 1, denominator: 2 });
+      createExternalCountReader({
+        kpiId: "dup",
+        source: async () => 1,
+        denominator: 2,
+      });
     expect(() => createKpiReaderRegistry([make(), make()])).toThrow();
   });
 });

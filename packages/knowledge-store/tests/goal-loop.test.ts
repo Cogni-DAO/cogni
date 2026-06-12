@@ -139,18 +139,18 @@ describe("applyStep — folds one step's accounting into LoopState", () => {
 
   it("increments the stall streak when the KPI does not gain", () => {
     const s = state({ lastKpi: 40, stalledIterations: 1 });
-    expect(applyStep(s, { tokensSpent: 100, newKpi: 40 }).stalledIterations).toBe(
-      2
-    );
-    expect(applyStep(s, { tokensSpent: 100, newKpi: 39 }).stalledIterations).toBe(
-      2
-    );
+    expect(
+      applyStep(s, { tokensSpent: 100, newKpi: 40 }).stalledIterations
+    ).toBe(2);
+    expect(
+      applyStep(s, { tokensSpent: 100, newKpi: 39 }).stalledIterations
+    ).toBe(2);
   });
 
   it("treats the first read (null prior) as progress, not a stall", () => {
     const s = state({ lastKpi: null, stalledIterations: 0 });
-    expect(applyStep(s, { tokensSpent: 100, newKpi: 0 }).stalledIterations).toBe(
-      0
-    );
+    expect(
+      applyStep(s, { tokensSpent: 100, newKpi: 0 }).stalledIterations
+    ).toBe(0);
   });
 });
