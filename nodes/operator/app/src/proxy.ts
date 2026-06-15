@@ -46,12 +46,11 @@ const SIGN_IN_PARAM = "signIn";
 const CALLBACK_PARAM = "callbackUrl";
 
 function isPublicApiRoute(pathname: string): boolean {
+  // Agent register is the one bootstrap seam left open: register → key →
+  // everything else (cognition included) requires that principal.
   return (
     pathname.startsWith("/api/v1/public/") ||
-    pathname === "/api/v1/agent/register" ||
-    // Session-start cognition substrate — a discovery seam like register and
-    // /.well-known/agent.json. Index-only (no entry bodies), so unauthenticated.
-    pathname === "/api/v1/cognition"
+    pathname === "/api/v1/agent/register"
   );
 }
 

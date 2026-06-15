@@ -208,10 +208,18 @@ describe("proxy — API route protection", () => {
     expect(mockGetToken).not.toHaveBeenCalled();
   });
 
-  it("allows /api/v1/cognition without auth", async () => {
+  it("rejects unauthenticated on /api/v1/cognition", async () => {
     mockGetToken.mockResolvedValue(null);
 
     const res = await proxy(makeRequest("/api/v1/cognition"));
+
+    expect(res.status).toBe(401);
+  });
+
+  it("allows agent bearer on /api/v1/cognition", async () => {
+    mockGetToken.mockResolvedValue(null);
+
+    const res = await proxy(makeAgentRequest("/api/v1/cognition"));
 
     expect(res.status).toBe(200);
     expect(mockGetToken).not.toHaveBeenCalled();
