@@ -237,8 +237,18 @@ COMPOSED_DSN_KEYS=" DATABASE_URL DATABASE_SERVICE_URL "
 # replaces with explicit catalog `inheritFrom` (catalog-custody lane). Now serves
 # from the prefetched cache, and only runs for non-agent keys.
 inherit_shared_value() {
-  local k="$1" v=""
+  local k="$1" v="" from=""
   [[ -n "${!k:-}" ]] && return 0
+  # Explicit catalog `inheritFrom: <service>` — the canonical-custody lane that
+  # replaces the blind ancestor scan for keys whose value must byte-match ONE
+  # owner (e.g. SCHEDULER_API_TOKEN must equal the token the scheduler-worker
+  # SENDS, sourced from cogni/<env>/scheduler-worker/). bug.5021.
+  from="$(_cat_field "$k" '.inheritFrom')"
+  if [[ -n "$from" && "$from" != "null" ]]; then
+    v="$(bao_get_field "$from" "$k")"
+    [[ -n "$v" ]] && export "${k}=${v}"
+    return 0
+  fi
   for svc in node-template operator _shared; do
     v="$(bao_get_field "$svc" "$k")"
     if [[ -n "$v" ]]; then export "${k}=${v}"; return 0; fi
@@ -247,10 +257,12 @@ inherit_shared_value() {
 }
 
 # One prefetch: node-path existence + node/ancestor key maps (O(1) ssh).
+# scheduler-worker is an inheritFrom source (SCHEDULER_API_TOKEN) — prefetch it
+# so bao_get_field (cache-only) can resolve the canonical value (bug.5021).
 if bao_exec "" "kv metadata get 'cogni/${DEPLOY_ENVIRONMENT}/${TARGET_NODE}'" >/dev/null 2>&1; then
   NODE_PATH_EXISTS=true
 fi
-for svc in "$TARGET_NODE" node-template operator _shared; do
+for svc in "$TARGET_NODE" node-template operator _shared scheduler-worker; do
   prefetch_path "$svc"
 done
 
@@ -273,6 +285,26 @@ for k in "${NODE_BASELINE_KEYS[@]}"; do
     rm -f "${CACHE_DIR}/${TARGET_NODE}/${k}"   # clear stale cache so seed_kv writes
     seed_kv "$TARGET_NODE" "$k" "$v"
     log "  recomposed ${k} (drift corrected)"
+    created=$((created + 1))
+    continue
+  fi
+  # inheritFrom keys: a single canonical owner holds the authoritative value
+  # (SCHEDULER_API_TOKEN ← scheduler-worker, the exact token the worker SENDS).
+  # The node MUST byte-match it, so — like composed DSNs — we overwrite-on-drift
+  # instead of preserve-existing. A freshly-formed node that inherited a
+  # divergent ancestor self-heals on the next materialize, killing the
+  # worker→node 401 (bug.5021). No-op when already equal (no pod churn).
+  inherit_from="$(_cat_field "$k" '.inheritFrom')"
+  if [[ -n "$inherit_from" && "$inherit_from" != "null" ]]; then
+    v="$(bao_get_field "$inherit_from" "$k")"
+    [[ -z "$v" ]] && continue
+    if [[ "$(bao_get_field "$TARGET_NODE" "$k")" == "$v" ]]; then
+      unchanged=$((unchanged + 1))
+      continue
+    fi
+    rm -f "${CACHE_DIR}/${TARGET_NODE}/${k}"
+    seed_kv "$TARGET_NODE" "$k" "$v"
+    log "  inherited ${k} from ${inherit_from} (drift corrected)"
     created=$((created + 1))
     continue
   fi
