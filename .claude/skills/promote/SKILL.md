@@ -137,8 +137,8 @@ gh workflow run promote-and-deploy.yml --ref main \
 
 App promotion never implies infra. Set `skip_infra=false` ONLY when the promoted diff touches the substrate/Compose layer:
 
-1. **`infra/compose/**`** — edge/Caddy routes, litellm, temporal, autoheal, db-backup, alloy, openclaw-gateway runtime.
-2. **A new/changed secret the VM must materialize** — a new per-node `ExternalSecret` / ESO-OpenBao declaration, or a compose service consuming a new env var. If it's *pod* secrets only (no Compose change), add `-f deploy_infra_mode=k8s-secrets-only` instead.
+1. **`infra/compose/**`\*\* — edge/Caddy routes, litellm, temporal, autoheal, db-backup, alloy, openclaw-gateway runtime.
+2. **A new/changed secret the VM must materialize** — a new per-node `ExternalSecret` / ESO-OpenBao declaration, or a compose service consuming a new env var. If it's _pod_ secrets only (no Compose change), add `-f deploy_infra_mode=k8s-secrets-only` instead.
 3. **Edge/runtime topology** — a new Compose service, a Caddy route, NodePort/ingress wiring living in compose infra.
 
 Everything else — app code, app image, k8s overlay/digest, **DB migrations** (run by the migrator image in the k8s lane, not deploy-infra) — is app-only ⇒ leave `skip_infra` at its `true` default.
