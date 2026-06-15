@@ -1103,7 +1103,9 @@ describe("GitHubRepoWriter.dispatchNodePromote", () => {
     });
 
     expect(result.dispatched).toBe(true);
-    const dispatch = requests.find((request) => request.route === DISPATCH_ROUTE);
+    const dispatch = requests.find(
+      (request) => request.route === DISPATCH_ROUTE
+    );
     expect(dispatch?.params).toMatchObject({
       workflow_id: "promote-and-deploy.yml",
       ref: "main",
@@ -1129,7 +1131,9 @@ describe("GitHubRepoWriter.dispatchNodePromote", () => {
       sourceSha: "abc1230000000000000000000000000000000000",
     });
 
-    const dispatch = requests.find((request) => request.route === DISPATCH_ROUTE);
+    const dispatch = requests.find(
+      (request) => request.route === DISPATCH_ROUTE
+    );
     expect((dispatch?.params.inputs as Record<string, string>).source_sha).toBe(
       "abc1230000000000000000000000000000000000"
     );
