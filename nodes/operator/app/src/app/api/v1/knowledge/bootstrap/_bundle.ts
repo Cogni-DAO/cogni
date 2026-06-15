@@ -10,8 +10,8 @@
  * Invariants:
  *   - IRREDUCIBLE_INVARIANTS_ALWAYS_PRESENT: the constant is the one piece of
  *     cognition that must render even when the hub is empty/unreachable.
- *   - INDEX_NOT_CONTENT: renders pointers (title + use-when + recall path), not
- *     full entry bodies.
+ *   - INDEX_NOT_CONTENT: renders pointers (id + title + recall path), not
+ *     entry bodies or excerpts.
  * Side-effects: none
  * Links: docs/spec/node-baas-architecture.md
  * @internal
@@ -49,15 +49,12 @@ export function isCognitionEntry(entryType: string | undefined): boolean {
   return COGNITION_ENTRY_TYPES.has(entryType ?? "");
 }
 
-/** First non-empty content line, stripped of markdown emphasis, ≤160 chars. */
-export function deriveUseWhen(content: string, fallback: string): string {
-  const firstLine = content
-    .split("\n")
-    .map((l) => l.trim())
-    .find((l) => l.length > 0);
-  const raw = firstLine ?? fallback;
-  const cleaned = raw.replace(/[*_`#>]/g, "").trim();
-  return cleaned.length > 160 ? `${cleaned.slice(0, 157)}…` : cleaned;
+/** Make a string safe to drop into a GFM table cell (no `|`, no line breaks). */
+export function escapeCell(value: string | null | undefined): string {
+  return (value ?? "")
+    .replace(/\s*\r?\n\s*/g, " ")
+    .replace(/\|/g, "\\|")
+    .trim();
 }
 
 export interface RenderBundleInput {
@@ -85,7 +82,9 @@ export function renderBundleMarkdown(input: RenderBundleInput): string {
   const skillRows =
     skillsIndex.length > 0
       ? skillsIndex
-          .map((s) => `| \`${s.id}\` | ${s.entryType} | ${s.useWhen} |`)
+          .map(
+            (s) => `| \`${s.id}\` | ${s.entryType} | ${escapeCell(s.title)} |`
+          )
           .join("\n")
       : "| _(none merged yet)_ | | |";
 
@@ -94,7 +93,7 @@ export function renderBundleMarkdown(input: RenderBundleInput): string {
       ? domainPointers
           .map(
             (d) =>
-              `| \`${d.domain}\` | ${d.entryCount} | ${d.description ?? ""} |`
+              `| \`${d.domain}\` | ${d.entryCount} | ${escapeCell(d.description)} |`
           )
           .join("\n")
       : "| _(none)_ | | |";

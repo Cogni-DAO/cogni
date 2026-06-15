@@ -30,7 +30,6 @@ import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { serverEnv } from "@/shared/env";
 import {
-  deriveUseWhen,
   isCognitionEntry,
   renderBundleMarkdown,
   SESSION_BOOTSTRAP_INVARIANTS,
@@ -40,6 +39,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const PER_DOMAIN_LIMIT = 50;
+// Unauthed + does N+1 Doltgres reads; cache so repeated session starts collapse
+// to one DB pass per window instead of hammering the hub.
+const CACHE_CONTROL = "public, max-age=60, stale-while-revalidate=300";
 
 /** External origin this request reached us through (forwarded headers first). */
 function publicOrigin(request: Request): string {
@@ -83,7 +85,6 @@ export const GET = wrapRouteHandlerWithLogging(
           skillsIndex.push({
             id: r.id,
             title: r.title,
-            useWhen: deriveUseWhen(r.content, r.title),
             entryType: r.entryType ?? "guide",
             domain: r.domain,
           });
@@ -116,7 +117,7 @@ export const GET = wrapRouteHandlerWithLogging(
       "knowledge.bootstrap_success"
     );
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       KnowledgeBootstrapResponseSchema.parse({
         node,
         version: "v1",
@@ -129,5 +130,7 @@ export const GET = wrapRouteHandlerWithLogging(
         markdown,
       })
     );
+    response.headers.set("Cache-Control", CACHE_CONTROL);
+    return response;
   }
 );

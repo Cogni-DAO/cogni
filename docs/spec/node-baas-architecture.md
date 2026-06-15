@@ -221,11 +221,11 @@ Supabase delivers Auth, Storage, and a generated API as managed services. The sa
 
 **Endpoint.** `GET /api/v1/knowledge/bootstrap` returns a node's kickstart bundle, advertised under `cognition` + `endpoints.knowledgeBootstrap` in `/.well-known/agent.json`. The bundle has three parts:
 
-| Part               | Source                                                            | Owner         |
-| ------------------ | ----------------------------------------------------------------- | ------------- |
-| Tooling invariants | `SESSION_BOOTSTRAP_INVARIANTS` constant in the node app           | code          |
-| Skills index       | hub entries of type `skill`/`guide`/`playbook` (title + use-when) | knowledge hub |
-| Domain pointers    | `listDomainsFull()` — registered domains + entry counts           | knowledge hub |
+| Part               | Source                                                                  | Owner         |
+| ------------------ | ----------------------------------------------------------------------- | ------------- |
+| Tooling invariants | `SESSION_BOOTSTRAP_INVARIANTS` constant in the node app                 | code          |
+| Skills index       | hub entries of type `skill`/`guide`/`playbook` (use-when framed titles) | knowledge hub |
+| Domain pointers    | `listDomainsFull()` — registered domains + entry counts                 | knowledge hub |
 
 The response carries a fully-rendered `markdown` field; a **SessionStart hook** echoes it to stdout, and both Claude Code and Codex inject SessionStart stdout into the model's context. One operator endpoint feeds both runtimes identically.
 

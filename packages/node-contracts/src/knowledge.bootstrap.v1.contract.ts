@@ -8,9 +8,10 @@
  *   git-synced AGENTS.md sprawl.
  * Scope: Zod schemas + types for the wire format only. Does not contain business logic, I/O, or auth.
  * Invariants:
- *   - INDEX_NOT_CONTENT: bundle carries skill/domain POINTERS (title + use-when
- *     + recall path), never full entry bodies — full content stays behind the
- *     authed read routes (KNOWLEDGE_READ_REQUIRES_PRINCIPAL).
+ *   - INDEX_NOT_CONTENT: bundle carries skill/domain POINTERS (id + title +
+ *     recall path) — discovery metadata only, never entry bodies or excerpts.
+ *     Full content stays behind the authed read routes
+ *     (KNOWLEDGE_READ_REQUIRES_PRINCIPAL).
  *   - IRREDUCIBLE_INVARIANTS_ALWAYS_PRESENT: `toolingInvariants` + `markdown`
  *     render even when the hub is empty or unreachable, so a session always
  *     bootstraps.
@@ -23,9 +24,8 @@ import { z } from "zod";
 
 export const BootstrapSkillPointerSchema = z.object({
   id: z.string(),
+  /** The entry's "use when X" framed title — discovery metadata, not body. */
   title: z.string(),
-  /** "use when X" framing lifted from the entry — the recall decision line. */
-  useWhen: z.string(),
   entryType: z.string(),
   domain: z.string(),
 });
