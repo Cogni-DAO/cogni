@@ -20,27 +20,31 @@ The bar: a node owner, holding only an API key (no kubeconfig, no vault token,
 lands in the node's running pod. This roadmap defines the validation layers and
 the work each requires — so "proper e2e" is reached deliberately, not claimed.
 
-## Capability decision (locked)
+## Capability decision (locked) — least-privilege, distinct role
 
-`can_manage_secrets` is a **computed relation off `developer`** (parity with
-`can_flight`, NOT a separate role like `production_promoter`). One `developer`
-grant confers flight + deploy + manage-secrets. **No `secrets_manager` role.**
+Top-0.1% practice, and the pattern prod **already** ships (Agents UI shows
+"Flight" for `developer` vs "Promote to production" for `production_promoter` as
+**separate** grants): **one distinct, least-privilege role per capability.**
 
-Consequence — the **UI must say so**. Today `ROLE_CAPABILITY.developer = "Flight"`
-([`NodeAccess.tsx:34`](../../nodes/operator/app/src/features/nodes/access/NodeAccess.tsx))
-understates the grant: approving a "Flight" developer **silently** also grants
-secret-write. That is the half-assed surface this roadmap closes (G1).
+So `can_manage_secrets` computes from its **own** `secrets_manager` role
+(mirroring `production_promoter`), **not** from `developer`. A node owner grants
+"Manage secrets" explicitly and legibly — it is never bundled into a "Flight"
+grant. (Reverses an earlier wrong assumption that secrets rode `developer`.)
+
+Node roles → capabilities: `developer → can_flight` · `secrets_manager →
+can_manage_secrets` · `production_promoter → can_promote_production`. `admin`
+confers all three (union).
 
 ## Parity gaps vs flight/promote (the work)
 
 The authz slice is wired (route `node.manage_secrets` → `can_manage_secrets`,
 fail-closed 503/403; OpenFGA relation; adapter). What is **not** at parity:
 
-| ID     | Gap                                                                                                                                                                                                     | Fix                                                                                                                              | Anchor                                                             |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| **G1** | UI renders the developer grant as "Flight" only — secrets is invisible                                                                                                                                  | `ROLE_CAPABILITY.developer` + page blurb must name manage-secrets; the human approver must see what they grant                   | `NodeAccess.tsx:34-37`                                             |
-| **G2** | `NODE_SECRETS_ALLOWLIST` is `{}` — **no node can declare an A2 key**, so Gate 2 (`key_not_allowed`) blocks **every** write                                                                              | Build-time codegen of the allowlist from `infra/secrets-catalog.yaml` A2 entries; the throwaway node must declare ≥1 A2 key      | `node-secrets-allowlist.data.ts:50`                                |
-| **G3** | `<env>-node-secrets-writer` OpenBao role is provisioned **only** by `provision-env.yml` (`reconcile-env-substrate.sh:138`), NOT the routine infra lever → operator pod can't self-login → Gate 3 throws | Provision the role from the routine infra lever (`candidate-flight-infra`/`deploy-infra`) so flight-infra is **1-1 DRY** with it | `reconcile-env-substrate.sh:138-152`, `candidate-flight-infra.yml` |
+| ID        | Gap                                                                                                                                                                                                     | Fix                                                                                                                                                    | Anchor                                                             |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| **G1** ✅ | Secrets had no distinct grant — rode `developer`, surfaced only as "Flight"                                                                                                                             | **DONE:** `secrets_manager` role (OpenFGA model + `NODE_ACCESS_ROLES` + CHECK migration `0036`) + `ROLE_CAPABILITY.secrets_manager = "Manage secrets"` | `rbac-model.json`, `node-access-requests.ts`, `NodeAccess.tsx`     |
+| **G2**    | `NODE_SECRETS_ALLOWLIST` is `{}` — **no node can declare an A2 key**, so Gate 2 (`key_not_allowed`) blocks **every** write                                                                              | Build-time codegen of the allowlist from `infra/secrets-catalog.yaml` A2 entries; the throwaway node must declare ≥1 A2 key                            | `node-secrets-allowlist.data.ts:50`                                |
+| **G3**    | `<env>-node-secrets-writer` OpenBao role is provisioned **only** by `provision-env.yml` (`reconcile-env-substrate.sh:138`), NOT the routine infra lever → operator pod can't self-login → Gate 3 throws | Provision the role from the routine infra lever (`candidate-flight-infra`/`deploy-infra`) so flight-infra is **1-1 DRY** with it                       | `reconcile-env-substrate.sh:138-152`, `candidate-flight-infra.yml` |
 
 No `secret-set.yml` workflow is needed — the write is a synchronous API call
 (unlike promote's async lane). That is parity, not a gap.

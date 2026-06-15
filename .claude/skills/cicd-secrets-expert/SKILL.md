@@ -153,7 +153,7 @@ The honest answer to "can a node add its own secret without Derek's GitHub/kube 
 
 **The gap that keeps us on Derek's creds:** there is **no shipped operator-app secrets route** and **no `.github/workflows/secret-set.yml`**. Every value-write today bottoms out in GitHub-merge authority or operator/admin kube custody — i.e. Derek.
 
-**The precise PR/design that closes it** — the value-write complement to the flight triangle (`developer → can_flight → operator-held GitHub App creds`), one rung over (`developer → can_manage_secrets → operator-held OpenBao writer`):
+**The precise PR/design that closes it** — the value-write complement to the flight triangle (`developer → can_flight → operator-held GitHub App creds`), one rung over with its **own least-privilege role** (`secrets_manager → can_manage_secrets → operator-held OpenBao writer`; distinct from `developer`, mirroring `production_promoter`):
 
 - Design: [`docs/design/node-self-serve-secrets.md`](../../../docs/design/node-self-serve-secrets.md) (operator-mediated, OpenFGA-authorized). Sibling: [`node-wizard-secret-setting.md`](../../../docs/design/node-wizard-secret-setting.md) (shape, shipped).
 - PR: **#1627** (prototype) — `POST /api/v1/nodes/[id]/secrets` + `OperatorSecretsPlanePort` + `OpenBaoSecretsAdapter` (operator pod self-logins with its OWN projected SA token, `audience: cogni-openbao`) + `can_manage_secrets` OpenFGA relation + build-time A2 allowlist. Caller holds **only an API key — no kubeconfig, no vault token.**
