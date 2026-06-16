@@ -37,6 +37,45 @@ Do not proceed until they pick. (A) = autonomous fan-out, faster, you own the ag
 - **Never forward subagent synthesis as fact.** Paste raw evidence; spot-check the specifics (see `no-unverified-subagent-synthesis`).
 - **Green ≠ done.** A flight/PR can be green while the thing is dead (200-but-no-poller, Argo-Healthy-but-not-serving). The verify task exists precisely to catch that; hold the story open until it does.
 
+## Monitoring recipe (precise — refine over time)
+
+**ONE persistent, claim-aware Monitor over ALL linked tasks** (not one per task; keep total monitors to 0–1). Poll every 60s (remote API → rate-limit safe). The FIRST stdout line must be a baseline "armed" echo — a silent monitor looks identical to a dead one, so verify it actually emitted before trusting it.
+
+**Poll TWO endpoints per task — claims are a blind spot:**
+- `GET /api/v1/work/items/{id}` → `status`, `pr`, `branch`. (NOT `assignees` — agents claim via the lease, which never writes `assignees`.)
+- `GET /api/v1/work/items/{id}/coordination` → `session.status` (`active`/expired) + `claimedByDisplayName`. **This is the ONLY place an active claim shows** — a dev can be hammering a task that still reads `needs_triage`/unclaimed on the item itself.
+
+**Signature = `status | pr | branch | claim(session.status:claimedBy)`. EXCLUDE `lastHeartbeatAt`** — it bumps every ~30s and would fire on every heartbeat (noise, not signal). Emit only when the signature changes vs the stored baseline.
+
+**Auth gotcha:** Cloudflare blocks the default `python-urllib` UA (error 1010). curl works; if you script in Python, set `User-Agent: curl/8.4.0`.
+
+```bash
+KEY=$(grep COGNI_API_KEY_PROD <repo>/.env.cogni | head -1 | cut -d= -f2- | tr -d "\"' ")
+B=https://cognidao.org/api/v1/work/items
+sig(){
+  wi=$(curl -s -A curl/8.4.0 -H "Authorization: Bearer $KEY" "$B/$1" | python3 -c \
+    "import sys,json;d=json.load(sys.stdin);print('status=%s pr=%s branch=%s'%(d.get('status'),d.get('pr'),d.get('branch')))" 2>/dev/null)
+  co=$(curl -s -A curl/8.4.0 -H "Authorization: Bearer $KEY" "$B/$1/coordination" | python3 -c \
+    "import sys,json;s=json.load(sys.stdin).get('session') or {};print('claim=%s:%s'%(s.get('status','none'),(s.get('claimedByDisplayName') or '-')[:24]))" 2>/dev/null)
+  echo "$wi $co"
+}
+declare -A prev; for id in <task-ids>; do prev[$id]="$(sig $id)"; done
+echo "monitor armed: $(for id in <task-ids>; do echo -n "$id[${prev[$id]}] "; done)"   # verify-running baseline
+while true; do
+  for id in <task-ids>; do c="$(sig $id)"; [ -n "$c" ] && [ "$c" != "${prev[$id]}" ] && { echo "[$(date -u +%H:%MZ)] $id -> $c"; prev[$id]="$c"; }; done
+  sleep 60
+done
+```
+Arm with `Monitor { persistent: true, timeout_ms: 3600000 }`.
+
+**Act on these events — not the rest:**
+- `pr`/`branch` appears → **collision check**: `comm -12 <(gh pr view <A> --json files -q '.files[].path'|sort) <(gh pr view <B> ...|sort)`. Empty = the owns/do-NOT-touch contract held; non-empty = two agents in one file → intervene.
+- `claim=active → expired` with no PR → stalled agent; re-hand or re-spawn.
+- `status → needs_review` or CI red → route to review / relay the failure.
+- silence on heartbeats → correct (that's the point).
+
+*Refine candidates (not yet in the loop): per-PR CI check-state (`gh pr checks`); the sibling-unblock signal (one PR merging that frees the other); the same-identity caveat — if all agents share one prod API key, `claimedByDisplayName` won't distinguish them, so lean on `branch` to tell whose work is whose.*
+
 ## Eventual home
 
 This is the human-driven v0. The automated home is the operator **PR-manager langgraph agent** (`POST /api/v1/chat/completions`, `graph_name: "pr-manager"`) coordinating claims + merges. Until that carries the loop, run it here.
