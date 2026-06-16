@@ -71,9 +71,9 @@ describe("substrate-registry", () => {
   });
 
   it("THE SEAM: stubbed assertLive fns fail CLOSED (never silently pass)", async () => {
+    // The invariant is "a stub fails closed", not "a stub exists" — so this stays
+    // green as dev2 (Move 2) lands real probes and the stub set shrinks to empty.
     const stubs = stubbedAssertions();
-    // until dev2 (Move 2) lands the live probes, all assertions are stubs
-    expect(stubs.length).toBeGreaterThan(0);
     for (const d of stubs) {
       await expect(
         d.assertLive({ env: "candidate-a", node: "throwaway" })
