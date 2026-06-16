@@ -89,5 +89,23 @@ else
     [[ "$caddyfile_changed" == "true" ]] && echo "$NEW_CADDY_HASH" > "$CADDY_HASH_FILE"
     [[ "$edge_env_changed" == "true" ]] && echo "$NEW_EDGE_ENV_HASH" > "$EDGE_ENV_HASH_FILE"
     log_info "Caddy recreated; new env_file values + Caddyfile in effect"
+
+    # Re-sync the on-disk Caddyfile into the running config. The force-recreate
+    # above loads the frozen env (the new $<SLUG>_DOMAIN), but it snapshots the
+    # Caddyfile at recreate time — and a new node's site block can be appended to
+    # the Caddyfile AFTER that snapshot (the per-node and env-wide reconciles race
+    # on the same file). The hash is then stored, so every later reconcile sees
+    # "no change" and never recreates: the new node's server block lives on disk
+    # but is absent from the running config → the node is Argo-Healthy and serves
+    # in-cluster yet returns external 000 indefinitely (bug.5031). A reload here is
+    # safe (the recreate already loaded the env, so {$<SLUG>_DOMAIN} resolves) and
+    # idempotently re-reads the latest on-disk Caddyfile into the running config,
+    # defeating the TOCTOU. Verified by hand on candidate-a 2026-06-16: a reload
+    # took beacon-test from external 000 → 200 with no other change.
+    if "${EDGE_COMPOSE[@]}" exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile 2>/dev/null; then
+      log_info "Caddy reloaded; running config re-synced to on-disk Caddyfile"
+    else
+      log_warn "caddy reload after recreate failed (non-fatal; recreate already applied)"
+    fi
   fi
 fi
