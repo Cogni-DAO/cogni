@@ -59,6 +59,17 @@ provisioning assumptions.
   an app rollout, but it must not run `deploy-infra.sh`. Missing substrate is a
   loud handoff to `provision-env.yml`, `candidate-flight-infra.yml`, or the
   preview/prod infra lane that owns the substrate mutation.
+- **`bug.5015` — candidate-a is the only env with a SPLIT flight.** app+infra
+  ship as two manual workflows (`candidate-flight` + `candidate-flight-infra`),
+  whereas `promote-and-deploy.yml` runs **both** in one graph for preview/prod.
+  So a PR that mutates `deploy-infra`-owned substrate (OpenFGA model bootstrap,
+  compose) ships its app via `candidate-flight` but silently does **not**
+  bootstrap the model — the gated route returns `503 authz_unavailable` until
+  someone also dispatches `candidate-flight-infra`. When validating any
+  model/substrate change on candidate-a, run **both** levers. Fix direction
+  (CI/CD freeze — not yet done): unify candidate-a onto a `promote-and-deploy`
+  shape, or have `candidate-flight` detect substrate drift and chain the infra
+  lever. The 503-vs-403 tell is documented in the `rbac-expert` skill.
 - The stale legacy VM `852637 / canary-cogni / 84.32.109.160` was destroyed.
 
 **`type: infra` images — built in CI, deployed via Compose (feat/litellm-image-in-ci, in flight).** Shared VM-infra images (`infra/images/litellm/` = `FROM berriai/litellm` + `COPY cogni_callbacks.py`) were previously **hand-built + content-hash-pinned by a human** (`docker build … litellm-<hash>` → bump `LITELLM_IMAGE` in `deploy-infra.sh`) — outside build-once-promote, so callback changes were latent and the pin drifted. Now litellm is a first-class catalog target: `infra/catalog/litellm.yaml` (`type: infra` + `build_context`), built by the catalog-generic `build-and-push-images.sh`, **content-hash tagged** via `image-tags.sh:infra_image_tag`, and `deploy-infra.sh` resolves the identical tag (no hand-pin). `type:infra` is in `ALL_TARGETS` (build) but not `NODE_TARGETS`; the k8s plane (overlays/promotion/Argo/coverage) skips it via `image-tags.sh:is_infra_target`. A new VM-infra image is a one-file catalog drop. See [create-service.md](../../../docs/guides/create-service.md) §9b-infra + [ci-cd.md](../../../docs/spec/ci-cd.md) axiom 16. **Runtime stays Compose** — moving litellm into k8s/Argo is explicitly deferred (build-in-CI was the actual fix, not the runtime move).
