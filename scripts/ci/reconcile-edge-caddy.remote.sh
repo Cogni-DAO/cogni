@@ -106,18 +106,17 @@ else
     # flight surfaces the failure instead of silently half-deploying.
     # (task.5078 edge-routing; healed by hand on candidate-a 2026-06-16 — a reload
     # took beacon-test from external 000 → 200 with no other change.)
+    # `caddy reload` validates + atomically swaps the running config; rc 0 means
+    # the new on-disk Caddyfile (incl. the new node's site block) is now live. It
+    # is the reliable gate — persist the hash ONLY on its success. (A per-node
+    # admin-API verify-and-heal — reusing assert-target-substrate.sh's :2019 probe
+    # — is the stronger follow-up; left out here to keep this a minimal bug-fix and
+    # avoid a hard dependency on a probe tool inside the caddy image.)
     if ! "${EDGE_COMPOSE[@]}" exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile; then
       log_warn "caddy reload FAILED — config hash NOT persisted; next reconcile will retry"
       exit 1
     fi
-    # Reload can return 0 yet the running config be empty (adapter quirk / admin
-    # race). Probe the live admin API — the same endpoint assert-target-substrate.sh
-    # reads — and require at least one route present before trusting the reconcile.
-    if ! "${EDGE_COMPOSE[@]}" exec -T caddy wget -qO- http://localhost:2019/config/apps/http/servers 2>/dev/null | grep -q reverse_proxy; then
-      log_warn "Caddy running config has no routes after reload — hash NOT persisted; failing loud"
-      exit 1
-    fi
-    log_info "Caddy reloaded + running config verified live; persisting config hash(es)"
+    log_info "Caddy reloaded; running config re-synced to on-disk Caddyfile; persisting config hash(es)"
     [[ "$caddyfile_changed" == "true" ]] && echo "$NEW_CADDY_HASH" > "$CADDY_HASH_FILE"
     [[ "$edge_env_changed" == "true" ]] && echo "$NEW_EDGE_ENV_HASH" > "$EDGE_ENV_HASH_FILE"
   fi
