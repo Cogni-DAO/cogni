@@ -339,6 +339,19 @@ export const repoSpecSchema = z
     /** Unique node identity — scopes all ledger tables. Generated once at init, never changes. */
     node_id: z.string().uuid("node_id must be a valid UUID"),
 
+    /**
+     * Human-facing node identity (display, not a key). `name` is the node slug
+     * (e.g. `operator`, `beacon`); `mission` is the one-line core mission the
+     * cognition substrate surfaces at session start. Optional for back-compat.
+     */
+    intent: z
+      .object({
+        name: z.string().min(1),
+        mission: z.string().min(1).optional(),
+      })
+      .passthrough()
+      .optional(),
+
     /** Stable opaque scope UUID — DB FK, never changes. Optional for backward compat. */
     scope_id: scopeIdSchema.optional(),
 

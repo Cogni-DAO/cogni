@@ -41,7 +41,12 @@ export type CognitionDomainPointer = z.infer<
 >;
 
 export const CognitionBundleResponseSchema = z.object({
+  /** Node UUID (node_id) — stable machine identity. */
   node: z.string(),
+  /** Human-facing node slug from repo-spec `intent.name` (e.g. `operator`). */
+  name: z.string(),
+  /** One-line node mission from repo-spec `intent.mission`, null when undeclared. */
+  mission: z.string().nullable(),
   version: z.literal("v1"),
   buildSha: z.string(),
   generatedAt: z.string(),
