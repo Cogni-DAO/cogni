@@ -14,14 +14,12 @@
  * @public
  */
 
-import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "@/app/_lib/auth/session";
-import { resolveServiceDb } from "@/bootstrap/container";
+import { resolveNodeRegistry } from "@/bootstrap/container";
 import { createNodeProber } from "@/bootstrap/node-flight.factory";
 import { rootDomain, verifyFlightStatus } from "@/features/nodes/flight-status";
-import { nodes } from "@/shared/db/nodes";
 import { serverEnv } from "@/shared/env";
 import { baseDomain } from "@/shared/node-registry/resolve";
 
@@ -45,16 +43,12 @@ export async function GET(
 
   const { id } = await ctx.params;
 
-  // Resolve {id} → slug. Accept either the registry UUID or the slug directly (a freshly-formed node
-  // may not be in the registry at main yet — see beacon). Read-only, service-scoped, not owner-gated:
-  // flight status only exposes a node's PUBLIC surface, no secrets.
-  const db = resolveServiceDb();
-  const rows = await db
-    .select({ slug: nodes.slug })
-    .from(nodes)
-    .where(eq(nodes.id, id))
-    .limit(1);
-  const slug = rows[0]?.slug ?? id;
+  // Consume dev1's registry: match {id} as either the repo-spec nodeId (UUID) or the slug. The registry
+  // exposes only PUBLIC node facts, so no owner-gating. (A raw nodes.id query would uuid-cast-error on a
+  // slug like "operator" — that 500 is exactly what the candidate-a self-exercise caught.)
+  const summaries = await resolveNodeRegistry().listPublic();
+  const node = summaries.find((n) => n.nodeId === id || n.slug === id);
+  const slug = node?.slug ?? id;
 
   const apex = baseDomain(serverEnv());
   if (!apex) {
@@ -69,9 +63,9 @@ export async function GET(
 
   const status = await verifyFlightStatus(
     {
-      nodeId: id,
+      nodeId: node?.nodeId ?? id,
       slug,
-      primary: slug === "operator",
+      primary: node?.primary ?? slug === "operator",
       baseDomain: rootDomain(apex),
     },
     createNodeProber()
