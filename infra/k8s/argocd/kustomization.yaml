@@ -41,6 +41,7 @@ resources:
   - production-blue-applicationset.yaml
   - production-habitat-applicationset.yaml
   - production-operator-applicationset.yaml
+  - production-oss-applicationset.yaml
   - production-scheduler-worker-applicationset.yaml
   # <<< GENERATED node-appsets
 
