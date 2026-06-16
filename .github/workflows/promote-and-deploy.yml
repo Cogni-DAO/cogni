@@ -975,22 +975,6 @@ jobs:
           ROLLUP_TARGETS_JSON: ${{ needs.decide.outputs.targets_json }}
         run: bash scripts/ci/aggregate-rollup.sh preview
 
-      - name: Lock preview on success
-        if: steps.outcome.outputs.outcome == 'dispatched'
-        env:
-          GH_TOKEN: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          DEPLOY_BRANCH: deploy/preview
-        run: bash scripts/ci/set-preview-review-state.sh reviewing "$(cat /tmp/preview-current-sha)"
-
-      - name: Unlock preview on failure
-        if: always() && steps.outcome.outputs.outcome == 'failed'
-        env:
-          GH_TOKEN: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          DEPLOY_BRANCH: deploy/preview
-        run: bash scripts/ci/set-preview-review-state.sh unlocked
-
       - name: Emit preview-flight-outcome artifact
         if: always()
         run: printf '%s\n' "${{ steps.outcome.outputs.outcome }}" > preview-flight-outcome.txt

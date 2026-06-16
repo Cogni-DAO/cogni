@@ -2,8 +2,9 @@ name: Flight Preview
 
 # Triggered on every push to main (PR merged) or via workflow_dispatch(sha).
 # Re-tags mq-{N}-{queueSHA} → preview-{mainSHA} in GHCR (no rebuild) and then
-# calls scripts/ci/flight-preview.sh which handles the three-value lease gate:
-# unlocked → dispatching → reviewing. See task.0293 for the lease model.
+# calls scripts/ci/flight-preview.sh, which dispatches promote-and-deploy
+# env=preview for the merged SHA. Preview tracks the latest merged SHA
+# (latest-wins); there is no review lease/hold.
 #
 # SHA resolution: HEAD_SHA is the commit on main (github.sha for push events,
 # inputs.sha for dispatch). With merge queue enabled, the squash-merged commit
@@ -37,10 +38,10 @@ permissions:
   pull-requests: read
   actions: write
 
-# Serialize entry to the unlocked → dispatching transition. Two merges landing
-# within seconds will run back-to-back, not in parallel. The three-value lease
-# in flight-preview.sh is the correctness guarantee; this concurrency group
-# just reduces push-retry churn under bursty merges.
+# Serialize flight dispatch: two merges landing within seconds run back-to-back,
+# not in parallel, so they dispatch promote-and-deploy in merge order.
+# promote-and-deploy.yml's own per-env concurrency group then serializes the
+# deploys themselves (latest-wins) — there is no review lease.
 concurrency:
   group: flight-preview
   cancel-in-progress: false
@@ -61,10 +62,9 @@ jobs:
        !startsWith(github.event.head_commit.message, 'chore(preview):'))
     outputs:
       # Emitted by scripts/ci/flight-preview.sh into $GITHUB_OUTPUT.
-      # Values: dispatched | queued | (empty when the flight step was
-      # gated off, e.g. workflow_dispatch with a non-PR SHA).
-      # Consumed by the deploy-preview job so a queued run surfaces as a
-      # visibly-skipped entry in the checks list instead of a green one.
+      # Values: dispatched | (empty when the flight step was gated off,
+      # e.g. workflow_dispatch with a non-PR SHA).
+      # Consumed by the deploy-preview job to confirm a dispatch occurred.
       status: ${{ steps.flight.outputs.status }}
       pr_number: ${{ steps.pr.outputs.pr_number }}
       head_sha: ${{ steps.pr.outputs.head_sha }}
@@ -257,10 +257,10 @@ jobs:
 
           echo "✅ Re-tag complete for preview-${HEAD_SHA:0:8}"
 
-      # The script writes `status=dispatched|queued` to $GITHUB_OUTPUT and a
-      # markdown banner to $GITHUB_STEP_SUMMARY — no decision logic lives in
-      # this workflow. Exit 0 = dispatched, 1 = error, 2 = queued.
-      - name: Flight to preview (lock-gate aware)
+      # The script writes `status=dispatched` to $GITHUB_OUTPUT and a markdown
+      # banner to $GITHUB_STEP_SUMMARY — no decision logic lives in this
+      # workflow. Exit 0 = dispatched, 1 = error.
+      - name: Flight to preview
         id: flight
         if: steps.pr.outputs.skip != 'true'
         env:
@@ -293,8 +293,7 @@ jobs:
           exit 1
 
       # Consumed by promote-preview-digest-seed.yml (workflow_run). Only
-      # `dispatched` may trigger a chore(preview): commit on main — queued
-      # merges must not (task.0349 follow-up).
+      # `dispatched` may trigger a chore(preview): commit on main.
       - name: Record preview flight outcome artifact
         if: always() && steps.pr.outputs.skip != 'true'
         run: |
@@ -306,9 +305,8 @@ jobs:
           name: preview-flight-outcome
           path: preview-flight-outcome.txt
 
-  # Visible check: green only when promote-and-deploy was actually dispatched
-  # (lease unlocked). Skipped (grey) when preview was queue-only — distinct
-  # from a green "Flight Preview" job alone.
+  # Visible check: green when promote-and-deploy was dispatched for this merge.
+  # Skipped (grey) only when the flight was gated off (a non-PR dispatch SHA).
   preview-dispatched-marker:
     needs: flight
     if: success() && needs.flight.outputs.status == 'dispatched'
@@ -319,9 +317,8 @@ jobs:
           echo "✅ Preview lease was unlocked; promote-and-deploy was dispatched for this merge."
 
   # Deploy-preview is gated on the flight script's `status` output, not on
-  # step conclusions. A queued run emits `status=queued`, leaving this job
-  # visibly skipped in the checks list; a dispatched run emits
-  # `status=dispatched` and this job runs to confirm.
+  # step conclusions. A dispatched run emits `status=dispatched` and this job
+  # runs to confirm; a gated-off run (non-PR dispatch SHA) leaves it skipped.
   deploy-preview:
     needs: flight
     if: needs.flight.outputs.status == 'dispatched'

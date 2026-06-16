@@ -91,7 +91,7 @@ GitHub Actions is **not** assumed to be the long-term OSS CI answer for the cont
 | `candidate-flight.yml`, `promote-and-deploy.yml`                                                      | App-digest promotion orchestration. ~1,100 + ~1,000 lines; 3-way inline digest-resolution trees; SSH to VM. | 🔴 DANGER ZONE                                   |
 | `candidate-flight-infra.yml`, `provision-env.yml`                                                     | Infra/Compose lever + cold-start provisioning. Mutate VM + secrets + Cloudflare.                            | 🔴 DANGER ZONE                                   |
 | `wait-for-argocd.sh`, `verify-buildsha.sh`, `aggregate-decide-outcome.sh`, `resolve-cell-state.sh`    | Deployment gates (Axioms 14/15/19). Read + assert only.                                                     | 🟡 FREEZE EXPANSION (load-bearing; don't extend) |
-| `flight-preview.yml`, `auto-merge-release-prs.yml`, `promote-preview-digest-seed.yml`                 | Preview-lease + release contract boundaries. Hardcoded check-name lists; main-merge side-effects.           | 🟡 FREEZE EXPANSION                              |
+| `flight-preview.yml`, `auto-merge-release-prs.yml`, `promote-preview-digest-seed.yml`                 | Preview-flight (latest-wins) + release contract boundaries. Hardcoded check-name lists; main-merge side-effects. | 🟡 FREEZE EXPANSION                              |
 
 ### The behemoth
 
