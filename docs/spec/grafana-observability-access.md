@@ -11,14 +11,14 @@ Provisioning demands **one** human input — the Grafana Cloud **admin** token (
 admin token, `fork-quickstart.md` §6). Phase 5e (`provision-grafana-cloud-mint.sh`) uses it to mint
 **derived, scoped** credentials — never the admin token itself leaves the runner. From that one root:
 
-| consumer | credential | where it lives | who/what queries |
-| --- | --- | --- | --- |
-| **Validator / CI** | child **Viewer** SA `glsa_` (read: datasource + logs) | `cogni/<env>/_shared/{GRAFANA_URL,GRAFANA_SERVICE_ACCOUNT_TOKEN}` | `/validate-candidate` scorecard, `scripts/loki-query.sh`, agent self-trace |
-| **Alloy push** | access-policy `glc_` (write: metrics/logs) | VM `.env` (Compose) | Alloy remote-write only |
-| **Devs / agents (open-ended)** | per-principal Viewer `glsa_`, RBAC-granted | the dev's own `.env.cogni` / session | anything — ad-hoc LogQL, dashboards, datasource introspection |
+| consumer                       | credential                                            | where it lives                                                    | who/what queries                                                           |
+| ------------------------------ | ----------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **Validator / CI**             | child **Viewer** SA `glsa_` (read: datasource + logs) | `cogni/<env>/_shared/{GRAFANA_URL,GRAFANA_SERVICE_ACCOUNT_TOKEN}` | `/validate-candidate` scorecard, `scripts/loki-query.sh`, agent self-trace |
+| **Alloy push**                 | access-policy `glc_` (write: metrics/logs)            | VM `.env` (Compose)                                               | Alloy remote-write only                                                    |
+| **Devs / agents (open-ended)** | per-principal Viewer `glsa_`, RBAC-granted            | the dev's own `.env.cogni` / session                              | anything — ad-hoc LogQL, dashboards, datasource introspection              |
 
 **The admin token can spawn any of these on demand** — so a new dev/agent who needs Grafana gets a
-*direct* read-only token (grant via RBAC, mint a per-principal Viewer SA), **not** a new API route.
+_direct_ read-only token (grant via RBAC, mint a per-principal Viewer SA), **not** a new API route.
 
 ## Why the operator holds no token
 
@@ -31,7 +31,7 @@ DB. So the gate needs **no** Grafana token.
 
 The three Loki rungs (`log-in-Loki`, `doltgres-exists`, `worker-carries-UUID`) are
 **diagnostics + observability-completeness**, not gate requirements. They are **injectable**: a caller
-that *does* hold a read token (`/validate-candidate`, CI) constructs the prober with a `LokiConfig` and
+that _does_ hold a read token (`/validate-candidate`, CI) constructs the prober with a `LokiConfig` and
 lights them up; the operator pod injects none, so they `skip` (`loki-unwired`) and **never block** the
 verdict. They block **only** on an explicit `fail` — a token present and logs genuinely absent — so a
 real observability gap is still loud (no silent pass).
