@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 /**
  * Module: `@scripts/lib/substrate-registry`
- * Purpose: The typed SSOT + contract for "what a node's deploy substrate is made
- *   of, how each piece is reconciled, AND how it is proven live". This is the
- *   control-plane half of the substrate-completeness plan (story.5006 / task.5023):
- *   it pairs every reconcile with a matching live assertion so the two can never
- *   drift — you cannot register a substrate dependency without declaring how a
- *   flight proves it usable.
+ * Purpose: Typed SSOT + contract for a node's deploy substrate dependencies.
+ *   Declares what substrate a node needs, how each piece is reconciled, and how a
+ *   flight proves it live — the control-plane half of substrate-completeness
+ *   (story.5006 / task.5023). It pairs every reconcile with a matching live
+ *   assertion so the two can never drift: you cannot register a dependency without
+ *   declaring how a flight proves it usable.
  * Scope: Pure typed data + invariants. Does NOT shell out, SSH, or mutate any VM /
  *   cluster / git state. Reconcile EXECUTION lives where it idiomatically belongs
  *   (a declarative manifest, an in-lane script, or a CI script); this registry

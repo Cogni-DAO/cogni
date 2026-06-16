@@ -3,11 +3,11 @@
 
 /**
  * Module: `@tests/unit/substrate-registry`
- * Purpose: Enforce the substrate-completeness SEAM in CI — every registered
- *   substrate dependency pairs a reconcile with a live assertion, and every
- *   assertion that is still a stub fails CLOSED. This is what makes "you cannot
- *   ship a reconcile without its matching live assertion" a CI gate rather than a
- *   convention, across two developers (reconcile = me, assertLive = dev2).
+ * Purpose: Enforce the substrate-completeness SEAM in CI: reconcile pairs assertLive.
+ *   Every registered dependency pairs a reconcile with a live assertion, and every
+ *   assertion still a stub fails CLOSED — making "you cannot ship a reconcile without
+ *   its matching live assertion" a CI gate rather than a convention, across two
+ *   developers (reconcile = me, assertLive = dev2).
  * Scope: Drives the typed registry's structure + invariants. Does NOT exercise any
  *   VM/cluster reconcile or real live probe.
  * Invariants:
