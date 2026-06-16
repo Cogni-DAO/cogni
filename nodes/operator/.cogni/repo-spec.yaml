@@ -10,6 +10,7 @@ scope_key: "default"
 
 intent:
   name: operator
+  mission: "Agentic git-manager for the Cogni node network — every node's code, knowledge, deploys, and validation flow through the operator."
 
 # Privy-managed operator wallet — the runtime container reads THIS file as
 # /app/.cogni/repo-spec.yaml (Dockerfile copies nodes/operator/.cogni, not root),

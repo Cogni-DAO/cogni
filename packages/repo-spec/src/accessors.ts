@@ -76,6 +76,19 @@ export function extractNodeId(spec: RepoSpec): string {
 }
 
 /**
+ * Human-facing node slug from `intent.name` (e.g. `operator`, `beacon`).
+ * Falls back to `node_id` when `intent.name` is absent (pre-intent repo-specs).
+ */
+export function extractNodeName(spec: RepoSpec): string {
+  return spec.intent?.name ?? spec.node_id;
+}
+
+/** One-line node mission from `intent.mission`, or null when undeclared. */
+export function extractNodeMission(spec: RepoSpec): string | null {
+  return spec.intent?.mission ?? null;
+}
+
+/**
  * Extract scope_id from parsed repo-spec.
  * Throws if scope_id is not present (required for ledger scope gating).
  */

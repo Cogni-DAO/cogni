@@ -22,6 +22,8 @@ export {
   getKnowledgeConfig,
   getLedgerApprovers,
   getNodeId,
+  getNodeMission,
+  getNodeName,
   getOperatorWalletConfig,
   getPaymentConfig,
   getScopeId,

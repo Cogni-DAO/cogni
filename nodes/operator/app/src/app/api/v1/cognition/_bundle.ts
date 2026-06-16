@@ -60,6 +60,9 @@ export function escapeCell(value: string | null | undefined): string {
 
 export interface RenderBundleInput {
   node: string;
+  name: string;
+  mission: string | null;
+  generatedAt: string;
   origin: string;
   buildSha: string;
   toolingInvariants: readonly string[];
@@ -73,8 +76,26 @@ export interface RenderBundleInput {
  * into the model's context.
  */
 export function renderBundleMarkdown(input: RenderBundleInput): string {
-  const { node, origin, buildSha, toolingInvariants, skillsIndex } = input;
-  const domainPointers = input.domainPointers;
+  const {
+    node,
+    name,
+    mission,
+    generatedAt,
+    origin,
+    buildSha,
+    toolingInvariants,
+  } = input;
+  const { skillsIndex, domainPointers } = input;
+  // "2026-06-16 14:20" — human date, not an ISO wall of digits.
+  const loadedAt = generatedAt.replace("T", " ").slice(0, 16);
+  const subtitle = [
+    mission,
+    `${skillsIndex.length} skills`,
+    `${domainPointers.length} domains`,
+    `loaded ${loadedAt}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const invariants = toolingInvariants
     .map((line, i) => `${i + 1}. ${line}`)
@@ -100,9 +121,11 @@ export function renderBundleMarkdown(input: RenderBundleInput): string {
       : "| _(none)_ | | |";
 
   return [
-    `# Cogni \`${node}\` — Session Cognition (live from the knowledge endpoint · build \`${buildSha}\`)`,
+    `# ${name} — Cogni Session Cognition`,
     "",
-    `> Delivered at session start from ${origin}/api/v1/cognition — this replaces git-synced AGENTS.md sprawl. Re-fetch any time.`,
+    `> ${subtitle}`,
+    ">",
+    `> Delivered at session start from ${origin}/api/v1/cognition — replaces git-synced AGENTS.md sprawl. (node \`${node}\` · build \`${buildSha}\`)`,
     "",
     "## Tooling invariants (irreducible session contract)",
     "",

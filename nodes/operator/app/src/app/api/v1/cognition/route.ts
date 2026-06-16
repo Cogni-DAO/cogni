@@ -30,6 +30,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
+import { getNodeMission, getNodeName } from "@/shared/config";
 import { serverEnv } from "@/shared/env";
 import {
   isCognitionEntry,
@@ -70,7 +71,10 @@ export const GET = wrapRouteHandlerWithLogging(
     const container = getContainer();
     const origin = publicOrigin(request);
     const node = container.nodeId;
+    const name = getNodeName();
+    const mission = getNodeMission();
     const buildSha = serverEnv().APP_BUILD_SHA ?? "unknown";
+    const generatedAt = new Date().toISOString();
 
     const skillsIndex: CognitionSkillPointer[] = [];
     const domainPointers: CognitionDomainPointer[] = [];
@@ -109,6 +113,9 @@ export const GET = wrapRouteHandlerWithLogging(
 
     const markdown = renderBundleMarkdown({
       node,
+      name,
+      mission,
+      generatedAt,
       origin,
       buildSha,
       toolingInvariants,
@@ -119,6 +126,7 @@ export const GET = wrapRouteHandlerWithLogging(
     ctx.log.info(
       {
         node,
+        name,
         skills: skillsIndex.length,
         domains: domainPointers.length,
         hub: Boolean(port),
@@ -129,9 +137,11 @@ export const GET = wrapRouteHandlerWithLogging(
     const response = NextResponse.json(
       CognitionBundleResponseSchema.parse({
         node,
+        name,
+        mission,
         version: "v1",
         buildSha,
-        generatedAt: new Date().toISOString(),
+        generatedAt,
         toolingInvariants,
         skillsIndex,
         domainPointers,
