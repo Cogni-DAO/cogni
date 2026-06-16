@@ -15,7 +15,7 @@ namePrefix: operator-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:93a5e59f5dfb0a3971a2d2feffbb828d3c9f7dbd150f468bf8390b9d4c0c78b6"
+    digest: "sha256:498acf8a4eeefeef8f16c04548772bf2759882038a2126b48112e31b9a2de061"
 
 patches:
   # Node-specific ConfigMap values.
@@ -44,13 +44,13 @@ patches:
         value: "https://cognidao.org"
       - op: add
         path: /data/NODE_MINT_OWNER
-        value: "Cogni-DAO"
+        value: "cogni-dao"
       - op: add
         path: /data/NODE_TEMPLATE_OWNER
-        value: "Cogni-DAO"
+        value: "cogni-dao"
       - op: add
         path: /data/NODE_SUBMODULE_PARENT_OWNER
-        value: "Cogni-DAO"
+        value: "cogni-dao"
       - op: add
         path: /data/NODE_SUBMODULE_PARENT_REPO
         value: "cogni"
