@@ -3,8 +3,8 @@
 #
 # task.0349 — After Flight Preview **dispatched** promote-and-deploy for a
 # merge to main, refresh `main:infra/k8s/overlays/preview/**` digest pins in a
-# single commit (`chore(preview): …`). **Does not run** for queue-only Flight
-# Preview runs (preview lease locked) — no bot commits for those merges.
+# single commit (`chore(preview): …`). **Does not run** when the flight was
+# gated off (a workflow_dispatch with a non-PR SHA) — no bot commits for those.
 #
 # Security (workflow_run): never checkout `workflow_run.head_sha` directly
 # with contents:write. A read-only job downloads the prior run's artifact; the
@@ -67,7 +67,7 @@ jobs:
             echo "✅ Flight outcome=dispatched — digest seed may run"
           else
             echo "should_seed=false" >> "$GITHUB_OUTPUT"
-            echo "ℹ️  Flight outcome=${v} — skip digest seed (queue-only or error)"
+            echo "ℹ️  Flight outcome=${v} — skip digest seed (gated-off flight or error)"
           fi
 
   seed:

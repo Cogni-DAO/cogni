@@ -274,7 +274,7 @@ Use the `Agent` tool with `subagent_type: general-purpose`. Give each a tight, s
 - **Trust `/version`, not `/readyz`.** Rollout proof = `/version` buildSha matching PR head SHA. `/readyz` is ingress-layer and flips green before the new pod takes traffic.
 - **Read `flight-preview.yml`'s checks correctly.** On merge to main, two jobs appear in the commit's checks list:
   - `flight ✓` + `deploy-preview ✓` — preview actually deployed. Proof-of-rollout applies to `cogni-preview` pods.
-  - `flight ✓` + `deploy-preview ⊘ skipped` — preview lease was locked (a prior SHA still `reviewing`/`dispatching`). The merged SHA is queued as `deploy/preview:.promote-state/candidate-sha`, **nothing rolled**. Do not proof-of-rollout preview for this SHA — it won't match. Wait for the prior reviewer to release the lease (or `set-preview-review-state.sh unlocked`) for the drain to fire.
+  - `flight ✓` + `deploy-preview ⊘ skipped` — the flight was gated off (a `workflow_dispatch` with a non-PR SHA), so **nothing rolled** for this SHA; don't proof-of-rollout preview for it. A normal merge-to-main always dispatches and deploys (preview is latest-wins; there is no lease/queue).
   - `flight ✗` — hard failure. Escalate.
 - **Never commit `dashboard.md` updates.** Session-scratch runtime state.
 - **Never modify someone's in-flight branch.** Operate only on remote refs and candidate-a overlays.

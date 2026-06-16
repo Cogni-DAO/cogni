@@ -33,15 +33,14 @@ Do NOT use for code review, test fixes, or routine PR work.
 - `.github/workflows/flight-preview.yml` — auto preview trigger on `push:main`, manual recovery dispatch
 - `.github/workflows/promote-and-deploy.yml` — does the actual promotion + verification (preview AND production)
 - `.github/workflows/pr-build.yml` — `pull_request` (immutable `pr-{N}-{X}` tags) + `merge_group` (`mq-{N}-{Y}` tags); only the latter feeds preview
-- `scripts/ci/flight-preview.sh` — three-value lease + dispatch
+- `scripts/ci/flight-preview.sh` — dispatch the preview flight for the merged SHA (latest-wins; no lease)
 - `scripts/ci/resolve-pr-build-images.sh` — single source of truth for "does the mq-{N}-{sha} image set exist for this PR"
 - `scripts/ci/verify-buildsha.sh` — single source of truth for "is this image actually serving"; per-node /version probes + non-Ingress markers
 - `scripts/ci/aggregate-decide-outcome.sh` — closes the silent-success seam (bug.0443)
 - `scripts/ci/aggregate-rollup.sh` — computes `current-sha = merge-base` of per-node deploy-branch tips; merges per-node `source-sha-by-app.json` preserving unaffected entries
-- `scripts/ci/set-preview-review-state.sh` — lease primitive
 - `scripts/ci/lib/image-tags.sh` — `ALL_TARGETS` / `NODE_TARGETS` from `infra/catalog/*.yaml` (axiom 16, CATALOG_IS_SSOT). Source this; never hardcode target lists.
 - Per-env deploy branches: `deploy/{candidate-a,preview,production}-{operator,poly,resy,scheduler-worker}` — per-node since task.0376
-- `.promote-state/` files on each deploy branch: `current-sha`, `source-sha-by-app.json`, `review-state` (preview only)
+- `.promote-state/` files on each deploy branch: `current-sha`, `source-sha-by-app.json`
 
 ## Hostname rule (per `verify-buildsha.sh`)
 
@@ -188,15 +187,9 @@ regex in `infra/compose/runtime/configs/alloy-config.{,metrics.}alloy`. If
 `{service=<svc>}` returns silence post-deploy, fix the regex before
 diagnosing further — it's not Loki, it's the filter.
 
-## Lease respect (preview only)
+## Preview is latest-wins (no lease)
 
-Never re-flight a sha while `.promote-state/review-state` on `deploy/preview` is `dispatching` or `reviewing`. The lease guards against double-promotion.
-
-- `unlocked` → safe to dispatch.
-- `dispatching` → a flight is in-flight; wait or check the run's actual outcome before forcing.
-- `reviewing` → a flight reached E2E success; awaiting human gate. Don't bypass.
-
-If a previous flight died and the lease is genuinely orphaned (rare — `aggregate-decide-outcome.sh`'s `if: always() &&` unlock should release it), forcing the lease back to `unlocked` writes to a deploy branch with a personal credential and is therefore an **operator-internal maintenance action**, not an agent step. Don't reach for `gh auth token`. Verify the prior run reached a terminal state, then hand off to the operator/maintainer; bypassing while a flight is genuinely live corrupts the overlay.
+There is **no preview review-lease** (removed 2026-06-16, `kill-preview-review-lease`). Every merge to main dispatches a fresh preview flight; the latest one wins. There is nothing to "unlock" and no `reviewing` hold to wait on — preview always tracks the latest merged SHA. Serialization under bursty merges is handled by the `flight-preview` and `promote-deploy-<env>-<nodes>` workflow concurrency groups. If preview looks stale, it's an affected-only or admin-merge image gap (see the two gotchas above) or a failed flight — not a lease; re-merge or re-dispatch `flight-preview.yml`.
 
 ## Failure modes — first-step diagnosis
 
@@ -207,7 +200,6 @@ If a previous flight died and the lease is genuinely orphaned (rare — `aggrega
 | aggregate-production red, "Axiom 19 contradiction: scheduler-worker"                                                                             | bug.0443 fix in `verify-buildsha.sh` is missing/reverted. The `NON_INGRESS_NODES` marker-emission block must be present.                                                                                                                                                                                                          |
 | verify-buildsha timeout 90s                                                                                                                      | Pod cutover incomplete; usually transient. Re-check `/version` directly in 60s. If still wrong, check Argo app revision matches deploy-branch tip.                                                                                                                                                                                |
 | `verify-deploy` green but `/version.buildSha` still old                                                                                          | CDN/edge cache, OR you hit `/readyz` (which the old pod still answers) instead of `/version`. Always use `/version.buildSha` for verification, never `/readyz`.                                                                                                                                                                   |
-| Lease stuck `dispatching`                                                                                                                        | The exit-1 + `if: always() &&` unlock should have fired. If not, manually unlock as above (cautiously).                                                                                                                                                                                                                           |
 | Production "succeeded" but only some nodes advanced                                                                                              | Affected-only — `nodes` input was scoped, or the source sha's image set didn't cover all targets. Verify per-node `current-sha` on each `deploy/production-*`.                                                                                                                                                                    |
 | prod-pd: every `verify-deploy (<node>)` red at `Resolve cell state` with `bash: app-src/scripts/ci/<script>: No such file or directory` exit 127 | `source_sha` predates the verify-deploy script tree. Don't use `deploy/preview:.promote-state/current-sha` — `aggregate-rollup.sh` writes the merge-base of per-node tips, which under affected-only divergence regresses behind script additions. Re-dispatch using preflight #4's picker (newest preview-{node} promotion sha). |
 
