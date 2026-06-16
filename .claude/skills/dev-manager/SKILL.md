@@ -10,10 +10,20 @@ You own the **story** (the e2e thing that must succeed) and keep its vision clea
 ## STEP 0 — Decision point (ask the human FIRST, before any work)
 
 > **How should the dev agents run?**
-> **(A) I spawn them directly** — I launch a subagent (Agent tool / Workflow) per task and drive them.
-> **(B) You drive them** — I hand you a tiny copy/paste message-starter per task; you paste each into a fresh agent/worktree and relay updates back.
+> **(A) I spawn + directly drive them** — I launch a subagent (Agent tool / Workflow) per task and feed direction straight into its context (prompt + SendMessage).
+> **(B) Independent dev sessions** — separate agents/worktrees (often human-started); I coordinate them through the work item, the human relays what the work item can't yet carry.
 
-Do not proceed until they pick. (A) = autonomous fan-out, faster, you own the agents' context. (B) = human-in-the-loop, one agent per worktree, the human is the relay. Either way the rest of the loop is identical.
+Do not proceed until they pick. **Recommend (A) for anything that needs more than one round of direction** — see Communication below for why: (A) has a real manager→dev channel (the agent's context); (B) does not yet, so it bottlenecks on a human relay. (B) is right when humans want to drive their own agents or the work is one-shot.
+
+## Communication — direction flows through the work item, never a human relay (and where that breaks today)
+
+This is the load-bearing part. Devs already poll for direction (`contribute-to-cogni`: poll `coordination.nextAction`, treat as authoritative, re-read after each phase). The manager's job is to make that channel carry real direction. What actually exists:
+
+- **`coordination.nextAction`** — the dev's authoritative "what next." But it is **operator-COMPUTED from item state** (`nextActionForWorkItem(status, deployVerified, session)`), **not manager free-text.** You shape it by changing **state**: `PATCH status` / `blockedBy` / `parentId`. Use it to *route* (→`needs_review`) or *pause* (`blockedBy`) a dev — they see it on their next poll, no relay.
+- **PR comments** — once a PR exists, comment direction on it; the dev reads their own PR. Reliable, but post-PR only.
+- **`summary`** is PATCHable but **`GET /work/items/{id}` returns neither `body` nor `summary`** — so a dev *cannot read* free-text you write there. Do not rely on it as a dev channel.
+
+**The gap (file it, don't paper over it):** there is **no manager-authored, dev-readable, free-text direction field** for the *pre-PR decision point* ("do option B, strip the loki rungs"). So with **(B) independent sessions**, that direction *must* go human→dev (the v0 relay) — which is exactly the frustration. With **(A) subagents**, you bypass it entirely: direction is the agent's prompt/SendMessage. **Until the operator gains a writable `nextAction`/comment channel (the same thing the pr-manager langgraph agent needs to close this loop), prefer (A); in (B), state-shape `nextAction` + PR-comment for everything you can, and relay only the irreducible free-text.**
 
 ## The loop
 
@@ -30,6 +40,8 @@ Do not proceed until they pick. (A) = autonomous fan-out, faster, you own the ag
 4. **Monitor + relay.** Arm ONE persistent `Monitor` over the linked tasks. Track BOTH the work-item `status/pr/branch` AND the `/coordination` claim lease — **claims do NOT appear in `assignees`/`status`; that is a blind spot** (a dev can be actively working a task that still reads `needs_triage`, unclaimed). Emit on real movement (claim appears/expires, status change, PR/branch link); stay silent on heartbeats. Relay only substantive changes to the human — do not echo every poll. Keep to 0–1 monitors.
 
 5. **Intervene only on collision or drift.** Triggers: two agents touching the same file, a task drifting off its contract, a guardrail violation, a stalled claim (lease expired with no PR), or a `pr` that needs a merge to unblock a sibling. Otherwise, let them work.
+
+6. **Route a finished task to done — you own the merge.** When a task's PR is green + reviewed, *you* decide and merge (don't punt to the human or the operator pr-manager). Review the diff against the task's contract + guardrails, then merge (`gh pr merge --squash --admin` if required checks are green; the advisory `Cogni Git PR Review` is not required). For the deploy-verify rung — flight + prove the change live — drive [`/promote`](../promote/SKILL.md) and [`/validate-candidate`](../validate-candidate/SKILL.md); this skill **replaces `pr-coordinator-v0`** (its single-slot flight→QA→score→merge loop is now: those two skills for the mechanics + this skill for the decision).
 
 ## Verification discipline (non-negotiable)
 
