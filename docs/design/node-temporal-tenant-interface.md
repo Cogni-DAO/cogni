@@ -35,6 +35,14 @@ So the question "is Temporal hard to wire for a new node?" answers itself: **for
 graph, it already works** (proven live — red's graph executed end-to-end). The gap
 is narrow and specific.
 
+> **Review correction (4-lens adversarial, 2026-06-17 — all `approve-with-changes`):**
+> "~80% assembly" is defensible for **Gaps 1–2** (workflow bundle, repo-spec block,
+> reconcile service are genuine assembly + freeze-clean). It is **NOT** true for **Gap 3**:
+> grant↔node binding, scope-generalized grant validation, route allow-listing, and
+> per-node principal resolution are **real new primitive work the build creates** — the
+> 20%. Gap 3 below is reframed accordingly. The uniform `principal → ExecutionGrant →
+> scoped action` model is a *target this work builds*, not a property that exists today.
+
 ## The three gaps (and the minimal closes)
 
 ### Gap 1 — no generic non-graph workflow in the worker bundle
@@ -49,18 +57,36 @@ It is the non-graph sibling of `GraphRunWorkflow`, following the canonical
 `Webhook→Parent→…→Write Activity` pattern from `temporal-patterns.md`:
 
 ```
-NodeTaskWorkflow(input: NodeTaskInput)              // .strict() zod, packages/scheduler-core
-  → validateGrantActivity(grant, node)              // reuse — grant scope "task:dispatch:<route>"
-  → dispatchNodeTaskActivity(node, route, payload)  // idempotent POST {nodeUrl}{route}
-        idempotency-key = `${node}/${scheduleId}/${TemporalScheduledStartTime}`  // ACTIVITY_IDEMPOTENCY, no attempt
+NodeTaskWorkflow(input: NodeTaskInput)              // .strict() zod, packages/temporal-workflows/src/workflows/node-task.schema.ts (T1 owns it — SINGLE_INPUT_CONTRACT)
+  scheduledFor = workflowInfo().searchAttributes.TemporalScheduledStartTime  // SCHEDULED_TIME_FROM_TEMPORAL (mirror graph-run.workflow.ts:127), NOT input
+  → validateGrantActivity(actor, nodeId, grantId, "task:dispatch:<route>")   // NET-NEW: must assert grant↔node (M1) + scope-generalized (M2)
+  → dispatchNodeTaskActivity(nodeId, route, payload, scheduledFor)            // POST {nodeUrl}{route}, principal = per-node token (G1, fail-closed)
+        Idempotency-Key: `${nodeId}/${scheduleId}/${scheduledFor}`           // header; the NODE ROUTE must dedup on it (hard contract)
+        retry profile: maximumAttempts:1 (MVP — mirrors executeGraphActivity GRAPH_EXECUTION_ACTIVITY_OPTIONS; no retry until the dedup contract is proven)
   → (no graph child — the node's route IS the work)
 ```
 
-`dispatchNodeTaskActivity` is a near-clone of the existing `executeGraphActivity`
-HTTP-dispatch (same `nodeUrl` resolution from `COGNI_NODE_ENDPOINTS`, same Bearer
-pattern), pointed at a node-declared route instead of `/api/internal/graphs/.../runs`.
-This single addition unlocks recurring non-graph work for **all** nodes and lets
-governance-sync retire its external cron.
+`dispatchNodeTaskActivity` mirrors the existing `executeGraphActivity` HTTP-dispatch
+(`nodeUrl` resolution from `COGNI_NODE_ENDPOINTS`, Bearer pattern), pointed at a
+node-declared route instead of `/api/internal/graphs/.../runs`. **Non-obvious
+requirements the build MUST honor (review M-fixes):**
+
+- **Idempotency is a two-sided contract (M3).** The operator forwards
+  `Idempotency-Key: ${nodeId}/${scheduleId}/${scheduledFor}`; the node route **MUST**
+  dedup on it. A key the receiver ignores does not make a POST idempotent. MVP retry
+  profile = `maximumAttempts:1` (the cited graph clone uses exactly this, precisely for
+  idempotency-collision risk); a retry profile is gated on the documented dedup contract.
+- **`scheduledFor` derives from the `TemporalScheduledStartTime` search attribute**
+  inside the workflow (M-fix), never from input or wall clock (SCHEDULED_TIME_FROM_TEMPORAL).
+- **Route allow-listing (M3/security):** `route` is validated to the node's OWN host —
+  relative path on the node's resolved `nodeUrl` only; never an absolute/foreign URL (SSRF / cross-tenant).
+- **Grant validation here is NET-NEW (G2):** the only current non-graph workflow
+  (CollectEpoch) never calls `validateGrantActivity` — wiring it into `NodeTaskWorkflow`
+  is new work + tests, not reuse.
+
+This single addition unlocks recurring non-graph work for **all** nodes and becomes the
+generic "non-graph workflow" (superseding CollectEpoch's special status). *(It does not
+"retire a cron" — governance-sync is already an in-app Temporal job, not external cron.)*
 
 ### Gap 2 — no node-facing declarative schedule field
 
@@ -98,20 +124,30 @@ per-node (RLS-backed, revocable) — but the wire identity is shared, so there i
 per-node attribution or blast-radius isolation at the token layer (this is the same
 root as the shared-LLM-account 429: shared credentials, no tenant binding).
 
-**Close (the seam — declare here, fill in the secrets work):**
+**This is the new-infra 20% — four real primitive changes, not assembly:**
 
-- This design **requires** that `dispatchNodeTaskActivity` carry a **per-node service
-  identity** (the node's own internal token / principal), not the shared
-  `SCHEDULER_API_TOKEN`, and that the `ExecutionGrant` be scoped `task:dispatch:<route>`
-  and validated per-node exactly as graph grants are today.
-- The **provisioning** of that per-node credential is **out of scope here** — it is the
-  shared-secrets-on-spawn work (separate dev). This design declares the slot
-  (`activity resolves a per-node token`); that work fills it. Neither ships half: a
-  `NodeTaskWorkflow` that still uses the shared token is not done.
-
-This makes the grant model uniform: **principal → ExecutionGrant (per-node, RLS,
-revocable) → scoped action**, identical for graph and http-dispatch. Killing a node
-revokes its grants + credential atomically.
+1. **Grant↔node binding (M1, security-blocker).** Today `validateGrantForGraph` loads the
+   grant by `grantId` alone and only checks the scope string — the grant row is bound to
+   `userId/billingAccountId`, **not `nodeId`**. So "per-node blast-radius isolation" does
+   **not** exist on the dispatch path (RLS scopes who may CREATE a grant, not which node a
+   worker dispatches with it). The build MUST add a `grant↔node` assertion in validation.
+2. **Scope-generalized grant (M2).** Grant scope is hardcoded `graph:execute:${graphId}`
+   with a graph-specific `validateGrantForGraph`. `task:dispatch:<route>` requires a
+   generalized `validateGrantForScope(actor, nodeId, grantId, scope)` (+ a non-hardcoded
+   mint). Graph validation becomes `scope=graph:execute:<id>` — the uniformity is a target
+   the build creates.
+3. **Per-node dispatch principal, FAIL-CLOSED (G1, the seam to the secrets work).** Replace
+   the shared `SCHEDULER_API_TOKEN` with a `NodePrincipalResolver.resolve(nodeId) → {token} |
+   throws`. T1 ships a stub that **throws when unprovisioned** — a shared-token
+   `NodeTaskWorkflow` is **not done** (CI/review gate, not prose). The credential
+   *provisioning* is the shared-secrets-on-spawn work (separate dev); this declares the slot
+   it must fill — hard sequencing dependency.
+4. **Teardown contract (M7).** The reconcile mirror (syncGovernanceSchedules) pauses a removed
+   schedule but does **not** revoke its grant — so "killing a node revokes atomically" is
+   false today. Decommission MUST: (a) pause/delete the node's Temporal schedules, (b)
+   `revokedAt` all grants scoped to that node, (c) revoke the per-node credential; validation
+   fails closed on revoked grants (`GrantRevokedError`, already supported). One saga, with an
+   ordering/idempotency note.
 
 ## Isolation boundary — decided
 
@@ -131,17 +167,34 @@ or quota isolation at the Temporal layer is ever required.
 - Not the per-node credential _provisioning_ (that's the secrets-on-spawn work; this
   only declares the principal seam it must fill).
 
+## Storage decision (M-fix — no migration for MVP)
+
+`schedules.graph_id` is `NOT NULL` and the arg-builder emits a fixed `GraphRunWorkflowInput`
+for every `workflowType` (CollectEpoch survives by ignoring graph fields and reading
+`raw.input`). MVP follows that ledger pattern: tunnel `{route, payload}` inside `input` as
+the `NodeTaskInput` envelope, set `graph_id = "task:<route>"` to satisfy the constraint —
+**zero migration**. Promoting `route` to a typed column (nullable `graph_id` +
+`workflow_type`/`target`) is a documented follow-up, not MVP.
+
 ## Task decomposition (story.5008)
 
-- **T1 (`task.5029`)** — `NodeTaskWorkflow` + `dispatchNodeTaskActivity` + grant scope
-  `task:dispatch:<route>`; add to the worker bundle. Owns `packages/temporal-workflows`,
-  `services/scheduler-worker`, `packages/scheduler-core` schema. Consumes the principal seam.
-- **T3 (`task.5030`)** — node-facing `schedules` repo-spec contract + `syncNodeSchedules`
-  - node-template prototype + `temporal-patterns.md` node-as-tenant section + this seam in
-    `node-baas-architecture.md`. Declares the schedule payload shape T1 consumes.
-- **Seam between them:** the `NodeTaskInput` schema (T3 declares the node-authored shape;
-  T1 consumes it) + the per-node dispatch principal (declared here, filled by secrets work).
-- **Out of scope:** beacon status-gating/bridge (independent), per-node credential provisioning (secrets dev).
+- **T1 (`task.5029`)** — `NodeTaskWorkflow` + `dispatchNodeTaskActivity` + **the new-infra
+  primitives**: grant↔node binding (M1), `validateGrantForScope` (M2), `NodePrincipalResolver`
+  fail-closed stub (G1), route allow-listing (M3). Owns `packages/temporal-workflows` (incl.
+  `node-task.schema.ts` — SINGLE_INPUT_CONTRACT), `services/scheduler-worker`, the grant-port
+  generalization. Grant validation on a non-graph workflow is **net-new** (G2), not reuse.
+- **T3 (`task.5030`)** — node-facing `schedules` repo-spec contract + `syncNodeSchedules` +
+  node-template prototype + docs. **Schema hygiene (G3):** infer `workflowType` from `route`
+  xor `graph` (drop the `target` enum — operator vocab); `overlap`/`catchupWindow` are platform
+  invariants → clamp/reject or drop; real cron-drift handling (`scheduleConfigChanged` skips
+  cron today — latent bug); `syncNodeSchedules` is `SYSTEM_OPS_ONLY` (CRUD_AUTHORITY, never
+  node-callable); **operator-pin `nodeId` to the repo-spec's registry `node_id`, reject
+  foreign-node schedules (M8)**; `workflowId = node-task:{node}:{scheduleId}`.
+- **Seam between them:** `NodeTaskInput` (T1 owns the schema; T3's repo-spec contract produces
+  it) + the per-node dispatch principal (T1 declares the fail-closed resolver; the
+  secrets-on-spawn work fills it).
+- **Out of scope:** beacon status-gating/bridge (independent); per-node credential
+  _provisioning_ (secrets dev — T1 only declares the fail-closed seam).
 
 ## Ground Truth (verified symbols)
 
