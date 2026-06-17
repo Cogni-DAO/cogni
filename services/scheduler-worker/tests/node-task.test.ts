@@ -40,8 +40,8 @@ import { createActivities } from "../src/activities/index.js";
 import { createFailClosedNodePrincipalResolver } from "../src/adapters/node-principal.js";
 import { NodePrincipalUnprovisionedError } from "../src/ports/index.js";
 
-const NODE_A = "11111111-1111-1111-1111-111111111111";
-const NODE_B = "22222222-2222-2222-2222-222222222222";
+const NODE_A = "11111111-1111-4111-8111-111111111111";
+const NODE_B = "22222222-2222-4222-8222-222222222222";
 const ROUTE = "/api/internal/ops/metrics-ingest";
 
 const mockLogger = {
@@ -128,7 +128,7 @@ describe("NodeTaskInputSchema route allow-listing (M3 / SSRF)", () => {
   const base = {
     nodeId: NODE_A,
     payload: {},
-    executionGrantId: "33333333-3333-3333-3333-333333333333",
+    executionGrantId: "33333333-3333-4333-8333-333333333333",
     runKind: "system_scheduled" as const,
     triggerSource: "temporal_schedule",
     scheduleId: "node-task:metrics",
@@ -210,7 +210,7 @@ describe("dispatchNodeTaskActivity", () => {
         scheduleId: "node-task:metrics",
         scheduledFor: "2026-01-01T00:00:00.000Z",
       })
-    ).rejects.toMatchObject({ code: "node_principal_unprovisioned" });
+    ).rejects.toMatchObject({ type: "node_principal_unprovisioned" });
     // The fail-closed gate must trip BEFORE any HTTP call.
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
