@@ -19,7 +19,10 @@ import {
   COGNI_SYSTEM_BILLING_ACCOUNT_ID,
   COGNI_SYSTEM_PRINCIPAL_USER_ID,
 } from "@cogni/node-shared";
-import type { NodeScheduleRowState } from "@cogni/scheduler-core";
+import type {
+  NodeScheduleEntry,
+  NodeScheduleRowState,
+} from "@cogni/scheduler-core";
 import {
   graphExecuteScope,
   nodeScheduleIdPrefix,
@@ -107,7 +110,11 @@ export async function runNodeSchedulesSyncJob(): Promise<NodeScheduleSyncSummary
     const nodeId = getNodeId();
     const ownerUserId = COGNI_SYSTEM_PRINCIPAL_USER_ID;
     const systemUserId = toUserId(COGNI_SYSTEM_PRINCIPAL_USER_ID);
-    const entries = getNodeSchedules();
+    // NodeScheduleConfig (repo-spec) and NodeScheduleEntry (scheduler-core) are the
+    // same shape; only payload type-width differs (unknown ⊋ JsonValue, safe at
+    // runtime — values are parsed JSON). Unifying the two types is a follow-up.
+    const entries =
+      getNodeSchedules() as unknown as readonly NodeScheduleEntry[];
 
     const result = await syncNodeSchedules(entries, {
       nodeId,

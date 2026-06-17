@@ -20,7 +20,7 @@ import { NextResponse } from "next/server";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { runNodeSchedulesSyncJob } from "@/bootstrap/jobs/syncNodeSchedules.job";
 import { serverEnv } from "@/shared/env";
-import { EVENT_NAMES, logEvent } from "@/shared/observability";
+import { EVENT_NAMES } from "@/shared/observability";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -78,18 +78,22 @@ export const POST = wrapRouteHandlerWithLogging(
       const summary = await runNodeSchedulesSyncJob();
       const durationMs = Math.round(performance.now() - start);
 
-      logEvent(ctx.log, EVENT_NAMES.NODE_SCHEDULES_SYNC_COMPLETE, {
-        reqId: ctx.reqId,
-        routeId: ctx.routeId,
-        status: 200,
-        durationMs,
-        outcome: "success",
-        created: summary.created,
-        updated: summary.updated,
-        resumed: summary.resumed,
-        skipped: summary.skipped,
-        paused: summary.paused,
-      });
+      ctx.log.info(
+        {
+          event: EVENT_NAMES.NODE_SCHEDULES_SYNC_COMPLETE,
+          reqId: ctx.reqId,
+          routeId: ctx.routeId,
+          status: 200,
+          durationMs,
+          outcome: "success",
+          created: summary.created,
+          updated: summary.updated,
+          resumed: summary.resumed,
+          skipped: summary.skipped,
+          paused: summary.paused,
+        },
+        EVENT_NAMES.NODE_SCHEDULES_SYNC_COMPLETE
+      );
 
       return NextResponse.json(
         GovernanceSchedulesSyncSummarySchema.parse(summary),
@@ -98,14 +102,18 @@ export const POST = wrapRouteHandlerWithLogging(
     } catch (error) {
       const durationMs = Math.round(performance.now() - start);
 
-      logEvent(ctx.log, EVENT_NAMES.NODE_SCHEDULES_SYNC_COMPLETE, {
-        reqId: ctx.reqId,
-        routeId: ctx.routeId,
-        status: 500,
-        durationMs,
-        outcome: "error",
-        errorCode: "sync_failed",
-      });
+      ctx.log.info(
+        {
+          event: EVENT_NAMES.NODE_SCHEDULES_SYNC_COMPLETE,
+          reqId: ctx.reqId,
+          routeId: ctx.routeId,
+          status: 500,
+          durationMs,
+          outcome: "error",
+          errorCode: "sync_failed",
+        },
+        EVENT_NAMES.NODE_SCHEDULES_SYNC_COMPLETE
+      );
 
       throw error;
     }
