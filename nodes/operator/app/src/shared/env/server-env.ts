@@ -202,6 +202,16 @@ export const serverSchema = z.object({
   PROMETHEUS_QUERY_URL: optionalUrl,
   PROMETHEUS_READ_USERNAME: optionalString,
   PROMETHEUS_READ_PASSWORD: optionalString,
+
+  // Grafana observability access ISSUANCE (Substrate Access-Grant plane v0, task.5025).
+  // The operator holds the env's shared read-only Viewer token ONLY to ISSUE it to
+  // developer-RBAC'd devs via GET /nodes/{id}/observability-token, so a dev queries their
+  // node's Grafana/Loki DIRECTLY. The operator is NOT a query proxy and never self-queries
+  // Loki for a verdict (spec.grafana-observability-access: issuer-vs-proxy). Optional: the
+  // issuance route returns 503 observability_unwired until ESO extracts these from
+  // cogni/<env>/_shared (GRAFANA_URL, GRAFANA_SERVICE_ACCOUNT_TOKEN → GRAFANA_VIEWER_TOKEN).
+  GRAFANA_URL: optionalUrl,
+  GRAFANA_VIEWER_TOKEN: optionalString,
   ANALYTICS_K_THRESHOLD: z.coerce.number().int().positive().default(50),
   ANALYTICS_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
 
