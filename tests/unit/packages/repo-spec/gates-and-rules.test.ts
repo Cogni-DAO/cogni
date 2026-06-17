@@ -169,7 +169,7 @@ describe("parseRule", () => {
   it("parses repo-goal-alignment.yaml fixture", () => {
     const yaml = readRuleFixture("repo-goal-alignment.yaml");
     const rule = parseRule(yaml);
-    expect(rule.id).toBe("cogni-git-review-repo-goal-alignment");
+    expect(rule.id).toBe("operator-mission-alignment");
     expect(rule.evaluations).toHaveLength(3);
     expect(rule.success_criteria.any_of).toHaveLength(3);
   });

@@ -1,19 +1,32 @@
-id: cogni-git-review-repo-goal-alignment
+id: operator-mission-alignment
 schema_version: "0.3"
 blocking: true
 workflow_id: goal-evaluations
 
+# Goal-alignment for the Cogni operator node — the AI control plane that runs and
+# manages the node network: its code, deploys, knowledge, governance, and the web3
+# linkage between mission, finances, and code. A PR passes if it advances that
+# mission OR is a sound, scoped, well-tested change.
+# Keep in sync with `intent.mission` in nodes/operator/.cogni/repo-spec.yaml.
 evaluations:
-  - proper-ci-cd: This PR implements improvements to the CI/CD pipeline. Ensuring clean, tested, and deployed code.
-  - standard-cogni-template: This PR contributes to building a standardized template for a typescript AI application.
-  - test-coverage: This PR improves test coverage or reliability of existing features.
+  - advances-operator-mission: >
+      This PR advances the operator's mission as the AI control plane for the Cogni
+      node network — the shared substrate (CI/CD, knowledge syntropy, observability),
+      the gitops/web3 linkage of DAO ownership, finances, and code, or node formation
+      and lifecycle management.
+  - clear-purpose: >
+      This PR has a clear, scoped purpose and moves the operator toward a stated goal
+      rather than adding unscoped surface area.
+  - sound-and-tested: >
+      This PR is a sound, well-structured change (clean architecture, typed
+      boundaries) that maintains or improves test coverage and reliability.
 
 success_criteria:
   neutral_on_missing_metrics: true
   any_of:
-    - metric: proper-ci-cd
+    - metric: advances-operator-mission
       gte: 0.8
-    - metric: standard-cogni-template
+    - metric: clear-purpose
       gte: 0.8
-    - metric: test-coverage
+    - metric: sound-and-tested
       gte: 0.8
