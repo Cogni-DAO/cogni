@@ -856,13 +856,16 @@ payments_in:
           "https://api.github.com/repos/cogni-test-org/ghcr/installation"
       )
     ).toHaveLength(2);
+    // Parent is authenticated once — for the catalog read. The flight is
+    // source-addressed and opens no catalog pin PR, so there is no second
+    // parent-authenticated write path (task.5022).
     expect(
       installUrls.filter(
         (url) =>
           url ===
           "https://api.github.com/repos/cogni-test-org/cogni-monorepo/installation"
       )
-    ).toHaveLength(2);
+    ).toHaveLength(1);
   });
 
   it("does not require source repo GHCR package metadata before flight", async () => {
@@ -950,7 +953,9 @@ payments_in:
       image: `ghcr.io/cogni-test-org/ghcr:sha-${sourceSha}`,
     });
 
-    expect(requests.map((request) => request.route)).toContain(
+    // Source-addressed flight opens NO catalog pin PR on `main` (task.5022); the
+    // deploy pin rides the dispatch, never a parent code-branch PR.
+    expect(requests.map((request) => request.route)).not.toContain(
       "POST /repos/{owner}/{repo}/pulls"
     );
     expect(requests.map((request) => request.route)).not.toContain(
