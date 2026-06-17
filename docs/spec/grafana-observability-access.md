@@ -4,11 +4,11 @@ type: spec
 title: Grafana / Loki Observability Access
 status: draft
 trust: draft
-summary: How Grafana/Loki query credentials are granted across Cogni — one provisioned admin root mints scoped consumers (validator/CI `_shared` Viewer, Alloy push, per-dev RBAC tokens). The operator is a credential ISSUER, never a query PROXY, and holds no query token for its own gate. v0 issues the shared env Viewer token on developer-RBAC grant (env-wide, not node-scoped); vNext issues per-principal label-scoped `glc_` tokens for per-node isolation.
-read_when: Wiring or debating whether the operator/API should hold a Grafana token; granting a dev/agent Loki query access; designing an automated observability gate; reviewing an ExternalSecret that pulls a GRAFANA_* key into a pod; deciding between a Viewer `glsa_` and a label-scoped `glc_` token.
+summary: How a developer-RBAC'd dev reads their node's Grafana/Loki logs WITHOUT seeing other nodes and WITHOUT holding a token. The operator is a node-pinned query PROXY (runs the dev's LogQL server-side constrained to `{node="<id>"}`), never a credential issuer — a returned token's reach is ungoverned by the per-node check, a pinned proxy is node-scoped by construction. The operator's own liveness gate still holds no token (it uses the public run-carries rung). Real blocker: node Loki streams have no `node` label yet.
+read_when: Wiring or debating whether the operator/API should hold or hand out a Grafana token; granting a dev/agent Loki query access; designing an automated observability gate; reviewing an ExternalSecret that pulls a GRAFANA_* key into a pod; deciding proxy-vs-issuer for observability reads.
 owner: derekg1729
 created: 2026-06-16
-verified: 2026-06-16
+verified: 2026-06-17
 tags:
   - secrets
   - observability
@@ -17,94 +17,79 @@ tags:
 
 # Grafana / Loki Observability Access
 
-**Decision (2026-06-16):** the operator is a Grafana credential **ISSUER**, not a query **PROXY**.
-Observability querying is a **read-only credential held directly by the consumer**, because the space
-of future LogQL / dashboard / datasource queries is open-ended and proxying it through typed API routes
-would never converge. The operator may **issue** a credential at grant time (a one-time, RBAC-gated act);
-it must never **proxy** a query (intercept every LogQL on the consumer's behalf).
+**Decision (2026-06-17):** for a dev reading **their node's** logs, the operator is a **node-pinned query
+PROXY**, NOT a credential issuer. The dev sends a query; the operator runs it server-side **constrained to
+`{node="<id>"}`** and returns only that node's lines. **The dev never holds a token** — so access is
+node-scoped from day one.
 
-> **Issuer vs proxy — the load-bearing distinction.** A grant-time "mint/hand the dev a read token"
-> route is an **issuer** and is sanctioned (it is the same shape as the node-self-serve-secrets triangle,
-> `developer → can_flight → operator-held credential → one action`). A route that takes a dev's LogQL,
-> runs it with an operator-held token, and returns rows is a **proxy** and is rejected. Earlier wording
-> here said "**not a new API route**" — read that as "**not a query-proxy route**." An issuance route is fine.
+> **Why proxy, not issuer (the load-bearing correction).** Handing the dev a token — even behind a per-node
+> OpenFGA check — gates **who** gets the token, not **what the token can reach**. The env's shared Viewer
+> token reads _every_ node's logs; the moment ESO wires it into the operator and the route returns it, any
+> dev granted on **one** node holds a god-token for **all** nodes in that env. That is the exact inverse of
+> the substrate thesis (_operator wires a per-node isolated environment_). A server-side pinned proxy has no
+> such gap: the per-node check gates **who**, and the pinned selector gates **reach**. An earlier draft of
+> this spec flipped to "issuer not proxy" — that was the wrong turn and is reverted here.
 
-## The one root, many consumers
+> **Scope keeps the proxy convergent.** The objection to a proxy is "the LogQL/dashboard/datasource query
+> space is open-ended and never converges." True for _arbitrary Grafana access_ — so that is NOT the MVP.
+> The MVP proxy serves exactly one shape: **read this node's log lines** (LogQL pinned to the node label).
+> Dashboards, datasource introspection, and ad-hoc multi-tenant queries are out of scope.
+
+## The real blocker — node Loki streams have no `node` label
+
+Neither a proxy nor a scoped token can isolate a node's logs if the logs aren't labeled per node. Today
+Alloy/pino label streams `app` / `env` / `service` only; node identity lives in the `pod` name prefix and a
+JSON field inside the line — **there is nothing for a `{node="<id>"}` selector to match.** So the
+**sequence** is:
+
+1. **Add a `node` (nodeId) stream label** to node Loki streams (Alloy + pino) — the actual substrate gap.
+2. **Operator query-proxy** that runs the dev's LogQL server-side, AND-ed with `{node="<id>"}`, returning
+   only that node's lines. The operator holds its own read token for this; the dev holds nothing.
+
+Until (1) lands, the dev-read route (`GET /api/v1/nodes/{id}/observability/logs`) is a **guarded stub**:
+developer-RBAC-gated, but **always `503 observability_proxy_not_built`** — it holds no token and returns
+none, so it cannot leak.
+
+**Out of MVP scope (do not build now):** per-principal label-scoped `glc_` access-policy tokens, per-dev
+Grafana service accounts, any "mint a token and hand it to the dev" path. Those re-introduce a held
+credential; the proxy makes them unnecessary for the debug-my-node use case.
+
+## The provisioned credentials (unchanged)
 
 Provisioning demands **one** human input — the Grafana Cloud **admin** token (`GH_GRAFANA_CLOUD_ADMIN_TOKEN`
 `glc_*` + `GRAFANA_URL`, `fork-quickstart.md` §6). Phase 5e (`scripts/setup/provision-grafana-cloud-mint.sh`)
-uses it to mint **derived, scoped** credentials — the admin token never leaves the runner (Invariant 13:
-never written to OpenBao, never reaches the VM). From that one root:
+derives **scoped** credentials — the admin token never leaves the runner (Invariant 13: never written to
+OpenBao, never reaches the VM). From that one root:
 
-| consumer                  | credential                                                | where it lives                                                    | who/what queries                                                           |
-| ------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| **Validator / CI**        | child **Viewer** SA `glsa_` (read: datasource + logs)     | `cogni/<env>/_shared/{GRAFANA_URL,GRAFANA_SERVICE_ACCOUNT_TOKEN}` | `/validate-candidate` scorecard, `scripts/loki-query.sh`, agent self-trace |
-| **Alloy push**            | access-policy `glc_` (write: metrics/logs)                | VM `.env` (Compose)                                               | Alloy remote-write only                                                    |
-| **Devs / agents — v0**    | the **shared** env Viewer `glsa_`, ISSUED on RBAC grant   | the dev's own `.env.cogni` / session                              | anything — ad-hoc LogQL, dashboards. **Env-wide: sees every node's logs.** |
-| **Devs / agents — vNext** | per-principal **label-scoped** `glc_` access-policy token | the dev's own `.env.cogni` / session                              | only their granted nodes' logs (`{node="X"}`), read-only                   |
+| consumer           | credential                                            | where it lives                                                    | who/what queries                                                           |
+| ------------------ | ----------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **Validator / CI** | child **Viewer** SA `glsa_` (read: datasource + logs) | `cogni/<env>/_shared/{GRAFANA_URL,GRAFANA_SERVICE_ACCOUNT_TOKEN}` | `/validate-candidate` scorecard, `scripts/loki-query.sh`, agent self-trace |
+| **Alloy push**     | access-policy `glc_` (write: metrics/logs)            | VM `.env` (Compose)                                               | Alloy remote-write only                                                    |
+| **Dev node-read**  | **none — the operator proxies** (its own read token)  | the operator pod (never handed out)                               | the operator, server-side pinned to `{node="<id>"}` on the dev's behalf    |
 
-**The admin token can spawn any of these on demand.** A new dev/agent who needs Grafana gets a **direct**
-read-only token (the operator issues it after an RBAC check, or the provision lane mints it); the dev then
-queries Grafana **directly**. The operator does not stand between the dev and Grafana for queries.
+The validator/CI shared Viewer token is fine: validator and CI are **trusted env-wide consumers**, not
+per-node-scoped principals. The per-node concern is the **external dev**, and that path is the proxy above.
 
-## v0 vs vNext — the credential the dev holds
+## Why the operator's own liveness gate holds no token (unchanged)
 
-### v0 (shipped, task.5025) — issue the shared env Viewer token
+The operator's `flight-status` / `assertLive` gate (`task.5024`, `src/features/nodes/flight-status.ts`) is
+**liveness-only**, proven by the two PUBLIC rungs — `serving` (`/readyz`) and `run-carries` (a real graph
+run completes). **`run-carries` transitively proves the rest:** a completed run means the scheduler-worker
+polled `scheduler-tasks-<nodeId>` (routing), the `SCHEDULER_API_TOKEN` matched (no 401 — `bug.5021`), the
+graph executed, and the run was written to the DB. So the **gate** needs no Grafana token and holds none.
 
-On a `developer` grant (the `node.flight` tuple), the operator **issues** the env's existing `_shared`
-Viewer `glsa_` + `GRAFANA_URL` via `GET /api/v1/nodes/{id}/observability-token` (developer-RBAC-gated,
-fail-closed, returns 503 `observability_unwired` until ESO wires the token into the operator pod). The dev
-puts it in their `.env.cogni` and queries Loki directly.
+This is distinct from the dev-read proxy: the gate gets its verdict **publicly** (run-carries), so it must
+not query Loki at all; the dev-read genuinely needs a Loki query, which the operator runs **pinned to one
+node**. Both keep arbitrary Loki query power out of the open path.
 
-🔴 **The v0 breach-line — state it, don't hide it.** The shared Viewer token is **read-only but NOT
-node-scoped**: it can query **every** node's logs in the env. v0 is acceptable **only while every node
-developer is Cogni-trusted**. The **written trigger** to vNext is _"the first external node developer not
-cleared to see another node's data."_ Below that line v0 ships; above it, v0 is a cross-node data leak.
-
-> The operator pod holding the `_shared` Viewer token to **issue** it is NOT the anti-pattern below — that
-> anti-pattern is about the **gate self-querying**. Issuance ≠ self-query. Keep the issuance token in a
-> distinct env var (`GRAFANA_VIEWER_TOKEN`) so the liveness gate is never tempted to query with it.
-
-### vNext — per-principal, label-scoped, per-node isolation
-
-The dev's token must become a **label-scoped Grafana Cloud access-policy `glc_` token**, NOT a Viewer
-`glsa_`. **A Viewer `glsa_` is role-scoped (Viewer/Editor/Admin) and CANNOT carry a label policy — so it
-can never isolate node X from node Y.** Per-node isolation requires:
-
-1. **a `node` stream label on Loki** (today Alloy/pino label streams `app/env/service` only; node identity
-   lives in the `pod` name prefix + a JSON field — there is nothing for a label policy to filter on); and
-2. **a read-only access policy** `{ scopes: ["logs:read"], realms: [{ type: "stack", identifier: <stackId>,
-labelPolicies: [{ selector: '{node="<nodeId>"}' }] }] }` with a `glc_` token minted on it, per principal.
-
-`provision-grafana-cloud-mint.sh` already POSTs `/api/v1/accesspolicies` + `/api/v1/tokens` with the
-admin root's `accesspolicies:write` scope — the only delta is a non-empty `labelPolicies` selector + the
-read-only scope. The mint **trigger + delivery** (provision-time vs an operator-held scoped minter behind
-the grant route) is the open vNext decision; both keep the operator out of the query path. See
-[`docs/spec/substrate-access-grant.md`](./substrate-access-grant.md) for the cross-substrate plan.
-
-## Why the operator's own gate holds no token
-
-The operator's `flight-status` / `assertLive` gate (`task.5024`, `src/features/nodes/flight-status.ts`)
-is **liveness-only**, proven by the two PUBLIC rungs — `serving` (`/readyz`) and `run-carries` (a real
-graph run completes). **`run-carries` transitively proves the rest:** a completed run means the
-scheduler-worker polled `scheduler-tasks-<nodeId>` (routing), the `SCHEDULER_API_TOKEN` matched (no 401 —
-`bug.5021`), the graph executed, and the run was written to the DB. So the gate needs **no** Grafana token,
-and the operator prober holds none.
-
-Deeper **observability verification** (did the node's runs actually emit logs in Loki? is the worker
-polling the UUID queue?) is a query against Loki, and querying belongs to whoever **directly** holds a
-read token — the dev in `/validate-candidate`, or CI — **not** the operator's gate. The operator's only
-role in that is to **issue** the dev a token (v0/vNext above), never to run the query.
-
-**Anti-pattern:** wiring `cogni/<env>/_shared/GRAFANA_SERVICE_ACCOUNT_TOKEN` into the operator pod's
-ExternalSecret **to make the liveness gate self-query Loki**. That turns the control plane into a Grafana
-proxy for a verdict it already gets publicly, and a proxy never converges on the open-ended query space.
-Don't. (Issuing a token to a dev is a different use and a distinct env var — see v0.)
+**Anti-pattern:** wiring `cogni/<env>/_shared/GRAFANA_SERVICE_ACCOUNT_TOKEN` into the operator pod to make
+the **liveness gate** self-query Loki (it has a public verdict already), **or** returning any Grafana token
+to a dev from an API route (a dormant env-wide leak). The sanctioned shape is the node-pinned proxy.
 
 ## See also
 
 - [`docs/spec/substrate-access-grant.md`](./substrate-access-grant.md) — the cross-substrate plane (Grafana/PostHog/DB/Temporal), health scorecard, sequencing
 - `fork-quickstart.md` §6 (Phase 5e mint), `infra/secrets-catalog.yaml` (`GRAFANA_*` = `service: _shared`)
 - `docs/spec/secrets-classification.md` (tier/routing), `.claude/skills/cicd-secrets-expert/SKILL.md`
-- `nodes/operator/app/src/features/nodes/observability-access.ts` (v0 issuance), `.../api/v1/nodes/[id]/observability-token/route.ts`
+- `nodes/operator/app/src/app/api/v1/nodes/[id]/observability/logs/route.ts` (guarded stub — proxy, never a token)
 - `nodes/operator/app/src/features/nodes/flight-status.ts` (`assertLive`), `task.5024`, `task.5025`
