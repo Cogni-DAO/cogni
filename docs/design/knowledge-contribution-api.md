@@ -470,18 +470,18 @@ curl -X POST "$URL/api/v1/knowledge/contributions" \
 
 One commit, two row changes. Diff returns `modified` + `added` together.
 
-### Delete
+### Deprecate
 
 ```bash
 curl -X POST "$URL/api/v1/knowledge/contributions/$CID/commits" \
   -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
   -d '{
-    "message": "delete retired scorecard",
-    "edits": [{ "op": "delete", "targetRowId": "poly:target-overlap-2026-w20", "reason": "retired; no successor" }]
+    "message": "deprecate superseded scorecard",
+    "edits": [{ "op": "deprecate", "targetRowId": "poly:target-overlap-2026-w20", "reason": "superseded by 2026-w21" }]
   }'
 ```
 
-Hard-deletes the row + its own outbound citation edges (`DELETE_IS_CLEAN` — Dolt history preserves content, commits, and attribution). **Refuses with 409 if a live row cites the target** — repoint/remove those edges first, or refine the entry in place. For supersession, prefer `update` (REFINE in place) over delete-and-rewrite.
+Sets `status='deprecated'` + `source_ref='contribution:<id>:<seq>'` on the row; never deletes (`DEPRECATE_NOT_DELETE`).
 
 ### List · get · diff · commits
 
