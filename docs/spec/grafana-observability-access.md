@@ -4,22 +4,58 @@ type: spec
 title: Grafana / Loki Observability Access
 status: draft
 trust: draft
-summary: How a developer-RBAC'd dev reads only their node's Grafana/Loki logs without holding a token — the operator is a node-pinned query PROXY (runs the dev's LogQL server-side, constrained to the node label) rather than a credential issuer, because a returned token's reach is ungoverned by the per-node check while a pinned proxy is node-scoped by construction. The operator's own liveness gate still holds no token (it uses the public run-carries rung). Blocked today on node Loki streams lacking a node stream label.
-read_when: Wiring or debating whether the operator/API should hold or hand out a Grafana token; granting a dev/agent Loki query access; designing an automated observability gate; reviewing an ExternalSecret that pulls a GRAFANA_* key into a pod; deciding proxy-vs-issuer for observability reads.
+summary: How a developer-RBAC'd dev reads only their node's logs through ONE stable operator endpoint (`GET /api/v1/nodes/{id}/observability/logs`) — the node-dev contract is a fixed envelope over a SWAPPABLE log backend. The operator is a node-pinned query PROXY (runs the read server-side, constrained to the node) rather than a credential issuer, because a returned token's reach is ungoverned by the per-node OpenFGA check. v0 (shipped, #1734/task.5025) isolates on Grafana Cloud by forcing the LogQL selector and rejecting braces — a brittle compromise forced by Cloud being a single tenant. The top-0.1% OSS target is self-hosted OSS Loki with native multi-tenancy (`X-Scope-OrgID=<nodeId>`), which eliminates the query-surgery, is free + sovereign, and is reachable ONLY via the operator gateway. The backend swaps; the node-dev contract does not.
+read_when: Wiring or debating whether the operator/API should hold or hand out a Grafana token; granting a dev/agent log-read access; designing an automated observability gate; reviewing an ExternalSecret that pulls a GRAFANA_* key into a pod; deciding proxy-vs-issuer for observability reads; planning the Grafana-Cloud → self-hosted-OSS-Loki migration; stamping a node id on shared-infra (scheduler-worker / litellm / cicd) log lines.
 owner: derekg1729
 created: 2026-06-16
 verified: 2026-06-17
+updated: 2026-06-17
 tags:
   - secrets
   - observability
   - grafana
+  - loki
+  - multi-tenancy
 ---
 
 # Grafana / Loki Observability Access
 
+## The held design — a stable envelope over a swappable backend
+
+The node-dev observability interface is **one stable operator endpoint** with a **swappable log backend
+behind it**:
+
+- **Stable envelope (the contract):** `GET /api/v1/nodes/{id}/observability/logs` — OpenFGA
+  `developer`-grant gated, the dev holds **no** backend token. This surface does **not** change across
+  backend swaps.
+- **Swappable backend (the substrate):** today → **Grafana Cloud Loki**; target → **self-hosted OSS
+  Loki**. The operator translates the stable read into whatever the current backend speaks.
+
+This is the same shape as `TEMPORAL_IS_SWAPPABLE_SUBSTRATE` in
+[`docs/design/node-temporal-tenant-interface.md`](../design/node-temporal-tenant-interface.md): the
+node-facing port is portable; the substrate behind it is the operator's managed convenience, swappable
+without changing the node's contract. A node that wants its own log store swaps the backend behind the
+same endpoint; nothing in its repo-spec or read path changes.
+
+**Named invariants:**
+
+- **`OBSERVABILITY_BACKEND_IS_SWAPPABLE`** — the node-dev contract is `GET …/observability/logs`; Grafana
+  Cloud vs self-hosted OSS Loki is an implementation detail behind it, swapped without breaking the dev.
+- **`AUTH_IS_OPENFGA_GATED`** — WHO can read is the `developer`/`node.flight` OpenFGA tuple, on every
+  backend. The dev never holds a backend credential.
+- **`ISOLATION_IS_TENANT_NATIVE_NOT_QUERY_SURGERY`** (target) — per-node REACH must be enforced by the
+  backend's native tenancy (`X-Scope-OrgID`), not by string-building + guarding LogQL. v0 violates this by
+  necessity (see shortcomings); the OSS target restores it.
+- **`LOKI_ONLY_VIA_GATEWAY`** (target) — OSS Loki trusts `X-Scope-OrgID` blindly, so it must be reachable
+  **only** via the operator gateway. Direct network reach = forged-tenant bypass.
+- **`OSS_ONLY_OR_CRYPTO_PAID`** — no fiat-billed Cloud-Advanced / LBAC. Per-node tenancy is bought with
+  self-hosted OSS, never a paid Grafana Cloud tier.
+
+## Decision: proxy, not issuer
+
 **Decision (2026-06-17):** for a dev reading **their node's** logs, the operator is a **node-pinned query
 PROXY**, NOT a credential issuer. The dev sends a query; the operator runs it server-side **constrained to
-`{node="<id>"}`** and returns only that node's lines. **The dev never holds a token** — so access is
+the node** and returns only that node's lines. **The dev never holds a token** — so access is
 node-scoped from day one.
 
 > **Why proxy, not issuer (the load-bearing correction).** Handing the dev a token — even behind a per-node
@@ -35,24 +71,92 @@ node-scoped from day one.
 > The MVP proxy serves exactly one shape: **read this node's log lines** (LogQL pinned to the node label).
 > Dashboards, datasource introspection, and ad-hoc multi-tenant queries are out of scope.
 
-## The real blocker — node Loki streams have no `node` label
+## v0 — shipped (Grafana Cloud, isolation by query surgery)
 
-Neither a proxy nor a scoped token can isolate a node's logs if the logs aren't labeled per node. Today
-Alloy/pino label streams `app` / `env` / `service` only; node identity lives in the `pod` name prefix and a
-JSON field inside the line — **there is nothing for a `{node="<id>"}` selector to match.** So the
-**sequence** is:
+v0 (`#1734` / `task.5025`, live on candidate-a) proxies the read against **Grafana Cloud Loki**. The
+operator builds the LogQL server-side, **forcing** the stream selector to `{env=…, service="app",
+node="<nodeId>"}` and returning only that node's lines. **OpenFGA gates WHO** (the `developer` tuple in the
+route); **the forced selector gates REACH** (the dev cannot widen scope).
 
-1. **Add a `node` (nodeId) stream label** to node Loki streams (Alloy + pino) — the actual substrate gap.
-2. **Operator query-proxy** that runs the dev's LogQL server-side, AND-ed with `{node="<id>"}`, returning
-   only that node's lines. The operator holds its own read token for this; the dev holds nothing.
+The security core is
+[`nodes/operator/app/src/features/nodes/observability-logs.ts`](../../nodes/operator/app/src/features/nodes/observability-logs.ts)
+(`buildNodeScopedLogQL`): the selector is constructed by the operator (`SELECTOR_IS_FORCED`), and the
+optional dev `filter` is appended **as a LogQL pipeline only** — braces `{`/`}` are rejected so a dev cannot
+open a second selector (e.g. `} or {node="other"}`) to escape the pin (`FILTER_IS_PIPELINE_ONLY`).
 
-Until (1) lands, the dev-read route (`GET /api/v1/nodes/{id}/observability/logs`) is a **guarded stub**:
-developer-RBAC-gated, but **always `503 observability_proxy_not_built`** — it holds no token and returns
-none, so it cannot leak.
+This works, but be honest about why it has this shape: it is a **compromise forced by Grafana Cloud being a
+single tenant** for us. Per-node tenancy on Cloud needs paid LBAC, which we will **not** buy
+(`OSS_ONLY_OR_CRYPTO_PAID`). So v0 hand-rolls isolation in the query string.
+
+### v0 shortcomings (state them plainly)
+
+1. **`ISOLATION_BY_QUERY_SURGERY` (the bug surface).** Isolation is enforced by string-building LogQL and
+   rejecting `{`/`}` in the dev filter to block selector-injection. Hand-rolled query-string guards are
+   brittle and bug-prone — one missed escape or a new LogQL syntax is a cross-node leak. This is the direct
+   consequence of Cloud being single-tenant; the OSS target removes the surgery entirely.
+2. **`SHARED_INFRA_NOT_NODE_ATTRIBUTABLE` (the real debugging gap).** temporal / scheduler-worker / litellm
+   / cicd logs carry **no `node` label**, so a node dev can only see their own **app** pods — they cannot
+   debug failures that cross shared infra (a scheduler dispatch, an LLM call, a flight for their node).
+   Most real node failures live in shared infra, so this is the gap that matters most.
+3. **`ENV_LIST_HARDCODED`.** The env allowlist (`OBSERVABILITY_ENVS = candidate-a / preview / production`)
+   is a hardcoded constant, not catalog-driven; a new env requires a code edit.
+4. **`COST_CAPACITY_OWNERSHIP`.** Grafana Cloud bills **fiat**, we have already hit a capacity block (logs
+   blocked), and it runs on a **personal account** — not sovereign. This violates
+   `OSS_ONLY_OR_CRYPTO_PAID` and is the trigger for the migration below.
+
+## Target — self-hosted OSS Loki with native multi-tenancy
+
+The top-0.1% OSS direction is **self-hosted OSS Loki** (AGPL) using its **native multi-tenancy**: one
+**`X-Scope-OrgID=<nodeId>`** tenant per node. Loki enforces per-node isolation **natively** — the operator
+gateway sets the header from the OpenFGA grant, and Loki returns only that tenant's streams. This:
+
+- **eliminates the LogQL string-surgery** — no query parsing, no brace-guarding, no forced-selector
+  builder; per-node REACH is a backend primitive (`ISOLATION_IS_TENANT_NATIVE_NOT_QUERY_SURGERY`);
+- is **free, sovereign, and OpenFGA-aligned** — the per-node grant maps 1:1 to a Loki tenant id, satisfying
+  `OSS_ONLY_OR_CRYPTO_PAID`.
+
+**Hard requirement (`LOKI_ONLY_VIA_GATEWAY`).** OSS Loki **trusts `X-Scope-OrgID` blindly** — there is no
+auth on the header. So Loki must be reachable **only** via the operator gateway: any direct network path
+lets a caller forge the tenant header and read every node. This is a network-isolation invariant — the
+operator gateway is the **sole ingress**, and Loki has no externally-routable address.
+
+## Shared-infra attribution (orthogonal — applies to either backend)
+
+Shortcoming (2) is **not** a Cloud-vs-OSS question — it is a **logging-instrumentation** gap that must be
+fixed independent of the backend. Node-scoped work running in shared infra must **stamp `nodeId` as a Pino
+field** on its log lines:
+
+- **scheduler-worker** — when dispatching/executing for a node (`scheduler-tasks-<nodeId>`);
+- **litellm** — on calls attributable to a node;
+- **cicd** — on flights run for a node.
+
+With `nodeId` stamped, those lines are filterable (Cloud: into the forced selector / line filter) or
+routable (OSS: into the node's `X-Scope-OrgID` tenant) to the node's view. This is the fix for the real
+debugging gap and lands the same way regardless of which backend is live.
+
+## Migration — Cloud → OSS Loki (contract unchanged)
+
+The migration **swaps the backend behind the operator endpoint**; the node-dev contract
+(`GET …/observability/logs`, OpenFGA-gated, dev holds no token) is **unchanged** — that is the whole point
+of the stable envelope.
+
+**Trigger:** `COST_CAPACITY_OWNERSHIP` — the fiat bill, the capacity block, and the personal-account
+sovereignty problem.
+
+**Sequence:**
+
+1. **Stamp `nodeId`** on shared-infra log lines (the orthogonal fix above) — unblocks cross-infra
+   debugging on the current backend immediately.
+2. **Stand up self-hosted OSS Loki** behind the operator gateway, with **no externally-routable address**
+   (`LOKI_ONLY_VIA_GATEWAY`).
+3. **Point Alloy** at OSS Loki, writing each stream to its node's tenant (`X-Scope-OrgID=<nodeId>`).
+4. **Switch the operator proxy** to set `X-Scope-OrgID` from the OpenFGA grant and **drop** the
+   forced-selector / brace-guarding LogQL surgery (`ISOLATION_IS_TENANT_NATIVE_NOT_QUERY_SURGERY`).
+5. **Decommission** the Grafana Cloud personal account once parity is proven on a live env.
 
 **Out of MVP scope (do not build now):** per-principal label-scoped `glc_` access-policy tokens, per-dev
-Grafana service accounts, any "mint a token and hand it to the dev" path. Those re-introduce a held
-credential; the proxy makes them unnecessary for the debug-my-node use case.
+Grafana service accounts, any paid Cloud-Advanced / LBAC tier, any "mint a token and hand it to the dev"
+path. Those re-introduce a held credential or a fiat bill; the proxy + OSS tenancy make them unnecessary.
 
 ## The provisioned credentials (unchanged)
 
@@ -89,7 +193,10 @@ to a dev from an API route (a dormant env-wide leak). The sanctioned shape is th
 ## See also
 
 - [`docs/spec/substrate-access-grant.md`](./substrate-access-grant.md) — the cross-substrate plane (Grafana/PostHog/DB/Temporal), health scorecard, sequencing
+- [`docs/spec/node-baas-architecture.md`](./node-baas-architecture.md) — BaaS substrate map; "node declares shape; operator wires environment"
+- [`docs/design/node-temporal-tenant-interface.md`](../design/node-temporal-tenant-interface.md) — the sibling swappable-substrate design (`TEMPORAL_IS_SWAPPABLE_SUBSTRATE`)
 - `fork-quickstart.md` §6 (Phase 5e mint), `infra/secrets-catalog.yaml` (`GRAFANA_*` = `service: _shared`)
 - `docs/spec/secrets-classification.md` (tier/routing), `.claude/skills/cicd-secrets-expert/SKILL.md`
-- `nodes/operator/app/src/app/api/v1/nodes/[id]/observability/logs/route.ts` (guarded stub — proxy, never a token)
-- `nodes/operator/app/src/features/nodes/flight-status.ts` (`assertLive`), `task.5024`, `task.5025`
+- `nodes/operator/app/src/features/nodes/observability-logs.ts` (`buildNodeScopedLogQL` — the v0 forced-selector security core)
+- `nodes/operator/app/src/app/api/v1/nodes/[id]/observability/logs/route.ts` (the OpenFGA-gated proxy route — never returns a token)
+- `nodes/operator/app/src/features/nodes/flight-status.ts` (`assertLive`), `task.5024`, `task.5025`, `#1734`
