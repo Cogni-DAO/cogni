@@ -720,7 +720,7 @@ describe("GitHubRepoWriter.promoteNodeToPreview", () => {
     "POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches";
   const childSha = "0123456789012345678901234567890123456789";
   const staleCatalog =
-    "name: habitat\ntype: node\nsource_repo: https://github.com/Cogni-DAO/habitat.git\nimage_repository: ghcr.io/cogni-dao/habitat\nsource_sha: ffffffffffffffffffffffffffffffffffffffff\n";
+    "name: habitat\ntype: node\npath_prefix: nodes/ghcr/\nsource_repo: https://github.com/Cogni-DAO/habitat.git\nimage_repository: ghcr.io/cogni-dao/habitat\nsource_sha: ffffffffffffffffffffffffffffffffffffffff\n";
 
   it("source-addresses the node sha on the preview dispatch — ZERO writes to main, no PR (task.5022 Design A)", async () => {
     routeHandlers = {
