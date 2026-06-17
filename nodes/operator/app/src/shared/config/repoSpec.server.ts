@@ -24,11 +24,13 @@ import {
   extractLedgerApprovers,
   extractNodeMission,
   extractNodeName,
+  extractNodeSchedules,
   extractOperatorWalletConfig,
   extractPaymentConfig,
   type GovernanceConfig,
   type InboundPaymentConfig,
   type KnowledgeConfig,
+  type NodeScheduleConfig,
   type OperatorWalletSpec,
   parseRepoSpec,
   type RepoSpec,
@@ -142,6 +144,22 @@ export function getGovernanceConfig(): GovernanceConfig {
   const spec = loadRepoSpec();
   cachedGovernanceConfig = extractGovernanceConfig(spec);
   return cachedGovernanceConfig;
+}
+
+let cachedNodeSchedules: NodeScheduleConfig[] | null = null;
+
+/**
+ * Node-facing recurring-work schedules from repo-spec (story.5008 / task.5030).
+ * Each entry is pinned to this repo-spec's OWN node_id (M8) — a repo-spec cannot
+ * author a schedule for a foreign node. Returns an empty array when no `schedules`
+ * block is declared.
+ */
+export function getNodeSchedules(): NodeScheduleConfig[] {
+  if (cachedNodeSchedules) return cachedNodeSchedules;
+
+  const spec = loadRepoSpec();
+  cachedNodeSchedules = extractNodeSchedules(spec);
+  return cachedNodeSchedules;
 }
 
 // ---------------------------------------------------------------------------

@@ -24,6 +24,7 @@ export {
   getNodeId,
   getNodeMission,
   getNodeName,
+  getNodeSchedules,
   getOperatorWalletConfig,
   getPaymentConfig,
   getScopeId,
