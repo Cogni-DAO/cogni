@@ -8,11 +8,13 @@
  *   with a live skills index + domain pointers from the knowledge hub, plus a
  *   rendered markdown bundle a SessionStart hook echoes into agent context.
  * Scope: Single authed GET (any principal: cookie-session human OR bearer
- *   agent). Reads via container.knowledgeStorePort. Index-only — full entry
- *   bodies stay behind the same authed read routes (KNOWLEDGE_READ_REQUIRES_PRINCIPAL).
+ *   agent). Reads via container.knowledgeStorePort. Index-first — full entry
+ *   bodies stay behind the same authed read routes (KNOWLEDGE_READ_REQUIRES_PRINCIPAL),
+ *   save one bounded current-node orientation excerpt.
  *   The public bootstrap seam stays /api/v1/agent/register: register → key → cognition.
  * Invariants:
- *   - INDEX_NOT_CONTENT: returns skill/domain pointers, never full bodies.
+ *   - INDEX_FIRST: returns skill/domain pointers + one bounded orientation
+ *     excerpt, never full entry bodies.
  *   - IRREDUCIBLE_INVARIANTS_ALWAYS_PRESENT: invariants + markdown render even
  *     when the hub is unconfigured or empty.
  *   - NO_INTERNAL_BIND_ADDR: origin derived from forwarded headers first.
@@ -157,6 +159,7 @@ export const GET = wrapRouteHandlerWithLogging(
         name,
         skills: skillsIndex.length,
         domains: domainPointers.length,
+        orientation: orientation?.id ?? null,
         hub: Boolean(port),
       },
       "cognition.bundle_success"
