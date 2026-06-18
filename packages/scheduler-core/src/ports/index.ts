@@ -32,6 +32,11 @@ export type {
   ExecutionRequestPort,
   IdempotencyCheckResult,
 } from "./execution-request.port";
+export type {
+  RecurringWorkHandle,
+  RecurringWorkInput,
+  RecurringWorkPort,
+} from "./recurring-work.port";
 export {
   type CreateScheduleParams,
   isScheduleControlConflictError,
