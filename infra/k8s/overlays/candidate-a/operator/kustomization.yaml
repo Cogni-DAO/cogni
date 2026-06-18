@@ -16,7 +16,7 @@ namePrefix: operator-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:7f0325e909f9318f95036d752e5f96037177f6b29e2a590e87f02b650cc0e025"
+    digest: "sha256:0250cc2e6c01a80172d19b00583b65c50990b27849ca16815e75d2d899511b53"
 
 patches:
   - target:
@@ -26,6 +26,11 @@ patches:
       - op: replace
         path: /data/NODE_NAME
         value: "operator"
+      # Deploy-env name the secrets route stamps onto the OpenBao path
+      # (cogni/<env>/<node>/<KEY>). Distinct from APP_ENV (a build flag).
+      - op: add
+        path: /data/DEPLOY_ENVIRONMENT
+        value: "candidate-a"
       - op: replace
         path: /data/TEMPORAL_NAMESPACE
         value: "cogni-candidate-a"
