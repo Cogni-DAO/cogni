@@ -327,6 +327,101 @@ don't assume complete Loki rotation history until it closes).
   justified **only here** — where the tool layer (a package consumed by graphs)
   actually needs it; Phase 1's REST path does not.
 
+## Phase 3 — Cross-env writes (the test-env self-serve blocker · `bug.5038`)
+
+**The blocker, stated plainly:** a node registered through the prod operator can
+only self-serve on **production**. Setting a secret on a _test_ env
+(candidate-a/preview) for that node falls back to the operator-admin CLI
+(kube port-forward + writer JWT) — i.e. **one person's `.local` creds.** That is
+backwards: the least-protected env is the most human-gated, and it hard-blocks
+every external developer. (Surfaced by the beacon dev, who could only write
+`cogni/production/beacon/*` from `cognidao.org` and clobbered a `source: agent`
+key there.)
+
+**Root cause** (not a bug in the route — a topology fact): env is
+operator-stamped from `serverEnv().DEPLOY_ENVIRONMENT` (correct — it closes the
+env-injection axis), and the **control plane is per-env**: each env's operator runs
+its own `nodes` registry + OpenFGA store. So no single operator both _knows the
+prod-registered node_ and _writes the test env's OpenBao_.
+
+The shape mirrors the **deploy port**: control plane authorizes, env-local plane
+executes. Deploy gets away with `workflow_dispatch` because it carries only a PR
+number; secrets cannot (plaintext value in a CI input — see Non-goals), so the
+cross-env path must carry the value operator→operator, never through CI.
+
+### Decision — phase the fix; simplest first, mesh deferred behind a trigger
+
+**Phase 3a (this bug — the MVP unblock): per-env self-serve, _gated on a
+verification spike_.** The hypothesis: a dev manages a test-env secret by talking
+to **that env's own operator**, where the node is registered and the dev is
+granted, reusing the shipped #1627 write — `POST /nodes` (register) →
+`POST /nodes/[id]/access-requests` → owner `POST /nodes/[id]/developers` →
+`POST /nodes/[id]/secrets`, all API, no kube. **But three preconditions are
+unproven and each can sink it — prove them before calling 3a "done", do not
+assume "zero new code":**
+
+1. **Registry row ≠ running node.** A `nodes` row + an OpenBao write are useless
+   unless the test env actually has the node's `cogni/<env>/<node>/*` ExternalSecret
+   fan-out **and a deployed pod consuming `<node>-env-secrets`.** That is the
+   node-formation/flight path, not a single `POST /nodes`. If the test env has no
+   deployed node, self-serve writes into a void.
+2. **Owner bootstrap (chicken-and-egg).** The grant rung needs an existing **owner**
+   on the test-env operator to approve. If self-registration makes the dev the
+   owner, fine — API-only. If not, the _first_ grant still needs an admin → back to
+   a human. Prove who owns a freshly-registered test node.
+3. **OpenFGA must exist on the chosen test env.** #1627's gate fail-closes to
+   **503** where no OpenFGA store exists. candidate-a has one (works) **but is
+   reprovisioned often** and `candidate-flight` does **not** bootstrap the OpenFGA
+   model (`project_candidate_flight_no_openfga_bootstrap`) — grants/rows are
+   ephemeral. **preview** is more durable but (per §Security boundary) **has no
+   OpenFGA store today → every check 503s.** So 3a is squeezed: candidate-a
+   (works, fragile) vs preview (durable, needs OpenFGA provisioned first — _not_
+   zero-code). Resolving this env choice **is** the spike.
+
+> **Honest read:** 3a is the right _direction_ and may be a small change, but the
+> "zero Derek, works today" framing is aspirational until the spike clears all
+> three. The realistic near-term unblock is likely **one** admin-run bootstrap
+> (provision/own the node on a durable test env) after which the dev self-serves
+> kube-free — i.e. zero _per-secret_ human creds, not zero human at registration.
+
+**Phase 3b (scalable target — deferred behind a trigger): `targetEnv` + operator
+mesh.** When operating per-env across N envs/nodes becomes the friction (or a
+second external node lands), promote the **prod operator to the single control
+plane** for registry + RBAC and let a dev manage _any_ env of their node from one
+host:
+
+```
+POST cognidao.org/api/v1/nodes/<id>/secrets { key, value, targetEnv: "candidate-a" }
+  → prod operator: OpenFGA check (it knows the node + grant)  [GATE 1, here]
+  → authz-scoped targetEnv  [NEW: targetEnv ∈ caller's grant]
+  → delegate to test.cognidao.org internal endpoint (operator→operator service cred, mTLS)
+  → candidate-a operator writes cogni/candidate-a/<node>/* via its OWN in-cluster writer
+```
+
+The target operator **trusts the control-plane operator's authz** (it can't
+re-check — it doesn't know the node); the trust seam is a service credential held
+**only by the control-plane operator pod** (ESO-sourced, like `OPENFGA_API_TOKEN`),
+never by a dev. The value crosses operator→operator over TLS, lands in the target
+env's OpenBao, and the env axis stays closed (each operator still writes only its
+own env).
+
+**Rejected alternatives:**
+
+- **Prod operator holds a writer + network path into _every_ env's OpenBao
+  directly** (no mesh, one skeleton key). Rejected — makes the prod operator a
+  single credential that can write all envs' secret planes; max blast radius,
+  violates the per-env data-plane isolation the design is built on.
+- **`secret-set.yml` GitHub Actions OIDC writer** (deploy-port-style dispatch).
+  Rejected for human values — the value can't ride a `workflow_dispatch` input
+  without plaintext exposure (Non-goal). Fine for `source: agent` keys, but those
+  are already minted by `secret-materialize`; it adds nothing for the vendor-value
+  case this bug is about.
+- **Unify the operator DB + OpenFGA across all envs into one shared store.**
+  Rejected for now — candidate-a/preview run _unmerged_ operator code; a shared
+  control-plane schema would couple test envs to prod's migration state (the exact
+  test-isolation the separate stores buy). 3b keeps registry on prod and delegates
+  execution, getting the centralized UX without merging the data planes.
+
 ## Non-goals
 
 - A generic secret-management UI (the wizard doc's non-goal still holds).
@@ -342,6 +437,12 @@ don't assume complete Loki rotation history until it closes).
       even `openbao-operator` today — `bug.5007`). Candidate-a first.
 - [ ] Confirm `audience: cogni-openbao` matches OpenBao's `bound_audiences` on the
       k8s auth backend before wiring the projected token.
+- [ ] **Phase 3a (`bug.5038`):** confirm an external agent can register a node +
+      receive a grant on a test-env operator API-only (no kube), and that a
+      candidate-a reprovision preserves the node row + grant (else prefer preview).
+- [ ] **Phase 3b trigger:** define when per-env operation becomes painful enough to
+      build the `targetEnv` + operator-mesh delegation (e.g. ≥2 external nodes, or a
+      dev manages ≥3 envs). Until then, 3a holds.
 - [x] Allowlist source resolved: A2 entries live in `infra/secrets-catalog.yaml`
       (per-node `.cogni/*.yaml` empty today) **and** the operator runtime image carries
       neither that file nor the loader — so gate 2 reads a **build-time-generated typed
