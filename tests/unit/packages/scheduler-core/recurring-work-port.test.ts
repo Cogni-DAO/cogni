@@ -3,10 +3,8 @@
 
 /**
  * Module: `@tests/unit/packages/scheduler-core/recurring-work-port`
- * Purpose: Contract test for the RecurringWorkPort seam — proves the 2-method port is
- *   implementable, that a repo-spec-shaped NodeScheduleEntry flows through `schedule()`
- *   unchanged, and that `cancel()` is idempotent. Guards the seam both impls (cron, Temporal) bind to.
- * Scope: Pure type/contract test with an in-memory fake; no Temporal, no cron, no I/O.
+ * Purpose: Contract test for the RecurringWorkPort seam — proves the 2-method port is implementable, that a repo-spec-shaped NodeScheduleEntry flows through `schedule()` unchanged, and that `cancel()` is idempotent.
+ * Scope: Pure contract test with an in-memory fake. Does not touch real Temporal, cron, or I/O.
  * Invariants: schedule() accepts the NodeScheduleEntry shape and returns a stable handle;
  *   cancel() is idempotent.
  * Side-effects: none

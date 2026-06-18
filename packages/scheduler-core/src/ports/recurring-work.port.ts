@@ -3,11 +3,8 @@
 
 /**
  * Module: `@ports/recurring-work`
- * Purpose: The 2-method seam a node binds to register recurring work — so a node-local
- *   cron implementation (the day-1 fallback) and the Temporal substrate implementation are
- *   swappable behind ONE interface with zero product-code change.
- * Scope: Interface + input/result types only. No implementations, no cron/Temporal/vendor
- *   imports, no I/O.
+ * Purpose: The 2-method seam a node binds to register recurring work, so a node-local cron impl (the day-1 fallback) and the node-direct Temporal substrate are swappable behind one interface with zero product-code change.
+ * Scope: Interface + input/result types only. Does not contain implementations, cron/Temporal/vendor imports, or I/O.
  * Invariants:
  *   - SWAP_IS_ZERO_PRODUCT_CHANGE: a node binds exactly one impl (node-local cron MVP, or the
  *     node-direct Temporal substrate); switching impls never touches the node's product code.
