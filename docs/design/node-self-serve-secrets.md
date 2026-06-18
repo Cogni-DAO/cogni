@@ -384,70 +384,75 @@ identity:
 | **Authorization** (write key K on node Y, env E) | **per-(node, env)** — already is     | one OpenFGA tuple in **that env's own** store; prod grant gated on promotion             |
 | **Data** (the value bytes)                       | **per-env** (`cogni/<env>/<node>/*`) | the **shipped #1627 route**, env operator-stamped — unchanged                            |
 
-**Foundation (the actual fix — ~1 PR, reuses shipped primitives): node formation
-fans the grant into every env it provisions.** At each env's provision/flight, the
-substrate lane idempotently ensures, **in that env's own stores**: (a) the node's
-`nodes` registry row, (b) the owner's `users` row, (c) the owner's
-`developer`/`can_manage_secrets` OpenFGA tuple. All three already exist as
-primitives — `writeRelation` (`nodes/[id]/developers/route.ts:208-211`), the `users`
-upsert (`agent/register/route.ts:41-57`). **Result:** the already-shipped #1627
-per-env route becomes reachable on every env the node lives on — the dev sets a
-candidate-a secret by calling the candidate-a operator, a prod secret by calling the
-prod operator, **zero kube on any of them.** Per-env data **and** per-env authz are
-**preserved** — no cross-env channel is created, so Phase 1's env-axis-closed-by-
-topology safety (§Security boundary) stays intact and there is **no skeleton key.**
+> **Architect correction (2026-06-18, Derek).** Do **not** create a separate node
+> registration per env. **A node is registered ONCE — in the (prod/control-plane)
+> operator — and that record is _env-aware_:** it knows which envs the node is
+> deployed in, exactly as the deploy-port / node-awareness layer already tracks a
+> node's per-env deploy state ("node X: candidate-a ✓, preview ✓, production —").
+> Per-env `nodes` rows are incidental current state, **not** the target. The earlier
+> "fan a registration into each env" framing is retracted.
+
+**Foundation: ONE env-aware node record + ONE grant; per-env value writes
+authorized against it.** Three layers, scoped to match Derek's correction:
+
+1. **Node identity & awareness = singular + env-aware** (the deploy-port / node
+   model). One `nodes` record in the control-plane operator; "which envs is it in"
+   is an attribute of that record (derived from deploy state), never a second
+   registration. _This is the real foundation, and it replaces "register per env."_
+2. **Authorization = granted once on that node record.** The owner gets
+   `can_manage_secrets` on node X one time. Env-scoping for **safety** is a separate,
+   deliberate gate (below) — not a separate registration.
+3. **Secret VALUE = per-env, written into that env's own vault.** The value never
+   becomes a single super-operator's to push everywhere (that was the rejected
+   skeleton key). The cross-env step carries only a **narrowly-scoped, signed,
+   single-use, target-verified capability to write exactly `(node, env, key)`** — the
+   target env validates the signature + its own `APP_ENV` + TTL + replay-nonce before
+   writing its OpenBao (the security review's required shape; "verify the claim," not
+   "trust the channel"). A leaked cred can write nothing beyond its one named tuple.
 
 - `source: agent` keys: still operator-generated per env by `secret-materialize`
   (no dev; clobber-protected since #1753).
-- `source: human` keys: per-env self-serve via the shipped route, now reachable
-  because formation fanned the grant. Distinct values per env (test X-app vs prod
-  X-app) are the point.
+- `source: human` keys: the dev sets the value once, env-targeted; it lands in that
+  env's vault. Distinct values per env (test X-app vs prod X-app) are the point.
 
-**Safety carried over from the per-env model (the security review's required fixes):**
+**Test↔prod isolation stays hard:** the **production** secret-write is a separate,
+deliberate grant (mirror `production_promoter`); a test grant can never authorize a
+prod write, and a `source: human` prod value is never auto-asserted from test-env
+code.
 
-- **Prod grant is promotion-gated, never auto-self-healed.** Formation auto-asserts
-  the grant on **candidate-a/preview** (cheap, low-blast); the **production** grant
-  is a separate approval (mirror `production_promoter`). A candidate-a reprovision
-  writes only candidate-a's store — it must **never** mint a prod tuple. This keeps
-  unmerged test-env code off the prod authz path.
-- **Per-(node, env) authz already holds** by topology: each env's OpenFGA store is
-  separate, so a `(beacon, candidate-a)` grant is physically incapable of authorizing
-  a prod write. No model change needed for the per-env path (unlike the rejected
-  cross-env design, which needed a net-new `(node,env)` resource type).
+**Honest size (correcting my "~1 PR" claim):** Derek's correction makes this a small
+**project, not one PR**. It needs (a) the env-aware single node model in the
+operator's node-awareness layer, (b) one identity that the per-env write path can
+trust, and (c) the scoped/signed cross-env write. The simplicity review preferred a
+1-PR per-env fan-out, but that path **is** "register/grant per env," which the
+architect rejected — so we take the larger, correct shape.
 
-**The dev's "one relationship" (the only residual) is a deferred UX polish, not a
-blocker.** Today the dev still targets a per-env hostname and (naively) holds a
-per-env key. When that friction is actually felt (trigger: ≥2 external nodes, or a
-dev managing ≥3 envs), solve it with a **thin operator key-broker** — the operator
-custodies the per-env creds behind one dev login (or mints **audience-scoped child
-tokens** per env from a global principal, so a leaked candidate-a token still cannot
-speak to prod — the security review's point: discard per-env _keys_, keep per-env
-_credential scope_). This is additive over existing per-env primitives; it is **not**
-identity unification and introduces **no** cross-env write channel.
+**Deliverables (sequenced):**
 
-**Deliverables:**
-
-1. **Formation grant fan-out** (the unblocker, ~1 PR): idempotently provision
-   `{node row, owner user, developer tuple}` into candidate-a + preview at
-   provision/flight; production grant behind a promotion-gated approval. Lives in
-   the substrate/wizard lane (`reconcile-node-substrate.sh` + `writeRelation`).
-2. **Verify** the shipped #1627 route end-to-end per env once (1) lands.
-3. **Guide**: per-env self-serve is THE path for `source: human` node secrets (call
-   the env's own operator host); `source: agent` keys are auto-fanned, never hand-set.
-4. **(Deferred, triggered)** operator key-broker / audience-scoped tokens for the
-   single-relationship UX.
+1. **Env-aware node model** — the operator's node-awareness (deploy-port layer)
+   exposes, for the single `nodes` record, which envs the node is deployed in. One
+   registration, env-presence as an attribute. _The foundation; Derek's correction._
+2. **One grant, prod-gated** — `can_manage_secrets` granted once on the node record;
+   the **production** secret-write is a separate deliberate grant (mirror
+   `production_promoter`), so test authz can never reach prod.
+3. **Scoped, signed cross-env write** — env-targeted `writeSecret`, where the value
+   lands in the target env's own vault via a single-use, signed, target-verified
+   `(node, env, key)` capability (verify the claim, not trust the channel). Reuses
+   the shipped #1627 per-env write as the executor.
+4. **Guide** — `source: human` secrets are set through this path, env-targeted;
+   `source: agent` keys are auto-generated per env, never hand-set.
+5. **(Deferred, triggered)** smooth the dev to a single login (operator key-broker /
+   audience-scoped tokens — discard per-env _keys_, keep per-env _credential scope_).
 
 **Rejected (with the reviews' teeth):**
 
-- **Global control plane + operator→operator mTLS delegated write.** It is the
-  skeleton key (one leaked service cred = write any node's secret on any env; target
-  can't re-check the claim), it contradicts Phase 1's topology closure, and it is
-  spec-blocked by `openfga-substrate-unification.md`'s permanent per-env store. A
-  project-sized re-platforming where formation fan-out (1 PR) delivers the same dev
-  outcome with isolation **preserved**.
-- **Per-env dev identity exposed raw** (the dev juggles 3 keys). The 3-key friction
-  is a UX problem — solve via broker/audience-scoped tokens, not by re-platforming
-  identity, and not by making the dev manage three keys by hand.
+- **A second node registration per env.** _Architect-rejected._ One env-aware record;
+  per-env `nodes` rows are incidental state, not the model.
+- **Blind operator→operator mTLS delegated write** (target trusts the channel, can't
+  re-check). The skeleton key — one leaked service cred writes any env's secrets.
+  Replaced by the scoped/signed/target-verified capability in deliverable 3.
+- **Production as a node's test env** ("no users yet"). Every node gets first-class
+  test envs; conflating them violates the BaaS contract and trains prod-is-staging.
 - **Production as a node's test env** ("no users yet"). Every node gets first-class
   test envs; conflating them violates the BaaS contract and trains prod-is-staging.
 - **Per-secret kube CLI** as the standard path — the day-2 admin escape hatch only.
