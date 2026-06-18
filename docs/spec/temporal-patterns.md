@@ -311,8 +311,12 @@ product-code change**.
 > reached by provisioning the node a Temporal client + ESO namespace creds — gated on a real
 > consumer, not built on principle. The **system tenant** (operator governance / epochs)
 > creates its own schedules via `syncGovernanceSchedules` — **wired and live; epochs run on
-> exactly this path and are unaffected.** `syncNodeSchedules` (`@cogni/scheduler-core`) is the
-> same reconcile capability, built but unwired for node tenants.
+> exactly this path and are unaffected** (see
+> [Governance Schedule Sync](./governance-scheduling.md) for declaring system-tenant /
+> DAO schedules in repo-spec). `syncNodeSchedules` (`@cogni/scheduler-core`) is the same
+> reconcile capability, now **wired for the operator's own node-task schedules**
+> (`runNodeSchedulesSyncJob`, story.5008) as the first node-task consumer — triggered via
+> the internal node-schedules sync endpoint; a node-held client is the next step.
 
 **3. Execute — the shared worker.** On each tick the shared generic worker runs the generic
 workflow under the node's tenant identity: `NodeTaskWorkflow` POSTs the node's `route` (the

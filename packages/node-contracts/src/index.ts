@@ -83,6 +83,7 @@ export * from "./review.internal.v1.contract";
 export * from "./run-stream.contract";
 export * from "./runs.stream.v1.contract";
 // ── Schedules ───────────────────────────────────────────────────────────────
+export * from "./node-schedules-sync.internal.v1.contract";
 export * from "./schedules.create.v1.contract";
 export * from "./schedules.delete.v1.contract";
 export * from "./schedules.list.v1.contract";
