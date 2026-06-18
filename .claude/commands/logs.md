@@ -109,7 +109,7 @@ For CI failures, use `env="ci"`:
 > **Parity / scope:** for the caller's node slice this is **1:1** with this guide's MCP /
 > `loki-query.sh` path — same selector syntax, same `| json | …` pipeline, same JSON output — the
 > only difference is the operator runs it under an OpenFGA check instead of handing out a token. It
-> is **not** yet multi-scope: querying *other* nodes, shared services (`scheduler-worker`, …), or
+> is **not** yet multi-scope: querying _other_ nodes, shared services (`scheduler-worker`, …), or
 > env-wide is the **generic** route `GET /api/v1/observability/logs` + the `logs.query` RBAC action
 > (Phase 1, not yet built). When that lands, this guide will direct all node-dev agents to it
 > instead of the MCP. Identity + phasing: `docs/design/substrate-grafana-observability.md` §"Phase

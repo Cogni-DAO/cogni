@@ -31,12 +31,12 @@ A caller sends a full LogQL log query to the operator. The operator authenticate
 
 Access is granted to explicit observability scopes:
 
-| Scope | Example resource | What it permits |
-| --- | --- | --- |
-| Node | `node:<repo-spec node_id>` | Logs attributable to that node across any service that carries the node identity. |
-| Service | `service:scheduler-worker` | Logs for one shared service, optionally narrowed by env. |
-| Environment | `environment:candidate-a` | Logs for all resources in one env. |
-| Network | `observability:all` | All logs across the operator-managed network. Operator/admin only. |
+| Scope       | Example resource           | What it permits                                                                   |
+| ----------- | -------------------------- | --------------------------------------------------------------------------------- |
+| Node        | `node:<repo-spec node_id>` | Logs attributable to that node across any service that carries the node identity. |
+| Service     | `service:scheduler-worker` | Logs for one shared service, optionally narrowed by env.                          |
+| Environment | `environment:candidate-a`  | Logs for all resources in one env.                                                |
+| Network     | `observability:all`        | All logs across the operator-managed network. Operator/admin only.                |
 
 This mirrors the pattern used by top platform products: access is attached to product resources such as project, deployment, environment, service, or team, and the logs UI/CLI/API sits behind that same permission model. Vercel exposes runtime logs at project/deployment level with environment/source/status filters and team/project roles; Railway's Environment RBAC makes logs, metrics, services, variables, and configs restricted resources inside an environment. Cogni's equivalent resource graph is node/service/environment/network.
 
@@ -66,16 +66,16 @@ The operator `nodes` table has `id uuid().defaultRandom()` and **no** explicit `
 - `POST /api/v1/vcs/flight` resolves `nodeRef.nodeId` against `nodes.id`.
 - `GET /api/v1/nodes/{id}/observability/logs` resolves via `NodeRegistryPort`, whose DB adapter maps `NodeSummary.nodeId = row.id`.
 
-**Crucial fact (verified):** there is exactly one insert path into `nodes` — the wizard `POST /api/v1/nodes` — and `publish` then mints the node's repo-spec identity *from* that row's id (`identity.nodeId = node.id`). So for **every row that exists today, `nodes.id` already equals the repo-spec `node_id`.** Those route usages are therefore *correct*, not buggy — `node:<nodes.id>` already is `node:<repo-spec node_id>`, and the deploy plane's `prepareNodeRefCandidateFlight` proves it by re-reading the child repo-spec and throwing `node_id_mismatch` (422) on any disagreement.
+**Crucial fact (verified):** there is exactly one insert path into `nodes` — the wizard `POST /api/v1/nodes` — and `publish` then mints the node's repo-spec identity _from_ that row's id (`identity.nodeId = node.id`). So for **every row that exists today, `nodes.id` already equals the repo-spec `node_id`.** Those route usages are therefore _correct_, not buggy — `node:<nodes.id>` already is `node:<repo-spec node_id>`, and the deploy plane's `prepareNodeRefCandidateFlight` proves it by re-reading the child repo-spec and throwing `node_id_mismatch` (422) on any disagreement.
 
-The risk is not present data; it is the **absent contract**. Nothing in the schema or the type names says "`nodes.id` *is* the repo-spec `node_id`," so a future external/imported-node insert that mints `id` with `defaultRandom()` while the child repo carries its own `node_id` would silently fork identity — wrong OpenFGA resource, empty Loki joins. The fix is to **make the contract explicit and structural**, not to add a parallel identity column.
+The risk is not present data; it is the **absent contract**. Nothing in the schema or the type names says "`nodes.id` _is_ the repo-spec `node_id`," so a future external/imported-node insert that mints `id` with `defaultRandom()` while the child repo carries its own `node_id` would silently fork identity — wrong OpenFGA resource, empty Loki joins. The fix is to **make the contract explicit and structural**, not to add a parallel identity column.
 
-| Meaning | Value | Status today |
-| --- | --- | --- |
-| Public node identity | repo-spec `node_id` (UUID) | `= nodes.id` for every row (wizard-minted) |
-| Public addressing handle | `slug` | `nodes.slug` (unique) |
-| OpenFGA resource | `node:<node_id>` | correct (`node:<nodes.id>` == `node:<node_id>`) |
-| Loki node label | `node="<node_id>"` | correct (app stamps repo-spec `node_id`) |
+| Meaning                  | Value                      | Status today                                    |
+| ------------------------ | -------------------------- | ----------------------------------------------- |
+| Public node identity     | repo-spec `node_id` (UUID) | `= nodes.id` for every row (wizard-minted)      |
+| Public addressing handle | `slug`                     | `nodes.slug` (unique)                           |
+| OpenFGA resource         | `node:<node_id>`           | correct (`node:<nodes.id>` == `node:<node_id>`) |
+| Loki node label          | `node="<node_id>"`         | correct (app stamps repo-spec `node_id`)        |
 
 The job is to **ratify `nodes.id` as the operator's projection of repo-spec `node_id`** so it can never fork, and to make the read surface ergonomic (slug) and the log proxy first-class (full LogQL).
 
@@ -96,12 +96,12 @@ observability:all
 
 ### Resource IDs
 
-| Resource | ID source |
-| --- | --- |
-| `node:<node_id>` | repo-spec `.cogni/repo-spec.yaml::node_id`, projected into operator DB. |
+| Resource               | ID source                                                                               |
+| ---------------------- | --------------------------------------------------------------------------------------- |
+| `node:<node_id>`       | repo-spec `.cogni/repo-spec.yaml::node_id`, projected into operator DB.                 |
 | `service:<service_id>` | catalog service name for deployable services; fixed substrate names for infra services. |
-| `environment:<env>` | canonical deploy env enum. |
-| `observability:all` | singleton network-wide resource. |
+| `environment:<env>`    | canonical deploy env enum.                                                              |
+| `observability:all`    | singleton network-wide resource.                                                        |
 
 The operator's `nodes` row IS the node read model. There is no separate `registry_row_id`:
 **`nodes.id` is the operator's projection of repo-spec `node_id`** (one immutable UUID, keyed to
@@ -150,12 +150,12 @@ type node
 
 Action mapping:
 
-| Action | Resource | Check |
-| --- | --- | --- |
-| `logs.query` | `node:<node_id>` | `can_query_logs` |
+| Action       | Resource               | Check            |
+| ------------ | ---------------------- | ---------------- |
+| `logs.query` | `node:<node_id>`       | `can_query_logs` |
 | `logs.query` | `service:<service_id>` | `can_query_logs` |
-| `logs.query` | `environment:<env>` | `can_query_logs` |
-| `logs.query` | `observability:all` | `can_query_all` |
+| `logs.query` | `environment:<env>`    | `can_query_logs` |
+| `logs.query` | `observability:all`    | `can_query_all`  |
 
 Policy rule: a query is allowed only when every selected stream is within at least one granted scope. If the query selector is broader than the caller's grants, the server either intersects it with the allowed label set or rejects it. MVP should reject ambiguous/broader queries unless a safe rewrite is straightforward.
 
@@ -171,13 +171,13 @@ The current node route may remain as a compatibility wrapper only if it delegate
 
 ### Request contract
 
-| Field | Requirement |
-| --- | --- |
-| `env` | Required until multi-env query support is designed. |
-| `query` | Full LogQL log query. Metric queries are out of scope for v1 unless explicitly admitted. |
-| `start/end` | Optional range bounds; defaults are server-owned and bounded. |
-| `limit` | Bounded by server max. |
-| `direction` | `backward` or `forward`. |
+| Field       | Requirement                                                                              |
+| ----------- | ---------------------------------------------------------------------------------------- |
+| `env`       | Required until multi-env query support is designed.                                      |
+| `query`     | Full LogQL log query. Metric queries are out of scope for v1 unless explicitly admitted. |
+| `start/end` | Optional range bounds; defaults are server-owned and bounded.                            |
+| `limit`     | Bounded by server max.                                                                   |
+| `direction` | `backward` or `forward`.                                                                 |
 
 ### Query evaluation
 
@@ -203,12 +203,12 @@ The access plane only works if labels identify resources consistently.
 
 Required low-cardinality stream labels:
 
-| Label | Meaning |
-| --- | --- |
-| `env` | `candidate-a`, `preview`, `production`, etc. |
+| Label     | Meaning                                                                                           |
+| --------- | ------------------------------------------------------------------------------------------------- |
+| `env`     | `candidate-a`, `preview`, `production`, etc.                                                      |
 | `service` | stable service/catalog identifier: `app`, `scheduler-worker`, `litellm`, `openfga`, `caddy`, etc. |
-| `node` | repo-spec `node_id` when a line is attributable to one node. |
-| `source` | ingestion source, e.g. `docker`, `k8s`, `ci`, where useful. |
+| `node`    | repo-spec `node_id` when a line is attributable to one node.                                      |
+| `source`  | ingestion source, e.g. `docker`, `k8s`, `ci`, where useful.                                       |
 
 Rules:
 
@@ -235,11 +235,11 @@ The cleaner target is self-hosted OSS Loki with an operator-owned auth gateway. 
 
 Likely tenant shapes:
 
-| Tenant | Use |
-| --- | --- |
-| `env:<env>` | env-wide operator/debug access. |
-| `node:<node_id>` | node developer access when every node-attributable line is written to the node tenant. |
-| `service:<service_id>` | service-owner access for shared services. |
+| Tenant                 | Use                                                                                    |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| `env:<env>`            | env-wide operator/debug access.                                                        |
+| `node:<node_id>`       | node developer access when every node-attributable line is written to the node tenant. |
+| `service:<service_id>` | service-owner access for shared services.                                              |
 
 If a log line must be queryable through multiple scopes (for example node and env), prefer multi-write or a gateway that fans out authorized tenant queries over trusting caller-supplied label filters. The goal is to move reach enforcement down into Loki/gateway tenancy, not keep string surgery in route handlers forever.
 
@@ -247,12 +247,12 @@ If a log line must be queryable through multiple scopes (for example node and en
 
 High-quality platforms do not expose raw observability backend credentials to normal developers. They model logs as a product surface inside the same resource hierarchy used for deploys and secrets.
 
-| Platform pattern | Cogni translation |
-| --- | --- |
-| Team/workspace roles plus project-level roles. | `observability:all`, `environment:<env>`, `node:<node_id>`, `service:<id>` resources. |
-| Runtime logs are project/deployment scoped, with filters. | Full LogQL behind RBAC, scoped by node/service/env/network. |
+| Platform pattern                                                       | Cogni translation                                                                     |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Team/workspace roles plus project-level roles.                         | `observability:all`, `environment:<env>`, `node:<node_id>`, `service:<id>` resources. |
+| Runtime logs are project/deployment scoped, with filters.              | Full LogQL behind RBAC, scoped by node/service/env/network.                           |
 | Environments can restrict logs, metrics, services, variables, configs. | `environment:<env>#observer/admin` gates logs and later metrics/secrets/config views. |
-| Agents/CLI use the same permission model as the dashboard. | API, UI, MCP, and agents call the same operator route and OpenFGA checks. |
+| Agents/CLI use the same permission model as the dashboard.             | API, UI, MCP, and agents call the same operator route and OpenFGA checks.             |
 
 ## Phasing
 
@@ -276,7 +276,7 @@ way** rather than introducing a parallel `node_id` column that only ever holds t
     `node_id`; for an externally-formed node the operator inserts the child's `node_id` as the row PK,
     never a fresh `defaultRandom()`. The repo-spec stays authoritative; the row mirrors it under the
     same id.
-  - `shared/db/nodes.ts` header: state the invariant + that wizard creation's `defaultRandom()` *is*
+  - `shared/db/nodes.ts` header: state the invariant + that wizard creation's `defaultRandom()` _is_
     the act of minting the node_id (the value `publish` writes into the repo-spec).
 - **No backfill, no migration, no second-id resolution.** Existing OpenFGA tuples (`node:<id>`), the
   Loki `node` label, the deploy plane's `node_id_mismatch` guard, and `NodeSummary.nodeId = row.id` are
@@ -288,10 +288,10 @@ way** rather than introducing a parallel `node_id` column that only ever holds t
 
 #### Addressing: slug is the handle, UUID is the authority
 
-| Layer | Key | Used for |
-| --- | --- | --- |
-| Public addressing | `slug` (`beacon`) | API path `{id}`, UI, what a human/AI types |
-| Authority / wire | `node_id` UUID (= `nodes.id`) | OpenFGA `node:<uuid>`, Loki `node="<uuid>"`, deploy-plane checks |
+| Layer             | Key                           | Used for                                                         |
+| ----------------- | ----------------------------- | ---------------------------------------------------------------- |
+| Public addressing | `slug` (`beacon`)             | API path `{id}`, UI, what a human/AI types                       |
+| Authority / wire  | `node_id` UUID (= `nodes.id`) | OpenFGA `node:<uuid>`, Loki `node="<uuid>"`, deploy-plane checks |
 
 `slug` is not the authority (unique but not guaranteed immutable; no rename gate exists today but none
 is promised). So: **address by slug, authorize and join by UUID.** Add one shared
@@ -303,7 +303,7 @@ UUID is what reaches OpenFGA + Loki. `observability-logs` and `flight-status` al
 #### Log proxy: full LogQL, not a pipeline-only dialect (parity option 1)
 
 Replace the node proxy's `?filter=<pipeline>` with `?query=<full LogQL>` — the **identical string** a
-dev writes for `loki-query.sh` / the MCP. The operator does not *construct* the selector; it
+dev writes for `loki-query.sh` / the MCP. The operator does not _construct_ the selector; it
 **authorizes the query's reach**:
 
 1. Parse the LogQL **stream selector** (labels only — not a full pipeline parser).
@@ -318,14 +318,14 @@ dev writes for `loki-query.sh` / the MCP. The operator does not *construct* the 
 3. Run the rewritten/validated query server-side with the operator's token; return **raw Loki lines**
    (same output shape as `loki-query.sh`), plus the effective query.
 
-This is 1:1 with the MCP/`loki-query.sh` *language and output* for the node's slice — same selector
+This is 1:1 with the MCP/`loki-query.sh` _language and output_ for the node's slice — same selector
 syntax, same `| json | …` pipeline, same JSON lines — the only difference is the operator runs it
 under an OpenFGA check instead of handing over a Grafana token. No bespoke param, no lesser dialect.
 The selector parser is deliberately tiny (label matchers on one selector); the "do not hand-roll an
 ever-growing LogQL parser" caution applies to the **Phase 1 multi-scope** route, not this label gate.
 
-`buildNodeScopedLogQL` (`features/nodes/observability-logs.ts`) flips from *building* a selector to
-*validating + pinning* the caller's selector; the route swaps `filter` → `query` and maps the new
+`buildNodeScopedLogQL` (`features/nodes/observability-logs.ts`) flips from _building_ a selector to
+_validating + pinning_ the caller's selector; the route swaps `filter` → `query` and maps the new
 `ObservabilityQueryError` codes (`query_out_of_scope`, `invalid_query`) to `400`.
 
 #### Per-site changes
@@ -359,7 +359,7 @@ A node dev (any node — wizard-born or a future external import, since identity
 
 **Parity boundary (crisp):** the proxy now has full LogQL language + output parity with
 `loki-query.sh`/MCP **for the caller's node slice** (`service` ∈ allowlist, `node` pinned). It is
-**not** yet multi-scope — querying *other* nodes, shared services, or env-wide is the **Phase 1**
+**not** yet multi-scope — querying _other_ nodes, shared services, or env-wide is the **Phase 1**
 generic `/api/v1/observability/logs` route with the `logs.query` RBAC action. `logs.md` is updated now
 to route node devs to this first-class proxy; the "all agents drop the MCP" switch lands with Phase 1.
 
