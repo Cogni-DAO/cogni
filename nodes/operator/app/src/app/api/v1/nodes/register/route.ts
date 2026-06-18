@@ -3,17 +3,19 @@
 
 /**
  * Module: `@app/api/v1/nodes/register`
- * Purpose: Register a FIRST-CLASS node (`operator` / `node-template`) as a registry row owned by the
- *   caller — the one path that bypasses the wizard's reserved-slug block so the hub + fork-source can
- *   become RBAC-anchored nodes an agent can be granted on.
- * Scope: Session-gated, idempotent. Inserts identity/ownership only; catalog stays the deploy SSoT.
- *   V0_GATE: any authenticated caller may register one of the fixed first-class slugs (idempotent —
- *   first registrant owns it; re-register is a no-op). Hardening to a governance-approver gate is a
- *   tracked follow-up before this ships to prod.
- * Invariants: AUTH_REQUIRED, FIRST_CLASS_ONLY (slug ∈ FIRST_CLASS_NODES), USER_ROW_ENSURED,
- *   IDEMPOTENT (onConflictDoNothing on slug), NODES_TABLE_SCOPE (identity/ownership/RBAC anchor only).
+ * Purpose: Register an EXISTING GitHub repo as a managed node row owned by the caller — the
+ *   operator-as-git-manager-for-N-repos primitive. Unlike the wizard create path (which mints a NEW
+ *   node + repo and reserves `operator`/`node-template`), this anchors an already-existing repo so an
+ *   RBAC-gated agent can be granted on it and run flight/secrets/sync via the operator itself.
+ * Scope: Session-gated, idempotent. Inserts identity/ownership only; `infra/catalog/*.yaml` stays the
+ *   deploy SSoT (CATALOG_IS_SSOT). Caller supplies the repo coords; no hardcoded node list.
+ *   V0_GATE: any authenticated caller may register a repo they name (idempotent — first registrant
+ *   owns the slug; re-register is a no-op). Hardening to a governance-approver gate is a tracked
+ *   follow-up before prod.
+ * Invariants: AUTH_REQUIRED, SLUG_KEBAB, USER_ROW_ENSURED, IDEMPOTENT (onConflictDoNothing on slug),
+ *   NODES_TABLE_SCOPE (identity/ownership/RBAC anchor only — never the deploy SSoT).
  * Side-effects: IO (Postgres)
- * Links: story.5009, docs/spec/identity-model.md, src/features/nodes/first-class-nodes.ts
+ * Links: story.5009, docs/spec/identity-model.md, docs/spec/node-baas-architecture.md
  * @public
  */
 
@@ -25,17 +27,23 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { resolveAppDb } from "@/bootstrap/container";
-import {
-  FIRST_CLASS_NODES,
-  isFirstClassSlug,
-} from "@/features/nodes/first-class-nodes";
 import { getServerSessionUser } from "@/lib/auth/server";
 import { nodes } from "@/shared/db/nodes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const RegisterInput = z.object({ slug: z.string().min(1) });
+// SLUG_KEBAB mirrors parseNodeSlug's format rule, but WITHOUT the reserved-slug block — registering
+// an existing repo legitimately uses names the wizard reserves (e.g. `operator`, `node-template`).
+const SLUG_RE = /^[a-z][a-z0-9-]{1,31}$/;
+const GH_OWNER_RE = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,38})$/;
+const GH_REPO_RE = /^[a-zA-Z0-9._-]{1,100}$/;
+
+const RegisterInput = z.object({
+  slug: z.string().regex(SLUG_RE, "slug must be kebab-case (a-z, 0-9, -)"),
+  repoOwner: z.string().regex(GH_OWNER_RE, "invalid GitHub owner"),
+  repoName: z.string().regex(GH_REPO_RE, "invalid GitHub repo name"),
+});
 
 export async function POST(request: Request) {
   const session = await getServerSessionUser();
@@ -57,19 +65,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const { slug } = parsed.data;
-  if (!isFirstClassSlug(slug)) {
-    return NextResponse.json(
-      {
-        error: "not a first-class node",
-        reason: `slug must be one of: ${Object.keys(FIRST_CLASS_NODES).join(", ")}`,
-      },
-      { status: 400 }
-    );
-  }
-
-  const coords = FIRST_CLASS_NODES[slug];
-  const repoUrl = `https://github.com/${coords.repoOwner}/${coords.repoName}`;
+  const { slug, repoOwner, repoName } = parsed.data;
+  const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
   const db = resolveAppDb();
 
   // USER_ROW_ENSURED: nodes.owner_user_id FKs users.id. Mirror the wizard create path.
@@ -93,8 +90,8 @@ export async function POST(request: Request) {
         .values({
           slug,
           repoUrl,
-          repoOwner: coords.repoOwner,
-          repoName: coords.repoName,
+          repoOwner,
+          repoName,
           repoVisibility: "public",
           ownerUserId: session.id,
           status: "active",

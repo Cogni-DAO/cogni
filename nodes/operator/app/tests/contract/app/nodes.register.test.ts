@@ -68,7 +68,7 @@ interface RegisterBody {
 }
 
 async function register(
-  slug: unknown
+  body: Record<string, unknown>
 ): Promise<{ status: number; body: RegisterBody }> {
   let out: { status: number; body: RegisterBody } = { status: 0, body: {} };
   await testApiHandler({
@@ -77,7 +77,7 @@ async function register(
       const res = await fetch({
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug }),
+        body: JSON.stringify(body),
       });
       out = { status: res.status, body: (await res.json()) as RegisterBody };
     },
@@ -96,8 +96,12 @@ describe("POST /api/v1/nodes/register", () => {
     dbState.existing = null;
   });
 
-  it("registers operator as a row owned by the caller with hub repo coords", async () => {
-    const res = await register("operator");
+  it("registers an existing repo as a row owned by the caller (status active)", async () => {
+    const res = await register({
+      slug: "operator",
+      repoOwner: "cogni-dao",
+      repoName: "cogni",
+    });
     expect(res.status).toBe(201);
     expect(res.body.node?.slug).toBe("operator");
     expect(insertValues).toHaveBeenCalledWith(
@@ -111,30 +115,49 @@ describe("POST /api/v1/nodes/register", () => {
     );
   });
 
-  it("registers node-template with its own repo coords", async () => {
+  it("uses the caller-supplied repo coords (not a hardcoded list)", async () => {
     dbState.inserted = {
       id: "55555555-5555-4555-8555-555555555555",
       slug: "node-template",
     };
-    const res = await register("node-template");
+    const res = await register({
+      slug: "node-template",
+      repoOwner: "cogni-dao",
+      repoName: "node-template",
+    });
     expect(res.status).toBe(201);
     expect(insertValues).toHaveBeenCalledWith(
       expect.objectContaining({
         slug: "node-template",
+        repoOwner: "cogni-dao",
         repoName: "node-template",
       })
     );
   });
 
-  it("rejects a non-first-class slug without inserting", async () => {
-    const res = await register("my-wizard-node");
+  it("rejects a malformed slug without inserting", async () => {
+    const res = await register({
+      slug: "Bad Slug!",
+      repoOwner: "cogni-dao",
+      repoName: "cogni",
+    });
+    expect(res.status).toBe(400);
+    expect(insertValues).not.toHaveBeenCalled();
+  });
+
+  it("rejects missing repo coords without inserting", async () => {
+    const res = await register({ slug: "operator" });
     expect(res.status).toBe(400);
     expect(insertValues).not.toHaveBeenCalled();
   });
 
   it("rejects an unauthenticated caller", async () => {
     mockGetServerSessionUser.mockResolvedValue(null);
-    const res = await register("operator");
+    const res = await register({
+      slug: "operator",
+      repoOwner: "cogni-dao",
+      repoName: "cogni",
+    });
     expect(res.status).toBe(401);
     expect(insertValues).not.toHaveBeenCalled();
   });
@@ -145,7 +168,11 @@ describe("POST /api/v1/nodes/register", () => {
       id: "44444444-4444-4444-8444-444444444444",
       slug: "operator",
     };
-    const res = await register("operator");
+    const res = await register({
+      slug: "operator",
+      repoOwner: "cogni-dao",
+      repoName: "cogni",
+    });
     expect(res.status).toBe(200);
     expect(res.body.alreadyRegistered).toBe(true);
   });

@@ -31,7 +31,7 @@ import { eq } from "drizzle-orm";
 import type { Logger } from "pino";
 import { createOperatorDeployPlane } from "@/bootstrap/capabilities/operator-deploy-plane";
 import { resolveServiceDb } from "@/bootstrap/container";
-import { isFirstClassSlug } from "@/features/nodes/first-class-nodes";
+import { getGithubRepo } from "@/shared/config";
 import { nodes } from "@/shared/db/nodes";
 import type { ServerEnv } from "@/shared/env";
 import { EVENT_NAMES } from "@/shared/observability";
@@ -104,7 +104,12 @@ async function promoteNodeToPreview(
   try {
     const db = resolveServiceDb();
     const rows = await db
-      .select({ id: nodes.id, slug: nodes.slug })
+      .select({
+        id: nodes.id,
+        slug: nodes.slug,
+        repoOwner: nodes.repoOwner,
+        repoName: nodes.repoName,
+      })
       .from(nodes)
       // A wizard node's fork is named after its slug (`forkFromTemplate` → `name: slug`), so the
       // merged-PR repo name == the node slug. `nodes.repoOwner/repoName` is the PARENT deploy
@@ -116,14 +121,19 @@ async function promoteNodeToPreview(
     // by flight-preview.yml directly — nothing to do here.
     if (!node) return;
 
-    // NOT_PREVIEW_PROMOTABLE: first-class nodes (operator, node-template) are now registry rows
-    // (story.5009) so an agent can be granted on them — but they own their own deploy pipelines and
-    // are NOT spawned preview nodes. node-template's repo name == its slug, so without this guard a
-    // node-template merge would resolve here and spuriously dispatch a preview promotion.
-    if (isFirstClassSlug(node.slug)) {
+    // SPAWNED_NODES_ONLY (general): the preview tie applies ONLY to nodes deployed via the parent
+    // monorepo submodule pin — exactly the rows whose repoOwner/repoName IS the parent monorepo
+    // (set by the wizard create path). A node REGISTERED from its own existing repo
+    // (`/api/v1/nodes/register`, e.g. node-template) owns its own deploy pipeline; its repo name can
+    // equal its slug and would otherwise resolve here and spuriously dispatch a preview promotion.
+    const parentMonorepo = getGithubRepo();
+    const deployedViaParent =
+      node.repoOwner.toLowerCase() === parentMonorepo.owner.toLowerCase() &&
+      node.repoName.toLowerCase() === parentMonorepo.repo.toLowerCase();
+    if (!deployedViaParent) {
       log.debug(
-        { slug: node.slug },
-        "node preview promote skipped — first-class node (own deploy pipeline)"
+        { slug: node.slug, repo: `${node.repoOwner}/${node.repoName}` },
+        "node preview promote skipped — registered external repo (own deploy pipeline)"
       );
       return;
     }

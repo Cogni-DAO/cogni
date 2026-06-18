@@ -14,7 +14,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const promoteNodeToPreview = vi.fn();
-let nodeRows: Array<{ id: string; slug: string }> = [];
+let nodeRows: Array<{
+  id: string;
+  slug: string;
+  repoOwner: string;
+  repoName: string;
+}> = [];
+
+// The spawned-only guard compares each node's repo coords to the parent monorepo.
+vi.mock("@/shared/config", () => ({
+  getGithubRepo: () => ({ owner: "cogni-dao", repo: "cogni" }),
+}));
 
 vi.mock("@/bootstrap/capabilities/operator-deploy-plane", () => ({
   createOperatorDeployPlane: () => ({ promoteNodeToPreview }),
@@ -76,7 +86,14 @@ beforeEach(() => {
 
 describe("dispatchNodePreviewPromote", () => {
   it("pins the PR head SHA when a registered node's PR merges (PIN_IS_PR_HEAD_SHA)", async () => {
-    nodeRows = [{ id: "node-1", slug: "habitat" }];
+    nodeRows = [
+      {
+        id: "node-1",
+        slug: "habitat",
+        repoOwner: "cogni-dao",
+        repoName: "cogni",
+      },
+    ];
     promoteNodeToPreview.mockResolvedValue({
       status: "dispatched",
       sourceSha: "a".repeat(40),
@@ -96,7 +113,14 @@ describe("dispatchNodePreviewPromote", () => {
   });
 
   it("ignores a closed-but-unmerged PR (MERGED_ONLY)", async () => {
-    nodeRows = [{ id: "node-1", slug: "habitat" }];
+    nodeRows = [
+      {
+        id: "node-1",
+        slug: "habitat",
+        repoOwner: "cogni-dao",
+        repoName: "cogni",
+      },
+    ];
     dispatchNodePreviewPromote(
       mergedPayload({
         pull_request: {
@@ -113,7 +137,14 @@ describe("dispatchNodePreviewPromote", () => {
   });
 
   it("ignores a non-closed action", async () => {
-    nodeRows = [{ id: "node-1", slug: "habitat" }];
+    nodeRows = [
+      {
+        id: "node-1",
+        slug: "habitat",
+        repoOwner: "cogni-dao",
+        repoName: "cogni",
+      },
+    ];
     dispatchNodePreviewPromote(mergedPayload({ action: "opened" }), ENV, log);
     await flush();
     expect(promoteNodeToPreview).not.toHaveBeenCalled();
@@ -126,9 +157,17 @@ describe("dispatchNodePreviewPromote", () => {
     expect(promoteNodeToPreview).not.toHaveBeenCalled();
   });
 
-  it("skips first-class nodes — they own their deploy pipeline (NOT_PREVIEW_PROMOTABLE)", async () => {
-    // node-template's repo name == its slug, so it resolves here; the guard must skip it.
-    nodeRows = [{ id: "node-nt", slug: "node-template" }];
+  it("skips a registered external-repo node — it owns its own deploy pipeline (SPAWNED_NODES_ONLY)", async () => {
+    // A repo registered via /nodes/register carries its OWN repo (not the parent monorepo), and its
+    // repo name can equal its slug — so it resolves here. The guard must skip it.
+    nodeRows = [
+      {
+        id: "node-nt",
+        slug: "node-template",
+        repoOwner: "cogni-dao",
+        repoName: "node-template",
+      },
+    ];
     dispatchNodePreviewPromote(
       mergedPayload({
         repository: { name: "node-template", owner: { login: "Cogni-DAO" } },
@@ -141,7 +180,14 @@ describe("dispatchNodePreviewPromote", () => {
   });
 
   it("no-ops when the deploy-plane GitHub App is unconfigured", async () => {
-    nodeRows = [{ id: "node-1", slug: "habitat" }];
+    nodeRows = [
+      {
+        id: "node-1",
+        slug: "habitat",
+        repoOwner: "cogni-dao",
+        repoName: "cogni",
+      },
+    ];
     dispatchNodePreviewPromote(
       mergedPayload(),
       { ...ENV, GH_REVIEW_APP_ID: undefined },
