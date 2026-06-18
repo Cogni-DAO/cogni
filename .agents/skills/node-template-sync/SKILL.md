@@ -33,11 +33,11 @@ gh pr view <n> --repo <owner>/<fork> \
   --jq '{mergeable,mergeStateStatus,changedFiles, bad:[.statusCheckRollup[]|select((.conclusion//.state) as $c|$c!="SUCCESS" and $c!="NEUTRAL" and $c!="SKIPPED")|{name,s:(.conclusion//.state)}]}'
 ```
 
-| State | Meaning | Action |
-| --- | --- | --- |
-| `MERGEABLE` / `CLEAN`, checks green | fresh fork, upstream applies clean | **Merge** (`gh pr merge <n> --repo … --merge`). |
-| `CONFLICTING` / `DIRTY` | fork diverged from node-template (customized files) | **Resolve per-fork** — check out the branch, merge fork main, resolve conflicts preserving fork customizations (`FORK_FREEDOM`), push. Then merge. This is real per-node work, not a button. |
-| Checks failing | CI broke on the merged delta | Read the failing job. A `Cogni Git PR Review` FAILURE is usually a goal-alignment advisory, not a hard gate — confirm it's not a required check before merging past it. A `static`/`unit`/`resolve` failure is a real block. |
+| State                               | Meaning                                             | Action                                                                                                                                                                                                                       |
+| ----------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MERGEABLE` / `CLEAN`, checks green | fresh fork, upstream applies clean                  | **Merge** (`gh pr merge <n> --repo … --merge`).                                                                                                                                                                              |
+| `CONFLICTING` / `DIRTY`             | fork diverged from node-template (customized files) | **Resolve per-fork** — check out the branch, merge fork main, resolve conflicts preserving fork customizations (`FORK_FREEDOM`), push. Then merge. This is real per-node work, not a button.                                 |
+| Checks failing                      | CI broke on the merged delta                        | Read the failing job. A `Cogni Git PR Review` FAILURE is usually a goal-alignment advisory, not a hard gate — confirm it's not a required check before merging past it. A `static`/`unit`/`resolve` failure is a real block. |
 
 **Per-node edge cases that block** (the diff between a clean fork and a stale one): diverged `package.json`/lockfile, fork-local graph/runtime customizations, node-specific config the merge would clobber. Tier 1 (CI/contract) is byte-safe and almost always clean; Tier 2 (upstream app merge) is where divergence bites — the more a fork has customized, the bigger the conflict.
 
@@ -83,7 +83,7 @@ node-template merge → main
 
 ### Why operator can't be auto-synced
 
-- **Tier 1 is the wrong direction.** Per [`repo-sync-contract`](../../../docs/spec/repo-sync-contract.md) `HUB_IS_COGNI_MONOREPO`, cogni is the canonical *source* of operator-scope CI; node-template pulls from it. Hub↔template CI drift is watched (correct direction) by `sync-drift-detector.yml`.
+- **Tier 1 is the wrong direction.** Per [`repo-sync-contract`](../../../docs/spec/repo-sync-contract.md) `HUB_IS_COGNI_MONOREPO`, cogni is the canonical _source_ of operator-scope CI; node-template pulls from it. Hub↔template CI drift is watched (correct direction) by `sync-drift-detector.yml`.
 - **Tier 2 can't mechanically run.** It needs node-template + target in one git object store (materialize upstream SHA as a branch → same-repo PR). cogni isn't a fork of node-template → the SHA is unreachable. And paths don't correspond (root vs `nodes/operator/**`), and operator's app is a divergent superset. This is the bidirectional history-preserving case `repo-sync-contract` defers to v2 (josh-proxy). Hence: hand-port (Responsibility 2).
 
 ### Wiring traps
