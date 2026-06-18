@@ -112,7 +112,9 @@ export function scopeNodeLogQL(input: {
       "stream selector is not a single balanced {…} block"
     );
   }
-  const [, matchersRaw, pipelineRaw] = selectorMatch;
+  // Regex capture groups are always present on a match; coerce for noUncheckedIndexedAccess.
+  const matchersRaw = selectorMatch[1] ?? "";
+  const pipelineRaw = selectorMatch[2] ?? "";
 
   const narrowing: string[] = [];
   for (const m of parseMatchers(matchersRaw)) {
@@ -156,9 +158,9 @@ function parseMatchers(matchersRaw: string): LabelMatcher[] {
   let m: RegExpExecArray | null = matcherRe.exec(matchersRaw);
   while (m !== null) {
     matchers.push({
-      label: m[1],
-      op: m[2] as LabelMatcher["op"],
-      value: m[3],
+      label: m[1] ?? "",
+      op: (m[2] ?? "=") as LabelMatcher["op"],
+      value: m[3] ?? "",
     });
     residue = residue.replace(m[0], "");
     m = matcherRe.exec(matchersRaw);

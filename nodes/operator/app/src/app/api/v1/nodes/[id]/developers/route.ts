@@ -153,7 +153,8 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
           .where(and(nodeIdOrSlug(id), eq(nodes.ownerUserId, session.id)))
           .limit(1)
     );
-    if (!existing[0]) {
+    const ownerNode = existing[0];
+    if (!ownerNode) {
       logTerminal({
         outcome: "error",
         status: 404,
@@ -166,7 +167,7 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
     }
     // The path `{id}` may be a slug; the OpenFGA resource + tracking FK must use the canonical
     // node identity (`nodes.id` == repo-spec node_id), never the raw addressing segment.
-    const nodeRowId = existing[0].id;
+    const nodeRowId = ownerNode.id;
 
     const serviceDb = resolveServiceDb();
     const agentUsers = await serviceDb

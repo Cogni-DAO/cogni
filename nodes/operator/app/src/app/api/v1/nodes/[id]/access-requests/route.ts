@@ -115,7 +115,8 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       .from(nodes)
       .where(nodeIdOrSlug(id))
       .limit(1);
-    if (!existing[0]) {
+    const node = existing[0];
+    if (!node) {
       logTerminal({
         outcome: "error",
         status: 404,
@@ -127,7 +128,7 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
     // `{id}` may be a slug; the tracking FK is the canonical node identity (`nodes.id`).
-    const nodeRowId = existing[0].id;
+    const nodeRowId = node.id;
 
     await upsertAccessRequest(db, {
       nodeId: nodeRowId,
