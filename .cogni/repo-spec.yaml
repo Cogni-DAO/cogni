@@ -142,14 +142,3 @@ governance:
       cron: "0 6 * * *" # daily at 6am UTC
       timezone: UTC
       entrypoint: LEDGER_INGEST
-
-# Node-facing recurring-work schedules (story.5008). Distinct from governance
-# charters above: this is the node-as-tenant contract — the operator declares ONE
-# self-test schedule that POSTs to its own node-task-echo route every 5 minutes,
-# proving syncNodeSchedules → NodeTaskWorkflow → dispatch fires end to end.
-schedules:
-  - id: node-task-selftest
-    cron: "*/5 * * * *"
-    route: /api/internal/ops/node-task-echo
-    payload:
-      ping: "ok"

@@ -150,14 +150,6 @@ export const serverSchema = z.object({
     .default("true")
     .transform((v) => v === "true"),
 
-  // Node-facing recurring-work schedules (story.5008) - Deploy-time sync control.
-  // When false, the node schedule sync job is skipped (prevents duplicate ops in preview).
-  // Default: true (enabled in production/staging), mirrors GOVERNANCE_SCHEDULES_ENABLED.
-  NODE_SCHEDULES_ENABLED: z
-    .enum(["true", "false"])
-    .default("true")
-    .transform((v) => v === "true"),
-
   // GitHub webhook secret - HMAC-SHA256 verification for incoming GitHub webhook payloads.
   // Required when GitHub webhook ingestion is enabled. Per WEBHOOK_SECRET_NOT_IN_CODE.
   GH_WEBHOOK_SECRET: optionalString,

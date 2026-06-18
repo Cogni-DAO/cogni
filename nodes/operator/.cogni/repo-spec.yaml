@@ -26,16 +26,6 @@ cogni_dao:
   chain_id: "8453"
   base_url: "https://proposal.cognidao.org"
 
-# Node-facing recurring-work schedules (story.5008). The operator declares ONE
-# self-test schedule that POSTs to its own node-task-echo route every 5 minutes —
-# the end-to-end proof that syncNodeSchedules → NodeTaskWorkflow → dispatch fires.
-schedules:
-  - id: node-task-selftest
-    cron: "*/5 * * * *"
-    route: /api/internal/ops/node-task-echo
-    payload:
-      ping: "ok"
-
 payments:
   status: active
 

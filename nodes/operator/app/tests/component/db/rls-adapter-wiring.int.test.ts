@@ -133,7 +133,12 @@ describe("RLS Adapter Wiring Gate", () => {
     beforeAll(() => {
       // listSchedules only uses this.db — stubs are never called
       // biome-ignore lint/suspicious/noExplicitAny: test stubs for unused ports
-      adapter = new DrizzleScheduleUserAdapter(rlsDb, {} as any, {} as any);
+      adapter = new DrizzleScheduleUserAdapter(
+        rlsDb,
+        {} as any,
+        {} as any,
+        "test-node"
+      );
     });
 
     it("listSchedules returns schedules for the calling user", async () => {
