@@ -369,14 +369,20 @@ assume "zero new code":**
    on the test-env operator to approve. If self-registration makes the dev the
    owner, fine — API-only. If not, the _first_ grant still needs an admin → back to
    a human. Prove who owns a freshly-registered test node.
-3. **OpenFGA must exist on the chosen test env.** #1627's gate fail-closes to
-   **503** where no OpenFGA store exists. candidate-a has one (works) **but is
-   reprovisioned often** and `candidate-flight` does **not** bootstrap the OpenFGA
-   model (`project_candidate_flight_no_openfga_bootstrap`) — grants/rows are
-   ephemeral. **preview** is more durable but (per §Security boundary) **has no
-   OpenFGA store today → every check 503s.** So 3a is squeezed: candidate-a
-   (works, fragile) vs preview (durable, needs OpenFGA provisioned first — _not_
-   zero-code). Resolving this env choice **is** the spike.
+3. **The node's tuples must live in the target env's OpenFGA store, and that
+   env's operator must be able to check them.** _Correction (2026-06-18):_ the
+   "preview/prod have no OpenFGA store" line in §Security boundary is **stale** —
+   per [`openfga-substrate-unification.md`](./openfga-substrate-unification.md)
+   the store is substrate, **one env-shared `cogni-<env>-rbac` store on every
+   env** (prod store live since 2026-06-14). So OpenFGA presence is **not** the
+   blocker. The real gaps are: (a) the node + `developer`/`can_manage_secrets`
+   tuples must exist in **that env's** store (each env's operator checks its own
+   store), and (b) on **candidate-a**, `candidate-flight` does **not** bootstrap
+   the model (`project_candidate_flight_no_openfga_bootstrap`) and the env is
+   reprovisioned often → tuples/rows are ephemeral. **preview** is the durable
+   choice (store present, not a flight slot). So the env choice resolves toward
+   **preview**, and the spike is really preconditions 1+2 (node wiring + owner
+   bootstrap) on preview — _not_ "provision OpenFGA".
 
 > **Honest read:** 3a is the right _direction_ and may be a small change, but the
 > "zero Derek, works today" framing is aspirational until the spike clears all
@@ -404,6 +410,42 @@ re-check — it doesn't know the node); the trust seam is a service credential h
 never by a dev. The value crosses operator→operator over TLS, lands in the target
 env's OpenBao, and the env axis stays closed (each operator still writes only its
 own env).
+
+### Alignment with the operator control plane (the deploy port) — REQUIRED
+
+This is **not a secrets one-off.** It is the secrets row of the same typed
+operator control plane that owns deploy, framed in
+[`cicd-platform-boundary.md`](../spec/cicd-platform-boundary.md) ("the deploy
+brain goes into the `.ts` operator app as a hexagonal capability… the model is
+Railway: the operator declares intent and sees live state; the substrate
+executes") and [`operator-managed-deployments.md`](./operator-managed-deployments.md)
+(SEE / DEPLOY / REMOVE). `OperatorSecretsPlanePort` (#1627) is already a **sibling
+of `OperatorDeployPlanePort`**; Phase 3b is "give the secrets plane the same
+cross-env targeting deploy already has" — `dispatchNodePromote({ env })` is the
+precedent for `writeSecret({ targetEnv })`.
+
+**But one axis differs, and it is the whole design tension.** The deploy port
+reaches other envs **declaratively**: it writes intent to git, the GitHub App is
+the only write credential, and Argo reconciles — _"git is the steering wheel;
+a compromised operator token can look but not touch."_ **Secrets cannot ride that
+rail** — a value can't transit a git commit or a `workflow_dispatch` input without
+plaintext exposure (Non-goal). So cross-env secrets are the **one** control-plane
+operation that needs a **live, custodial channel**, which is exactly why 3b is an
+operator→operator call and not "write the value to a deploy branch." Any future
+"operator owns VMs / logs / health / scaling" surface that is **read or
+git-declarative** inherits the deploy port's safe non-custodial model; **secret
+_values_ are the deliberate exception** and must stay on the narrow
+authorized-mesh path. Build 3b as that sibling capability, reusing the deploy
+plane's RBAC-gated, env-targeted shape — not a parallel mechanism.
+
+> **OpenFGA control gap (the thing the operator doesn't yet own).** The store is
+> on every env, but the operator app is **operator-only consumer per-env**
+> today; it cannot manage another env's tuples. 3b's control-plane operator
+> needs cross-env authz reach — track it with the all-node consumption path in
+> [`openfga-substrate-unification.md`](./openfga-substrate-unification.md)
+> (Phase B: relocate bootstrap to a self-owned Job, publish store/model to the
+> `_shared` fan), so "operator authorizes any env" is a substrate capability,
+> not a bespoke cross-env token.
 
 **Rejected alternatives:**
 
