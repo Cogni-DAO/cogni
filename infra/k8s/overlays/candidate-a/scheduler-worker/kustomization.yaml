@@ -11,7 +11,7 @@ resources:
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:1babf3ac44cd0af939b3c45667582fdb307b7f3cbb12b6e48a159b9e35b348f7"
+    digest: "sha256:ea58efa08f3454b1d7c5d21ac7e90d50b0b7c6ccb714cdf93c9b0cac050ac236"
 
 patches:
   - target:
@@ -21,6 +21,9 @@ patches:
       - op: replace
         path: /data/TEMPORAL_NAMESPACE
         value: "cogni-candidate-a"
+      - op: add
+        path: /data/DEPLOY_ENVIRONMENT
+        value: "candidate-a"
       - op: replace
         path: /data/IMAGE_DIGEST
         value: "candidate-a-placeholder-scheduler-worker"
