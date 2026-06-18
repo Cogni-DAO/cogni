@@ -177,6 +177,11 @@ export async function POST(request: Request) {
   }
 
   const createdNode = inserted[0];
+  if (!createdNode) {
+    // Unreachable: the `inserted.length === 0` branch above already returned. Narrows the
+    // index access for the tuple seed below under noUncheckedIndexedAccess.
+    return NextResponse.json({ error: "internal error" }, { status: 500 });
+  }
 
   // OPENFGA_IS_AUTHORITY: seed the owner→admin tuple so the creator can immediately act on
   // the node (flight / manage_secrets / promote_production all derive from `admin`). Without
