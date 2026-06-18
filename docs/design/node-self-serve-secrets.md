@@ -390,6 +390,17 @@ assume "zero new code":**
 > (provision/own the node on a durable test env) after which the dev self-serves
 > kube-free — i.e. zero _per-secret_ human creds, not zero human at registration.
 
+> **Interim that already works for a brand-new node (precondition-1 corollary):**
+> 3a's hard part is that the node must already _run_ on the chosen test env. A
+> freshly-formed node typically runs on only **one** env (often production, where
+> it was registered) and has **no users / no data yet**. For that node the
+> test↔prod boundary is moot — its production deployment _is_ its test env. So the
+> dev sets `source: human` vendor secrets via self-serve on the operator that
+> already knows it (e.g. `cognidao.org` → `cogni/production/<node>/*`), which
+> works **today** (granted `can_manage_secrets`, key not substrate-reserved). This
+> is the unblock for the _first_ node; bug.5038 (3a/3b) is the general fix for
+> nodes that genuinely need an _isolated_ test env distinct from a populated prod.
+
 **Phase 3b (scalable target — deferred behind a trigger): `targetEnv` + operator
 mesh.** When operating per-env across N envs/nodes becomes the friction (or a
 second external node lands), promote the **prod operator to the single control
