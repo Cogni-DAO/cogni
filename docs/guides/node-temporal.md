@@ -1,104 +1,99 @@
 ---
 id: guide.node-temporal
 type: guide
-title: Using Temporal in a Node — recurring & durable work as a building block
+title: Building recurring & AI workflows in a node
 status: draft
 trust: draft
-summary: "How a node-template node uses the Temporal substrate. Two paths, both running on the shared worker (no node worker required): (1) the pre-existing repo-spec-declared schedules for the node's OWN system-tenant charter jobs; (2) the extensible building block — schedule any route or graph the node owns, the way a node builds arbitrary recurring/AI work. Includes the exact beacon walkthrough."
-read_when: "You are a node dev adding recurring, scheduled, or durable work to a node (campaign cadences, metrics ingest, scheduled AI runs); deciding repo-spec schedule vs dynamic schedule; or wondering whether you need your own Temporal worker."
+summary: "How a node-template node builds recurring and AI workflows on the shared Temporal substrate. The default needs NO node worker: multi-step AI lives inside a LangGraph graph, run on cron by the shared worker; plain crons are routes. A node runs its OWN Temporal worker only for durable, multi-day, human-in-the-loop workflows (the roadmap tier). Includes the beacon walkthrough."
+read_when: "You are a node dev adding scheduled, recurring, AI, or human-in-the-loop work to a node; deciding graph vs route vs own-worker; or wondering whether you need a Temporal worker."
 owner: derekg1729
 created: 2026-06-18
-tags: [temporal, node-template, scheduling, guide]
+verified: 2026-06-18
+tags: [temporal, langgraph, node-template, scheduling, guide]
 ---
 
-# Using Temporal in a Node
+# Building recurring & AI workflows in a node
 
-Temporal is a provisioned substrate (see [substrate-temporal.md](../spec/substrate-temporal.md)).
-**One shared worker** runs the generic workflows and dispatches the work **into your node** —
-so you almost never run your own worker. You schedule **your own routes and graphs**.
+Temporal is a provisioned substrate ([substrate-temporal.md](../spec/substrate-temporal.md)).
+**One shared worker** runs generic workflows and dispatches the work **into your node**.
+You almost never run your own worker — you write a **graph** or a **route**.
 
-There are two ways to use it. Pick by _who owns the schedule_.
+## Pick your tier
 
----
+| You're building… | You write… | Needs a node worker? |
+| --- | --- | --- |
+| **AI work** (even multi-step: ingest → reason → score → branch) | a **LangGraph graph** in your `graphs/` package | **No** — the graph IS the multi-step composition |
+| **plain recurring job** (no AI, e.g. metrics ingest) | a **route** (`defineScheduledJob`) | **No** |
+| **durable, multi-day, human-in-the-loop** (approval gates, long waits, cross-crash resume) | a **Temporal workflow** on your **own worker** | **Yes** — see Roadmap |
 
-## Path 1 — repo-spec schedules (system-tenant, the node's own charter jobs)
+The first two are the default and the substrate already runs them. The third is the
+genuine Temporal-workflow case; it's on the roadmap below.
 
-**Pre-existing.** For the node's **fixed, operator-governed** recurring jobs — not per-user.
-Declared in the node's `.cogni/repo-spec.yaml` and reconciled into Temporal by the operator
-(`syncGovernanceSchedules`). Governed by git: changing the schedule is a repo-spec PR.
+## Default — AI work is a graph (no worker)
 
-```yaml
-# .cogni/repo-spec.yaml
-governance:
-  schedules:
-    - name: collect # a fixed, charter-level recurring job
-      cron: "0 * * * *"
+Your multi-step AI flow lives **inside one LangGraph graph** — LangGraph already does steps,
+branching, tools, loops. Schedule the graph; the shared worker runs it via `GraphRunWorkflow`,
+dispatched into your node's own runtime. Billed + tenant-scoped via `GraphExecutorPort`
+(per-user `ExecutionGrant`, RLS). See [langgraph-patterns.md](../spec/langgraph-patterns.md).
+
+```ts
+// nodes/<node>/graphs — your node owns this. "300 workflows" = 300 graphs.
+export const growthLoop = compileGraph(/* ingest → analyze (LLM) → score → draft (LLM) */);
+// then schedule it (cron) → GraphRunWorkflow runs it. No worker, no Temporal code.
 ```
 
-Use this for: governance signal collection, charter-driven agent runs — **system-tenant**
-work that belongs to the node itself and should be version-controlled, not user-toggled.
+## Default — plain cron is a route (no worker)
 
----
+```ts
+export const metricsIngest = defineScheduledJob({
+  id: "metrics-ingest",
+  cron: "*/15 * * * *",
+  run: async (ctx) => { /* the work, inline — no route file, no token, no workflow */ },
+});
+```
 
-## Path 2 — dynamic node schedules (the building block) ← the extensible use case
+### beacon walkthrough (v0)
 
-For **whatever the node wants** to build: per-user campaigns, ops cadences, scheduled AI
-runs. You do **not** write Temporal workflow code or run a worker. You write a **route** or a
-**graph** — normal node app code — and schedule it through a generic workflow:
+beacon's growth loop is **one multi-step graph** (`ingest engagement → AI summarize →
+score → AI draft`) scheduled on a cron. The shared worker fires it; it runs in beacon;
+results land in beacon's DB + Loki. No beacon worker, no Temporal authoring, no operator call.
 
-| You wrote…            | Schedule it via…                  | Runs in…           |
-| --------------------- | --------------------------------- | ------------------ |
-| an HTTP ops route     | `NodeTaskWorkflow` → your `route` | your route handler |
-| an AI/LangGraph graph | `GraphRunWorkflow` → your `graph` | your graph runtime |
+## Roadmap — human-in-the-loop (generic engine, NO per-node worker)
 
-**"300 different things" = 300 routes/graphs.** The workflow types are fixed and generic; the
-variety is your product code. Adding a new scheduled thing never touches Temporal or a worker.
+The moment a workflow must **pause for a human** (approval, review) — slow, inconsistent,
+multi-day — a single graph run is the wrong tool (a graph run isn't durable across a crash
+or a multi-day wait). But this does **not** require a worker per node.
 
-### How beacon uses it (the campaign loop, end to end)
+The target is **one generic durable workflow engine on the shared worker** that interprets a
+node-supplied step list — `run graph → await human signal → run graph → branch` — where:
 
-1. **Write the work as a route** (your normal app code), idempotent, logs to Loki:
-   `POST /api/internal/ops/growth/metrics-ingest`, `/resolve`, `/post`. For an AI step,
-   write a **graph** instead and schedule `GraphRunWorkflow`.
-2. **On campaign create**, from your campaign CRUD endpoint, call the node scheduler client
-   (node-template scaffolding — the node's own Temporal client):
-   ```ts
-   await nodeScheduler.schedule({
-     id: `campaign:${campaignId}:ingest`, // stable → idempotent re-register
-     cron: "*/15 * * * *",
-     route: "/api/internal/ops/growth/metrics-ingest", // OR: graph: "growth:summarize"
-     payload: { campaignId },
-   });
-   ```
-   This calls **your node's** Temporal client directly — no operator API.
-3. **User toggles the campaign** Active/Paused → `nodeScheduler.pause(id)` /
-   `nodeScheduler.resume(id)`; delete on campaign delete (`CRUD_AUTHORITY` — the app owns
-   schedule lifecycle, never a worker).
-4. **The shared worker fires** each tick → dispatches into your route/graph → **your code
-   runs in your node.** beacon stores the schedule id on the campaign row; the operator is in
-   neither the create nor the work path.
+- the **human-wait** (`signal` + `await condition`, durable across days and crashes) is
+  generic Temporal mechanics, identical for every node — it lives in the shared worker;
+- the **node-specific work** (the AI step, the approval surface) is **dispatched into the
+  node** (graph run / route), exactly as today;
+- a node defines its HITL workflow as **data** (a step list), not Temporal code — like an
+  n8n flow. No node worker, no shared-worker redeploy per workflow.
 
-That is the whole integration: write routes/graphs, call `nodeScheduler`. No worker, no
-Temporal workflow authoring, no operator call.
+- **Status:** roadmap, arriving soon (HITL shows up fast).
+- A **per-node worker** drops to the genuine last resort — only for arbitrary custom durable
+  logic the generic engine's step types can't express. Rare; opt-in.
 
----
+## Later — AI off the app
 
-## When you DO run your own worker (escape hatch — rare)
+When InProc graph load on the node app gets heavy, the LangGraph **Server** executor moves
+AI execution to a separate runtime (compute isolation + scale). Same graphs, different
+executor. Roadmap.
 
-Only when you need **custom durable orchestration**: multi-step sagas, signals, long human
-waits, crash-recovery across a multi-day flow — work that genuinely can't be "fire my
-route/graph." Then you add your own workflow defs + a worker pod polling your queue. This is
-opt-in and uncommon; do not reach for it for cron-style jobs.
+## The rules (hold inside your node)
 
-## The rules (hold inside your node exactly as in the operator)
-
-- `SCHEDULES_OVER_CRON`, `CRUD_AUTHORITY` (the app owns create/pause/delete), `TEMPORAL_DETERMINISM`,
+- `SCHEDULES_OVER_CRON`, `CRUD_AUTHORITY` (app owns create/pause/delete), `TEMPORAL_DETERMINISM`,
   `ACTIVITY_IDEMPOTENCY` — see [temporal-patterns.md](../spec/temporal-patterns.md).
-- **AI runs in activities/graphs, never in workflow code.**
-- Dispatch is at-most-once (`maximumAttempts: 1`) for MVP — make your route idempotent.
+- AI runs **inside graphs/activities**, never in workflow code.
+- Dispatch is at-most-once (`maximumAttempts: 1`) for v0 — make routes idempotent.
 
 ## References
 
-- [substrate-temporal.md](../spec/substrate-temporal.md) — the substrate (shared worker,
-  node-direct create, per-node queue, the escape hatch).
-- [temporal-patterns.md](../spec/temporal-patterns.md) — the build rules + the generic workflows.
-  </content>
+- [substrate-temporal.md](../spec/substrate-temporal.md) — the shared-worker substrate + roadmap.
+- [langgraph-patterns.md](../spec/langgraph-patterns.md) — how graphs are built + executed (the AI layer).
+- [temporal-patterns.md](../spec/temporal-patterns.md) — Temporal build rules + the generic workflows.
+</content>
