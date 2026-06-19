@@ -195,7 +195,7 @@ contract shape**, enforced by review, not inheritance:
 | **Deploy WRITES**     | **`OperatorDeployPlanePort`** (operator-LOCAL)  | Argo / GitHub  | `flight` + `promote` (+ later `rollback`/`scale`) — App-dispatched, RBAC-gated, with the artifact verify-gate                                        | flight ✅ · promote ✅                              |
 | **Secret WRITES**     | **`OperatorSecretsPlanePort`** (operator-LOCAL) | OpenBao        | node-owner `source:human` secret **values** (`writeSecret({nodeId, env, key})`) — `can_manage_secrets`-gated, env-param (D1), per-env OpenBao policy | candidate-a ✅ (proven 200) · prod 503 (`bug.5007`) |
 | **Deploy READS**      | `DeployCapability` (`@cogni/ai-tools`)          | Argo (read)    | env/node deploy-state awareness for the brain + dashboard. **Read-only — no writes.**                                                                | v0 read-only                                        |
-| **Compute substrate** | `ComputeResourcePort`                           | Cherry → Akash | provision/release a cluster, report capacity + cost, **settle payment**                                                                              | **deferred** until Akash is funded                  |
+| **Compute substrate** | `ComputeResourcePort`                           | Cherry → Akash | provision/release a cluster, report capacity + cost, **settle payment**                                                                              | **READ-NOW / SETTLE-LATER** — balance/cost reads shipped (Cherry); writes (`provision`/`release`/`settle`) deferred — only `settle()` (Cosmos/axlUSDC) is genuinely Akash-gated |
 
 `OperatorSecretsPlanePort` is the **secrets row of the same plane**: operator-local
 (a gated write, not a brain tool — like `OperatorDeployPlanePort`), env-parameterized
@@ -232,7 +232,16 @@ Design: [`node-self-serve-secrets.md`](../design/node-self-serve-secrets.md).
 The read-only `DeployCapability` v0 ships in this PR as a real interface at
 [`packages/ai-tools/src/capabilities/deploy.ts`](../../packages/ai-tools/src/capabilities/deploy.ts)
 (type-only, exported from the `@cogni/ai-tools` barrel alongside `VcsCapability` — no runtime yet).
-`ComputeResourcePort` below stays a sketch until Akash is funded.
+
+**`ComputeResourcePort` is NOT Akash-gated — the deferral was over-broad.** Its READ half (cost/balance)
+is provider-agnostic and ships now: a real interface at
+[`packages/ai-tools/src/capabilities/compute.ts`](../../packages/ai-tools/src/capabilities/compute.ts)
+(`balances(): Promise<readonly ComputeBalance[]>`), a runtime `CherryComputeAdapter`, an hourly
+operator scheduled job emitting `infrastructure.compute_balance.{observed,low,check_failed}` to Loki, and a
+Grafana alert (`infra/grafana/alerts/compute-balance.alerts.yaml`). This closes the spend-awareness gap that
+silently took preview down on 2026-06-19 (story.5011). Only the WRITE verbs (`provision`/`release`/`settle`)
+stay deferred, and only `settle()` (Cosmos multisig / axlUSDC) is genuinely Akash-shaped — Cherry has its own
+provision (OpenTofu) and pay paths. The sketch below shows the full port; the read half is built, the writes are not.
 
 ```ts
 // packages/ai-tools/src/capabilities/deploy.ts  — sibling to vcs.ts (SHIPPED in this PR, read-only v0)
@@ -246,16 +255,20 @@ export interface DeployCapability {
 // OperatorDeployPlanePort (operator-local, App-dispatched, RBAC-gated). DeployCapability stays read-only:
 // a freely-callable brain tool must never carry a gated deploy write. Reads here, writes on the port.
 
-// @cogni/compute-control (DEFERRED — only when Akash is funded)
+// READ half SHIPPED in @cogni/ai-tools/capabilities/compute.ts (provider-agnostic balance awareness).
+// WRITE half DEFERRED; only settle() is genuinely Akash-gated (Cosmos/axlUSDC).
 //   Payment/settlement lives ONLY here; DeployCapability never sees it.
 export interface ComputeResourcePort {
+  // --- read half (BUILT, not Akash-gated) ---
+  balances(): Promise<readonly ComputeBalance[]>; // provider-agnostic remaining/currency per account
+  capacity(p: { leaseId: string }): Promise<ResourceCapacity>; // uniform vCPU/mem/storage units, not provider units
+  // --- write half (DEFERRED) ---
   provision(p: {
     env: string;
     spec: ResourceCapacity;
   }): Promise<ProvisionOutput>; // → ClusterEndpoint, cost, leaseId
   release(p: { leaseId: string }): Promise<void>;
-  capacity(p: { leaseId: string }): Promise<ResourceCapacity>; // uniform vCPU/mem/storage units, not provider units
-  settle(p: { leaseId: string }): Promise<SettlementResult>; // async side-effect; Cosmos key via ConnectionBrokerPort
+  settle(p: { leaseId: string }): Promise<SettlementResult>; // async side-effect; Cosmos key via ConnectionBrokerPort — the one genuinely Akash-gated verb
 }
 ```
 
@@ -265,7 +278,7 @@ The provider seam is a **1:1 adapter swap** in the operator bootstrap — `Cherr
 
 | Phase  | Build                                                                                                                                                                                                                     | Defer                                                    |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| **v0** | read-only `DeployCapability` over live Argo state + a dashboard view; AI tools `deploy_get_state` / `deploy_observe` next to the `vcs_*` tools                                                                            | the registry table, control verbs, `ComputeResourcePort` |
+| **v0** | read-only `DeployCapability` over live Argo state + a dashboard view; AI tools `deploy_get_state` / `deploy_observe` next to the `vcs_*` tools; **`ComputeResourcePort` read half** (`balances()` + `CherryComputeAdapter` + hourly Loki probe + Grafana low-balance alert, story.5011) | the registry table, control verbs, `ComputeResourcePort` **write** verbs |
 | **P1** | `OperatorDeployPlanePort` write verbs (`dispatchNodeRefCandidateFlight` ✅ · `dispatchNodePromote` ✅ · later rollback/scale); `compute_resources` registry table (mirrors `mcp_deployments`) as the dashboard read-cache | multi-provider                                           |
 | **P2** | `ComputeResourcePort` + `AkashComputeAdapter` (Cosmos multisig, axlUSDC Stable Payments per `infra/provision/akash/FUTURE_AKASH_INTEGRATION.md`); Cherry becomes one adapter among many                                   | —                                                        |
 

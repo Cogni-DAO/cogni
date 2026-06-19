@@ -94,6 +94,12 @@ export {
   GitHubWebhookNormalizer,
 } from "./ingestion/github-webhook";
 export {
+  type CherryComputeAdapterConfig,
+  CherryComputeAdapter,
+  CherryComputeError,
+  type CherryComputeErrorCode,
+} from "./compute/cherry-compute.adapter";
+export {
   type MimirAdapterConfig,
   MimirMetricsAdapter,
   TemplateQueryError,

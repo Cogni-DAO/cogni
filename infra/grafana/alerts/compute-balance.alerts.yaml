@@ -1,0 +1,79 @@
+# Grafana unified-alerting provisioning — compute-substrate spend plane (story.5011).
+#
+# WHY: On 2026-06-19 all of preview went down when its Cherry VM was balance-suspended.
+# The deploy state in git was clean; nothing alerted — the operator had zero visibility
+# into compute-provider spend. The operator now emits an hourly balance probe; these rules
+# make a low or unreadable balance loud BEFORE a suspension takes an environment down.
+#
+# APPLY: Grafana Git Sync does not sync alerting (see ./README.md). Apply via the alerting
+# provisioning API or Terraform. Replace <FOLDER_UID> with the target folder and confirm a
+# contact point on the notification policy. Datasource UID `grafanacloud-logs` is the
+# production Loki source.
+#
+# Source events (operator compute-balance scheduled job, hourly):
+#   event="infrastructure.compute_balance.low"           remaining < COMPUTE_BALANCE_LOW_THRESHOLD
+#   event="infrastructure.compute_balance.check_failed"  the balance read itself errored
+apiVersion: 1
+groups:
+  - orgId: 1
+    folder: <FOLDER_UID>
+    name: compute-balance-plane
+    interval: 5m
+    rules:
+      # PRIMARY: a provider account is below the low-balance threshold. This is the
+      # pre-suspension warning that was missing on 2026-06-19.
+      - uid: compute-balance-low
+        title: Compute provider balance LOW — top up before suspension
+        condition: THRESHOLD
+        for: 5m
+        data:
+          - refId: COUNT
+            datasourceUid: grafanacloud-logs
+            relativeTimeRange: { from: 5400, to: 0 }
+            model:
+              datasource: { type: loki, uid: grafanacloud-logs }
+              expr: 'sum(count_over_time({env="production",pod=~"operator-node-app-.*",service="app"} | json | event="infrastructure.compute_balance.low" [90m]))'
+              queryType: instant
+              refId: COUNT
+          - refId: THRESHOLD
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: COUNT
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+              refId: THRESHOLD
+        annotations:
+          summary: "A compute provider account is below COMPUTE_BALANCE_LOW_THRESHOLD. Top up the provider account now — a balance suspension takes the env's VM (and every node on it) down (story.5011)."
+        labels: { severity: critical, plane: compute-balance }
+        noDataState: OK
+        execErrState: Alerting
+
+      # SECONDARY: the hourly probe itself is failing — a dead monitor is as bad as a
+      # silent outage. Two missed/errored hours = alert.
+      - uid: compute-balance-check-failing
+        title: Compute balance probe FAILING (provider read errored)
+        condition: THRESHOLD
+        for: 15m
+        data:
+          - refId: COUNT
+            datasourceUid: grafanacloud-logs
+            relativeTimeRange: { from: 10800, to: 0 }
+            model:
+              datasource: { type: loki, uid: grafanacloud-logs }
+              expr: 'sum(count_over_time({env="production",pod=~"operator-node-app-.*",service="app"} | json | event="infrastructure.compute_balance.check_failed" [3h]))'
+              queryType: instant
+              refId: COUNT
+          - refId: THRESHOLD
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: COUNT
+              conditions:
+                - evaluator: { type: gt, params: [1] }
+              refId: THRESHOLD
+        annotations:
+          summary: "The operator's compute-balance probe is erroring — balance awareness is blind. Check operator CHERRY_AUTH_TOKEN on the runtime and the Cherry API reachability."
+        labels: { severity: warning, plane: compute-balance }
+        noDataState: OK
+        execErrState: Alerting
