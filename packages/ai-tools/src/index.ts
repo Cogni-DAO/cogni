@@ -18,6 +18,8 @@ export type {
   CheckInfo,
   CiStatusResult,
   ClockCapability,
+  ComputeBalance,
+  ComputeResourcePort,
   CreateBranchResult,
   DecideParams,
   DeployCapability,
