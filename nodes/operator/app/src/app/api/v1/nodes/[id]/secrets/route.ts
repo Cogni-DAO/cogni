@@ -257,6 +257,7 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         slug: node.slug,
         key,
         op,
+        env: requestedEnv,
         errorCode: code,
       });
       return NextResponse.json(
@@ -283,6 +284,7 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         slug: node.slug,
         key,
         op,
+        env: requestedEnv,
         errorCode: "key_reserved",
       });
       return NextResponse.json(
