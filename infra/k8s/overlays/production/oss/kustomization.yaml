@@ -13,7 +13,7 @@ namePrefix: oss-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/oss
-    digest: "sha256:817a58962536e2f63dde21d75870410de1a0f095504e86f9989af4288837721d"
+    digest: "sha256:c0f788e43517fb648fd278e7fc9bc88306335100d55eac8c67eca332e06ecc5c"
 
 patches:
   - target:
@@ -23,6 +23,11 @@ patches:
       - op: replace
         path: /data/NODE_NAME
         value: "oss"
+      # Per-env runtime env-name the app stamps onto OpenBao paths + observability
+      # labels (metrics/logger read DEPLOY_ENVIRONMENT; absent → silent "local").
+      - op: add
+        path: /data/DEPLOY_ENVIRONMENT
+        value: "production"
       - op: replace
         path: /data/TEMPORAL_NAMESPACE
         value: "cogni-production"
