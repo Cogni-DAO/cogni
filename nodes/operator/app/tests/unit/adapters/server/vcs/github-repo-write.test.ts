@@ -1626,9 +1626,7 @@ describe("GitHubRepoWriter.syncTemplateUpstreamToFork", () => {
       ])
     );
     expect(
-      treeEntries.some((e) =>
-        e.path.startsWith("packages/knowledge-base")
-      )
+      treeEntries.some((e) => e.path.startsWith("packages/knowledge-base"))
     ).toBe(false);
   });
 
