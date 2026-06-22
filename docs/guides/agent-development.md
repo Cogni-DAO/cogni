@@ -47,7 +47,7 @@ tags: [ai, agents, dev]
 - ❌ Reach for a non-streaming `LlmService.completion(...)` — it was removed for this reason. Drain the stream + `await final` instead.
 - ❌ Hardcode a "free" model to dodge the credit gate. Free vs paid is resolved server-side from the model catalog; the gate already returns 0 credits for free models.
 
-**The ONE exception — platform/system billing (not the end user):** background jobs or platform features that must bill a *system* account require **explicit human sign-off** and STILL route through the graph executor, bound to a designated system billing account. There is no sanctioned path that skips the executor. If you think you need one, file a bug linking your work item and ask first.
+**The ONE exception — platform/system billing (not the end user):** background jobs or platform features that must bill a _system_ account require **explicit human sign-off** and STILL route through the graph executor, bound to a designated system billing account. There is no sanctioned path that skips the executor. If you think you need one, file a bug linking your work item and ask first.
 
 `LlmService` (`@/ports/llm.port`) is **executor-internal**: its only sanctioned consumers are `features/ai/services/completion.ts` and the in-proc completion adapter. See [graph-execution-spec](../spec/graph-execution.md) (`BILLABLE_AI_THROUGH_EXECUTOR`, `CREDITS_ENFORCED_AT_EXECUTION_PORT`).
 
