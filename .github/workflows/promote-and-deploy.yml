@@ -76,7 +76,14 @@ jobs:
           ENV="${{ inputs.environment }}"
           RAW_SOURCE_SHA="${{ inputs.source_sha }}"
           PREVIEW_FORWARD=false
-          if [ "$ENV" = "production" ] && [ -z "$RAW_SOURCE_SHA" ]; then
+          # Preview-forward only when NEITHER a source_sha NOR a node_source_sha is given.
+          # A fork-node production promote is SOURCE-ADDRESSED via node_source_sha (no
+          # source_sha); it must NOT be hijacked into preview-forward, or the digest job
+          # deploys the stale deploy/preview-<node> pin while node-substrate materializes
+          # the requested sha — a silent split-brain verify-buildsha can't catch because it
+          # self-confirms the preview pin it wrote (bug.5043). node_source_sha present ⇒
+          # preview_forward=false ⇒ digest reaches the remote-source branch that honors it.
+          if [ "$ENV" = "production" ] && [ -z "$RAW_SOURCE_SHA" ] && [ -z "${{ inputs.node_source_sha }}" ]; then
             PREVIEW_FORWARD=true
             RAW_SOURCE_SHA="${{ github.sha }}"
           fi
