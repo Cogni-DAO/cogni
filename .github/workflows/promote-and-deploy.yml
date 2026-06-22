@@ -103,18 +103,10 @@ jobs:
             echo "preview_forward=$PREVIEW_FORWARD"
           } >> "$GITHUB_OUTPUT"
 
-      # Pin the OPERATOR-repo ref (github.sha), NOT head_sha. This step only
-      # provides operator-repo tooling — scripts/ci/lib/image-tags.sh and
-      # resolve-promote-targets.sh, which read infra/catalog + infra/k8s/overlays.
-      # For a remote-source (fork) node, head_sha is the NODE repo's sha and does
-      # NOT exist in Cogni-DAO/cogni, so `ref: head_sha` hard-fails the checkout
-      # (bug.5043). In-repo nodes happened to work because head_sha was an
-      # operator-repo sha. github.sha = the dispatched workflow ref (consistent
-      # with deploy-infra's tooling checkout below).
       - name: Checkout (for image-tags lib)
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ steps.env.outputs.head_sha }}
           fetch-depth: 1
 
       - name: Resolve target node list

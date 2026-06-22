@@ -652,7 +652,7 @@ node_port: 30200
   });
 });
 
-describe("GitHubRepoWriter.promoteNodeToPreview", () => {
+describe("GitHubRepoWriter.promoteNode (env=preview)", () => {
   const DISPATCH =
     "POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches";
   const childSha = "0123456789012345678901234567890123456789";
@@ -675,7 +675,8 @@ describe("GitHubRepoWriter.promoteNodeToPreview", () => {
       [DISPATCH]: () => ({}),
     };
 
-    const result = await makeWriter().promoteNodeToPreview({
+    const result = await makeWriter().promoteNode({
+      env: "preview",
       parentOwner: "Cogni-DAO",
       parentRepo: "cogni",
       slug: "habitat",
@@ -684,7 +685,9 @@ describe("GitHubRepoWriter.promoteNodeToPreview", () => {
 
     expect(result).toMatchObject({
       status: "dispatched",
+      env: "preview",
       sourceSha: childSha,
+      sourceAddressing: "remote_source",
     });
 
     // The dispatch carries the node sha as node_source_sha; ref stays main (the
@@ -726,7 +729,8 @@ describe("GitHubRepoWriter.promoteNodeToPreview", () => {
     };
 
     await expect(
-      makeWriter().promoteNodeToPreview({
+      makeWriter().promoteNode({
+        env: "preview",
         parentOwner: "Cogni-DAO",
         parentRepo: "cogni",
         slug: "habitat",
@@ -738,7 +742,7 @@ describe("GitHubRepoWriter.promoteNodeToPreview", () => {
   });
 });
 
-describe("GitHubRepoWriter.promoteNodeToProduction", () => {
+describe("GitHubRepoWriter.promoteNode (env=production)", () => {
   const DISPATCH =
     "POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches";
   const childSha = "0123456789012345678901234567890123456789";
@@ -764,7 +768,8 @@ describe("GitHubRepoWriter.promoteNodeToProduction", () => {
       [DISPATCH]: () => ({}),
     };
 
-    const result = await makeWriter().promoteNodeToProduction({
+    const result = await makeWriter().promoteNode({
+      env: "production",
       parentOwner: "Cogni-DAO",
       parentRepo: "cogni",
       slug: "beacon",
@@ -773,6 +778,7 @@ describe("GitHubRepoWriter.promoteNodeToProduction", () => {
 
     expect(result).toMatchObject({
       status: "dispatched",
+      env: "production",
       sourceSha: childSha,
       sourceAddressing: "remote_source",
     });
@@ -814,7 +820,8 @@ describe("GitHubRepoWriter.promoteNodeToProduction", () => {
       [DISPATCH]: () => ({}),
     };
 
-    const result = await makeWriter().promoteNodeToProduction({
+    const result = await makeWriter().promoteNode({
+      env: "production",
       parentOwner: "Cogni-DAO",
       parentRepo: "cogni",
       slug: "operator",
@@ -823,6 +830,7 @@ describe("GitHubRepoWriter.promoteNodeToProduction", () => {
 
     expect(result).toMatchObject({
       status: "dispatched",
+      env: "production",
       sourceSha: childSha,
       sourceAddressing: "in_repo",
     });
@@ -847,7 +855,8 @@ describe("GitHubRepoWriter.promoteNodeToProduction", () => {
     };
 
     await expect(
-      makeWriter().promoteNodeToProduction({
+      makeWriter().promoteNode({
+        env: "production",
         parentOwner: "Cogni-DAO",
         parentRepo: "cogni",
         slug: "beacon",

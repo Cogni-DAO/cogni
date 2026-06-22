@@ -23,7 +23,7 @@ const NODE_ID = "22222222-2222-4222-8222-222222222222";
 
 const mockDeployPlane = vi.hoisted(() => ({
   dispatchNodePromote: vi.fn(),
-  promoteNodeToProduction: vi.fn(),
+  promoteNode: vi.fn(),
 }));
 const authzState = vi.hoisted(() => ({
   decision: undefined as
@@ -156,8 +156,9 @@ describe("POST /api/v1/deploy/promote", () => {
       workflowUrl: "https://github.com/test-owner/test-repo/actions",
       message: "Promote dispatched: sigh → production.",
     });
-    mockDeployPlane.promoteNodeToProduction.mockResolvedValue({
+    mockDeployPlane.promoteNode.mockResolvedValue({
       status: "dispatched",
+      env: "production",
       sourceSha: "0123456789012345678901234567890123456789",
       sourceAddressing: "remote_source",
       workflowUrl: "https://github.com/test-owner/test-repo/actions",
@@ -206,15 +207,16 @@ describe("POST /api/v1/deploy/promote", () => {
     expect(mockDeployPlane.dispatchNodePromote).toHaveBeenCalledWith(
       expect.objectContaining({ env: "production", slug: "sigh" })
     );
-    expect(mockDeployPlane.promoteNodeToProduction).not.toHaveBeenCalled();
+    expect(mockDeployPlane.promoteNode).not.toHaveBeenCalled();
   });
 
-  it("routes to the SOURCE-ADDRESSED path (promoteNodeToProduction) when a sourceSha is supplied (ONE_PROMOTION_PRIMITIVE)", async () => {
+  it("routes to the SOURCE-ADDRESSED path (promoteNode, env=production) when a sourceSha is supplied (ONE_PROMOTION_PRIMITIVE)", async () => {
     const sourceSha = "0123456789012345678901234567890123456789";
     const res = await post({ nodeId: NODE_ID, env: "production", sourceSha });
     expect(res.status).toBe(200);
-    expect(mockDeployPlane.promoteNodeToProduction).toHaveBeenCalledWith(
+    expect(mockDeployPlane.promoteNode).toHaveBeenCalledWith(
       expect.objectContaining({
+        env: "production",
         parentOwner: "test-owner",
         parentRepo: "test-repo",
         slug: "sigh",

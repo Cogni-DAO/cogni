@@ -10,10 +10,10 @@
  *   - PROMOTION_RUNS_AS_THE_OPERATOR: dispatch uses the operator GitHub App, never a personal credential.
  *   - APP_PROMOTE_IS_NO_INFRA: promotion reconciles the app digest only (`skip_infra=true`), orthogonal to substrate; Compose/secret/edge changes use a deliberate infra lever.
  *   - PRODUCTION_ONLY_V0: only `env=production` is accepted; preview auto-promote is the operator merge-hook path (ungated). A `can_promote_preview` rung is additive when manual preview promotes arrive.
- *   - ONE_PROMOTION_PRIMITIVE: a `sourceSha` promote is SOURCE-ADDRESSED — `promoteNodeToProduction`
- *     reads the catalog row to discriminate remote-source (fork) vs in-repo and dispatches by
- *     `node_source_sha` (fork) or `source_sha` (in-repo), mirroring preview. Production no longer
- *     deploys a stale catalog `source_sha` pin for fork nodes (bug.5043).
+ *   - ONE_PROMOTION_PRIMITIVE: a `sourceSha` promote is SOURCE-ADDRESSED via `promoteNode` — the
+ *     SAME method preview uses (different env + authz only). It reads the catalog row to discriminate
+ *     remote-source (fork) vs in-repo and dispatches by `node_source_sha` (fork) or `source_sha`
+ *     (in-repo). Production no longer deploys a stale catalog `source_sha` pin for fork nodes (bug.5043).
  * Side-effects: IO (authz check, GitHub workflow_dispatch)
  * Links: docs/spec/node-ci-cd-contract.md § Env-promotion progression, docs/spec/rbac.md, docs/spec/cicd-platform-boundary.md
  * @public
@@ -103,13 +103,15 @@ export const POST = wrapRouteHandlerWithLogging(
     const { owner, repo } = getGithubRepo();
     try {
       const deployPlane = createOperatorDeployPlane(serverEnv());
-      // ONE_PROMOTION_PRIMITIVE: a caller-supplied sha is SOURCE-ADDRESSED. promoteNodeToProduction
-      // reads the catalog row to discriminate remote-source (fork → node_source_sha) from in-repo
-      // (operator/poly → source_sha), mirroring preview. Without a sha (preview-forward mode), keep
-      // the raw catalog-pin dispatch unchanged.
+      // ONE_PROMOTION_PRIMITIVE: a caller-supplied sha is SOURCE-ADDRESSED via `promoteNode` — the
+      // SAME method preview uses, here with env=production. It reads the catalog row to discriminate
+      // remote-source (fork → node_source_sha) from in-repo (operator/poly → source_sha). Without a
+      // sha, production preview-forwards the current `deploy/preview` digest — the raw dispatch
+      // (neither source_sha nor node_source_sha) trips the workflow's preview-forward branch.
       const result =
         sourceSha !== undefined
-          ? await deployPlane.promoteNodeToProduction({
+          ? await deployPlane.promoteNode({
+              env,
               parentOwner: owner,
               parentRepo: repo,
               slug: node.slug,
