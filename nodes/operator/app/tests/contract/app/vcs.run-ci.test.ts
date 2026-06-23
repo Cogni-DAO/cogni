@@ -2,22 +2,22 @@
 // SPDX-FileCopyrightText: 2026 Cogni-DAO
 
 /**
- * Module: `@tests/contract/app/vcs.run-checks`
- * Purpose: Contract tests for POST /api/v1/vcs/run-checks (node-scoped).
+ * Module: `@tests/contract/app/vcs.run-ci`
+ * Purpose: Contract tests for POST /api/v1/vcs/run-ci (node-scoped).
  * Scope: Verifies auth (401), RBAC (403 deny → grant happy path), VCS-not-configured (503),
  *   node repo resolution from catalog `source_repo`, and 404 on catalog_missing.
  * Invariants:
  *   - RBAC_IS_THE_GATE: `node.flight` on the named node authorizes the approval.
  *   - NO_REPO_FROM_AGENT: owner/repo resolved from the node's catalog `source_repo`.
- *   - CONTRACTS_ARE_TRUTH: 200 response matches runChecksOperation.output schema.
+ *   - CONTRACTS_ARE_TRUTH: 200 response matches runCiOperation.output schema.
  * Side-effects: none
- * Links: nodes/operator/app/src/app/api/v1/vcs/run-checks/route.ts,
- *   packages/node-contracts/src/vcs.run-checks.v1.contract.ts
+ * Links: nodes/operator/app/src/app/api/v1/vcs/run-ci/route.ts,
+ *   packages/node-contracts/src/vcs.run-ci.v1.contract.ts
  * @internal
  */
 
 import { FakeAuthorizationAdapter } from "@cogni/authorization-core";
-import { runChecksOperation } from "@cogni/node-contracts";
+import { runCiOperation } from "@cogni/node-contracts";
 import { TEST_SESSION_USER_1 } from "@tests/_fakes/ids";
 import { testApiHandler } from "next-test-api-route-handler";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,6 +35,7 @@ const fakeVcs = vi.hoisted(() => ({
 }));
 
 const mockResolveNodeRepo = vi.hoisted(() => vi.fn());
+const mockDispatchPrBuild = vi.hoisted(() => vi.fn());
 const authzHolder = vi.hoisted(
   () =>
     ({ current: null }) as {
@@ -68,7 +69,10 @@ const mockLog = vi.hoisted(() => ({
 }));
 
 vi.mock("@/bootstrap/capabilities/operator-deploy-plane", () => ({
-  createOperatorDeployPlane: () => ({ resolveNodeRepo: mockResolveNodeRepo }),
+  createOperatorDeployPlane: () => ({
+    resolveNodeRepo: mockResolveNodeRepo,
+    dispatchPrBuild: mockDispatchPrBuild,
+  }),
 }));
 
 vi.mock("@/bootstrap/capabilities/vcs", () => ({
@@ -109,7 +113,7 @@ vi.mock("@/shared/observability", async (importOriginal) => {
     createRequestContext: () => ({
       log: mockLog,
       reqId: "req-1",
-      routeId: "vcs.runChecks",
+      routeId: "vcs.runCi",
     }),
     logRequestEnd: vi.fn(),
     logRequestStart: vi.fn(),
@@ -125,7 +129,7 @@ vi.mock("@/app/_lib/auth/session", () => ({
   getSessionUser: () => mockGetSessionUser(),
 }));
 
-import * as appHandler from "@/app/api/v1/vcs/run-checks/route";
+import * as appHandler from "@/app/api/v1/vcs/run-ci/route";
 
 async function post(body: unknown): Promise<Response> {
   let res!: Response;
@@ -142,7 +146,7 @@ async function post(body: unknown): Promise<Response> {
   return res;
 }
 
-describe("POST /api/v1/vcs/run-checks", () => {
+describe("POST /api/v1/vcs/run-ci", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authzHolder.current = new FakeAuthorizationAdapter();
@@ -166,8 +170,14 @@ describe("POST /api/v1/vcs/run-checks", () => {
       approved: 2,
       prNumber: 7,
       headSha: "0123456789012345678901234567890123456789",
+      headRepo: "flock-leader/cogni",
       runIds: [101, 102],
       message: "Approved 2 workflow run(s) for PR #7 @ 01234567.",
+    });
+    mockDispatchPrBuild.mockResolvedValue({
+      dispatched: true,
+      workflowUrl: "https://github.com/Cogni-DAO/cogni/actions",
+      message: "Trusted build dispatched.",
     });
   });
 
@@ -206,7 +216,7 @@ describe("POST /api/v1/vcs/run-checks", () => {
     const res = await post({ nodeId: NODE_SLUG, prNumber: 7 });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(runChecksOperation.output.safeParse(body).success).toBe(true);
+    expect(runCiOperation.output.safeParse(body).success).toBe(true);
     expect(body.approved).toBe(2);
     expect(body.runIds).toEqual([101, 102]);
     expect(mockResolveNodeRepo).toHaveBeenCalledWith({
@@ -217,6 +227,37 @@ describe("POST /api/v1/vcs/run-checks", () => {
     expect(fakeVcs.approveWorkflowRuns).toHaveBeenCalledWith({
       owner: "Cogni-DAO",
       repo: NODE_SLUG,
+      prNumber: 7,
+    });
+    // run-ci's build half: the operator dispatches the trusted pr-build of the
+    // approved head so a flightable sha-<headSha> image exists.
+    expect(mockDispatchPrBuild).toHaveBeenCalledWith({
+      owner: "Cogni-DAO",
+      repo: NODE_SLUG,
+      headRepo: "flock-leader/cogni",
+      headSha: "0123456789012345678901234567890123456789",
+      prNumber: 7,
+    });
+  });
+
+  it("operator monorepo lane: catalog_missing for the operator node falls back to NODE_SUBMODULE_PARENT", async () => {
+    dbState.byId.operator = { nodeId: NODE_ID, slug: "operator" };
+    grant(NODE_ID);
+    mockResolveNodeRepo.mockRejectedValue(
+      Object.assign(new Error("not found"), { code: "catalog_missing" })
+    );
+    const res = await post({ nodeId: "operator", prNumber: 7 });
+    expect(res.status).toBe(200);
+    expect(fakeVcs.approveWorkflowRuns).toHaveBeenCalledWith({
+      owner: "cogni-test-org",
+      repo: "cogni-monorepo",
+      prNumber: 7,
+    });
+    expect(mockDispatchPrBuild).toHaveBeenCalledWith({
+      owner: "cogni-test-org",
+      repo: "cogni-monorepo",
+      headRepo: "flock-leader/cogni",
+      headSha: "0123456789012345678901234567890123456789",
       prNumber: 7,
     });
   });

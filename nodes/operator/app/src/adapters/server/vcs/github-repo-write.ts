@@ -316,6 +316,78 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
         404
       );
     }
+    // Discriminate remote-source vs in-repo by `source_repo` PRESENCE (same as
+    // promoteNode). The operator is IN-REPO (no source_repo) — and it is a node
+    // like any other: flighted by `nodeRef {nodeId, sourceSha}`, NOT a `codePr`/
+    // pr_number lane (NORTH_STAR). Its deployable is the parent's own app image.
+    const discriminator = PromoteDiscriminatorSchema.safeParse(
+      parseYaml(catalogText)
+    );
+    if (!discriminator.success || discriminator.data.name !== slug) {
+      throw deployPlaneError(
+        "invalid_catalog",
+        `invalid node catalog entry for ${slug}`,
+        409
+      );
+    }
+
+    if (discriminator.data.source_repo === undefined) {
+      // IN-REPO node (operator): verify the commit + repo-spec identity in the
+      // PARENT repo (the operator's own monorepo); the image is the parent app
+      // image at sha-<sourceSha> (candidate-flight resolves it for real via
+      // resolve-node-ref-image — image existence is not gated in-app).
+      const sourceExists = await this.commitExists({
+        owner: parentOwner,
+        repo: parentRepo,
+        ref: sourceSha,
+      });
+      if (!sourceExists) {
+        throw deployPlaneError(
+          "source_missing",
+          `sourceSha not found in ${parentOwner}/${parentRepo}`,
+          422
+        );
+      }
+      const repoSpecText = await this.fetchFileText({
+        owner: parentOwner,
+        repo: parentRepo,
+        path: `nodes/${slug}/.cogni/repo-spec.yaml`,
+        ref: sourceSha,
+      });
+      if (!repoSpecText) {
+        throw deployPlaneError(
+          "repo_spec_missing",
+          "node repo-spec not found at sourceSha",
+          422
+        );
+      }
+      let actualNodeId: string;
+      try {
+        actualNodeId = extractNodeId(parseRepoSpec(repoSpecText));
+      } catch {
+        throw deployPlaneError(
+          "invalid_repo_spec",
+          "node repo-spec is invalid at sourceSha",
+          422
+        );
+      }
+      if (actualNodeId !== nodeId) {
+        throw deployPlaneError(
+          "node_id_mismatch",
+          `node repo-spec identity mismatch: expected ${nodeId}, got ${actualNodeId}`,
+          422
+        );
+      }
+      return {
+        nodeId,
+        slug,
+        sourceSha,
+        sourceRepo: `https://github.com/${parentOwner}/${parentRepo}`,
+        image: `ghcr.io/${parentOwner.toLowerCase()}/cogni-template:sha-${sourceSha}`,
+      };
+    }
+
+    // REMOTE-SOURCE node: strict catalog (source_repo + image_repository required).
     const catalog = CatalogEntrySchema.safeParse(parseYaml(catalogText));
     if (!catalog.success || catalog.data.name !== slug) {
       throw deployPlaneError(
@@ -548,6 +620,38 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
       dispatched: true,
       workflowUrl: `https://github.com/${input.owner}/${input.repo}/actions/workflows/candidate-flight.yml`,
       message: `Candidate flight dispatched for ${input.slug}@${input.sourceSha.slice(0, 8)}.`,
+    };
+  }
+
+  async dispatchPrBuild(input: {
+    owner: string;
+    repo: string;
+    headRepo: string;
+    headSha: string;
+    prNumber: number;
+  }): Promise<CandidateFlightDispatchResult> {
+    const octokit = await this.getOctokit(input.owner, input.repo);
+    // workflow_dispatch on the SAME pr-build.yml (ref: main = the trusted workflow
+    // definition), building the approved head at headRepo@headSha → sha-<headSha>.
+    await octokit.request(
+      "POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches",
+      {
+        owner: input.owner,
+        repo: input.repo,
+        workflow_id: "pr-build.yml",
+        ref: "main",
+        inputs: {
+          head_repo: input.headRepo,
+          head_sha: input.headSha,
+          pr_number: String(input.prNumber),
+        },
+        request: { signal: AbortSignal.timeout(15_000) },
+      }
+    );
+    return {
+      dispatched: true,
+      workflowUrl: `https://github.com/${input.owner}/${input.repo}/actions/workflows/pr-build.yml`,
+      message: `Trusted build dispatched for ${input.headRepo}@${input.headSha.slice(0, 8)} (PR #${input.prNumber}).`,
     };
   }
 
