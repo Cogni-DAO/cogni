@@ -7,8 +7,8 @@
 #
 # Spec: docs/spec/node-ci-cd-contract.md#repo-setup-fixture
 # Fixtures:
-#   - infra/github/branch-protection.json — required status checks + main-branch rules
-#   - infra/github/merge-queue.json       — queue tuning values for the manual UI step
+#   - infra/github/branch-protection.json   — required status checks + main-branch rules
+#   - infra/github/merge-queue-ruleset.json — `merge_queue` ruleset (queue requirement, config-as-code)
 #
 # Usage:
 #   bash infra/github/setup-main-branch.sh                      # applies to current repo (gh auth context)
@@ -39,27 +39,33 @@ echo "    [2/3] branch protection (required: $(jq -r '.required_status_checks.co
 jq 'with_entries(select(.key | startswith("_") | not))' "$SCRIPT_DIR/branch-protection.json" \
   | gh api -X PUT "repos/$REPO/branches/main/protection" --input - >/dev/null
 
-# 3. Merge queue toggle — UI-only at time of writing. REST silently drops `required_merge_queue`.
-echo "    [3/3] merge queue: REST endpoint cannot enable. Manual UI step required:"
-echo
-echo "         🔗 https://github.com/$REPO/settings/branches"
-echo "             → edit the 'main' rule"
-echo "             → check 'Require merge queue'"
-echo "             → fill the form using values from infra/github/merge-queue.json"
-echo "             → save"
-echo
+# 3. Merge queue — applied as a `merge_queue` repository RULESET (config-as-code).
+#    Classic protection's REST drops `required_merge_queue`; the rulesets API carries it. Idempotent:
+#    find the ruleset by name, then PUT (update) if it exists or POST (create) if not.
+RULESET_NAME="$(jq -r '.name' "$SCRIPT_DIR/merge-queue-ruleset.json")"
+echo "    [3/3] merge queue ruleset ($RULESET_NAME)"
+RULESET_PAYLOAD="$(jq 'with_entries(select(.key | startswith("_") | not))' "$SCRIPT_DIR/merge-queue-ruleset.json")"
+EXISTING_RULESET_ID="$(gh api "repos/$REPO/rulesets" --jq ".[] | select(.name == \"$RULESET_NAME\") | .id" 2>/dev/null | head -1 || true)"
+if [ -n "$EXISTING_RULESET_ID" ]; then
+  printf '%s' "$RULESET_PAYLOAD" \
+    | gh api -X PUT "repos/$REPO/rulesets/$EXISTING_RULESET_ID" --input - >/dev/null
+else
+  printf '%s' "$RULESET_PAYLOAD" \
+    | gh api -X POST "repos/$REPO/rulesets" --input - >/dev/null
+fi
 
 # Verify what was applied via API.
 echo "==> Verifying applied state"
 gh api "repos/$REPO/branches/main/protection" \
   | jq '{required_checks: .required_status_checks.contexts}'
 
-# Best-effort merge-queue check.
+# Confirm the merge queue is live (GraphQL is authoritative — a `merge_queue` ruleset on the default
+# branch surfaces here regardless of whether it was enabled via ruleset or the legacy UI checkbox).
 QUEUE_ID=$(gh api graphql -f query="query { repository(owner:\"${REPO%/*}\", name:\"${REPO#*/}\") { mergeQueue(branch:\"main\") { id } } }" \
   --jq '.data.repository.mergeQueue.id // empty' 2>/dev/null || true)
 
 if [ -n "$QUEUE_ID" ]; then
   echo "==> Merge queue: ENABLED (id=$QUEUE_ID)"
 else
-  echo "==> Merge queue: NOT ENABLED — complete the UI step above"
+  echo "==> Merge queue: NOT ENABLED — ruleset apply may have failed; check 'gh api repos/$REPO/rulesets'"
 fi

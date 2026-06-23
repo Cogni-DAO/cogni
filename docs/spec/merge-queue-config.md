@@ -96,13 +96,16 @@ Excluded from required (advisory on PR-time only):
 
 This is the canonical use of `STUB_JOB_FOR_PR_INTENT`: `candidate-flight.yml` will gain a `merge_group:` trigger with a passthrough job that emits `candidate-flight` success on merge_group events. Implementation tracked in `task.0414`. Once shipped, the canonical required set becomes `unit, component, static, manifest, candidate-flight` — the first stub-job-pattern entry in the live config.
 
-## Implementation — Classic Branch Protection
+## Implementation — Classic Protection (checks) + a `merge_queue` Ruleset (queue)
 
-Stay on classic branch protection on `main`. Rulesets gives no additional flexibility here (verified). The fixture in `infra/github/branch-protection.json` is the desired-state payload for `PUT /repos/{repo}/branches/main/protection`.
+Two orthogonal layers, both config-as-code, applied by `bash infra/github/setup-main-branch.sh [<owner>/<repo>]`:
 
-Apply via `bash infra/github/setup-main-branch.sh [<owner>/<repo>]` — see [`infra/github/README.md`](../../infra/github/README.md).
+- **Required-status-checks → classic branch protection.** Stay on classic protection for the checks set. Rulesets give no additional flexibility for the _event-specific required-checks-list_ problem (the falsified hypothesis below) — so there is no reason to migrate the checks. The fixture is `infra/github/branch-protection.json` → `PUT /repos/{repo}/branches/main/protection`.
+- **Queue requirement → a `merge_queue` ruleset.** The fixture is `infra/github/merge-queue-ruleset.json` → `POST`/`PUT /repos/{repo}/rulesets` (idempotent find-by-name).
 
-The merge queue toggle itself is **UI-only** today: REST `PUT .../protection` silently drops the `required_merge_queue` parameter. Setup script prints the link + checkbox to flip after API steps run.
+**The queue toggle is no longer UI-only.** Classic protection's `PUT .../protection` silently drops `required_merge_queue` — but that is a limitation of the _classic protection endpoint_, not of GitHub. The **rulesets** API carries the queue: a `merge_queue` rule is REST-settable (the 2026-04-28 experiment below in fact enabled the queue via the rulesets API). So the queue is now applied programmatically alongside the checks; the manual Settings → Branches checkbox is retired. The ruleset carries _only_ the `merge_queue` rule (not the checks), so it does not re-open the rejected "rulesets for required-checks lists" path.
+
+> Migration note: a repo that previously had the queue enabled via the classic UI checkbox should keep the ruleset as the single source of truth — the ruleset is authoritative and the legacy checkbox can be cleared once the ruleset is confirmed live (`gh api repos/{repo}/rulesets`).
 
 ## GitLab vFuture Mapping
 
@@ -153,7 +156,7 @@ The portability boundary stays clean: workflow YAML changes (per-trigger → per
 **Manual:**
 
 1. After applying via `setup-main-branch.sh`: verify `gh api .../branches/main/protection | jq '.required_status_checks.contexts'` returns the four canonical checks.
-2. After UI step (Require merge queue): open a no-op docs PR; click "Merge when ready"; queue accepts after the four checks report on the merge_group ref. Should complete within ~5 min.
+2. Verify the queue ruleset is live: `gh api repos/{repo}/rulesets --jq '.[] | select(.name=="main-merge-queue") | .enforcement'` returns `active` (the script also confirms via GraphQL `mergeQueue`). Then open a no-op docs PR; click "Merge when ready"; queue accepts after the four checks report on the merge_group ref. Should complete within ~5 min.
 3. Drift detection: re-run the diff in `infra/github/README.md` against live; should be empty.
 
 ## Related
