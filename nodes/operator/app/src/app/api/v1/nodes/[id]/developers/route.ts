@@ -20,6 +20,7 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { createOperatorDeployPlane } from "@/bootstrap/capabilities/operator-deploy-plane";
 import {
   getContainer,
   resolveAppDb,
@@ -31,6 +32,8 @@ import { nodeIdOrSlug } from "@/features/nodes/node-lookup";
 import { getServerSessionUser } from "@/lib/auth/server";
 import { NODE_ACCESS_ROLES } from "@/shared/db/node-access-requests";
 import { nodes } from "@/shared/db/nodes";
+import { userBindings } from "@/shared/db/schema";
+import { serverEnv } from "@/shared/env";
 import {
   EVENT_NAMES,
   logEvent,
@@ -44,7 +47,20 @@ const DeveloperDecisionInput = z.object({
   agentUserId: z.string().uuid(),
   decision: z.enum(["approve", "reject"]),
   role: z.enum(NODE_ACCESS_ROLES).default("developer"),
+  // Owner-attested GitHub login for branch-push provisioning when the agent has no `github`
+  // user_binding (V0 — the owner-approve step is the identity attestation; rbac.md §6a). When a
+  // binding exists it wins; this is the fallback only. Never a guessed login.
+  githubLogin: z.string().min(1).optional(),
 });
+
+/** Outcome of the §6a GitHub branch-push side-effect, surfaced in the response + audit log. */
+type BranchPushOutcome =
+  | "granted"
+  | "invited"
+  | "revoked"
+  | "skipped:not_developer_role"
+  | "skipped:github_identity_unbound"
+  | "error";
 
 type DeveloperDecision = z.infer<typeof DeveloperDecisionInput>["decision"];
 
@@ -55,6 +71,7 @@ interface DeveloperDecisionLogFields {
   readonly decision?: DeveloperDecision | undefined;
   readonly agentUserId?: string | undefined;
   readonly role?: string | undefined;
+  readonly branchPush?: BranchPushOutcome | undefined;
   readonly errorCode?: string | undefined;
 }
 
@@ -148,7 +165,11 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       userActor(session.id as UserId),
       async (tx) =>
         tx
-          .select({ id: nodes.id })
+          .select({
+            id: nodes.id,
+            repoOwner: nodes.repoOwner,
+            repoName: nodes.repoName,
+          })
           .from(nodes)
           .where(and(nodeIdOrSlug(id), eq(nodes.ownerUserId, session.id)))
           .limit(1)
@@ -237,6 +258,64 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       );
     }
 
+    // rbac.md §6a — provision/de-provision GitHub branch-push as a side-effect of the developer
+    // grant (the OpenFGA tuple above is the flight authority; branch-push is the contributor golden
+    // path). Best-effort: branch-push failure never reverses the authoritative tuple write — the agent
+    // still holds `can_flight` and the fork-PR fallback. Resolve the login from the agent's `github`
+    // binding, else the owner-attested `githubLogin` (V0); never guess a login.
+    let branchPush: BranchPushOutcome =
+      parsed.data.role === "developer"
+        ? "skipped:github_identity_unbound"
+        : "skipped:not_developer_role";
+    if (parsed.data.role === "developer") {
+      const [binding] = await serviceDb
+        .select({ login: userBindings.providerLogin })
+        .from(userBindings)
+        .where(
+          and(
+            eq(userBindings.userId, parsed.data.agentUserId),
+            eq(userBindings.provider, "github")
+          )
+        )
+        .limit(1);
+      const login = binding?.login ?? parsed.data.githubLogin ?? null;
+      if (login) {
+        try {
+          const deployPlane = createOperatorDeployPlane(serverEnv());
+          if (parsed.data.decision === "approve") {
+            const r = await deployPlane.setNodeCollaborator({
+              owner: ownerNode.repoOwner,
+              repo: ownerNode.repoName,
+              login,
+              permission: "push",
+            });
+            branchPush = r.invitationId ? "invited" : "granted";
+          } else {
+            await deployPlane.removeNodeCollaborator({
+              owner: ownerNode.repoOwner,
+              repo: ownerNode.repoName,
+              login,
+            });
+            branchPush = "revoked";
+          }
+        } catch (error) {
+          branchPush = "error";
+          ctx.log.warn(
+            {
+              event: EVENT_NAMES.NODE_DEVELOPER_DECISION_COMPLETE,
+              reqId: ctx.reqId,
+              routeId: ctx.routeId,
+              nodeId: id,
+              agentUserId: parsed.data.agentUserId,
+              errorCode: "branch_push_provision_failed",
+              err: error instanceof Error ? error.message : String(error),
+            },
+            "branch_push_provision_failed"
+          );
+        }
+      }
+    }
+
     // Reflect the decision into the tracking row when the agent filed one. Best-effort UX state:
     // the tuple write above is the authority, so a tracking-row failure must not fail the decision
     // (a missing row is already a no-op). Log and continue.
@@ -269,12 +348,14 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       decision: parsed.data.decision,
       agentUserId: parsed.data.agentUserId,
       role: parsed.data.role,
+      branchPush,
     });
     return NextResponse.json({
       nodeId: nodeRowId,
       agentUserId: parsed.data.agentUserId,
       decision: parsed.data.decision,
       role: parsed.data.role,
+      branchPush,
     });
   }
 );

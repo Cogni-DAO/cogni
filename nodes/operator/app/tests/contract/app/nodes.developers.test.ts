@@ -3,11 +3,14 @@
 
 /**
  * Module: `@tests/contract/app/nodes.developers`
- * Purpose: Contract tests for owner-gated node developer approval tuple writes.
- * Scope: Verifies POST /api/v1/nodes/[id]/developers validates ownership before OpenFGA writes.
- * Invariants: OWNER_GATING, OPENFGA_IS_AUTHORITY.
+ * Purpose: Contract tests for owner-gated node developer approval — OpenFGA tuple writes AND the
+ *   rbac.md §6a GitHub branch-push provisioning side-effect.
+ * Scope: Verifies POST /api/v1/nodes/[id]/developers validates ownership before OpenFGA writes, and
+ *   that approval provisions / rejection de-provisions a node-repo collaborator for the agent's bound
+ *   (or owner-attested) GitHub login — skipping safely when no login is resolvable.
+ * Invariants: OWNER_GATING, OPENFGA_IS_AUTHORITY, TRUST_BOUNDARY_IS_MERGE_NOT_PUSH, PUSH_LOGIN_FROM_BINDING.
  * Side-effects: none
- * Links: nodes/operator/app/src/app/api/v1/nodes/[id]/developers/route.ts
+ * Links: nodes/operator/app/src/app/api/v1/nodes/[id]/developers/route.ts, docs/spec/rbac.md §6a
  * @internal
  */
 
@@ -17,14 +20,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 const AGENT_USER_ID = "22222222-2222-4222-8222-222222222222";
+const REPO_OWNER = "cogni-dao";
+const REPO_NAME = "beacon";
 
 const authz = vi.hoisted(() => ({
   writeRelation: vi.fn(),
   deleteRelation: vi.fn(),
 }));
 const dbState = vi.hoisted(() => ({
-  ownerNode: null as { id: string } | null,
+  ownerNode: null as {
+    id: string;
+    repoOwner: string;
+    repoName: string;
+  } | null,
   agentUser: null as { id: string } | null,
+  githubBinding: null as { login: string | null } | null,
+}));
+const deployPlane = vi.hoisted(() => ({
+  setNodeCollaborator: vi.fn(),
+  removeNodeCollaborator: vi.fn(),
 }));
 const mockGetServerSessionUser = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
@@ -51,8 +65,15 @@ const transitionRequest = vi.hoisted(() => vi.fn());
 const mockAppDb = {
   select: () => rowsFrom(dbState.ownerNode ? [dbState.ownerNode] : []),
 };
+// The route runs two serviceDb selects: the agent-user existence check (projection has `id`) and the
+// `user_bindings` GitHub-login lookup (projection has `login`). Differentiate by the projection keys.
 const mockServiceDb = {
-  select: () => rowsFrom(dbState.agentUser ? [dbState.agentUser] : []),
+  select: (proj?: Record<string, unknown>) => {
+    if (proj && "login" in proj) {
+      return rowsFrom(dbState.githubBinding ? [dbState.githubBinding] : []);
+    }
+    return rowsFrom(dbState.agentUser ? [dbState.agentUser] : []);
+  },
   update: () => ({
     set: () => ({
       where: () => {
@@ -72,6 +93,14 @@ vi.mock("@/bootstrap/container", () => ({
   }),
   resolveAppDb: () => mockAppDb,
   resolveServiceDb: () => mockServiceDb,
+}));
+
+vi.mock("@/bootstrap/capabilities/operator-deploy-plane", () => ({
+  createOperatorDeployPlane: () => deployPlane,
+}));
+
+vi.mock("@/shared/env", () => ({
+  serverEnv: () => ({}),
 }));
 
 vi.mock("@/lib/auth/server", () => ({
@@ -101,11 +130,18 @@ describe("POST /api/v1/nodes/[id]/developers", () => {
       decision: "success",
       code: "authz_write_success",
     });
-    dbState.ownerNode = { id: NODE_ID };
+    deployPlane.setNodeCollaborator.mockResolvedValue({ invitationId: null });
+    deployPlane.removeNodeCollaborator.mockResolvedValue(undefined);
+    dbState.ownerNode = {
+      id: NODE_ID,
+      repoOwner: REPO_OWNER,
+      repoName: REPO_NAME,
+    };
     dbState.agentUser = { id: AGENT_USER_ID };
+    dbState.githubBinding = null;
   });
 
-  it("approves a registered agent user as node developer", async () => {
+  it("approves a developer; no GitHub binding ⇒ tuple written, branch-push skipped", async () => {
     await testApiHandler({
       appHandler,
       params: { id: NODE_ID },
@@ -124,6 +160,7 @@ describe("POST /api/v1/nodes/[id]/developers", () => {
           agentUserId: AGENT_USER_ID,
           decision: "approve",
           role: "developer",
+          branchPush: "skipped:github_identity_unbound",
         });
       },
     });
@@ -134,7 +171,114 @@ describe("POST /api/v1/nodes/[id]/developers", () => {
       object: `node:${NODE_ID}`,
     });
     expect(authz.deleteRelation).not.toHaveBeenCalled();
+    expect(deployPlane.setNodeCollaborator).not.toHaveBeenCalled();
     expect(transitionRequest).toHaveBeenCalled();
+  });
+
+  it("approve provisions branch-push for the agent's bound GitHub login", async () => {
+    dbState.githubBinding = { login: "flock-leader" };
+
+    await testApiHandler({
+      appHandler,
+      params: { id: NODE_ID },
+      async test({ fetch }) {
+        const res = await fetch({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agentUserId: AGENT_USER_ID,
+            decision: "approve",
+          }),
+        });
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({
+          nodeId: NODE_ID,
+          agentUserId: AGENT_USER_ID,
+          decision: "approve",
+          role: "developer",
+          branchPush: "granted",
+        });
+      },
+    });
+
+    expect(deployPlane.setNodeCollaborator).toHaveBeenCalledWith({
+      owner: REPO_OWNER,
+      repo: REPO_NAME,
+      login: "flock-leader",
+      permission: "push",
+    });
+  });
+
+  it("approve uses the owner-attested githubLogin when no binding exists (V0)", async () => {
+    await testApiHandler({
+      appHandler,
+      params: { id: NODE_ID },
+      async test({ fetch }) {
+        const res = await fetch({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agentUserId: AGENT_USER_ID,
+            decision: "approve",
+            githubLogin: "external-dev",
+          }),
+        });
+        expect(res.status).toBe(200);
+        expect((await res.json()).branchPush).toBe("granted");
+      },
+    });
+
+    expect(deployPlane.setNodeCollaborator).toHaveBeenCalledWith({
+      owner: REPO_OWNER,
+      repo: REPO_NAME,
+      login: "external-dev",
+      permission: "push",
+    });
+  });
+
+  it("invited outcome when GitHub returns a pending invitation", async () => {
+    dbState.githubBinding = { login: "flock-leader" };
+    deployPlane.setNodeCollaborator.mockResolvedValue({ invitationId: 999 });
+
+    await testApiHandler({
+      appHandler,
+      params: { id: NODE_ID },
+      async test({ fetch }) {
+        const res = await fetch({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agentUserId: AGENT_USER_ID,
+            decision: "approve",
+          }),
+        });
+        expect((await res.json()).branchPush).toBe("invited");
+      },
+    });
+  });
+
+  it("branch-push failure never reverses the authoritative tuple write", async () => {
+    dbState.githubBinding = { login: "flock-leader" };
+    deployPlane.setNodeCollaborator.mockRejectedValue(new Error("403 admin"));
+
+    await testApiHandler({
+      appHandler,
+      params: { id: NODE_ID },
+      async test({ fetch }) {
+        const res = await fetch({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agentUserId: AGENT_USER_ID,
+            decision: "approve",
+          }),
+        });
+        expect(res.status).toBe(200);
+        expect((await res.json()).branchPush).toBe("error");
+      },
+    });
+
+    expect(authz.writeRelation).toHaveBeenCalled();
   });
 
   it("addresses by slug but writes the tuple to the resolved node_id (not the slug)", async () => {
@@ -153,12 +297,7 @@ describe("POST /api/v1/nodes/[id]/developers", () => {
           }),
         });
         expect(res.status).toBe(200);
-        expect(await res.json()).toEqual({
-          nodeId: NODE_ID,
-          agentUserId: AGENT_USER_ID,
-          decision: "approve",
-          role: "developer",
-        });
+        expect((await res.json()).nodeId).toBe(NODE_ID);
       },
     });
 
@@ -169,7 +308,7 @@ describe("POST /api/v1/nodes/[id]/developers", () => {
     });
   });
 
-  it("approves a registered agent as production_promoter (role-aware grant)", async () => {
+  it("approves a registered agent as production_promoter (role-aware, no branch-push)", async () => {
     await testApiHandler({
       appHandler,
       params: { id: NODE_ID },
@@ -189,6 +328,7 @@ describe("POST /api/v1/nodes/[id]/developers", () => {
           agentUserId: AGENT_USER_ID,
           decision: "approve",
           role: "production_promoter",
+          branchPush: "skipped:not_developer_role",
         });
       },
     });
@@ -198,10 +338,12 @@ describe("POST /api/v1/nodes/[id]/developers", () => {
       relation: "production_promoter",
       object: `node:${NODE_ID}`,
     });
-    expect(authz.deleteRelation).not.toHaveBeenCalled();
+    expect(deployPlane.setNodeCollaborator).not.toHaveBeenCalled();
   });
 
-  it("rejects by removing the node developer tuple", async () => {
+  it("rejects by removing the developer tuple AND de-provisioning branch-push", async () => {
+    dbState.githubBinding = { login: "flock-leader" };
+
     await testApiHandler({
       appHandler,
       params: { id: NODE_ID },
@@ -215,6 +357,7 @@ describe("POST /api/v1/nodes/[id]/developers", () => {
           }),
         });
         expect(res.status).toBe(200);
+        expect((await res.json()).branchPush).toBe("revoked");
       },
     });
 
@@ -224,6 +367,11 @@ describe("POST /api/v1/nodes/[id]/developers", () => {
       object: `node:${NODE_ID}`,
     });
     expect(authz.writeRelation).not.toHaveBeenCalled();
+    expect(deployPlane.removeNodeCollaborator).toHaveBeenCalledWith({
+      owner: REPO_OWNER,
+      repo: REPO_NAME,
+      login: "flock-leader",
+    });
   });
 
   it("does not write OpenFGA when the caller is not node owner", async () => {
@@ -247,5 +395,6 @@ describe("POST /api/v1/nodes/[id]/developers", () => {
 
     expect(authz.writeRelation).not.toHaveBeenCalled();
     expect(authz.deleteRelation).not.toHaveBeenCalled();
+    expect(deployPlane.setNodeCollaborator).not.toHaveBeenCalled();
   });
 });
