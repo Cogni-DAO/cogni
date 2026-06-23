@@ -131,3 +131,5 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
 CMD ["node", "nodes/operator/app/server.js"]
 
 # rebuild: ship #1792 (vcs run-checks + node-scoped merge) to prod via merge queue
+
+# proof: external-agent e2e via operator API (run-ci -> nodeRef flight -> validate -> merge)
