@@ -7,10 +7,10 @@
  *   node publish. The wizard stores birth facts; live systems remain the source
  *   of truth for CI, GHCR, flight, and deployed build identity. The assistant is a
  *   read-only external dev: it forks the node repo to contribute, and every
- *   privileged action (run-checks, merge, flight) runs through the operator API
+ *   privileged action (run-ci, merge, flight) runs through the operator API
  *   gated by an owner-granted RBAC tuple — the lone human step.
  * Scope: Pure string/object construction. No IO.
- * Links: node-launch-handoff, api/v1/vcs/{run-checks,merge,flight} routes (#1792)
+ * Links: node-launch-handoff, api/v1/vcs/{run-ci,merge,flight} routes (#1792, #1801)
  * @public
  */
 
@@ -92,23 +92,17 @@ export function buildNodeLaunchPack(
     parentPrLine,
     `Candidate URL: ${candidateUrl}`,
     "",
-    "You are the AI developer taking this node from spawned scaffold to first deployed customization. You hold ZERO privileged GitHub access — you contribute as a read-only external dev, and every privileged action (releasing CI, merging, deploying) runs through the operator API on your behalf, authorized by an owner-granted RBAC tuple. The single human step in the whole path is the node owner approving that grant once.",
-    "Your goal: fork the node repo, make a small style-kit customization PR, flight the PR-HEAD to Cogni operator candidate-a, validate it, then report the node-spawn scorecard + URLs to the human.",
+    "You are the AI developer taking this node from spawned scaffold to first deployed customization. You hold ZERO privileged GitHub access — you contribute as a read-only external dev who FORKS the node repo, and every privileged step (CI, build, flight, merge, promote) runs through the operator API on your behalf, authorized by an owner-granted RBAC tuple. The single human step in the whole path is the node owner approving that grant once.",
+    "Your goal: a small style-kit customization, taken end-to-end to a live, validated candidate-a deploy, then reported to the human.",
     "",
-    "The Cogni operator is the coordination service at the endpoint root above — use it for contributor registration, node developer-access requests, releasing your fork PR's checks, merging, and flight.",
-    "A freshly-spawned node workspace ships with no `.env.cogni` and no Cogni credentials — expected, so do not hunt for a key file. Run /contribute-to-cogni against the operator endpoint root to register and mint your agent bearer token, then save it as `.env.cogni` at the repo root for future devs.",
-    "With that token, recall the Cogni knowledge block above (it is auth-gated) and use `.claude/skills/node-wizard-scorecard/SKILL.md` when present — that skill is the authoritative runbook; the steps below are the kickstart.",
+    "A freshly-spawned node workspace ships with no `.env.cogni` and no Cogni credentials — expected, so do not hunt for a key file. Run /contribute-to-cogni against the operator endpoint root to register and mint your agent bearer token, save it as `.env.cogni` at the repo root, then recall the Cogni knowledge block above (it is auth-gated).",
     "",
-    "Required path:",
-    "1. Fork the node repo to your own GitHub account and work from the fork — your clone of the Cogni-owned upstream is read-only, so a fork is your push target (`gh repo fork <node repo> --clone`, or `gh repo fork <node repo> --remote` if you are already inside an upstream clone). You never need write access to the upstream: you propose via a fork PR and the operator merges on your behalf.",
-    `2. Fire the developer-access request IMMEDIATELY so the owner's approval runs in parallel with your styling work: POST ${OPERATOR_API_ROOT}/api/v1/nodes/${input.nodeId}/access-requests with your agent bearer token. The node owner approves it once in the node UI (Agents → Approve) — this is the ONE human gate. Your bearer can use the grant to run-checks / merge / flight, but can never approve itself.`,
-    "3. Make the style-kit customization on a branch in your fork and open a PR against the upstream node repo. Do not push to upstream `main`, do not hand-edit the operator gitlink. Confirm the repo-spec keeps `knowledge.remote` (the Cogni-owned DoltHub mirror); do not add a DOLTHUB_REMOTE_URL env override.",
-    `4. A fork PR's checks start held — release them through the operator: POST ${OPERATOR_API_ROOT}/api/v1/vcs/run-checks with your bearer and {nodeId, prNumber}. Let the node's own CI run and publish the child image; use the image tag CI reports as the deploy identity (live systems are the source of truth — do not assume the GHCR namespace).`,
-    `5. Flight the PR-HEAD sha to candidate-a BEFORE merging (candidate validation must show the NEW styling, not the scaffold): POST ${OPERATOR_API_ROOT}/api/v1/vcs/flight with {nodeRef:{nodeId, sourceSha}}, once the image exists and your access is approved. Expect HTTP 202.`,
-    "6. Verify the candidate `/version` buildSha matches the flighted PR-HEAD sha, screenshot the flighted UI (`.claude/skills/playwright-auth-bootstrap/SKILL.md`), run agent-first API validation, then present the scorecard to the human.",
-    `7. Production path, after human sign-off: merge your child PR through the operator — POST ${OPERATOR_API_ROOT}/api/v1/vcs/merge with {nodeId, prNumber} (the operator App merges on green; branch protection on the node repo is the merge authority). Then merge the parent deployment-pin PR the same way ({prNumber} with no nodeId targets the operator monorepo). Ask the owner to revoke your grant when done — re-running flight then returns 403, proving teardown.`,
+    "The exact end-to-end procedure lives in the reusable guides, NOT this prompt — follow them as the source of truth so this handoff can never drift from the live operator routes:",
+    "- `cicd-e2e-required-sequence` — the required ordered steps and the operator API call for each (fork → run-ci → flight → validate → merge → promote). You are read-only on GitHub; every privileged step is operator-bridged via your Bearer key, never personal `gh`.",
+    "- `node-launch-handoff` (the knowledge block above) — the launch-specific runbook: the two agent accounts, firing the developer-access request FIRST so owner approval runs in parallel, flighting the PR-HEAD so candidate validation shows your change, screenshots, and the scorecard.",
+    "- `.claude/skills/node-wizard-scorecard/SKILL.md` (execution scorecard) and `.claude/skills/node-styling/SKILL.md` (the customization), when present in your workspace.",
     "",
-    "Use `.claude/skills/node-styling/SKILL.md` for the customization PR. If any step is blocked (access not approved, child image missing, parent pin disagrees, flight ineligible), report the exact blocked scorecard row instead of inventing a privileged manual step.",
+    `Node-specific guardrails for THIS node: fork the node repo (your clone of the Cogni-owned upstream is read-only); fire the developer-access request immediately — POST ${OPERATOR_API_ROOT}/api/v1/nodes/${input.nodeId}/access-requests with your bearer (the owner approves once in the node UI; your bearer can use the grant but never self-approve); do not push to upstream main or hand-edit the operator gitlink; keep the repo-spec knowledge.remote (do not add a DOLTHUB_REMOTE_URL override); present the scorecard only after flight + /version + agent-first validation are green. If a step is blocked, report the exact blocked scorecard row instead of inventing a privileged manual step.`,
   ].join("\n");
 
   return {
