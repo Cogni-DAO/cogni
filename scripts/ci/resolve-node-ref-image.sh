@@ -3,8 +3,10 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 # Script: scripts/ci/resolve-node-ref-image.sh
-# Purpose: Resolve the digest for a remote-source artifact image addressed
-#   by node ref `<slug>@<source_sha>`.
+# Purpose: Resolve the digest for ONE node's image addressed by node ref
+#   `<slug>@<source_sha>` — the SAME nodeRef path for every node, in-repo
+#   (operator) or remote-source. No `codePr`/pr_number special-case: the operator
+#   is just another node flighted by sourceSha (NORTH_STAR: operator = a node).
 #
 # Emits the same payload shape as resolve-pr-build-images.sh:
 #   { image_name, image_tag, source_sha, targets: [{target, source_repo, sourceSha, image_repository, tag, digest, source_sha}] }
@@ -27,20 +29,10 @@ if ! [[ "$SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
   echo "[ERROR] SOURCE_SHA must be a 40-char hex SHA" >&2
   exit 1
 fi
-if ! is_remote_source_artifact_target "$NODE"; then
-  echo "[ERROR] ${NODE} is not a remote-source artifact in this checkout" >&2
-  exit 1
-fi
 
 catalog="${_image_tags_catalog_root}/${NODE}.yaml"
-source_repo="$(yq -N '.source_repo // ""' "$catalog")"
-if [ -z "$source_repo" ]; then
-  echo "[ERROR] source_repo missing for remote-source artifact ${NODE}" >&2
-  exit 1
-fi
-image_repository="$(yq -N '.image_repository // ""' "$catalog")"
-if [ -z "$image_repository" ]; then
-  echo "[ERROR] image_repository missing for remote-source artifact ${NODE}" >&2
+if [ ! -f "$catalog" ]; then
+  echo "[ERROR] no catalog entry for ${NODE}" >&2
   exit 1
 fi
 
@@ -53,7 +45,24 @@ if ! docker buildx version >/dev/null 2>&1; then
   exit 1
 fi
 
-tag="${image_repository}:sha-${SOURCE_SHA}"
+# ONE identity for both node kinds: `<image>:sha-<sourceSha>`.
+#   - remote-source node: image_repository from its catalog row (ghcr.io/<owner>/<repo>).
+#   - in-repo node (operator): the parent's own app image (IMAGE_NAME_APP) + the
+#     catalog tag suffix — same image pr-build publishes. No source_repo.
+if is_remote_source_artifact_target "$NODE"; then
+  source_repo="$(yq -N '.source_repo // ""' "$catalog")"
+  image_repository="$(yq -N '.image_repository // ""' "$catalog")"
+  if [ -z "$image_repository" ]; then
+    echo "[ERROR] image_repository missing for remote-source artifact ${NODE}" >&2
+    exit 1
+  fi
+  tag="${image_repository}:sha-${SOURCE_SHA}"
+else
+  # In-repo node — its deployable is the parent app image at sha-<sourceSha>.
+  source_repo=""
+  image_repository="$(image_name_for_target "$NODE")"
+  tag="$(image_tag_for_target "$image_repository" "sha-${SOURCE_SHA}" "$NODE")"
+fi
 digest="$(docker buildx imagetools inspect "$tag" --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"' || true)"
 if [ -z "$digest" ] || [ "$digest" = "null" ]; then
   echo "[ERROR] remote-source artifact image not found: ${tag}" >&2

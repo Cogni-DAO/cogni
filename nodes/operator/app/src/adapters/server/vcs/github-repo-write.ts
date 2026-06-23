@@ -316,6 +316,78 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
         404
       );
     }
+    // Discriminate remote-source vs in-repo by `source_repo` PRESENCE (same as
+    // promoteNode). The operator is IN-REPO (no source_repo) — and it is a node
+    // like any other: flighted by `nodeRef {nodeId, sourceSha}`, NOT a `codePr`/
+    // pr_number lane (NORTH_STAR). Its deployable is the parent's own app image.
+    const discriminator = PromoteDiscriminatorSchema.safeParse(
+      parseYaml(catalogText)
+    );
+    if (!discriminator.success || discriminator.data.name !== slug) {
+      throw deployPlaneError(
+        "invalid_catalog",
+        `invalid node catalog entry for ${slug}`,
+        409
+      );
+    }
+
+    if (discriminator.data.source_repo === undefined) {
+      // IN-REPO node (operator): verify the commit + repo-spec identity in the
+      // PARENT repo (the operator's own monorepo); the image is the parent app
+      // image at sha-<sourceSha> (candidate-flight resolves it for real via
+      // resolve-node-ref-image — image existence is not gated in-app).
+      const sourceExists = await this.commitExists({
+        owner: parentOwner,
+        repo: parentRepo,
+        ref: sourceSha,
+      });
+      if (!sourceExists) {
+        throw deployPlaneError(
+          "source_missing",
+          `sourceSha not found in ${parentOwner}/${parentRepo}`,
+          422
+        );
+      }
+      const repoSpecText = await this.fetchFileText({
+        owner: parentOwner,
+        repo: parentRepo,
+        path: `nodes/${slug}/.cogni/repo-spec.yaml`,
+        ref: sourceSha,
+      });
+      if (!repoSpecText) {
+        throw deployPlaneError(
+          "repo_spec_missing",
+          "node repo-spec not found at sourceSha",
+          422
+        );
+      }
+      let actualNodeId: string;
+      try {
+        actualNodeId = extractNodeId(parseRepoSpec(repoSpecText));
+      } catch {
+        throw deployPlaneError(
+          "invalid_repo_spec",
+          "node repo-spec is invalid at sourceSha",
+          422
+        );
+      }
+      if (actualNodeId !== nodeId) {
+        throw deployPlaneError(
+          "node_id_mismatch",
+          `node repo-spec identity mismatch: expected ${nodeId}, got ${actualNodeId}`,
+          422
+        );
+      }
+      return {
+        nodeId,
+        slug,
+        sourceSha,
+        sourceRepo: `https://github.com/${parentOwner}/${parentRepo}`,
+        image: `ghcr.io/${parentOwner.toLowerCase()}/cogni-template:sha-${sourceSha}`,
+      };
+    }
+
+    // REMOTE-SOURCE node: strict catalog (source_repo + image_repository required).
     const catalog = CatalogEntrySchema.safeParse(parseYaml(catalogText));
     if (!catalog.success || catalog.data.name !== slug) {
       throw deployPlaneError(
