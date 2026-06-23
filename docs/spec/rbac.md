@@ -447,9 +447,18 @@ no GitHub binding fails closed (`github_identity_unbound`) — never guess a log
 
 - **V0 bind:** owner attests the login at approve-time (passes `githubLogin`; the
   owner-approve step _is_ the identity attestation). Sufficient for `flock-leader`.
+  Two V0 caveats, both closed by binding-based identity: (1) the attested `githubLogin`
+  is decoupled from `agentUserId` — the tuple goes to the agent, push goes to whatever
+  login the owner names, so the owner must match them; (2) a `reject` de-provisions only
+  when a login is resolvable (a binding, or `githubLogin` re-supplied on the reject) —
+  otherwise push access is **not** auto-revoked. The route never drops this silently: it
+  emits `branch_push_deprovision_skipped` so an orphaned collaborator is observable for
+  manual removal. The OpenFGA tuple delete is always authoritative.
 - **VNext bind:** agent-native, browserless GitHub-identity proof (token
   introspection or nonce challenge-response → write a `bind` `user_bindings` row +
   `identity_events` evidence), so no human approves identity, only the access grant.
+  Binding-based identity closes both V0 caveats — the login is bound to the agent and
+  always resolvable on revoke.
 
 **No human clicking.** The _one_ human action is the owner's one-time per-node
 access approval (governance, not per-contribution — mission-compliant). Everything

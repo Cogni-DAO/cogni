@@ -374,6 +374,37 @@ describe("POST /api/v1/nodes/[id]/developers", () => {
     });
   });
 
+  it("reject without a resolvable login skips de-provision (no orphaned removeNodeCollaborator)", async () => {
+    // V0 owner-attest gap (rbac.md §6a): no `github` binding + no githubLogin on the reject ⇒ the
+    // collaborator can't be auto-removed. The tuple delete is still authoritative; branch-push de-prov
+    // is skipped + warned, never a silent wrong-arg removeNodeCollaborator call.
+    await testApiHandler({
+      appHandler,
+      params: { id: NODE_ID },
+      async test({ fetch }) {
+        const res = await fetch({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agentUserId: AGENT_USER_ID,
+            decision: "reject",
+          }),
+        });
+        expect(res.status).toBe(200);
+        expect((await res.json()).branchPush).toBe(
+          "skipped:github_identity_unbound"
+        );
+      },
+    });
+
+    expect(authz.deleteRelation).toHaveBeenCalled();
+    expect(deployPlane.removeNodeCollaborator).not.toHaveBeenCalled();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ errorCode: "branch_push_deprovision_skipped" }),
+      "branch_push_deprovision_skipped"
+    );
+  });
+
   it("does not write OpenFGA when the caller is not node owner", async () => {
     dbState.ownerNode = null;
 

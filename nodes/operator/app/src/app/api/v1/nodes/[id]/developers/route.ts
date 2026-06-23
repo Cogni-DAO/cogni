@@ -6,10 +6,13 @@
  * Purpose: Owner-gated approval surface for node access roles (the grant half of the request→approve workflow).
  * Scope: Browser-session owners approve/reject a registered agent for one node by writing/removing the
  *   requested OpenFGA role tuple — `developer` (→can_flight) or `production_promoter` (→can_promote_production).
- *   `role` defaults to `developer`. Without a grant path the role relations are inert (rbac.md §6).
- * Invariants: OWNER_GATING, OPENFGA_IS_AUTHORITY, NO_LOCAL_ROLE_TABLE, ROLE_FROM_NODE_ACCESS_ROLES.
- * Side-effects: IO (Postgres read, OpenFGA tuple write/delete)
- * Links: docs/spec/rbac.md, docs/spec/identity-model.md
+ *   `role` defaults to `developer`. A `developer` decision ALSO provisions/de-provisions GitHub
+ *   branch-push on the node repo via the operator App (rbac.md §6a) — best-effort, never reversing the
+ *   authoritative tuple write. Without a grant path the role relations are inert (rbac.md §6).
+ * Invariants: OWNER_GATING, OPENFGA_IS_AUTHORITY, NO_LOCAL_ROLE_TABLE, ROLE_FROM_NODE_ACCESS_ROLES,
+ *   TRUST_BOUNDARY_IS_MERGE_NOT_PUSH, PUSH_LOGIN_FROM_BINDING.
+ * Side-effects: IO (Postgres read, OpenFGA tuple write/delete, GitHub repo collaborator add/remove via App)
+ * Links: docs/spec/rbac.md (§6, §6a), docs/spec/identity-model.md
  * @public
  */
 
@@ -279,7 +282,23 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         )
         .limit(1);
       const login = binding?.login ?? parsed.data.githubLogin ?? null;
-      if (login) {
+      if (!login && parsed.data.decision === "reject") {
+        // De-provisioning needs a login. An owner-attested grant (no `github` binding) can't be
+        // auto-revoked here unless the reject re-supplies `githubLogin` — surface it loudly so push
+        // access is never SILENTLY orphaned (V0 limitation, rbac.md §6a; the durable fix is
+        // binding-based, where the login is always resolvable on revoke).
+        ctx.log.warn(
+          {
+            event: EVENT_NAMES.NODE_DEVELOPER_DECISION_COMPLETE,
+            reqId: ctx.reqId,
+            routeId: ctx.routeId,
+            nodeId: id,
+            agentUserId: parsed.data.agentUserId,
+            errorCode: "branch_push_deprovision_skipped",
+          },
+          "branch_push_deprovision_skipped"
+        );
+      } else if (login) {
         try {
           const deployPlane = createOperatorDeployPlane(serverEnv());
           if (parsed.data.decision === "approve") {
