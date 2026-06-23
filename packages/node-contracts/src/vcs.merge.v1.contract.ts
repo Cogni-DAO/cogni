@@ -31,12 +31,28 @@ export const mergeOperation = {
     nodeId: z.string().min(1).optional(),
   }),
 
-  output: z.object({
-    merged: z.literal(true),
-    prNumber: z.number().int().positive(),
-    sha: z.string(),
-    baseBranch: z.literal("main"),
-    method: z.literal("squash"),
-    message: z.string(),
-  }),
+  /**
+   * MERGED_XOR_ENQUEUED: the operator merges directly when no merge queue is
+   * required on the base branch (`merged: true` + a `sha`, synchronous), or adds
+   * the PR to the queue when one is (`enqueued: true`, async — the real merge
+   * happens later on the queue's rebased candidate, so there is NO `sha` yet).
+   * Exactly one of the two booleans is true; a consumer that needs the merged SHA
+   * must poll the PR/queue after an `enqueued` result.
+   */
+  output: z
+    .object({
+      merged: z.boolean(),
+      enqueued: z.boolean(),
+      prNumber: z.number().int().positive(),
+      sha: z.string().optional(),
+      baseBranch: z.literal("main"),
+      method: z.literal("squash"),
+      message: z.string(),
+    })
+    .refine((d) => d.merged !== d.enqueued, {
+      message: "exactly one of `merged` | `enqueued` must be true",
+    })
+    .refine((d) => !d.merged || typeof d.sha === "string", {
+      message: "a `merged` result must carry a `sha`",
+    }),
 } as const;

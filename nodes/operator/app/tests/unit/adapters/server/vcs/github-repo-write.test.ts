@@ -42,7 +42,9 @@ vi.mock("@octokit/core", () => ({
 
 import {
   GitHubRepoWriter,
+  MERGE_QUEUE_RULESET_NAME,
   protectionGetToPutPayload,
+  rulesetGetToPutPayload,
 } from "@/adapters/server/vcs/github-repo-write";
 
 function statusError(
@@ -1995,5 +1997,79 @@ describe("protectionGetToPutPayload", () => {
       require_code_owner_reviews: false,
       required_approving_review_count: 2,
     });
+  });
+});
+
+describe("rulesetGetToPutPayload", () => {
+  it("copies the merge_queue ruleset verbatim, dropping the read-only envelope", () => {
+    const put = rulesetGetToPutPayload({
+      // read-only envelope fields a real GET returns — must be stripped:
+      // (id, source, source_type, created_at, updated_at, node_id, _links)
+      name: MERGE_QUEUE_RULESET_NAME,
+      target: "branch",
+      enforcement: "active",
+      conditions: { ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
+      rules: [
+        {
+          type: "merge_queue",
+          parameters: {
+            merge_method: "SQUASH",
+            grouping_strategy: "ALLGREEN",
+            min_entries_to_merge: 1,
+            max_entries_to_merge: 5,
+            max_entries_to_build: 5,
+            min_entries_to_merge_wait_minutes: 5,
+            check_response_timeout_minutes: 60,
+          },
+        },
+      ],
+    });
+    expect(put).toEqual({
+      name: MERGE_QUEUE_RULESET_NAME,
+      target: "branch",
+      enforcement: "active",
+      conditions: { ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
+      rules: [
+        {
+          type: "merge_queue",
+          parameters: {
+            merge_method: "SQUASH",
+            grouping_strategy: "ALLGREEN",
+            min_entries_to_merge: 1,
+            max_entries_to_merge: 5,
+            max_entries_to_build: 5,
+            min_entries_to_merge_wait_minutes: 5,
+            check_response_timeout_minutes: 60,
+          },
+        },
+      ],
+      bypass_actors: [],
+    });
+  });
+
+  it("preserves bypass_actors verbatim (monorepo is the SSOT, incl. any bypass)", () => {
+    const put = rulesetGetToPutPayload({
+      name: MERGE_QUEUE_RULESET_NAME,
+      target: "branch",
+      enforcement: "active",
+      conditions: { ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
+      rules: [{ type: "merge_queue", parameters: { merge_method: "SQUASH" } }],
+      bypass_actors: [
+        { actor_id: 5, actor_type: "Integration", bypass_mode: "always" },
+      ],
+    });
+    expect(put.bypass_actors).toEqual([
+      { actor_id: 5, actor_type: "Integration", bypass_mode: "always" },
+    ]);
+  });
+
+  it("falls back to safe defaults when fields are absent", () => {
+    const put = rulesetGetToPutPayload({});
+    expect(put.name).toBe(MERGE_QUEUE_RULESET_NAME);
+    expect(put.target).toBe("branch");
+    expect(put.enforcement).toBe("active");
+    expect(put.conditions.ref_name.include).toEqual(["~DEFAULT_BRANCH"]);
+    expect(put.rules).toEqual([]);
+    expect(put.bypass_actors).toEqual([]);
   });
 });

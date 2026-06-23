@@ -35,6 +35,13 @@ export type VcsMergePrInput = z.infer<typeof VcsMergePrInputSchema>;
 
 export const VcsMergePrOutputSchema = z.object({
   merged: z.boolean(),
+  /**
+   * True when the PR was added to the merge queue instead of merged directly
+   * (the base branch requires a queue). The merge then completes asynchronously
+   * on the queue's rebased candidate — `sha` is absent and the caller must poll
+   * the PR for the final merge.
+   */
+  enqueued: z.boolean().default(false),
   sha: z.string().optional(),
   message: z.string(),
 });
@@ -59,12 +66,14 @@ export const vcsMergePrContract: ToolContract<
     "Merge a pull request. IMPORTANT: Always check CI status and review approval " +
     "with core__vcs_get_ci_status before merging. " +
     "The normal code target is main; preview and production are promoted later by the deploy plane. " +
-    "Use 'squash' for accepted feature PRs.",
+    "Use 'squash' for accepted feature PRs. " +
+    "If the base branch requires a merge queue, the PR is ADDED TO THE QUEUE (enqueued=true) rather " +
+    "than merged immediately — there is no merge sha yet; poll the PR to confirm the merge completed.",
   effect: "state_change",
   inputSchema: VcsMergePrInputSchema,
   outputSchema: VcsMergePrOutputSchema,
   redact: (output: VcsMergePrOutput): VcsMergePrRedacted => output,
-  allowlist: ["merged", "sha", "message"] as const,
+  allowlist: ["merged", "enqueued", "sha", "message"] as const,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -80,12 +89,19 @@ export function createVcsMergePrImplementation(
 ): ToolImplementation<VcsMergePrInput, VcsMergePrOutput> {
   return {
     execute: async (input: VcsMergePrInput): Promise<VcsMergePrOutput> => {
-      return deps.vcsCapability.mergePr({
+      const result = await deps.vcsCapability.mergePr({
         owner: input.owner,
         repo: input.repo,
         prNumber: input.prNumber,
         method: input.method,
       });
+      // Normalize the capability's optional `enqueued` to the tool's required field.
+      return {
+        merged: result.merged,
+        enqueued: result.enqueued ?? false,
+        ...(result.sha ? { sha: result.sha } : {}),
+        message: result.message,
+      };
     },
   };
 }

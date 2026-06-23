@@ -200,7 +200,8 @@ export const POST = wrapRouteHandlerWithLogging(
       );
     }
 
-    // 6. Merge (squash). Classify failure on the surfaced GitHub HTTP status.
+    // 6. Merge — direct when no queue is required, else added to the merge queue
+    //    (async). Classify failure on the surfaced GitHub HTTP status.
     let result: Awaited<ReturnType<typeof vcs.mergePr>>;
     try {
       result = await vcs.mergePr({ owner, repo, prNumber, method });
@@ -208,7 +209,8 @@ export const POST = wrapRouteHandlerWithLogging(
       const g = classifyGithubOpError(error);
       return fail(g.status, g.errorCode, g.error, prCtx);
     }
-    if (!result.merged) {
+    // Failure = neither merged nor enqueued.
+    if (!result.merged && !result.enqueued) {
       const f = classifyMergeFailure(result.status, result.message);
       return fail(f.status, f.errorCode, f.error, {
         ...prCtx,
@@ -216,7 +218,9 @@ export const POST = wrapRouteHandlerWithLogging(
       });
     }
 
-    // 7. Success.
+    // 7. Success — merged synchronously, or enqueued (merge completes async on
+    //    the queue's rebased candidate; no merge SHA yet — callers must poll).
+    const enqueued = result.enqueued === true;
     logEvent(
       ctx.log,
       EVENT_NAMES.VCS_MERGE_REQUEST_COMPLETE,
@@ -227,6 +231,7 @@ export const POST = wrapRouteHandlerWithLogging(
         status: 200,
         prNumber,
         prAuthor: ci.author,
+        enqueued,
         mergeSha8: result.sha?.slice(0, 8),
         durationMs: durationMs(),
       },
@@ -235,9 +240,11 @@ export const POST = wrapRouteHandlerWithLogging(
 
     return NextResponse.json(
       mergeOperation.output.parse({
-        merged: true,
+        merged: result.merged,
+        enqueued,
         prNumber,
-        sha: result.sha,
+        // exactOptionalPropertyTypes: omit `sha` entirely on the enqueued path.
+        ...(result.sha ? { sha: result.sha } : {}),
         baseBranch: "main",
         method,
         message: result.message,
