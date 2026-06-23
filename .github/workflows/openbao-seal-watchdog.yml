@@ -1,0 +1,74 @@
+name: OpenBao Seal Watchdog
+
+# Proactive sealed-state alerting for OpenBao (bug.5051 detection gap).
+#
+# OpenBao is Shamir 1-of-1 with no auto-unseal, so ANY pod restart (OOM, reboot,
+# chart upgrade) reseals it. A sealed OpenBao 503s every ESO sync and every
+# flight's `auth/kubernetes/login` — all deploys for all nodes block — yet running
+# pods serve baked-in env, so apps stay green and the outage is INVISIBLE. There
+# is no PagerDuty/Slack/email sink in this stack; a GitHub issue is the only signal
+# that reaches the maintainer. This is the bug.5011 recorded-decision item #2
+# ("sealed-state → alert") that was never shipped, re-homed onto a GH-issue sink.
+#
+# This is OBSERVABILITY/MONITORING only (docs/spec/cicd-platform-boundary.md): a
+# read-only `bao status` probe + an idempotent GitHub-issue upsert. It mutates NO
+# infra, NO secrets, NO deploy state — it is NOT a deploy/promote/provision
+# workflow and is explicitly ALLOWED under the freeze. All decision/issue logic
+# lives in scripts/ci/openbao-seal-watchdog.sh (devops anti-pattern: no logic in YAML).
+#
+# Triggers:
+# - schedule: every 30 min — catches a reseal within one cadence.
+#   (NB: `schedule:` only fires once this workflow is on `main`; it will not run
+#    from the PR branch. Verify via workflow_dispatch.)
+# - workflow_dispatch: ad-hoc / contract testing.
+#
+# Permissions:
+# - contents: read   — checkout this repo (the watchdog script)
+# - issues: write    — upsert / close the per-env tracking issue
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: openbao-seal-watchdog
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    # fail-fast: false so one env's SSH hiccup (probe error) can't mask another
+    # env's sealed-state detection.
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [candidate-a, preview, production]
+    # Bind to the matching GitHub Environment so `secrets.VM_HOST` /
+    # `secrets.SSH_DEPLOY_KEY` resolve to that env's existing deploy secrets.
+    environment: ${{ matrix.env }}
+    env:
+      VM_HOST: ${{ secrets.VM_HOST }}
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Setup SSH
+        run: |
+          set -euo pipefail
+          if [ -z "$VM_HOST" ]; then
+            echo "::error::No VM_HOST secret set for environment '${{ matrix.env }}' — cannot probe."
+            exit 1
+          fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_DEPLOY_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Probe OpenBao seal state + upsert/close issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/openbao-seal-watchdog.sh "${{ matrix.env }}"
