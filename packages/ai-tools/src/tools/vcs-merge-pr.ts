@@ -39,9 +39,10 @@ export const VcsMergePrOutputSchema = z.object({
    * True when the PR was added to the merge queue instead of merged directly
    * (the base branch requires a queue). The merge then completes asynchronously
    * on the queue's rebased candidate — `sha` is absent and the caller must poll
-   * the PR for the final merge.
+   * the PR for the final merge. (No `.default()`: a ToolContract output schema
+   * must be symmetric — the implementation always supplies this field.)
    */
-  enqueued: z.boolean().default(false),
+  enqueued: z.boolean(),
   sha: z.string().optional(),
   message: z.string(),
 });
