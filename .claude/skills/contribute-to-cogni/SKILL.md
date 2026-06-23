@@ -89,10 +89,10 @@ Code carries _what_ via names + types. The **knowledge hub** carries the _why_ +
 
 7. Wait until all required CI checks are green on your PR head SHA.
 8. Request flight through the current deploy lane:
-   - For externally built node artifacts, call the operator primitive:
+   - **Child / submodule node artifacts** → operator primitive (RBAC, runs as the operator App):
      `POST /api/v1/vcs/flight { "nodeRef": { "nodeId": "<uuid>", "sourceSha": "<40-char sha>" } }`.
-   - For in-repo monorepo PRs, follow `coordination.nextAction` / the PR-manager lane. The candidate-flight workflow still accepts transitional `pr_number` inputs because in-repo build artifacts are PR-shaped, but `prNumber` is not the REST endpoint contract.
-   - Do not bypass the operator/policy lane unless a human explicitly asks you to diagnose a broken flight path; direct `gh workflow run candidate-flight.yml` uses the caller's GitHub actor and should be treated as an exception with a linked bug.
+   - **In-repo operator monorepo PRs → there is NO API flight path today (known shortcoming).** `vcs/flight {nodeRef}` is child-node-only; the operator's own nodeId returns `409 invalid_catalog`. Operator-monorepo flight is `gh workflow run candidate-flight.yml -f pr_number=<n>`, which needs admin/`actions:write` — an external agent (e.g. `flock-leader`) gets `403`. So for an operator-monorepo PR, **a human dispatches the flight as the interim "initiate CI" step** (alongside merge); the agent then drives Phase 3 (`/validate-candidate`). The e2e operator-RBAC-controlled CICD work closes this gap.
+   - `gh workflow run` is NOT a personal-credential bypass for operator self-flight — it is currently the *only* path for it. (It remains out-of-bounds for child-node flight/promote, which must go through the operator API.)
 
 ## Phase 3 — Self-Validate
 
