@@ -26,7 +26,6 @@ const canonicalOwnerFiles = [
   ".env.local.example",
   ".env.test.example",
   "infra/github/README.md",
-  "infra/github/merge-queue.json",
   "infra/provision/cherry/base/terraform.tfvars.example",
   "infra/provision/cherry/base/variables.tf",
   "infra/k8s/overlays/production/operator/kustomization.yaml",

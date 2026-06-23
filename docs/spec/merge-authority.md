@@ -59,7 +59,9 @@ As the network grows, the operator runs its gitops deployments — and merging i
                                                        every merge bound to a work_item_sessions row (audit)
 ```
 
-> **Execution reality (verified 2026-06-11):** `main` has `required_merge_queue: absent` and `enforce_admins: false`. So the operator **direct-merges** via `mergePr` (`PUT /pulls/{}/merge`); GitHub still enforces the 4 required status checks on the merge API, so a gate-passing `mergePr` is double-checked. There is no enqueue layer to build. `NO_AGENTIC_REBASE` holds trivially (no rebase happens). The one residual cost is stale-merge risk for the _routine_ class (no queue rebase-retest) → gate routine on require-up-to-date, or re-enable the queue, before scaling routine throughput. Node-formation is additive/non-racing, so direct-merge is safe; governance override relies on the App's `enforce_admins:false` bypass to merge a failed-check PR.
+> **Execution reality (verified 2026-06-11):** `main` has `required_merge_queue: absent` and `enforce_admins: false`. So the operator **direct-merges** via `mergePr` (`PUT /pulls/{}/merge`); GitHub still enforces the 4 required status checks on the merge API, so a gate-passing `mergePr` is double-checked. There is no enqueue layer to build _yet_. `NO_AGENTIC_REBASE` holds trivially (no rebase happens). The one residual cost is stale-merge risk for the _routine_ class (no queue rebase-retest) → gate routine on require-up-to-date, or re-enable the queue, before scaling routine throughput. Node-formation is additive/non-racing, so direct-merge is safe; governance override relies on the App's `enforce_admins:false` bypass to merge a failed-check PR.
+>
+> **Re-enabling the queue (the prescribed mitigation) is now config-as-code:** the queue requirement lives in [`infra/github/merge-queue-ruleset.json`](../../infra/github/merge-queue-ruleset.json) and applies via `setup-main-branch.sh` (no manual UI step). **But it is mutually exclusive with the current direct-merge path:** under a _required_ merge queue, GitHub `405`s `PUT /pulls/{}/merge`, so re-enabling the queue **requires building the enqueue layer first** (`mergePr` → `enablePullRequestAutoMerge`/`enqueuePullRequest`, an async merge whose result is the queue's rebased SHA, not an immediate one). Sequence: ship the queue-tolerant enqueue layer, verify, _then_ flip the ruleset to `active` on the monorepo and propagate it to nodes via node-formation.
 
 ### Authorization classes
 
@@ -130,7 +132,7 @@ When the network becomes an AI-led company with contributor evaluations and cred
 **Merge-queue / branch protection (execution — unchanged):**
 
 - `infra/github/branch-protection.json` — required checks `[unit, component, static, manifest]`; `required_pull_request_reviews: null`.
-- `infra/github/merge-queue.json` — squash, `ALLGREEN`, `min_entries_to_merge: 1` (config payload; **not enforced on `main` today**).
+- `infra/github/merge-queue-ruleset.json` — `merge_queue` ruleset: squash, `ALLGREEN`, `min_entries_to_merge: 1`. Applied as config-as-code via `setup-main-branch.sh` (the rulesets API carries the queue requirement that classic protection's REST drops).
 
 **Prototype (as-built — this PR): node-formation capacity gate.**
 

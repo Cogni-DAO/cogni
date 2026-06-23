@@ -639,11 +639,11 @@ bash infra/github/setup-main-branch.sh my-org/my-fork       # explicit repo
 
 What the fixture establishes:
 
-| Layer               | Source of truth                          | Apply mechanism                                                                                                                                              |
-| ------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Repo merge settings | `setup-main-branch.sh` step 1            | `gh api PATCH /repos/{repo}` — squash-only, auto-merge on, delete-branch-on-merge                                                                            |
-| Branch protection   | `infra/github/branch-protection.json`    | `gh api PUT /repos/{repo}/branches/main/protection` — required checks: `unit`, `component`, `static`, `manifest`                                             |
-| Merge queue toggle  | `infra/github/merge-queue.json` (values) | **UI-only**: Settings → Branches → main → "Require merge queue" + form values. REST silently drops `required_merge_queue` (verified empirically 2026-04-28). |
+| Layer               | Source of truth                         | Apply mechanism                                                                                                                                                                                                      |
+| ------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repo merge settings | `setup-main-branch.sh` step 1           | `gh api PATCH /repos/{repo}` — squash-only, auto-merge on, delete-branch-on-merge                                                                                                                                    |
+| Branch protection   | `infra/github/branch-protection.json`   | `gh api PUT /repos/{repo}/branches/main/protection` — required checks: `unit`, `component`, `static`, `manifest`                                                                                                     |
+| Merge queue         | `infra/github/merge-queue-ruleset.json` | `gh api POST/PUT /repos/{repo}/rulesets` — a `merge_queue` ruleset (config-as-code, idempotent). Classic protection's REST drops `required_merge_queue`; the rulesets API carries it, so there is no manual UI step. |
 
 The required-status-checks set is constrained by an empirical GitHub Merge Queue behavior: the queue waits forever for required checks whose workflows lack a `merge_group:` trigger. Full design + rationale in [`merge-queue-config.md`](./merge-queue-config.md), validated against `Cogni-DAO/test-repo` PR #53.
 

@@ -1,0 +1,45 @@
+{
+  "_comment": [
+    "Source-of-truth payload for the `main` merge-queue requirement, as a GitHub repository RULESET.",
+    "",
+    "Why a ruleset (not classic branch protection): classic `PUT .../branches/main/protection`",
+    "silently DROPS `required_merge_queue` (verified 2026-04-28) — which is why enabling the queue was",
+    "a manual UI step. The rulesets API DOES carry the queue: a `merge_queue` rule is REST-settable",
+    "(the 2026-04-28 test-repo experiment enabled the queue this way). So the queue toggle is now",
+    "config-as-code, killing the last manual step. See docs/spec/merge-queue-config.md.",
+    "",
+    "Scope discipline: this ruleset carries ONLY the `merge_queue` rule. The required-status-checks",
+    "set stays in classic protection (`branch-protection.json`) — the 'rulesets for event-specific",
+    "required-checks lists' idea was tested and rejected (rulesets give no extra flexibility there).",
+    "The two layers are orthogonal: classic protection requires the checks; this ruleset requires the",
+    "queue. Together: a PR must pass checks AND merge through the queue.",
+    "",
+    "Tuned for ~1-2 PR/day MVP cadence: queue depth ~= 0, fast feedback, low burn.",
+    "Re-tune if observed depth > 2 sustained or merge wait > 30 min.",
+    "",
+    "Apply: bash infra/github/setup-main-branch.sh [<owner>/<repo>] (idempotent POST-or-PUT by name)."
+  ],
+  "name": "main-merge-queue",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "merge_queue",
+      "parameters": {
+        "merge_method": "SQUASH",
+        "grouping_strategy": "ALLGREEN",
+        "min_entries_to_merge": 1,
+        "max_entries_to_merge": 5,
+        "max_entries_to_build": 5,
+        "min_entries_to_merge_wait_minutes": 5,
+        "check_response_timeout_minutes": 60
+      }
+    }
+  ]
+}
