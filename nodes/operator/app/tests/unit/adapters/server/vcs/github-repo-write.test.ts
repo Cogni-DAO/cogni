@@ -68,6 +68,12 @@ function installFetchMock(): void {
 
 function setHappyForkHandlers(): void {
   routeHandlers = {
+    // Canonical merge settings (squash-only, auto-merge, delete-on-merge) — applied
+    // to the node by ensureCanonicalMergeSettings during forkFromTemplate.
+    "PATCH /repos/{owner}/{repo}": () => ({}),
+    // Merge-queue replication source lookup. Default: the monorepo has no queue
+    // ruleset (admin-opt-in), so replicateMergeQueue finds nothing and skips.
+    "GET /repos/{owner}/{repo}/rulesets": () => [],
     "POST /repos/{owner}/{repo}/forks": (params) => {
       expect(params).toMatchObject({
         owner: "Cogni-DAO",
@@ -341,6 +347,59 @@ describe("GitHubRepoWriter.forkFromTemplate", () => {
       enforce_admins: false,
       required_pull_request_reviews: null,
       restrictions: null,
+    });
+  });
+
+  it("replicates the monorepo's merge_queue ruleset onto the node when present", async () => {
+    setHappyForkHandlers();
+    routeHandlers["GET /repos/{owner}/{repo}/branches/{branch}/protection"] =
+      () => ({
+        required_status_checks: { strict: false, contexts: ["unit"] },
+        enforce_admins: { enabled: false },
+        required_pull_request_reviews: null,
+      });
+    routeHandlers["PUT /repos/{owner}/{repo}/branches/{branch}/protection"] =
+      () => ({});
+    // Source (monorepo) HAS the queue ruleset; target (node) has none → POST.
+    routeHandlers["GET /repos/{owner}/{repo}/rulesets"] = (params) =>
+      params.repo === "cogni" ? [{ id: 77, name: "main-merge-queue" }] : [];
+    routeHandlers["GET /repos/{owner}/{repo}/rulesets/{ruleset_id}"] = () => ({
+      name: "main-merge-queue",
+      target: "branch",
+      enforcement: "active",
+      conditions: { ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
+      rules: [{ type: "merge_queue", parameters: { merge_method: "SQUASH" } }],
+    });
+    routeHandlers["POST /repos/{owner}/{repo}/rulesets"] = () => ({ id: 99 });
+
+    await makeWriter().forkFromTemplate({
+      templateOwner: "Cogni-DAO",
+      owner: "Cogni-DAO",
+      slug: "atlas",
+      nodeId: "11111111-1111-4111-8111-111111111111",
+      chainId: 8453,
+      protectionSourceOwner: "Cogni-DAO",
+      protectionSourceRepo: "cogni",
+    });
+
+    // The node got canonical merge settings (auto-merge ON) + the queue ruleset POSTed.
+    const patch = requests.find(
+      (r) => r.route === "PATCH /repos/{owner}/{repo}"
+    );
+    expect(patch?.params).toMatchObject({
+      owner: "Cogni-DAO",
+      repo: "atlas",
+      allow_auto_merge: true,
+      allow_squash_merge: true,
+    });
+    const post = requests.find(
+      (r) => r.route === "POST /repos/{owner}/{repo}/rulesets"
+    );
+    expect(post?.params).toMatchObject({
+      owner: "Cogni-DAO",
+      repo: "atlas",
+      name: "main-merge-queue",
+      enforcement: "active",
     });
   });
 
