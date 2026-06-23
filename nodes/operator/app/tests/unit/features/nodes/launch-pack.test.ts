@@ -124,15 +124,13 @@ describe("buildNodeLaunchPack", () => {
     expect(pack.prompt).toContain("Parent deployment PR:");
     expect(pack.prompt).toContain("Candidate URL:");
 
-    // Identity + goal: a ZERO-privilege external dev (no GitHub write).
+    // Identity + goal: a ZERO-privilege external dev (no GitHub write) who forks.
     expect(pack.prompt).toContain(
       "You are the AI developer taking this node from spawned scaffold to first deployed customization."
     );
     expect(pack.prompt).toContain("ZERO privileged GitHub access");
+    expect(pack.prompt).toContain("FORKS the node repo");
     expect(pack.prompt).toContain("style-kit customization");
-    expect(pack.prompt).toContain(
-      "The Cogni operator is the coordination service"
-    );
     expect(pack.prompt).toContain(
       ".claude/skills/node-wizard-scorecard/SKILL.md"
     );
@@ -150,47 +148,37 @@ describe("buildNodeLaunchPack", () => {
       pack.prompt.indexOf("recall the Cogni knowledge block above")
     );
 
-    // Step 1 — FORK-FIRST. The agent is read-only on the Cogni-owned upstream,
-    // so it contributes via a fork PR; the operator merges on its behalf. This
-    // is the core correction over the pre-#1792 "create a PR in the node repo"
-    // (which assumed write) + "merge via the pr-manager graph" model.
-    expect(pack.prompt).toContain("Fork the node repo");
+    // DELEGATION, not duplication: the prompt points at the reusable guides for
+    // the ordered e2e procedure and must NOT hardcode the operator vcs routes —
+    // that is exactly what drifted (run-checks → run-ci). Locking the absence of
+    // those paths keeps the kickstart from re-growing a parallel runbook.
+    expect(pack.prompt).toContain("cicd-e2e-required-sequence");
+    expect(pack.prompt).toContain("node-launch-handoff");
+    expect(pack.prompt).not.toContain("/api/v1/vcs/run-ci");
+    expect(pack.prompt).not.toContain("/api/v1/vcs/run-checks");
+    expect(pack.prompt).not.toContain("/api/v1/vcs/flight");
+    expect(pack.prompt).not.toContain("/api/v1/vcs/merge");
+
+    // Fork-first + the stale self-merge / pr-manager-graph path stays purged.
     expect(pack.prompt).toContain("read-only");
-    expect(pack.prompt).toContain("the operator merges on your behalf");
-    expect(pack.prompt).toContain("Do not push to upstream `main`");
-    // The stale self-merge / pr-manager-graph path must never return.
     expect(pack.prompt).not.toContain("merge your own PR");
     expect(pack.prompt).not.toContain("ask the Cogni PR Manager graph");
     expect(pack.prompt).not.toContain('graph_name "pr-manager"');
     expect(pack.prompt).not.toContain("/api/v1/chat/completions");
 
+    // Node-specific guardrails (the bits that ARE node-scoped, not generic CICD).
     expect(pack.prompt).toContain("knowledge.remote");
-    expect(pack.prompt).toContain("Cogni-owned DoltHub mirror");
     expect(pack.prompt).toContain("do not add a DOLTHUB_REMOTE_URL");
+    expect(pack.prompt).toContain("do not push to upstream main");
 
-    // Step 2 — RBAC owner-approve is the ONE human gate, fired immediately so it
-    // resolves in parallel; the bearer can use the grant but never self-approve.
+    // RBAC owner-approve is the lone human step, fired immediately (node-scoped
+    // URL stays in the prompt because it interpolates THIS node's id).
     expect(pack.prompt).toContain("developer-access request");
     expect(pack.prompt).toContain(
       `/api/v1/nodes/11111111-1111-4111-8111-111111111111/access-requests`
     );
-    expect(pack.prompt).toContain("ONE human gate");
-    expect(pack.prompt).toContain("approves it once in the node UI");
-    expect(pack.prompt).toContain("can never approve itself");
-    // The access request precedes flight in the documented order.
-    expect(pack.prompt.indexOf("access-requests")).toBeLessThan(
-      pack.prompt.indexOf("/api/v1/vcs/flight")
-    );
-
-    // Steps 4-7 — every privileged action runs through the operator vcs routes
-    // (#1792): release held fork-PR CI, flight, then merge child + parent pin.
-    expect(pack.prompt).toContain("/api/v1/vcs/run-checks");
-    expect(pack.prompt).toContain("/api/v1/vcs/flight");
-    expect(pack.prompt).toContain("/api/v1/vcs/merge");
-    expect(pack.prompt).toContain("{nodeId, prNumber}");
-    expect(pack.prompt).toContain("nodeRef:{nodeId, sourceSha}");
-    expect(pack.prompt).toContain("child image");
-    expect(pack.prompt).toContain("parent");
+    expect(pack.prompt).toContain("single human step");
+    expect(pack.prompt).toContain("never self-approve");
 
     expect(pack.prompt).not.toContain("browser-session-flight-auth.md");
     expect(pack.prompt).not.toContain("node-app-secrets");
@@ -199,10 +187,7 @@ describe("buildNodeLaunchPack", () => {
 
     expect(pack.prompt).toContain(".claude/skills/node-styling/SKILL.md");
     expect(pack.prompt).not.toContain("node-formation-styling-guide");
-    expect(pack.prompt).toContain(
-      ".claude/skills/playwright-auth-bootstrap/SKILL.md"
-    );
-    expect(pack.prompt).toContain("agent-first API validation");
+    expect(pack.prompt).toContain("agent-first validation");
     expect(pack.prompt).toContain("scorecard");
     expect(pack.prompt).toContain("blocked scorecard row");
     expect(pack.prompt).toContain("/version");
