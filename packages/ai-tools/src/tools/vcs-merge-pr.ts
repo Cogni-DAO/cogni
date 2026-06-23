@@ -8,6 +8,8 @@
  * Invariants:
  *   - TOOL_ID_NAMESPACED: ID is `core__vcs_merge_pr`
  *   - EFFECT_TYPED: effect is `state_change`
+ *   - MAY_ENQUEUE: when the base branch requires a merge queue the PR is enqueued
+ *     (`enqueued: true`, no `sha`) rather than merged immediately; poll the PR to confirm.
  *   - Agent must verify CI green + approval before calling (enforced by prompt, not code)
  * Side-effects: IO (merges PR via VcsCapability)
  * Links: task.0242

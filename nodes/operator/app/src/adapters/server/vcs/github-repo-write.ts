@@ -4,6 +4,8 @@
 /**
  * Module: `@adapters/server/vcs/github-repo-write`
  * Purpose: Operator-only helper that mints node repos, commits files, and opens pull requests via the GitHub App.
+ *   At formation it also replicates the monorepo's merge gate onto the node verbatim: branch
+ *   protection, canonical merge settings (squash-only, auto-merge), and the `merge_queue` ruleset.
  * Scope: Thin Octokit calls behind node formation and candidate-flight prep.
  *   Does not belong in `VcsCapability` because that capability is shared with poly/resy/node-template stubs
  *   and these write ops are operator-only.

@@ -13,6 +13,8 @@
  *   - NODE_SCOPED_OR_LEGACY: optional `nodeId` (id-or-slug) selects RBAC + merge target. Present →
  *     `node.flight` on THAT node + merge the node's repo. Absent → operator node + monorepo (legacy).
  *   - SQUASH_ONLY: V0 merges with a single, predictable strategy.
+ *   - MERGED_XOR_ENQUEUED: exactly one of `merged` (direct, synchronous, carries `sha`) or
+ *     `enqueued` (added to the merge queue, async — no `sha` yet) is true. Enforced by `.refine`.
  * Side-effects: none
  * Links: nodes/operator/app/src/app/api/v1/vcs/merge/route.ts, docs/spec/development-lifecycle.md
  * @public

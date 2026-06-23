@@ -25,6 +25,9 @@
  *     monorepo env), never the body (anti-spoof).
  *   - BRANCH_PROTECTION_IS_AUTHORITY: GitHub independently rejects a non-green merge (405); the
  *     `evaluateMergeGate` pre-check is fast-fail UX + clear errors, not the sole gate.
+ *   - MERGED_XOR_ENQUEUED: `mergePr` is queue-tolerant — when the base requires a merge queue it
+ *     enqueues (returns `enqueued`, no `sha`; merge completes async on the rebased candidate),
+ *     else it direct-merges (`merged` + `sha`). Both are 200; only neither is a failure.
  *   - NO_SEPARATION_OF_DUTIES (V0): autonomous self-merge on green is intended ("no human required
  *     for routine merges"); a second-reviewer policy is vNext. The operator-App execution boundary
  *     is the structural control today.

@@ -6,6 +6,9 @@
  * Purpose: VcsCapability adapter using Octokit + GitHub App authentication.
  * Scope: Implements VcsCapability for GitHub API operations (list PRs, CI status, merge, create branch, dispatch candidate-flight).
  * Invariants:
+ *   - MERGE_IS_QUEUE_TOLERANT: `mergePr` detects the base branch's merge-queue state (GraphQL
+ *     `mergeQueue`) and either direct-merges (no queue → `merged` + `sha`) or enqueues via
+ *     `enablePullRequestAutoMerge` (queue required → `enqueued`, async, no `sha`).
  *   - AUTH_VIA_APP: Uses @octokit/auth-app for GitHub App JWT + installation token management
  *   - INSTALLATION_CACHED: Installation ID resolved once per owner/repo and cached
  *   - TOKEN_AUTO_REFRESH: Octokit auth-app handles token caching and refresh automatically
