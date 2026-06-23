@@ -22,14 +22,15 @@
  * @public
  */
 
+import type { AuthzDecisionCode } from "@cogni/authorization-core";
+import { billingAccounts } from "@cogni/db-schema/refs";
 import { flightOperation } from "@cogni/node-contracts";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { createOperatorDeployPlane } from "@/bootstrap/capabilities/operator-deploy-plane";
-import { resolveServiceDb } from "@/bootstrap/container";
+import { getContainer, resolveServiceDb } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { authorizeNodeAction } from "@/features/vcs/authorize-node-action";
 import type {
   OperatorDeployPlanePort,
   PreparedNodeRefCandidateFlight,
@@ -58,6 +59,11 @@ interface FlightLogFields {
   readonly githubStatus?: number | undefined;
   readonly dispatchStatus?: "initiated" | undefined;
 }
+
+type FlightAuthzErrorCode = Extract<
+  AuthzDecisionCode,
+  "authz_denied" | "authz_unavailable"
+>;
 
 function elapsedMs(startedAt: number): number {
   return Math.round(performance.now() - startedAt);
@@ -158,6 +164,61 @@ function handleDeployPlaneError(error: unknown): NextResponse | null {
   return null;
 }
 
+async function authorizeNodeFlight(params: {
+  readonly sessionUser: {
+    readonly id: string;
+    readonly displayName?: string | null;
+  };
+  readonly node: { readonly id: string; readonly ownerUserId: string };
+}): Promise<
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly status: number;
+      readonly errorCode:
+        | FlightAuthzErrorCode
+        | "node_not_found"
+        | "billing_account_missing";
+    }
+> {
+  const container = getContainer();
+  const authorization = container.authorization;
+
+  if (!authorization) {
+    return params.node.ownerUserId === params.sessionUser.id
+      ? { ok: true }
+      : { ok: false, status: 404, errorCode: "node_not_found" };
+  }
+
+  const db = resolveServiceDb();
+  const billingAccountRows = await db
+    .select({ id: billingAccounts.id })
+    .from(billingAccounts)
+    .where(eq(billingAccounts.ownerUserId, params.sessionUser.id))
+    .limit(1);
+  const billingAccount = billingAccountRows[0];
+  if (!billingAccount) {
+    return { ok: false, status: 403, errorCode: "billing_account_missing" };
+  }
+
+  const decision = await authorization.check({
+    actorId: `user:${params.sessionUser.id}`,
+    action: "node.flight",
+    resource: `node:${params.node.id}`,
+    context: {
+      tenantId: billingAccount.id,
+      nodeId: params.node.id,
+    },
+  });
+
+  if (decision.decision === "allow") return { ok: true };
+  return {
+    ok: false,
+    status: decision.code === "authz_unavailable" ? 503 : 403,
+    errorCode: decision.code,
+  };
+}
+
 function getNodeRefParentRepo(env: ServerEnv): {
   readonly owner: string;
   readonly repo: string;
@@ -225,11 +286,7 @@ export const POST = wrapRouteHandlerWithLogging(
         return NextResponse.json({ error: "not found" }, { status: 404 });
       }
 
-      const authz = await authorizeNodeAction({
-        sessionUser,
-        node,
-        action: "node.flight",
-      });
+      const authz = await authorizeNodeFlight({ sessionUser, node });
       if (!authz.ok) {
         logTerminal({
           mode,

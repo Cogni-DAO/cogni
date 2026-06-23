@@ -11,13 +11,14 @@
  *   deploy-brain / script / workflow logic (freeze-policy compliant).
  * Invariants:
  *   - AUTH_REQUIRED: Bearer token (machine agents) or SIWE session.
- *   - MERGE_AUTHORITY_IS_OPERATOR_NODE: gated on `can_flight` for the OPERATOR node (resolved
- *     server-side by slug), because merging the monorepo is a repo-level operator authority — not
- *     an arbitrary agent-supplied node. NOTE: this gates the single most IRREVERSIBLE repo action
- *     (merge-to-main) on `can_flight`, a deliberate least-privilege concession accepted only
- *     because a dedicated `can_merge` relation needs an OpenFGA model re-bootstrap. A `merger` /
- *     `can_merge` role + scope-to-node + a probation tier (first N merges human-reviewed, then
- *     graduate) is the COMMITTED vNext — this is intentional MVP over-trust.
+ *   - MERGE_AUTHORITY_IS_OPERATOR_NODE: authorized through the shared `resolveNodeAndAuthorize`
+ *     seam against the OPERATOR node (slug `operator`), reusing `can_flight` — merging the
+ *     monorepo is a repo-level operator authority, not an arbitrary agent-supplied node. NOTE:
+ *     this gates the single most IRREVERSIBLE repo action (merge-to-main) on `can_flight`, a
+ *     deliberate least-privilege concession accepted only because a dedicated `can_merge` relation
+ *     needs an OpenFGA model re-bootstrap. A `merger` / `can_merge` role + scope-to-node + a
+ *     probation tier (first N merges human-reviewed, then graduate) is the COMMITTED vNext — this
+ *     is intentional MVP over-trust. The seam FAILS CLOSED (503) when no authority is configured.
  *   - NO_REPO_FROM_AGENT: owner/repo are env-resolved (operator's own monorepo), never the body.
  *   - BRANCH_PROTECTION_IS_AUTHORITY: GitHub independently rejects a non-green merge (405); the
  *     `evaluateMergeGate` pre-check is fast-fail UX + clear errors, not the sole gate.
@@ -27,23 +28,22 @@
  *   - CONTRACTS_ARE_TRUTH: input/output parsed through `mergeOperation`.
  * Side-effects: IO (DB read, GitHub REST merge via VcsCapability).
  * Links: packages/node-contracts/src/vcs.merge.v1.contract.ts,
- *   nodes/operator/app/src/features/vcs/merge-gate.ts, docs/spec/development-lifecycle.md
+ *   nodes/operator/app/src/features/vcs/merge-gate.ts,
+ *   nodes/operator/app/src/app/_lib/node-rbac.ts, docs/spec/development-lifecycle.md
  * @public
  */
 
 import { mergeOperation } from "@cogni/node-contracts";
-import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
+import { resolveNodeAndAuthorize } from "@/app/_lib/node-rbac";
 import { stubVcsCapability } from "@/bootstrap/capabilities/vcs";
-import { getContainer, resolveServiceDb } from "@/bootstrap/container";
+import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { authorizeNodeAction } from "@/features/vcs/authorize-node-action";
 import {
   classifyMergeFailure,
   evaluateMergeGate,
 } from "@/features/vcs/merge-gate";
-import { nodes } from "@/shared/db/nodes";
 import { serverEnv } from "@/shared/env";
 import { EVENT_NAMES, logEvent } from "@/shared/observability";
 
@@ -88,41 +88,24 @@ export const POST = wrapRouteHandlerWithLogging(
     }
     const { prNumber, method } = parsed.data;
 
-    // 2. Resolve the operator node row (with ownerUserId — needed by the no-OpenFGA fallback).
-    const db = resolveServiceDb();
-    const node = (
-      await db
-        .select()
-        .from(nodes)
-        .where(eq(nodes.slug, OPERATOR_NODE_SLUG))
-        .limit(1)
-    )[0];
-    if (!node) {
-      return fail(
-        503,
-        "operator_node_unresolved",
-        "operator node not registered",
-        { prNumber }
-      );
-    }
-
-    // 3. RBAC — reuse can_flight on the operator node (see MERGE_AUTHORITY_IS_OPERATOR_NODE).
-    const authz = await authorizeNodeAction({
-      sessionUser,
-      node,
+    // 2. RBAC — the ONE node-authz seam, against the operator node, reusing can_flight.
+    //    Fails closed (503) when no authority is configured (see MERGE_AUTHORITY_IS_OPERATOR_NODE).
+    const rbac = await resolveNodeAndAuthorize({
+      id: OPERATOR_NODE_SLUG,
+      userId: sessionUser.id,
       action: "node.flight",
     });
-    if (!authz.ok) {
+    if (!rbac.ok) {
       const error =
-        authz.errorCode === "authz_unavailable"
+        rbac.errorCode === "authz_unavailable"
           ? "authorization unavailable"
-          : authz.errorCode === "billing_account_missing"
-            ? "billing account required"
+          : rbac.errorCode === "node_not_found"
+            ? "operator node not found"
             : "not authorized";
-      return fail(authz.status, authz.errorCode, error, { prNumber });
+      return fail(rbac.status, rbac.errorCode, error, { prNumber });
     }
 
-    // 4. VcsCapability configured? (stub throws on use — detect structurally.)
+    // 3. VcsCapability configured? (stub throws on use — detect structurally.)
     const vcs = getContainer().vcsCapability;
     if (vcs === stubVcsCapability) {
       return fail(503, "vcs_not_configured", "VCS not configured", {
@@ -130,7 +113,7 @@ export const POST = wrapRouteHandlerWithLogging(
       });
     }
 
-    // 5. Merge target = the operator's own monorepo (env-scoped, anti-spoof).
+    // 4. Merge target = the operator's own monorepo (env-scoped, anti-spoof).
     const env = serverEnv();
     const owner = env.NODE_SUBMODULE_PARENT_OWNER;
     const repo = env.NODE_SUBMODULE_PARENT_REPO;
@@ -143,7 +126,7 @@ export const POST = wrapRouteHandlerWithLogging(
       );
     }
 
-    // 6. CI / state gate (fast-fail; GitHub branch protection is the real backstop).
+    // 5. CI / state gate (fast-fail; GitHub branch protection is the real backstop).
     const ci = await vcs.getCiStatus({ owner, repo, prNumber });
     const prCtx = {
       prNumber,
@@ -161,7 +144,7 @@ export const POST = wrapRouteHandlerWithLogging(
       );
     }
 
-    // 7. Merge (squash). Classify failure on the surfaced GitHub HTTP status.
+    // 6. Merge (squash). Classify failure on the surfaced GitHub HTTP status.
     const result = await vcs.mergePr({ owner, repo, prNumber, method });
     if (!result.merged) {
       const f = classifyMergeFailure(result.status, result.message);
@@ -171,7 +154,7 @@ export const POST = wrapRouteHandlerWithLogging(
       });
     }
 
-    // 8. Success.
+    // 7. Success.
     logEvent(
       ctx.log,
       EVENT_NAMES.VCS_MERGE_REQUEST_COMPLETE,
