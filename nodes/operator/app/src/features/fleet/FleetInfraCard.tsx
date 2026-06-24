@@ -72,9 +72,7 @@ function tierLabel(env: string): string {
   return ENV_TIER[env] ?? env;
 }
 
-function sortEnvs(
-  envs: readonly DeployEnvVM[]
-): readonly DeployEnvVM[] {
+function sortEnvs(envs: readonly DeployEnvVM[]): readonly DeployEnvVM[] {
   return [...envs].sort((a, b) => {
     const ai = ENV_ORDER.indexOf(a.env);
     const bi = ENV_ORDER.indexOf(b.env);

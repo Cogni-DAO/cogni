@@ -13,7 +13,7 @@
  * @public
  */
 
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 
 import { fetchComputeBalances, fetchFleetNodes } from "./fetch-fleet";
 import type { ComputeBalanceVM, NodeFleetVM } from "./fleet-schemas";
