@@ -6,11 +6,12 @@
  * Purpose: Owner action buttons for one access row — Approve/Deny on a pending request, Revoke on
  *   an approved developer. Each click is an owner-gated decision against the existing
  *   POST /api/v1/nodes/[id]/developers route; the OpenFGA role tuple write is the authority.
- * Scope: Client island only. The clicked button shows a kit waiting signal (Loader2) tied strictly to
- *   the in-flight decision POST — always cleared when it settles, so the button completes or errors but
- *   never hangs. On success router.refresh() (inside a transition, to avoid the clobber race) moves the
- *   row between sections; the spinner is NOT gated on the transition's pending flag, which can stick.
- * Side-effects: IO (POST decision), router.refresh (inside a transition, fire-and-forget).
+ * Scope: Client island only. The clicked button shows a kit waiting signal (Loader2). On success it
+ *   calls router.refresh() and KEEPS spinning — the server re-render moves the row out of its section
+ *   and unmounts the button, which ends the spinner. Clearing client state in the same tick as
+ *   router.refresh() clobbers the RSC re-render (the "needs a second click / hangs" bug), so we clear
+ *   `submitting` only on error. Mirrors the wizard steps' POST → router.refresh() pattern.
+ * Side-effects: IO (POST decision), router.refresh.
  * Links: src/app/api/v1/nodes/[id]/developers/route.ts, ./NodeAccess.tsx
  * @public
  */
@@ -19,7 +20,7 @@
 
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type ReactElement, useState, useTransition } from "react";
+import { type ReactElement, useState } from "react";
 
 import { Button } from "@/components";
 import type { NodeAccessRole } from "@/shared/db/node-access-requests";
@@ -49,13 +50,9 @@ export function AccessActions({
   actions,
 }: Props): ReactElement {
   const router = useRouter();
-  // `submitting` tracks the in-flight decision POST (and which button fired it) — and ONLY that. It
-  // is the single source of the waiting signal and is always cleared when the request settles, so the
-  // button can never spin forever. We deliberately do NOT gate the UI on useTransition's pending flag:
-  // `router.refresh()` wrapped in a transition can leave that flag stuck indefinitely, which both
-  // froze the spinner AND blocked the re-render (the infinite-spinner bug).
+  // `submitting` holds the in-flight decision (and which button fired it) — the single source of the
+  // waiting signal.
   const [submitting, setSubmitting] = useState<Decision | null>(null);
-  const [, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   const decide = (decision: Decision): void => {
@@ -74,20 +71,18 @@ export function AccessActions({
             error?: string;
           };
           setError(body.errorCode ?? body.error ?? `HTTP ${res.status}`);
+          setSubmitting(null); // re-enable so the owner can retry/correct
           return;
         }
-        // The decision committed server-side (the role tuple + best-effort row transition). Reconcile
-        // the server-rendered list so the row moves between sections. Wrapped in a transition so this
-        // non-urgent RSC refetch isn't clobbered by the urgent setSubmitting(null) below — the race
-        // that originally made the click need a second press — but the spinner is NOT tied to it.
-        startTransition(() => {
-          router.refresh();
-        });
+        // Success: the decision is committed server-side. Refresh the server-rendered list so this
+        // row leaves its section (approve → Approved, deny/revoke → gone). Deliberately do NOT clear
+        // `submitting` here: clearing client state in the same tick as router.refresh() clobbers the
+        // RSC re-render — the bug that made the click need a second press / look hung. The spinner
+        // keeps showing until the refresh re-renders and this row unmounts, matching the wizard steps'
+        // POST → router.refresh() pattern (RepoStep/DaoStep).
+        router.refresh();
       } catch (e) {
         setError(e instanceof Error ? e.message : "request failed");
-      } finally {
-        // Always clear the waiting signal once the request resolves — success or failure — so the
-        // button completes or errors, but never hangs.
         setSubmitting(null);
       }
     })();
