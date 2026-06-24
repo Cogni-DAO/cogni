@@ -236,14 +236,13 @@ The read-only `DeployCapability` v0 ships in this PR as a real interface at
 **`ComputeResourcePort` is NOT Akash-gated — the deferral was over-broad.** Its READ half (cost/balance)
 is provider-agnostic and ships now: a real interface at
 [`packages/ai-tools/src/capabilities/compute.ts`](../../packages/ai-tools/src/capabilities/compute.ts)
-(`balances(): Promise<readonly ComputeBalance[]>`), a runtime `CherryComputeAdapter`, an **on-demand**
-session-gated read (`GET /api/v1/compute/balances`) that both serves the dashboard fleet view and refreshes a
-provider-agnostic Prometheus gauge `compute_balance_remaining{provider,account,currency}` (scraped → Mimir →
-Grafana alert at `infra/grafana/alerts/compute-balance.alerts.yaml`). A balance read is a pure recomputable
-read, so it is **not** wrapped in a Temporal scheduled job (that would be the over-engineering the
-[temporal-patterns](./temporal-patterns.md) boundary rule warns against, and Loki-as-sink made it invisible).
-This closes the spend-awareness gap that silently took preview down on 2026-06-19 (story.5011); the dashboard
-fleet view is story.5013. Only the WRITE verbs (`provision`/`release`/`settle`) stay deferred, and only
+(`balances(): Promise<readonly ComputeBalance[]>`), a runtime `CherryComputeAdapter`, and an **on-demand**
+session/RBAC-gated read (`GET /api/v1/compute/balances`) — the pull surface for the dashboard fleet view and
+agents. A balance read is a pure recomputable read, so it is **not** wrapped in a Temporal scheduled job (that
+would be the over-engineering the [temporal-patterns](./temporal-patterns.md) boundary rule warns against, and a
+Loki/metrics sink made it invisible). This closes the spend-awareness gap that silently took preview down on
+2026-06-19 (story.5011); the dashboard fleet view + per-env/per-VM consumption breakdown + unattended alerting
+are the next slice (story.5013). Only the WRITE verbs (`provision`/`release`/`settle`) stay deferred, and only
 `settle()` (Cosmos multisig / axlUSDC) is genuinely Akash-shaped — Cherry has its own provision (OpenTofu) and
 pay paths. The sketch below shows the full port; the read half is built, the writes are not.
 
@@ -280,11 +279,11 @@ The provider seam is a **1:1 adapter swap** in the operator bootstrap — `Cherr
 
 ### Phased rollout (no throwaway, MVP-disciplined)
 
-| Phase  | Build                                                                                                                                                                                                                                                                                                                                  | Defer                                                                    |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| **v0** | read-only `DeployCapability` over live Argo state + a dashboard view; AI tools `deploy_get_state` / `deploy_observe` next to the `vcs_*` tools; **`ComputeResourcePort` read half** (`balances()` + `CherryComputeAdapter` + on-demand `GET /api/v1/compute/balances` + `compute_balance_remaining` gauge → Grafana alert, story.5011) | the registry table, control verbs, `ComputeResourcePort` **write** verbs |
-| **P1** | `OperatorDeployPlanePort` write verbs (`dispatchNodeRefCandidateFlight` ✅ · `dispatchNodePromote` ✅ · later rollback/scale); `compute_resources` registry table (mirrors `mcp_deployments`) as the dashboard read-cache                                                                                                              | multi-provider                                                           |
-| **P2** | `ComputeResourcePort` + `AkashComputeAdapter` (Cosmos multisig, axlUSDC Stable Payments per `infra/provision/akash/FUTURE_AKASH_INTEGRATION.md`); Cherry becomes one adapter among many                                                                                                                                                | —                                                                        |
+| Phase  | Build                                                                                                                                                                                                                                                                                        | Defer                                                                    |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| **v0** | read-only `DeployCapability` over live Argo state + a dashboard view; AI tools `deploy_get_state` / `deploy_observe` next to the `vcs_*` tools; **`ComputeResourcePort` read half** (`balances()` + `CherryComputeAdapter` + on-demand RBAC read `GET /api/v1/compute/balances`, story.5011) | the registry table, control verbs, `ComputeResourcePort` **write** verbs |
+| **P1** | `OperatorDeployPlanePort` write verbs (`dispatchNodeRefCandidateFlight` ✅ · `dispatchNodePromote` ✅ · later rollback/scale); `compute_resources` registry table (mirrors `mcp_deployments`) as the dashboard read-cache                                                                    | multi-provider                                                           |
+| **P2** | `ComputeResourcePort` + `AkashComputeAdapter` (Cosmos multisig, axlUSDC Stable Payments per `infra/provision/akash/FUTURE_AKASH_INTEGRATION.md`); Cherry becomes one adapter among many                                                                                                      | —                                                                        |
 
 **Prior art:** the Argo-GitOps foundation this builds on is [PR #628](https://github.com/Cogni-DAO/cogni/pull/628) (`task.0149`, open since 2026-03-25, superseded piecemeal by per-node flighting). The registry/adapter-swap pattern is proven in [`mcp-control-plane.md`](./mcp-control-plane.md). The decentralized-compute target is `infra/provision/akash/FUTURE_AKASH_INTEGRATION.md`. **Cherry Servers is the explicit MVP stopgap; Akash is the crypto-native end state.**
 

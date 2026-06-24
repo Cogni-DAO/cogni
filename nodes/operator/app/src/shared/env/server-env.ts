@@ -214,7 +214,7 @@ export const serverSchema = z.object({
 
   // Compute-substrate spend awareness (story.5011). CHERRY_AUTH_TOKEN is the same Cherry
   // Servers API token used for provisioning; here it powers the READ-only balance read
-  // exposed on-demand via GET /api/v1/compute/balances + the compute_balance_remaining gauge.
+  // exposed on-demand via GET /api/v1/compute/balances (ComputeResourcePort + CherryComputeAdapter).
   // Optional: when unset the compute capability returns no balances (graceful degradation)
   // until ESO surfaces the token onto the operator runtime.
   CHERRY_AUTH_TOKEN: optionalString,
