@@ -17,9 +17,7 @@
 import type { ReactElement } from "react";
 
 import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
+  GitHubIdentity,
   SectionCard,
   Table,
   TableBody,
@@ -60,51 +58,20 @@ function AccessRow({
   readonly row: NodeAccessRequestRow;
   readonly mode: "pending" | "approved";
 }): ReactElement {
-  // Lead with the human GitHub identity (avatar + @login linking to the profile) — the value the
-  // owner actually verifies before approving. The agent's registered name is demoted to a single
-  // muted line; the opaque agent UUID is intentionally not shown.
-  const profileUrl = row.githubLogin
-    ? `https://github.com/${row.githubLogin}`
-    : null;
-  const initial = (row.githubLogin ?? agentLabel(row)).charAt(0).toUpperCase();
-
+  // Lead with the human GitHub identity (avatar + @login → profile) — the value the owner actually
+  // verifies before approving — via the shared GitHubIdentity primitive (same github-account wiring
+  // the attribution surface reuses). The agent's registered name is demoted to GitHubIdentity's muted
+  // secondary line; the opaque agent UUID is intentionally not shown. No declared login → name only.
   return (
     <TableRow>
       <TableCell>
-        <div className="flex items-center gap-3">
-          <Avatar className="size-9 shrink-0">
-            {row.githubLogin ? (
-              <AvatarImage
-                src={`https://github.com/${row.githubLogin}.png?size=72`}
-                alt={`@${row.githubLogin}`}
-              />
-            ) : null}
-            <AvatarFallback className="font-semibold text-muted-foreground text-xs">
-              {initial}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            {profileUrl ? (
-              <>
-                <a
-                  href={profileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-semibold text-foreground text-sm hover:underline"
-                >
-                  @{row.githubLogin}
-                </a>
-                <p className="truncate text-muted-foreground text-xs">
-                  {agentLabel(row)}
-                </p>
-              </>
-            ) : (
-              <p className="truncate font-semibold text-foreground text-sm">
-                {agentLabel(row)}
-              </p>
-            )}
-          </div>
-        </div>
+        {row.githubLogin ? (
+          <GitHubIdentity login={row.githubLogin} secondary={agentLabel(row)} />
+        ) : (
+          <p className="truncate font-semibold text-foreground text-sm">
+            {agentLabel(row)}
+          </p>
+        )}
       </TableCell>
       <TableCell className="text-muted-foreground text-sm">
         {ROLE_CAPABILITY[row.role]}
