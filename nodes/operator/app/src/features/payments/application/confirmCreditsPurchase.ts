@@ -28,6 +28,7 @@ import {
   uuidToBigInt,
 } from "@cogni/financial-ledger";
 import { calculateOpenRouterTopUp } from "@cogni/node-core";
+import { EVENT_NAMES } from "@cogni/node-shared";
 import type { Logger } from "pino";
 import { v5 as uuidv5 } from "uuid";
 import {
@@ -36,6 +37,7 @@ import {
 } from "@/features/payments/services/creditsConfirm";
 import type {
   AccountService,
+  ProviderFundingOutcome,
   ProviderFundingPort,
   ServiceAccountService,
   TreasurySettlementOutcome,
@@ -206,6 +208,8 @@ export async function runPostCreditFunding(
   }
 
   // Step 5: Provider funding (OpenRouter top-up)
+  let fundingOutcome: ProviderFundingOutcome | undefined;
+  let fundingError = false;
   if (deps.providerFunding && !deps.pricingConfig) {
     log.warn(
       { paymentIntentId },
@@ -220,13 +224,11 @@ export async function runPostCreditFunding(
         deps.pricingConfig.revenueShare,
         deps.pricingConfig.cryptoFee
       );
-      const fundingOutcome = await deps.providerFunding.fundAfterCreditPurchase(
-        {
-          paymentIntentId,
-          amountUsdCents,
-          topUpUsd,
-        }
-      );
+      fundingOutcome = await deps.providerFunding.fundAfterCreditPurchase({
+        paymentIntentId,
+        amountUsdCents,
+        topUpUsd,
+      });
 
       // Step 6: TB co-write — record provider top-up (OperatorFloat → ProviderFloat)
       if (deps.financialLedger && fundingOutcome) {
@@ -254,6 +256,7 @@ export async function runPostCreditFunding(
         }
       }
     } catch (err) {
+      fundingError = true;
       log.error(
         { err, paymentIntentId },
         "provider funding failed — credits confirmed, funding skipped"
@@ -261,14 +264,23 @@ export async function runPostCreditFunding(
     }
   }
 
+  // Terminal event — carries the on-chain txns so the full payments→DAO/OpenRouter
+  // path is traceable by paymentIntentId in one query (the tx hashes are already in
+  // hand from the settlement/funding outcomes; do not drop them).
   log.info(
     {
-      event: "payments.funding_complete",
+      event: EVENT_NAMES.PAYMENTS_FUNDING_COMPLETE,
       paymentIntentId,
       amountUsdCents,
       settlementOk: !!settlement,
       settlementError: !!settlementError,
       fundingConfigured: !!deps.providerFunding,
+      fundingError,
+      // Split distribute (Treasury → operator + DAO) tx
+      distributeTxHash: settlement?.txHash,
+      // OpenRouter top-up (operator → provider) tx + gross amount
+      providerTxHash: fundingOutcome?.txHash,
+      topUpUsd: fundingOutcome?.topUpUsd,
     },
     "post-credit funding chain complete"
   );

@@ -36,6 +36,8 @@ export interface CreditsConfirmResult {
   billingAccountId: string;
   balanceCredits: number;
   creditsApplied: number;
+  /** Bonus credits minted to the system tenant (revenue share). 0 on idempotent replay. */
+  systemBonusCredits: number;
 }
 
 export async function confirmCreditsPayment(
@@ -54,6 +56,7 @@ export async function confirmCreditsPayment(
       billingAccountId: input.billingAccountId,
       balanceCredits: existingEntry.balanceAfter,
       creditsApplied: 0,
+      systemBonusCredits: 0,
     };
   }
 
@@ -111,5 +114,6 @@ export async function confirmCreditsPayment(
     billingAccountId: input.billingAccountId,
     balanceCredits: newBalance,
     creditsApplied: credits,
+    systemBonusCredits: Number(bonusCredits),
   };
 }
