@@ -28,6 +28,7 @@ import {
   toClientVisibleStatus,
   usdCentsToRawUsdc,
 } from "@cogni/node-core";
+import { EVENT_NAMES } from "@cogni/node-shared";
 import type {
   AccountService,
   Clock,
@@ -461,18 +462,39 @@ async function verifyAndSettle(
     const clientPaymentId = `${attempt.chainId}:${attempt.txHash}`;
 
     try {
-      await confirmCreditsPayment(accountService, serviceAccountService, {
-        billingAccountId: attempt.billingAccountId,
-        defaultVirtualKeyId,
-        amountUsdCents: attempt.amountUsdCents,
-        clientPaymentId,
-        metadata: {
-          paymentAttemptId: attempt.id,
-          txHash: attempt.txHash,
+      const creditResult = await confirmCreditsPayment(
+        accountService,
+        serviceAccountService,
+        {
+          billingAccountId: attempt.billingAccountId,
+          defaultVirtualKeyId,
+          amountUsdCents: attempt.amountUsdCents,
+          clientPaymentId,
+          metadata: {
+            paymentAttemptId: attempt.id,
+            txHash: attempt.txHash,
+            chainId: attempt.chainId,
+            fromAddress: attempt.fromAddress,
+          },
+        }
+      );
+
+      // Credit terminal — user credit + system-tenant bonus amounts, keyed by the
+      // same clientPaymentId as the funding chain. Answers "where did the credits
+      // land" in one query; pairs with payments.funding_complete (the on-chain txns).
+      log.info(
+        {
+          event: EVENT_NAMES.PAYMENTS_CONFIRMED,
+          paymentIntentId: clientPaymentId,
+          billingAccountId: attempt.billingAccountId,
           chainId: attempt.chainId,
-          fromAddress: attempt.fromAddress,
+          txHash: attempt.txHash,
+          creditsApplied: creditResult.creditsApplied,
+          systemBonusCredits: creditResult.systemBonusCredits,
+          balanceCredits: creditResult.balanceCredits,
         },
-      });
+        "credits applied (user + system bonus)"
+      );
 
       if (isValidTransition(attempt.status, "CREDITED")) {
         attempt = await serviceRepo.updateStatus(
