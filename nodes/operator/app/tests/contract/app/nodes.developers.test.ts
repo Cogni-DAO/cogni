@@ -20,19 +20,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 const AGENT_USER_ID = "22222222-2222-4222-8222-222222222222";
-const REPO_OWNER = "cogni-dao";
-const REPO_NAME = "beacon";
+const REPO_OWNER = "cogni-test-org";
+const REPO_NAME = "test-cog";
+const NODE_SLUG = "test-cog";
 
 const authz = vi.hoisted(() => ({
   writeRelation: vi.fn(),
   deleteRelation: vi.fn(),
 }));
 const dbState = vi.hoisted(() => ({
-  ownerNode: null as {
-    id: string;
-    repoOwner: string;
-    repoName: string;
-  } | null,
+  ownerNode: null as { id: string; slug: string } | null,
   agentUser: null as { id: string } | null,
   requestedGithubLogin: null as string | null,
   githubBinding: null as { login: string | null } | null,
@@ -40,6 +37,7 @@ const dbState = vi.hoisted(() => ({
 const deployPlane = vi.hoisted(() => ({
   setNodeCollaborator: vi.fn(),
   removeNodeCollaborator: vi.fn(),
+  resolveNodeRepo: vi.fn(),
 }));
 const mockGetServerSessionUser = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
@@ -104,7 +102,10 @@ vi.mock("@/bootstrap/capabilities/operator-deploy-plane", () => ({
 }));
 
 vi.mock("@/shared/env", () => ({
-  serverEnv: () => ({}),
+  serverEnv: () => ({
+    NODE_SUBMODULE_PARENT_OWNER: "cogni-test-org",
+    NODE_SUBMODULE_PARENT_REPO: "cogni-monorepo",
+  }),
 }));
 
 vi.mock("@/lib/auth/server", () => ({
@@ -136,11 +137,11 @@ describe("POST /api/v1/nodes/[id]/developers", () => {
     });
     deployPlane.setNodeCollaborator.mockResolvedValue({ invitationId: null });
     deployPlane.removeNodeCollaborator.mockResolvedValue(undefined);
-    dbState.ownerNode = {
-      id: NODE_ID,
-      repoOwner: REPO_OWNER,
-      repoName: REPO_NAME,
-    };
+    deployPlane.resolveNodeRepo.mockResolvedValue({
+      owner: REPO_OWNER,
+      repo: REPO_NAME,
+    });
+    dbState.ownerNode = { id: NODE_ID, slug: NODE_SLUG };
     dbState.agentUser = { id: AGENT_USER_ID };
     dbState.requestedGithubLogin = null;
     dbState.githubBinding = null;
@@ -239,6 +240,68 @@ describe("POST /api/v1/nodes/[id]/developers", () => {
       owner: REPO_OWNER,
       repo: REPO_NAME,
       login: "linked-dev",
+      permission: "push",
+    });
+  });
+
+  it("grants on the node's OWN repo (catalog source_repo), not the nodes-table parent", async () => {
+    // Regression: the grant must target resolveNodeRepo()'s child repo (cogni-test-org/test-cog),
+    // NOT nodes.repoOwner/repoName (the submodule-parent monorepo). The earlier bug granted on the
+    // parent → "App not installed on Cogni-DAO/cogni (404)".
+    dbState.requestedGithubLogin = "flock-leader";
+
+    await testApiHandler({
+      appHandler,
+      params: { id: NODE_ID },
+      async test({ fetch }) {
+        await fetch({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agentUserId: AGENT_USER_ID,
+            decision: "approve",
+          }),
+        });
+      },
+    });
+
+    expect(deployPlane.resolveNodeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: NODE_SLUG })
+    );
+    expect(deployPlane.setNodeCollaborator).toHaveBeenCalledWith({
+      owner: "cogni-test-org",
+      repo: "test-cog",
+      login: "flock-leader",
+      permission: "push",
+    });
+  });
+
+  it("falls back to the parent monorepo when the node has no catalog row", async () => {
+    dbState.requestedGithubLogin = "flock-leader";
+    deployPlane.resolveNodeRepo.mockRejectedValue(
+      Object.assign(new Error("catalog missing"), { code: "catalog_missing" })
+    );
+
+    await testApiHandler({
+      appHandler,
+      params: { id: NODE_ID },
+      async test({ fetch }) {
+        const res = await fetch({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agentUserId: AGENT_USER_ID,
+            decision: "approve",
+          }),
+        });
+        expect((await res.json()).branchPush).toBe("granted");
+      },
+    });
+
+    expect(deployPlane.setNodeCollaborator).toHaveBeenCalledWith({
+      owner: "cogni-test-org",
+      repo: "cogni-monorepo",
+      login: "flock-leader",
       permission: "push",
     });
   });

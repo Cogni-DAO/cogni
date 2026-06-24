@@ -169,11 +169,7 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       userActor(session.id as UserId),
       async (tx) =>
         tx
-          .select({
-            id: nodes.id,
-            repoOwner: nodes.repoOwner,
-            repoName: nodes.repoName,
-          })
+          .select({ id: nodes.id, slug: nodes.slug })
           .from(nodes)
           .where(and(nodeIdOrSlug(id), eq(nodes.ownerUserId, session.id)))
           .limit(1)
@@ -308,21 +304,42 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         );
       } else if (login) {
         try {
-          const deployPlane = createOperatorDeployPlane(serverEnv());
+          const env = serverEnv();
+          const deployPlane = createOperatorDeployPlane(env);
+          // Target the node's OWN repo (catalog `source_repo` via resolveNodeRepo), NOT
+          // `nodes.repoOwner/repoName` (which holds the submodule-PARENT monorepo). Same resolution
+          // the merge/run-ci routes use. `catalog_missing` (the operator node IS the monorepo) → the
+          // parent repo is the target. Without a configured parent there is no repo to grant on.
+          let owner = env.NODE_SUBMODULE_PARENT_OWNER;
+          let repo = env.NODE_SUBMODULE_PARENT_REPO;
+          try {
+            const nodeRepo = await deployPlane.resolveNodeRepo({
+              parentOwner: owner ?? "",
+              parentRepo: repo ?? "",
+              slug: ownerNode.slug,
+            });
+            owner = nodeRepo.owner;
+            repo = nodeRepo.repo;
+          } catch (error) {
+            if ((error as { code?: string })?.code !== "catalog_missing")
+              throw error;
+            // catalog_missing ⇒ keep the parent monorepo (operator-node lane).
+          }
+          if (!owner || !repo) {
+            throw new Error(
+              "node repo not resolvable (no catalog row, no parent configured)"
+            );
+          }
           if (parsed.data.decision === "approve") {
             const r = await deployPlane.setNodeCollaborator({
-              owner: ownerNode.repoOwner,
-              repo: ownerNode.repoName,
+              owner,
+              repo,
               login,
               permission: "push",
             });
             branchPush = r.invitationId ? "invited" : "granted";
           } else {
-            await deployPlane.removeNodeCollaborator({
-              owner: ownerNode.repoOwner,
-              repo: ownerNode.repoName,
-              login,
-            });
+            await deployPlane.removeNodeCollaborator({ owner, repo, login });
             branchPush = "revoked";
           }
         } catch (error) {
