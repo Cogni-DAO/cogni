@@ -61,6 +61,18 @@ function AccessRow({
     <TableRow>
       <TableCell>
         <p className="font-medium text-foreground text-sm">{agentLabel(row)}</p>
+        {row.githubLogin ? (
+          <p className="text-xs">
+            <a
+              href={`https://github.com/${row.githubLogin}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground hover:underline"
+            >
+              @{row.githubLogin}
+            </a>
+          </p>
+        ) : null}
         <p className="truncate font-mono text-muted-foreground text-xs">
           {row.agentUserId}
         </p>
