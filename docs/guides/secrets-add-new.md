@@ -16,54 +16,20 @@ tags:
 
 # Add or Update a Service Secret
 
-## The path: self-serve API
+## Two paths — and the node-dev path lives in the hub
 
-The intended way a node owner sets a vendor/human secret value is the
-**self-serve operator API** — you hold only a Cogni **API key** plus a
-`secrets_manager` OpenFGA grant on the node; **no kubeconfig, no OpenBao token,
-no SSH**:
+**Node owner/agent setting a secret with only an API key:** the contract —
+request shape, the `secrets_manager` (not `developer`) grant, the auth chain, and
+the **live per-env status** — is single-sourced as a knowledge guide in the hub,
+not restated here (a git snapshot drifts):
 
-```
-POST /api/v1/nodes/<id>/secrets
-Body: { "env": "candidate-a", "key": "X_OAUTH_CLIENT_SECRET", "value": "…", "op": "set" }
-→ 200 { written, version, path }   # path = cogni/<env>/<node>/<KEY>, never the value
-```
+> Recall **`node-self-serve-secrets`** — `GET /api/v1/knowledge/node-self-serve-secrets`.
+> Code of record: `nodes/operator/app/src/app/api/v1/nodes/[id]/secrets/route.ts`.
 
-The operator pod performs the OpenBao write with its **own** projected-SA
-identity (`resolveNodeRef` + the shared `withNodeRbac` seam in
-[`src/app/_lib/node-rbac.ts`](../../nodes/operator/app/src/app/_lib/node-rbac.ts)),
-checks `can_manage_secrets ← secrets_manager` (fail-closed), refuses
-substrate-reserved keys, and writes only its own env. See
-[§2 Choose The Writer Lane](#2-choose-the-writer-lane) for the full lane table
-and [`node-self-serve-secrets.md`](../design/node-self-serve-secrets.md) for the
-design.
+**The rest of this doc is the operator-admin break-glass CLI** (`pnpm secrets:set`
 
-> **RBAC is `secrets_manager`, not `developer`.** `developer → can_flight`
-> (logs/flight); secret writes are a **distinct** grant
-> (`can_manage_secrets ← secrets_manager`, both ∪ `admin`). Requesting
-> `developer` and expecting a secret-write succeeds is the trap — the right
-> answer to the wrong role is `403 authz_denied`.
-
-### Per-env status (canonical — link here, do not re-state)
-
-This is the one place the per-env reality lives. The self-serve API is **code-deployed
-on every env**, and as of **2026-06-24** it is **proven end-to-end (write `200` +
-take-effect) on ALL THREE envs** — candidate-a, production, and preview.
-
-| Env           | Self-serve write | State (verified 2026-06-24, live)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `candidate-a` | ✅ PROVEN e2e    | End-to-end, including a **non-operator node** (`node-template`, `200 written`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `production`  | ✅ PROVEN e2e    | **Non-operator** node proven: `POST cognidao.org/api/v1/nodes/node-template/secrets {env:production}` (API key + `secrets_manager` only) → **`200`** (`cogni/production/node-template/X_SELF_SERVE_PROOF` v21). **Take-effect proven:** ESO synced the key into `node-template-env-secrets`, then **Reloader rolled `node-template-node-app`** (controller log: _"Changes detected in 'node-template-env-secrets'… updated 'node-template-node-app'"_). Role + overlay (`OPENBAO_NODE_SECRETS_WRITER_ROLE`) + both SAs provisioned (#1737); OpenFGA live; **Reloader installed 2026-06-24** ([`bug.5040`](https://cognidao.org/work/items/bug.5040)). |
-| `preview`     | ✅ PROVEN e2e    | **Non-operator** write → **`200`** (`cogni/preview/node-template/X_SELF_SERVE_PROOF` v35); ESO synced → **Reloader rolled `node-template-node-app`** (controller log confirmed). **Required an OpenFGA model re-bootstrap** — preview's model predated the `can_manage_secrets` relation (#1627), so secrets checks were `503 authz_unavailable` until the current `rbac-model.json` was POSTed + the operator repointed (the silent-drift class: normal `skip_infra=true` promotes never re-bootstrap OpenFGA — [`task.5049`](https://cognidao.org/work/items/task.5049)).                                                                           |
-
-For any **cross-env** write (an env different from the operator you call), a vendor value
-goes through the **break-glass operator-admin CLI** ([§3–8 below](#3-recover-kube-custody))
-against that env's OpenBao — kube + writer JWT, admin-only.
-
-> The CLI path (`pnpm secrets:set`, §3–8) is **legacy / break-glass / day-2 admin**,
-> not the node-dev contract. Reach for it only for the envs/cases the self-serve API
-> cannot yet serve (preview, cross-env). It is documented here for completeness,
-> not as the default.
+- kube custody) — the day-2 fallback for what the self-serve API cannot serve
+  (cross-env writes), admin-only. It is not the node-dev contract.
 
 `source: agent` keys (DB creds, DSNs, `AUTH_SECRET`, `CONNECTIONS_ENCRYPTION_KEY`,
 `GH_WEBHOOK_SECRET`) are **never** hand-set on either lane — they are substrate-minted
@@ -166,7 +132,7 @@ Identify:
 
 Three lanes, by `source` and who you are. Pick before you touch anything. The
 **self-serve API is the default lane** for a node owner; the CLI lane is
-break-glass admin (see the [per-env status](#per-env-status-canonical--link-here-do-not-re-state)).
+break-glass admin (see the the hub guide `node-self-serve-secrets`).
 
 | Value kind                                                                                                                                  | Lane                                                                                                                | Who runs it                        |
 | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
@@ -228,7 +194,7 @@ the CLI path below is the operator day-2 path for cross-env human values.
 > **⚠️ This is the break-glass / day-2 admin lane, not the node-dev contract.**
 > Use it only when the [self-serve API](#the-path-self-serve-api) cannot serve
 > your case — an env not yet provisioned (preview/prod, see the
-> [per-env status](#per-env-status-canonical--link-here-do-not-re-state)), or a
+> the hub guide `node-self-serve-secrets`), or a
 > cross-env write. It requires kube custody + a short-lived OpenBao writer JWT
 > and is operator-admin-only. A node owner adding a vendor secret on candidate-a
 > should never reach this far.

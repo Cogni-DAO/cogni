@@ -448,19 +448,10 @@ allowlist and the OpenBao `_system`/`_shared` policy deny, then writes
 identity (projected SA token → k8s-auth over ClusterIP). The value transits TLS to
 the operator and never leaves it; the node slug is operator-stamped from the
 OpenFGA-authorized resource and env is validated against the operator's own.
-Per-node isolation is **tuple-based** (OpenFGA), not a shared writer token.
-**Provisioned + write-proven (with take-effect) on ALL THREE envs** — candidate-a,
-production, and preview (2026-06-24; each returns `200` on a non-operator
-`node-template` write, then ESO + Reloader roll the pod).
-[`bug.5040`](https://cognidao.org/work/items/bug.5040) (prod Reloader) is fixed; the prod
-writer role + SAs exist ([`bug.5007`](https://cognidao.org/work/items/bug.5007) SA-absent
-framing is stale). Preview required an **OpenFGA model re-bootstrap** (its model predated
-the `can_manage_secrets` relation → `503 authz_unavailable`); the durable fix — re-bootstrap
-OpenFGA on every promote, not just `skip_infra=false` — is [`task.5049`](https://cognidao.org/work/items/task.5049). The canonical
-per-env status table lives in
-[`secrets-add-new.md`](../guides/secrets-add-new.md#per-env-status-canonical--link-here-do-not-re-state).
-Spec + roadmap:
-[`docs/design/node-self-serve-secrets.md`](../design/node-self-serve-secrets.md).
+Per-node isolation is **tuple-based** (OpenFGA), not a shared writer token. **Live
+per-env readiness is not snapshotted here** (it drifts) — recall the hub guide
+`node-self-serve-secrets` (`GET /api/v1/knowledge/node-self-serve-secrets`). Spec +
+roadmap: [`docs/design/node-self-serve-secrets.md`](../design/node-self-serve-secrets.md).
 
 > Supersedes the prior shape-only `secrets/declare` sketch (agent declares shape,
 > human fills value). The node-self-serve spike (#1627) deliberately closed that
