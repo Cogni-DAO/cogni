@@ -316,15 +316,17 @@ for k in "${NODE_BASELINE_KEYS[@]}"; do
   v="$(_resolve_node_value "$TARGET_NODE" "$k")"
   if [[ -z "$v" ]]; then
     # We only reach here for a key the node is SUPPOSED to get (_node_gets_key
-    # filtered above). A source:human shared substrate value (EVM_RPC_URL,
-    # POSTHOG_*) has no minting owner — it must already sit in the env bank at
-    # cogni/<env>/_shared/<KEY>. If it doesn't, inherit_shared_value resolves
-    # empty and the pre-fix `continue` silently shipped a half-provisioned node
-    # whose outbound path no-ops at runtime (bug.5087: payments outbound + chain
-    # reads silently skipped). Fail-fast on the incomplete required set instead —
-    # repair the BANK, never the node (design.secrets-catalog-per-node).
-    if [[ "$(_cat_field "$k" '.required')" == "true" ]]; then
-      fail "required secret ${k} resolved empty for ${DEPLOY_ENVIRONMENT}/${TARGET_NODE} — env bank incomplete (source:$(_cat_field "$k" '.source')). Seed it once per env at cogni/${DEPLOY_ENVIRONMENT}/_shared/${k}, then re-run. See docs/guides/secrets-add-new.md."
+    # filtered above). A required source:human value (EVM_RPC_URL, POSTHOG_*) is
+    # substrate with NO minting owner — it must already sit in the env bank at
+    # cogni/<env>/_shared/<KEY>. If it doesn't, inherit_shared_value resolves empty
+    # and the pre-fix `continue` silently shipped a half-provisioned node whose
+    # outbound path no-ops at runtime (bug.5087: payments outbound + chain reads
+    # silently skipped). Fail-fast on the incomplete required HUMAN set — repair the
+    # BANK, never the node (design.secrets-catalog-per-node). Deliberately scoped to
+    # source:human: an agent/composed key resolving empty is a generator gap (a
+    # different class), and "seed it at _shared" is the wrong remedy for a key we mint.
+    if [[ "$(_cat_field "$k" '.required')" == "true" && "$(_cat_field "$k" '.source')" == "human" ]]; then
+      fail "required human secret ${k} resolved empty for ${DEPLOY_ENVIRONMENT}/${TARGET_NODE} — env bank incomplete. Seed it once per env at cogni/${DEPLOY_ENVIRONMENT}/_shared/${k}, then re-run. See docs/guides/secrets-add-new.md."
     fi
     continue
   fi
