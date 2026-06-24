@@ -31,13 +31,13 @@ import type { NodeAccessRole } from "@/shared/db/node-access-requests";
 
 import { AccessActions } from "./AccessActions.client";
 
-// What each role lets an agent do, for display (rbac.md §6/§6a). developer→can_flight
-// AND GitHub branch-push on the node repo; secrets_manager→can_manage_secrets;
-// production_promoter→can_promote_production. Lead with the role, then its grants.
-const ROLE_CAPABILITY: Record<NodeAccessRole, string> = {
-  developer: "Developer — flight + GitHub branch-push",
-  secrets_manager: "Secrets manager — manage secrets",
-  production_promoter: "Production promoter — promote to prod",
+// One access request = one role (rbac.md §6/§6a), so the Access column is just the role name — no
+// verbose grant breakdown. developer→can_flight + GitHub branch-push; secrets_manager→
+// can_manage_secrets; production_promoter→can_promote_production.
+const ROLE_LABEL: Record<NodeAccessRole, string> = {
+  developer: "Developer",
+  secrets_manager: "Secrets manager",
+  production_promoter: "Production promoter",
 };
 
 interface Props {
@@ -74,7 +74,7 @@ function AccessRow({
         )}
       </TableCell>
       <TableCell className="text-muted-foreground text-sm">
-        {ROLE_CAPABILITY[row.role]}
+        {ROLE_LABEL[row.role]}
       </TableCell>
       <TableCell className="text-right">
         {mode === "pending" ? (
