@@ -2147,23 +2147,36 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
     const existing = (
       targetRulesets as ReadonlyArray<{ id: number; name: string }>
     ).find((r) => r.name === MERGE_QUEUE_RULESET_NAME);
-    if (existing) {
-      await this.requestRaw(
-        targetOctokit,
-        "PUT /repos/{owner}/{repo}/rulesets/{ruleset_id}",
-        {
-          owner: targetOwner,
-          repo: targetRepo,
-          ruleset_id: existing.id,
-          ...payload,
-        }
-      );
-    } else {
-      await this.requestRaw(
-        targetOctokit,
-        "POST /repos/{owner}/{repo}/rulesets",
-        { owner: targetOwner, repo: targetRepo, ...payload }
-      );
+    try {
+      if (existing) {
+        await this.requestRaw(
+          targetOctokit,
+          "PUT /repos/{owner}/{repo}/rulesets/{ruleset_id}",
+          {
+            owner: targetOwner,
+            repo: targetRepo,
+            ruleset_id: existing.id,
+            ...payload,
+          }
+        );
+      } else {
+        await this.requestRaw(
+          targetOctokit,
+          "POST /repos/{owner}/{repo}/rulesets",
+          { owner: targetOwner, repo: targetRepo, ...payload }
+        );
+      }
+    } catch (err) {
+      // QUEUE_IS_BEST_EFFORT: the `merge_queue` ruleset rule is an organization /
+      // GitHub-Team feature — a node minted under a PERSONAL account (or a plan
+      // without it) returns 403/422 (verified against GitHub: same payload accepted
+      // on an org repo, rejected on a personal one). The queue is an enhancement, not
+      // the merge-on-green backstop (branch protection is), so a node that cannot
+      // carry it is still a formed node: skip, don't fail formation. Other errors
+      // (auth, network) are real — rethrow.
+      const status = (err as { status?: number })?.status;
+      if (status === 403 || status === 422) return;
+      throw err;
     }
   }
 

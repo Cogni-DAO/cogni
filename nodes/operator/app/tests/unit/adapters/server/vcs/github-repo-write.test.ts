@@ -403,6 +403,46 @@ describe("GitHubRepoWriter.forkFromTemplate", () => {
     });
   });
 
+  it("does NOT fail formation when the node repo cannot carry a merge queue (422/403)", async () => {
+    // QUEUE_IS_BEST_EFFORT: the merge_queue ruleset is org/Team-only — a personal-account
+    // node 422s. The queue is an enhancement (branch protection is the backstop), so
+    // formation must still succeed; the node is born queue-less.
+    setHappyForkHandlers();
+    routeHandlers["GET /repos/{owner}/{repo}/branches/{branch}/protection"] =
+      () => ({
+        required_status_checks: { strict: false, contexts: ["unit"] },
+        enforce_admins: { enabled: false },
+        required_pull_request_reviews: null,
+      });
+    routeHandlers["PUT /repos/{owner}/{repo}/branches/{branch}/protection"] =
+      () => ({});
+    routeHandlers["GET /repos/{owner}/{repo}/rulesets"] = (params) =>
+      params.repo === "cogni" ? [{ id: 77, name: "main-merge-queue" }] : [];
+    routeHandlers["GET /repos/{owner}/{repo}/rulesets/{ruleset_id}"] = () => ({
+      name: "main-merge-queue",
+      target: "branch",
+      enforcement: "active",
+      conditions: { ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
+      rules: [{ type: "merge_queue", parameters: { merge_method: "SQUASH" } }],
+    });
+    routeHandlers["POST /repos/{owner}/{repo}/rulesets"] = () =>
+      Promise.reject(
+        statusError(422, "Invalid rule 'merge_queue': unsupported on this plan")
+      );
+
+    // Resolves (no throw) despite the queue write failing.
+    const result = await makeWriter().forkFromTemplate({
+      templateOwner: "Cogni-DAO",
+      owner: "Cogni-DAO",
+      slug: "atlas",
+      nodeId: "11111111-1111-4111-8111-111111111111",
+      chainId: 8453,
+      protectionSourceOwner: "Cogni-DAO",
+      protectionSourceRepo: "cogni",
+    });
+    expect(result.headSha).toBeTruthy();
+  });
+
   it("fails loud when the monorepo source is unprotected (404)", async () => {
     setHappyForkHandlers();
     routeHandlers["GET /repos/{owner}/{repo}/branches/{branch}/protection"] =
