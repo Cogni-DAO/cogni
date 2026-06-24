@@ -120,10 +120,10 @@ import {
 } from "@/adapters/server/db/doltgres/client";
 import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
 import { DrizzleWorkItemSessionAdapter } from "@/adapters/server/db/work-item-session.adapter";
-import { SHOWCASE_NODES } from "@/adapters/server/node-registry/bundled-nodes.data";
 import { CompositeNodeRegistryAdapter } from "@/adapters/server/node-registry/composite-node-registry.adapter";
 import { DbNodeRegistryAdapter } from "@/adapters/server/node-registry/db-node-registry.adapter";
 import { LiveNodeRegistryAdapter } from "@/adapters/server/node-registry/live-node-registry.adapter";
+import { NETWORK_NODES } from "@/adapters/server/node-registry/network-nodes.data";
 import { StaticNodeRegistryAdapter } from "@/adapters/server/node-registry/static-node-registry.adapter";
 import { ServiceDrizzlePaymentAttemptRepository } from "@/adapters/server/payments/drizzle-payment-attempt.adapter";
 import { OpenRouterFundingAdapter } from "@/adapters/server/treasury/openrouter-funding.adapter";
@@ -1065,7 +1065,7 @@ export function resolveNodeRegistry(): NodeRegistryPort {
   const domain = baseDomain(serverEnv());
   const log = makeLogger({ service: "cogni-template", nodeId: getNodeId() });
   const inner = new CompositeNodeRegistryAdapter([
-    new StaticNodeRegistryAdapter(SHOWCASE_NODES, domain),
+    new StaticNodeRegistryAdapter(NETWORK_NODES, domain),
     new DbNodeRegistryAdapter({
       listListedNodes: async () => {
         try {
