@@ -24,8 +24,12 @@ import { isLlmError } from "./llm-errors";
  * - timeout: Request exceeded time limit
  * - aborted: Request was cancelled (e.g., AbortSignal)
  * - rate_limit: Provider rate limit exceeded (HTTP 429)
- * - internal: Unexpected error during execution (server fault)
- * - insufficient_credits: Billing account lacks sufficient credits
+ * - internal: Unexpected error during execution (server fault — our bug)
+ * - insufficient_credits: The USER's billing account lacks sufficient credits (user-fixable)
+ * - provider_unavailable: Upstream LLM provider is down or the OPERATOR's provider
+ *   account is unfunded (e.g. OpenRouter 402 / 5xx). Operator-fault — the user
+ *   cannot fix it. MUST stay distinct from insufficient_credits so the UI never
+ *   tells the user to top up their balance for an operator billing problem (bug.5056).
  */
 export const AI_EXECUTION_ERROR_CODES = [
   "invalid_request",
@@ -35,6 +39,7 @@ export const AI_EXECUTION_ERROR_CODES = [
   "rate_limit",
   "internal",
   "insufficient_credits",
+  "provider_unavailable",
 ] as const;
 
 export type AiExecutionErrorCode = (typeof AI_EXECUTION_ERROR_CODES)[number];
@@ -80,6 +85,11 @@ export function isAiExecutionError(error: unknown): error is AiExecutionError {
  * 2. AiExecutionError (.code field) → use code
  * 3. LlmError (.status, .kind) → map to code
  * 4. Default → "internal"
+ *
+ * FAULT_PARTY_BEFORE_BUCKET: upstream provider failures the operator must fix
+ * (402 unfunded provider account, 5xx provider outage) map to "provider_unavailable",
+ * NOT "internal". Collapsing them to "internal" is what masked bug.5056 as a generic
+ * "Something went wrong" 500. See docs/spec/error-handling.md.
  */
 export function normalizeErrorToExecutionCode(
   error: unknown
@@ -102,6 +112,11 @@ export function normalizeErrorToExecutionCode(
     // Status-first (most reliable - HTTP status code)
     if (error.status === 429) return "rate_limit";
     if (error.status === 408) return "timeout";
+    // Upstream provider billing/availability — operator-fault, NOT "internal" (bug.5056).
+    if (error.status === 402) return "provider_unavailable";
+    if (typeof error.status === "number" && error.status >= 500) {
+      return "provider_unavailable";
+    }
 
     // Kind fallback
     switch (error.kind) {
@@ -111,6 +126,8 @@ export function normalizeErrorToExecutionCode(
         return "timeout";
       case "aborted":
         return "aborted";
+      case "provider_5xx":
+        return "provider_unavailable";
       default:
         return "internal";
     }

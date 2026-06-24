@@ -26,19 +26,20 @@ vi.mock("@/shared/env", () => ({
 }));
 
 // Capture logger.warn calls for private error diagnostic assertions (bug.0059)
-const { mockLoggerWarn } = vi.hoisted(() => ({
+const { mockLoggerWarn, mockLoggerError } = vi.hoisted(() => ({
   mockLoggerWarn: vi.fn(),
+  mockLoggerError: vi.fn(),
 }));
 vi.mock("@/shared/observability", () => ({
   makeLogger: () => ({
     warn: mockLoggerWarn,
     info: vi.fn(),
-    error: vi.fn(),
+    error: mockLoggerError,
     debug: vi.fn(),
     child: vi.fn().mockReturnValue({
       warn: mockLoggerWarn,
       info: vi.fn(),
-      error: vi.fn(),
+      error: mockLoggerError,
       debug: vi.fn(),
     }),
   }),
@@ -448,10 +449,27 @@ describe("LiteLlmAdapter", () => {
 
       await expect(adapter.completionStream(errorTestParams)).rejects.toThrow();
 
-      expect(mockLoggerWarn).toHaveBeenCalledWith(
+      // status 500 is operator-fault → logged at error level (bug.5056)
+      expect(mockLoggerError).toHaveBeenCalledWith(
         expect.objectContaining({
           responseExcerpt: "[unreadable]",
         }),
+        "adapter.litellm.stream_http_error"
+      );
+    });
+
+    it("logs operator-fault upstream 402 at error level, not warn (bug.5056)", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 402,
+        statusText: "Payment Required",
+        text: async () => '{"error":{"message":"Insufficient credits"}}',
+      });
+
+      await expect(adapter.completionStream(errorTestParams)).rejects.toThrow();
+
+      expect(mockLoggerError).toHaveBeenCalledWith(
+        expect.objectContaining({ statusCode: 402 }),
         "adapter.litellm.stream_http_error"
       );
     });

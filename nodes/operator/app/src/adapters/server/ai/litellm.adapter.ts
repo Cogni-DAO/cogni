@@ -307,19 +307,25 @@ export class LiteLlmAdapter implements LlmService {
     if (!response.ok) {
       const kind = classifyLlmErrorFromStatus(response.status);
       const responseExcerpt = await readErrorResponseExcerpt(response);
+      // Operator-fault upstream failures (402 unfunded provider account, 5xx
+      // outage) are loud: they page, not whisper. Benign client-ish 4xx (404
+      // model-not-found, 400) stay at warn. See bug.5056 / FAULT_PARTY_BEFORE_BUCKET.
+      const isOperatorFault = response.status === 402 || response.status >= 500;
       // Operator log: includes private root cause for debugging (never sent to clients)
-      logger.warn(
-        {
-          statusCode: response.status,
-          kind,
-          requestId,
-          traceId,
-          model,
-          provider: extractProviderFromModel(model),
-          responseExcerpt,
-        },
-        "adapter.litellm.stream_http_error"
-      );
+      const httpErrorLog = {
+        statusCode: response.status,
+        kind,
+        requestId,
+        traceId,
+        model,
+        provider: extractProviderFromModel(model),
+        responseExcerpt,
+      };
+      if (isOperatorFault) {
+        logger.error(httpErrorLog, "adapter.litellm.stream_http_error");
+      } else {
+        logger.warn(httpErrorLog, "adapter.litellm.stream_http_error");
+      }
       throw new LlmError(
         `LiteLLM API error: ${response.status} ${response.statusText}`,
         kind,
