@@ -15,6 +15,7 @@
  */
 
 import type { NodeDeployState } from "@cogni/ai-tools";
+import { CheckCircle, Circle } from "lucide-react";
 import type { ReactElement } from "react";
 
 import {
@@ -27,15 +28,18 @@ import {
   TableRow,
 } from "@/components";
 
-// Friendly env labels for the deploy lane, in flight order.
-const ENV_LABEL: Record<string, string> = {
-  "candidate-a": "Candidate A",
+// Label each env by its user-facing TIER (its role), not the backend deploy-lane id: candidate-a → Test.
+// The VM PLACEMENT (which slot serves a tier) is deliberately NOT surfaced yet — with one test VM it adds
+// no signal and would only show on one row. It earns a sub-label once a tier fans out across VMs
+// (candidate-a, candidate-b, … for PR-validation volume); until then the tier name is the whole story.
+const ENV_TIER: Record<string, string> = {
+  "candidate-a": "Test",
   preview: "Preview",
   production: "Production",
 };
 
-function envLabel(env: string): string {
-  return ENV_LABEL[env] ?? env;
+function tierLabel(env: string): string {
+  return ENV_TIER[env] ?? env;
 }
 
 /** A live env serves /readyz 200; the probe adapter maps that to health=healthy. */
@@ -56,13 +60,19 @@ function DeployRow({
   return (
     <TableRow>
       <TableCell className="font-medium text-foreground text-sm">
-        {envLabel(state.env)}
+        {tierLabel(state.env)}
       </TableCell>
       <TableCell className="text-sm">
         {live ? (
-          <span className="text-foreground">✓ Live</span>
+          <span className="inline-flex items-center gap-1.5 text-foreground">
+            <CheckCircle className="size-4 text-success" aria-hidden="true" />
+            Live
+          </span>
         ) : (
-          <span className="text-muted-foreground">✗ Not deployed</span>
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <Circle className="size-4" aria-hidden="true" />
+            Not deployed
+          </span>
         )}
       </TableCell>
       <TableCell className="text-right font-mono text-muted-foreground text-xs">
