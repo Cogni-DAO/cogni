@@ -150,14 +150,14 @@ The atomic unit of what the node believes. Each row is a single assertion with p
 
 Most edges are directed relationships between two knowledge entries. `citation_type='tracks'` is the one cross-plane edge: it connects exactly one work-item endpoint (`task.*`, `bug.*`, `spike.*`, `story.*`, or `subtask.*`) with one knowledge endpoint already present on `main`. The citation DAG is what separates compounding knowledge from a flat document store, and work↔knowledge relationships live here instead of duplicated link columns.
 
-| Column          | Type        | Constraints            | Description                                                                                                                                   |
-| --------------- | ----------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`            | text        | PK                     | `{citing_id}→{cited_id}:{type}`                                                                                                               |
-| `citing_id`     | text        | NOT NULL               | The knowledge entry making the citation, or the work-item endpoint for a `tracks` edge                                                        |
-| `cited_id`      | text        | NOT NULL               | The knowledge entry being cited, or the work-item endpoint for a `tracks` edge                                                                |
-| `citation_type` | text        | NOT NULL               | `supports`, `contradicts`, `extends`, `supersedes`, `tracks`, `evidence_for`, `derives_from`, `validates`, `invalidates` (see § The EDO Loop) |
-| `context`       | text        |                        | Why this citation exists (one sentence)                                                                                                       |
-| `created_at`    | timestamptz | NOT NULL, default now  |                                                                                                                                               |
+| Column          | Type        | Constraints           | Description                                                                                                                                   |
+| --------------- | ----------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`            | text        | PK                    | `{citing_id}→{cited_id}:{type}`                                                                                                               |
+| `citing_id`     | text        | NOT NULL              | The knowledge entry making the citation, or the work-item endpoint for a `tracks` edge                                                        |
+| `cited_id`      | text        | NOT NULL              | The knowledge entry being cited, or the work-item endpoint for a `tracks` edge                                                                |
+| `citation_type` | text        | NOT NULL              | `supports`, `contradicts`, `extends`, `supersedes`, `tracks`, `evidence_for`, `derives_from`, `validates`, `invalidates` (see § The EDO Loop) |
+| `context`       | text        |                       | Why this citation exists (one sentence)                                                                                                       |
+| `created_at`    | timestamptz | NOT NULL, default now |                                                                                                                                               |
 
 **Unique constraint:** `(citing_id, cited_id, citation_type)` — one edge per type per pair.
 
