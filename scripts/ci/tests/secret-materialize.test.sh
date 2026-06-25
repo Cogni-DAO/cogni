@@ -214,7 +214,12 @@ fi
 # POSTHOG_API_KEY/OPENROUTER/EVM_RPC_URL stay seeded so POSTHOG_HOST is the trip key.
 rm -f "$BAO_ROOT/cogni/candidate-a/node-template/POSTHOG_HOST"
 set +e
-env \
+# `env -u POSTHOG_HOST`: source:human values resolve from the env when absent from
+# the bank (_compose_node_value passthrough `${!k}` — by design, provisioning sources
+# .env.<env>). To prove the guard fires on a value absent from BOTH bank AND env
+# (the real bug.5087 condition), the key must be unset here — otherwise a CI runner
+# that happens to export POSTHOG_HOST masks the absence (the actual CI failure here).
+env -u POSTHOG_HOST \
   VM_HOST=fake \
   DOMAIN=test.cognidao.org \
   SSH_OPTS="-i fake-key -o StrictHostKeyChecking=no" \
