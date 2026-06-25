@@ -148,18 +148,20 @@ The atomic unit of what the node believes. Each row is a single assertion with p
 
 ### `citations` — The DAG that makes knowledge compound
 
-Every edge is a directed relationship between two knowledge entries. The citation DAG is what separates compounding knowledge from a flat document store.
+Most edges are directed relationships between two knowledge entries. `citation_type='tracks'` is the one cross-plane edge: it connects exactly one work-item endpoint (`task.*`, `bug.*`, `spike.*`, `story.*`, or `subtask.*`) with one knowledge endpoint already present on `main`. The citation DAG is what separates compounding knowledge from a flat document store, and work↔knowledge relationships live here instead of duplicated link columns.
 
 | Column          | Type        | Constraints            | Description                                                                                                                                   |
 | --------------- | ----------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`            | text        | PK                     | `{citing_id}→{cited_id}:{type}`                                                                                                               |
-| `citing_id`     | text        | NOT NULL, FK→knowledge | The entry making the citation                                                                                                                 |
-| `cited_id`      | text        | NOT NULL, FK→knowledge | The entry being cited                                                                                                                         |
+| `citing_id`     | text        | NOT NULL               | The knowledge entry making the citation, or the work-item endpoint for a `tracks` edge                                                        |
+| `cited_id`      | text        | NOT NULL               | The knowledge entry being cited, or the work-item endpoint for a `tracks` edge                                                                |
 | `citation_type` | text        | NOT NULL               | `supports`, `contradicts`, `extends`, `supersedes`, `tracks`, `evidence_for`, `derives_from`, `validates`, `invalidates` (see § The EDO Loop) |
 | `context`       | text        |                        | Why this citation exists (one sentence)                                                                                                       |
 | `created_at`    | timestamptz | NOT NULL, default now  |                                                                                                                                               |
 
 **Unique constraint:** `(citing_id, cited_id, citation_type)` — one edge per type per pair.
+
+**Endpoint validation:** non-`tracks` edges require both endpoints to be existing `knowledge.id` values. `tracks` requires exactly one endpoint to be an existing `work_items.id` and exactly one endpoint to be an existing `knowledge.id` on `main`; the contribution branch may carry the edge, but the linked knowledge row must already be merged so work-item readers never point at branch-local state.
 
 ### `domains` — Registered knowledge domains
 
