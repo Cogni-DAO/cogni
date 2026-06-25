@@ -13,7 +13,7 @@ namePrefix: blue-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/blue
-    digest: "sha256:a2147613d09f5d773d3626a1f28b5b8140ef3b3884980e2f62df50b4cf7710ba"
+    digest: "sha256:39ffca5df56f364475fc68aa3ea27ef31b710c17d0f025bd5fa3627c8741808d"
 
 patches:
   - target:
@@ -23,6 +23,11 @@ patches:
       - op: replace
         path: /data/NODE_NAME
         value: "blue"
+      # Per-env runtime env-name the app stamps onto OpenBao paths + observability
+      # labels (metrics/logger read DEPLOY_ENVIRONMENT; absent → silent "local").
+      - op: add
+        path: /data/DEPLOY_ENVIRONMENT
+        value: "production"
       - op: replace
         path: /data/TEMPORAL_NAMESPACE
         value: "cogni-production"
