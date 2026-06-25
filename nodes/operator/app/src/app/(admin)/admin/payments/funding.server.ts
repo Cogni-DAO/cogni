@@ -66,7 +66,7 @@ async function usdcBalance(
   try {
     const client = createPublicClient({ transport: http(rpcUrl) });
     const raw = (await client.readContract({
-      address: USDC_TOKEN_ADDRESS,
+      address: getAddress(USDC_TOKEN_ADDRESS),
       abi: erc20Abi,
       functionName: "balanceOf",
       args: [getAddress(address)],
