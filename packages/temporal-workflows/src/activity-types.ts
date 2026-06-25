@@ -114,6 +114,11 @@ export interface ReviewActivities {
     installationId: number;
   }): Promise<{
     evidence: Record<string, unknown>;
+    /**
+     * Node-controlled PR review on/off (repo-spec `review.enabled`). When false,
+     * the workflow skips review entirely (no Check Run, no comment, no AI tokens).
+     */
+    reviewEnabled: boolean;
     gatesConfig: { gates: unknown[]; failOnError: boolean };
     rules: Record<string, unknown>;
     graphMessages: Array<{ role: string; content: string }>;
