@@ -199,6 +199,31 @@ export function getLedgerApprovers(): string[] {
   return cachedLedgerApprovers;
 }
 
+/**
+ * True when the wallet is a repo-spec ledger approver (activity_ledger.approvers).
+ * Mirrors node-template's gate. Empty allowlist → always false.
+ */
+export function isLedgerApprover(wallet: string | null | undefined): boolean {
+  if (!wallet) return false;
+  return getLedgerApprovers().includes(wallet.toLowerCase());
+}
+
+/**
+ * DAO-admin gate for the `(admin)` route group. A wallet is an admin when it is a
+ * ledger approver OR the configured steward wallet (payments_out.steward_wallet).
+ *
+ * The steward-wallet clause lets the operator node gate its admin tab on the
+ * governance approver/admin wallet WITHOUT requiring a full `activity_ledger` block
+ * in its runtime repo-spec (which would synthesize a LEDGER_INGEST schedule as a
+ * side effect). At MVP steward == approver == admin (the same wallet).
+ */
+export function isDaoAdmin(wallet: string | null | undefined): boolean {
+  if (!wallet) return false;
+  if (isLedgerApprover(wallet)) return true;
+  const steward = getStewardWalletConfig();
+  return !!steward && steward.address.toLowerCase() === wallet.toLowerCase();
+}
+
 let cachedOperatorWalletConfig: OperatorWalletSpec | undefined | null = null;
 
 /**

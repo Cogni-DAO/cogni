@@ -29,5 +29,7 @@ export {
   getScopeId,
   getStewardWalletConfig,
   type InboundPaymentConfig,
+  isDaoAdmin,
+  isLedgerApprover,
   type KnowledgeConfig,
 } from "./repoSpec.server";

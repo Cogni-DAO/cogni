@@ -127,11 +127,24 @@ card layout. Add a **"Provider Top-Ups"** card that:
   approver/node-admin gate;
 - lists recent `payments.steward_withdrawal` / `payments.topup_confirmed` events.
 
+## Admin tab (operator was behind — synced)
+
+The DAO Admin tab is a node-template `(admin)/` route group that the **operator app did
+not have** (operator only had `(app)`/`(infra)`/`(public)`). This PR ports it to operator:
+`(admin)/{layout,AdminShell,admin/page}.tsx` + an "Admin" sidebar entry, and adds the
+**Provider Top-Ups** surface (`/admin/payments`) with a real `StewardTopUpCard` button →
+`POST /steward-withdrawal`. No more devtools.
+
+Gate: node-template's `(admin)` uses `isLedgerApprover` (repo-spec `activity_ledger.approvers`).
+Operator's runtime repo-spec (`nodes/operator/.cogni`) has no `activity_ledger`, and adding
+one would synthesize a LEDGER_INGEST schedule as a side effect. So operator gates on
+**`isDaoAdmin` = ledger approver OR steward wallet** (`payments_out.steward_wallet`) — works
+without touching attribution config. At MVP steward == approver == admin (one wallet).
+
 ## Next steps (separate PRs)
 
-1. **Admin-tab UI** (node-template): the "Provider Top-Ups" card that calls
-   `POST /steward-withdrawal` and renders balances — built in node-template so all forks
-   inherit it (see "Works for ALL nodes" above).
+1. **node-template parity**: port the Provider Top-Ups card into node-template's existing
+   `(admin)` tab so all forks get it (its `(admin)` already exists).
 2. **Confirm unification + metrics**: a single `provider balances` read wrapping
    OpenRouter `/credits` + the existing Cherry `compute/balances` (+ steward wallet USDC).
    Log `payments.topup_confirmed` with the delta.
