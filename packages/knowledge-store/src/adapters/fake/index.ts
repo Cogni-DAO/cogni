@@ -269,6 +269,9 @@ export class FakeKnowledgeStoreAdapter implements KnowledgeStorePort {
     if (!citedRow && !citedIsWork) {
       throw new CitationTargetNotFoundError(edge.citedId);
     }
+    if (citedIsWork && !citingIsWork && !this.rows.has(edge.citingId)) {
+      throw new CitationTargetNotFoundError(edge.citingId);
+    }
     const expected = expectedEntryTypeForEdge(edge.citationType);
     if (expected !== null && citedRow?.entryType !== expected) {
       throw new CitationTypeMismatchError(

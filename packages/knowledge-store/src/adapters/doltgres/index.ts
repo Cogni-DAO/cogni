@@ -439,13 +439,17 @@ export class DoltgresKnowledgeStoreAdapter implements KnowledgeStorePort {
         throw new CitationTargetNotFoundError(edge.citedId);
     }
 
-    // CITATION_TARGET_EXISTS_AT_WRITE + EDGE_TYPE_MATCHES_CITED_ENTRY_TYPE
-    // collapsed into one SELECT (knowledge-syntropy spec).
-    const citedEntryType = citedIsWork
-      ? null
-      : await this.getKnowledgeEntryType(edge.citedId);
-    if (citedEntryType === null && !citedIsWork) {
+    const citedEntryType = !citedIsWork
+      ? await this.getKnowledgeEntryType(edge.citedId)
+      : null;
+    if (!citedIsWork && citedEntryType === null) {
       throw new CitationTargetNotFoundError(edge.citedId);
+    }
+    if (citedIsWork && !citingIsWork) {
+      const citingEntryType = await this.getKnowledgeEntryType(edge.citingId);
+      if (citingEntryType === null) {
+        throw new CitationTargetNotFoundError(edge.citingId);
+      }
     }
     const expected = expectedEntryTypeForEdge(edge.citationType);
     if (expected !== null && citedEntryType !== expected) {

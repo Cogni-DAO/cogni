@@ -594,4 +594,16 @@ describe("EDO chain walk — walkChain", () => {
     const chain = await resolver.walkChain("h", { direction: "both" });
     expect(chain.map((n) => n.entry.id)).toEqual(["h"]);
   });
+
+  it("rejects work-item tracking edges when the non-work citing endpoint is missing", async () => {
+    const { store } = await bootstrap();
+
+    await expect(
+      store.addCitation({
+        citingId: "missing-knowledge",
+        citedId: "task.5017",
+        citationType: "tracks",
+      })
+    ).rejects.toBeInstanceOf(CitationTargetNotFoundError);
+  });
 });
