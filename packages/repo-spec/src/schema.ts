@@ -447,14 +447,26 @@ export const repoSpecSchema = z
     node_id: z.string().uuid("node_id must be a valid UUID"),
 
     /**
-     * Human-facing node identity (display, not a key). `name` is the node slug
-     * (e.g. `operator`, `beacon`); `mission` is the one-line core mission the
-     * cognition substrate surfaces at session start. Optional for back-compat.
+     * Human-facing node identity (display, not a key) — the SSOT a node self-describes from. `name` is
+     * the node slug (e.g. `operator`, `beacon`). The display layers, all projected to the node's public
+     * `/.well-known/agent.json` so the operator reads them rather than hardcoding (IDENTITY_IS_REPO_SPEC_PROJECTION):
+     *   - `hook`    — punchy ~5-word tagline shown on gallery cards / node-page headings.
+     *   - `mission` — the 1–3 sentence north-star the cognition substrate surfaces at session start.
+     *   - `brand`   — visual identity: `thumbnail` is a URL the NODE hosts (e.g. its OG image) so brand
+     *     stays sovereign + current with no operator asset-hosting; `color` tints the monogram fallback.
+     * All optional for back-compat (a node with only `name` falls back to title-cased slug + monogram).
      */
     intent: z
       .object({
         name: z.string().min(1),
+        hook: z.string().min(1).max(80).optional(),
         mission: z.string().min(1).optional(),
+        brand: z
+          .object({
+            thumbnail: z.string().url().optional(),
+            color: z.string().optional(),
+          })
+          .optional(),
       })
       .passthrough()
       .optional(),
