@@ -34,8 +34,10 @@ export function useFleetNodes(): UseQueryResult<readonly NodeFleetVM[]> {
   return useQuery({
     queryKey: ["fleet-nodes"],
     queryFn: fetchFleetNodes,
-    refetchInterval: 30_000,
-    staleTime: 15_000,
+    // 60s client cadence halves per-viewer churn; the server-side per-cell single-flight cache
+    // (createDeployCapability) is what actually bounds upstream probes regardless of viewers.
+    refetchInterval: 60_000,
+    staleTime: 30_000,
     gcTime: 5 * 60_000,
   });
 }
