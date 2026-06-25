@@ -27,6 +27,7 @@ export {
   getOperatorWalletConfig,
   getPaymentConfig,
   getScopeId,
+  getStewardWalletConfig,
   type InboundPaymentConfig,
   type KnowledgeConfig,
 } from "./repoSpec.server";

@@ -29,12 +29,14 @@ import {
   extractNodeThumbnail,
   extractOperatorWalletConfig,
   extractPaymentConfig,
+  extractStewardWalletConfig,
   type GovernanceConfig,
   type InboundPaymentConfig,
   type KnowledgeConfig,
   type OperatorWalletSpec,
   parseRepoSpec,
   type RepoSpec,
+  type StewardWalletSpec,
 } from "@cogni/repo-spec";
 import { serverEnv } from "@/shared/env";
 
@@ -223,6 +225,21 @@ export function getDaoTreasuryAddress(): string | undefined {
   const spec = loadRepoSpec();
   cachedDaoTreasuryAddress = extractDaoTreasuryAddress(spec);
   return cachedDaoTreasuryAddress;
+}
+
+let cachedStewardWalletConfig: StewardWalletSpec | undefined | null = null;
+
+/**
+ * Steward wallet configuration from repo-spec (payments_out.steward_wallet).
+ * The human-custodied address the operator wallet funds via withdrawToSteward.
+ * Returns undefined if payments_out is not present.
+ */
+export function getStewardWalletConfig(): StewardWalletSpec | undefined {
+  if (cachedStewardWalletConfig !== null) return cachedStewardWalletConfig;
+
+  const spec = loadRepoSpec();
+  cachedStewardWalletConfig = extractStewardWalletConfig(spec);
+  return cachedStewardWalletConfig;
 }
 
 let cachedKnowledgeConfig: KnowledgeConfig | undefined | null = null;
