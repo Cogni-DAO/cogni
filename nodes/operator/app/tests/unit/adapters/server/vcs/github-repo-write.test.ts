@@ -1769,7 +1769,13 @@ describe("GitHubRepoWriter.syncTemplateUpstreamToFork", () => {
     }) => {
       expect(params.recursive).toBe("1");
       const src = params.tree_sha === "fork-tree" ? forkTree : upstreamTree;
-      return { tree: src.map((e) => ({ ...e, mode: e.mode ?? "100644", type: "blob" })) };
+      return {
+        tree: src.map((e) => ({
+          ...e,
+          mode: e.mode ?? "100644",
+          type: "blob",
+        })),
+      };
     },
   });
 
@@ -1911,7 +1917,9 @@ describe("GitHubRepoWriter.syncTemplateUpstreamToFork", () => {
     ]);
     // node_local (page.tsx) and fork-unique (fork-only.ts) never appear in the overlay.
     expect(treeEntries.some((e) => e.path.endsWith("page.tsx"))).toBe(false);
-    expect(treeEntries.some((e) => e.path.endsWith("fork-only.ts"))).toBe(false);
+    expect(treeEntries.some((e) => e.path.endsWith("fork-only.ts"))).toBe(
+      false
+    );
   });
 
   it("returns up_to_date when no Tier-2 path differs (no merge commit, no PR)", async () => {
