@@ -5,9 +5,12 @@
  * Module: `@adapters/server/onchain/viem-evm-onchain-client`
  * Purpose: Production EVM on-chain client using viem for RPC operations.
  * Scope: Implements EvmOnchainClient interface with real RPC calls. Does not implement business logic.
- * Invariants: Validates chain ID against repo-spec config at construction; requires EVM_RPC_URL.
+ * Invariants: Depends ONLY on EVM_RPC_URL + the compile-time CHAIN — a generic chain reader, decoupled
+ *   from governance/payments config. It does NOT read repo-spec (cogni_dao / payments_in): on-chain
+ *   reads (treasury, ownership, payment verification) must not require payment-rails activation. Any
+ *   chain-vs-repo-spec assertion belongs at the call boundary, not in this client.
  * Side-effects: IO (RPC calls to EVM node)
- * Notes: Used by EvmRpcOnChainVerifierAdapter and future treasury/ownership adapters.
+ * Notes: Used by ViemTreasuryAdapter (DAO treasury), EvmRpcOnChainVerifierAdapter + SplitPaymentRailGuardAdapter (payments).
  * Links: docs/spec/onchain-readers.md, docs/spec/payments-design.md
  * @public
  */
@@ -24,7 +27,6 @@ import {
   type TransactionReceipt,
 } from "viem";
 
-import { getPaymentConfig } from "@/shared/config/repoSpec.server";
 import { serverEnv } from "@/shared/env";
 import { CHAIN, ERC20_ABI } from "@/shared/web3";
 import type { EvmOnchainClient } from "@/shared/web3/onchain/evm-onchain-client.interface";
@@ -42,23 +44,15 @@ export class ViemEvmOnchainClient implements EvmOnchainClient {
     }
 
     const env = serverEnv();
-    const config = getPaymentConfig();
-    if (!config) {
-      throw new Error("[ViemEvmOnchainClient] Payment rails not activated");
-    }
 
-    // Validate chain ID matches repo-spec
-    if (config.chainId !== CHAIN.id) {
-      throw new Error(
-        `[ViemEvmOnchainClient] Chain mismatch: repo-spec declares ${config.chainId}, CHAIN constant is ${CHAIN.id}`
-      );
-    }
-
-    // Require EVM_RPC_URL in production/preview/dev
+    // The only hard dependency: a chain RPC endpoint. This client reads the
+    // compile-time CHAIN; it does NOT gate on payment-rails activation or any
+    // repo-spec section. Treasury/ownership reads work for any node with a DAO
+    // address + RPC, independent of whether inbound payments are activated.
     if (!env.EVM_RPC_URL) {
       throw new Error(
-        "[ViemEvmOnchainClient] EVM_RPC_URL is required for on-chain verification. " +
-          "Set it in your environment or use APP_ENV=test for fake adapter."
+        "[ViemEvmOnchainClient] EVM_RPC_URL is required for on-chain reads. " +
+          "Set it in your environment or use APP_ENV=test for the fake adapter."
       );
     }
 
