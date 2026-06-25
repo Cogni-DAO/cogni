@@ -12,8 +12,8 @@ namePrefix: games-
 
 images:
   - name: ghcr.io/cogni-dao/cogni-template
-    newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    newName: ghcr.io/cogni-dao/games
+    digest: "sha256:1ddd9ecaa505fd5a53b03ef726ad45be52fb1bf59fd4db1bfd75f7de08265c1a"
 
 patches:
   - target:
