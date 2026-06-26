@@ -16,11 +16,14 @@ intent:
   hook: "Optimizing the tooling + CICD for node-template spawns"
   mission: "Cogni's first node — empowering AI-powered, web3-governed nodes with streamlined CI/CD, knowledge syntropy, and shared infrastructure, so each builds its mission, not its plumbing. An open-source, gitops-native substrate aligning DAO ownership, code, and knowledge into one verifiable lineage; strongest within the network, forkable to run fully sovereign."
   brand:
-    # Generated at request time by the node's own Next server (app/src/app/opengraph-image.tsx),
-    # rendered from THIS identity (name + hook + color). One image = og:image + gallery card,
-    # always current, no committed binary. Relative to this node's host → operator resolves per-env.
-    thumbnail: "/opengraph-image"
+    # `icon` (Lucide NAME) is the SSOT for the node's mark — gallery card, og:image, favicon
+    # all render it. `color` tints it. The /opengraph-image route renders `icon` into a PNG,
+    # generated at request time by the node's own Next server (no committed binary, no CDN).
+    icon: "Brain"
     color: "#6366f1"
+    # Transitional: the gallery still reads `thumbnail` until it renders `icon` directly;
+    # /opengraph-image now renders the icon, so the gallery shows it today.
+    thumbnail: "/opengraph-image"
 
 # Privy-managed operator wallet — the runtime container reads THIS file as
 # /app/.cogni/repo-spec.yaml (Dockerfile copies nodes/operator/.cogni, not root),
