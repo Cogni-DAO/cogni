@@ -1052,6 +1052,63 @@ describe("GitHubRepoWriter.promoteNode (env=production)", () => {
   });
 });
 
+describe("GitHubRepoWriter.resolveNodeRepo", () => {
+  // IN-REPO catalog: NO source_repo (operator/poly shape).
+  const inRepoCatalog =
+    "name: operator\ntype: node\npath_prefix: nodes/operator/\ndockerfile: nodes/operator/app/Dockerfile\n";
+  // REMOTE-SOURCE (fork) catalog: has source_repo.
+  const forkCatalog =
+    "name: beacon\ntype: node\npath_prefix: nodes/beacon/\nsource_repo: https://github.com/cogni-dao/beacon.git\nimage_repository: ghcr.io/cogni-dao/beacon\n";
+
+  function catalogHandler(yaml: string) {
+    return {
+      "GET /repos/{owner}/{repo}/contents/{path}": () => ({
+        type: "file" as const,
+        encoding: "base64" as const,
+        sha: "catalog-blob",
+        content: Buffer.from(yaml, "utf-8").toString("base64"),
+      }),
+    };
+  }
+
+  it("IN-REPO node (operator, no source_repo) resolves to the parent monorepo — not catalog_missing", async () => {
+    routeHandlers = catalogHandler(inRepoCatalog);
+    const repo = await makeWriter().resolveNodeRepo({
+      parentOwner: "Cogni-DAO",
+      parentRepo: "cogni",
+      slug: "operator",
+    });
+    expect(repo).toEqual({ owner: "Cogni-DAO", repo: "cogni" });
+  });
+
+  it("REMOTE-SOURCE node resolves to its own source_repo", async () => {
+    routeHandlers = catalogHandler(forkCatalog);
+    const repo = await makeWriter().resolveNodeRepo({
+      parentOwner: "Cogni-DAO",
+      parentRepo: "cogni",
+      slug: "beacon",
+    });
+    expect(repo).toEqual({ owner: "cogni-dao", repo: "beacon" });
+  });
+
+  it("throws catalog_missing (404) for a genuinely absent catalog row", async () => {
+    routeHandlers = {
+      "GET /repos/{owner}/{repo}/contents/{path}": () => {
+        const err = new Error("Not Found") as Error & { status: number };
+        err.status = 404;
+        throw err;
+      },
+    };
+    await expect(
+      makeWriter().resolveNodeRepo({
+        parentOwner: "Cogni-DAO",
+        parentRepo: "cogni",
+        slug: "ghost",
+      })
+    ).rejects.toMatchObject({ code: "catalog_missing" });
+  });
+});
+
 describe("GitHubRepoWriter.prepareNodeRefCandidateFlight", () => {
   it("prepares node-ref flights from source repo identity without GHCR metadata", async () => {
     const sourceSha = "0123456789012345678901234567890123456789";

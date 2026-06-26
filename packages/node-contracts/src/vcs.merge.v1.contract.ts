@@ -27,10 +27,11 @@ export const mergeOperation = {
     prNumber: z.number().int().positive(),
     method: z.literal("squash").default("squash"),
     /**
-     * Optional node id-or-slug. Present → node-scoped (RBAC + merge target = the node's
-     * `source_repo`). Absent → legacy operator-monorepo lane (operator-node RBAC + env repo).
+     * Required node id-or-slug — every merge is node-scoped (RBAC on the named node + merge target
+     * resolved by `resolveNodeRepo`). The operator's own monorepo PRs pass `nodeId:"operator"` (it is
+     * the in-repo node → resolves to the parent monorepo). There is no `nodeId`-less lane.
      */
-    nodeId: z.string().min(1).optional(),
+    nodeId: z.string().min(1),
   }),
 
   /**
