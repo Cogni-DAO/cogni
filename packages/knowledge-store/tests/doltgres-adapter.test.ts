@@ -15,6 +15,7 @@ import type { Sql } from "postgres";
 import { describe, expect, it } from "vitest";
 
 import { DoltgresKnowledgeStoreAdapter } from "../src/adapters/doltgres/index.js";
+import { CitationTargetNotFoundError } from "../src/port/knowledge-store.port.js";
 
 type Rows = Record<string, unknown>[] & { count?: number };
 
@@ -43,10 +44,42 @@ function rows(values: Record<string, unknown>[], count?: number): Rows {
 class FakeSql {
   readonly queries: string[] = [];
 
+  constructor(
+    private readonly knowledgeEntryTypes = new Map([["policy-row", "finding"]]),
+    private readonly workItemIds = new Set<string>()
+  ) {}
+
   async unsafe(query: string): Promise<Rows> {
     this.queries.push(query);
+    if (query.includes("FROM work_items")) {
+      return rows(
+        Array.from(this.workItemIds).some((id) => query.includes(`'${id}'`))
+          ? [{ "?column?": 1 }]
+          : []
+      );
+    }
+    if (query.includes("entry_type FROM knowledge")) {
+      const id = Array.from(this.knowledgeEntryTypes.keys()).find((candidate) =>
+        query.includes(`'${candidate}'`)
+      );
+      return id
+        ? rows([{ entry_type: this.knowledgeEntryTypes.get(id) }])
+        : rows([]);
+    }
     if (query.includes("FROM domains")) return rows([{ "?column?": 1 }]);
     if (query.startsWith("INSERT INTO knowledge")) return rows([knowledgeRow]);
+    if (query.startsWith("INSERT INTO citations")) {
+      return rows([
+        {
+          id: "knowledge-row->task.5017:tracks",
+          citing_id: "knowledge-row",
+          cited_id: "task.5017",
+          citation_type: "tracks",
+          context: null,
+          created_at: new Date("2026-06-14T00:00:00.000Z"),
+        },
+      ]);
+    }
     if (query.startsWith("UPDATE knowledge")) return rows([knowledgeRow], 1);
     if (query.includes("SELECT * FROM knowledge WHERE id")) {
       return rows([knowledgeRow]);
@@ -140,5 +173,45 @@ describe("DoltgresKnowledgeStoreAdapter — confidence policy on writes", () => 
     await adapterFor(fake).updateKnowledge("policy-row", { confidencePct: 55 });
     const update = fake.queries.find((q) => q.startsWith("UPDATE knowledge"));
     expect(update).toContain("confidence_pct = 55");
+  });
+});
+
+describe("DoltgresKnowledgeStoreAdapter — work-item tracking citations", () => {
+  it("rejects tracks edges when the non-work citing endpoint is not knowledge", async () => {
+    const fake = new FakeSql(new Map(), new Set(["task.5017"]));
+
+    await expect(
+      adapterFor(fake).addCitation({
+        citingId: "missing-knowledge",
+        citedId: "task.5017",
+        citationType: "tracks",
+      })
+    ).rejects.toBeInstanceOf(CitationTargetNotFoundError);
+
+    expect(
+      fake.queries.some(
+        (q) =>
+          q.includes("entry_type FROM knowledge") &&
+          q.includes("'missing-knowledge'")
+      )
+    ).toBe(true);
+  });
+
+  it("accepts tracks edges when the non-work citing endpoint exists", async () => {
+    const fake = new FakeSql(
+      new Map([["knowledge-row", "finding"]]),
+      new Set(["task.5017"])
+    );
+
+    const citation = await adapterFor(fake).addCitation({
+      citingId: "knowledge-row",
+      citedId: "task.5017",
+      citationType: "tracks",
+    });
+
+    expect(citation.citationType).toBe("tracks");
+    expect(
+      fake.queries.some((q) => q.startsWith("INSERT INTO citations"))
+    ).toBe(true);
   });
 });

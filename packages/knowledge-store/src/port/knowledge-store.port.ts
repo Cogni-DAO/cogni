@@ -9,8 +9,8 @@
  *   - PORT_BEFORE_BACKEND: All knowledge access goes through this port.
  *   - PACKAGES_NO_ENV, PACKAGES_NO_LIFECYCLE.
  *   - DOMAIN_FK_ENFORCED_AT_WRITE: every write to knowledge verifies `domain` exists.
- *   - CITATION_TARGET_EXISTS_AT_WRITE: every addCitation verifies cited_id exists.
- *   - EDGE_TYPE_MATCHES_CITED_ENTRY_TYPE: addCitation checks cited row's entry_type.
+ *   - CITATION_TARGET_EXISTS_AT_WRITE: addCitation verifies each knowledge endpoint exists.
+ *   - EDGE_TYPE_MATCHES_CITED_ENTRY_TYPE: addCitation checks target row entry_type contracts.
  *   - HYPOTHESIS_HAS_EVALUATE_AT: addKnowledge rejects hypothesis rows w/o evaluate_at.
  * Side-effects: none
  * Links: docs/spec/knowledge-data-plane.md, docs/spec/knowledge-domain-registry.md, docs/spec/knowledge-syntropy.md
@@ -198,9 +198,10 @@ export interface KnowledgeStorePort {
 
   // --- Write — edges (knowledge-syntropy: CITATION_TARGET_EXISTS_AT_WRITE + EDGE_TYPE_MATCHES_CITED_ENTRY_TYPE) ---
   /**
-   * Insert a row in `citations`. Adapter MUST verify the cited row exists
-   * (CITATION_TARGET_EXISTS_AT_WRITE) and its entry_type matches the
-   * citation_type contract (EDGE_TYPE_MATCHES_CITED_ENTRY_TYPE).
+   * Insert a row in `citations`. Adapter MUST verify every knowledge endpoint
+   * exists (for knowledge-only edges this is the cited row; for work-item
+   * `tracks` edges this is the single non-work endpoint) and its entry_type
+   * matches the citation_type contract (EDGE_TYPE_MATCHES_CITED_ENTRY_TYPE).
    * Throws `CitationTargetNotFoundError` or `CitationTypeMismatchError`.
    * Idempotent on the unique (citing_id, cited_id, citation_type) index —
    * duplicate inserts return the existing row, not an error.

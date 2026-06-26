@@ -36,7 +36,7 @@ Walk top-to-bottom. **Most agent work stops at step 1.**
 1. **STAY SILENT.** Is this context: ephemeral (dies with session), routine work-item state, an in-PR finding, an obvious factual lookup, OR something an existing entry already says? → **write nothing.** Knowledge entries are precious; sprawl is the failure mode. **≥80% of contributable-feeling moments belong here.**
 2. **RECALL — both planes.** (a) The **merged** plane: `/knowledge?mode=browse` filtered by domain, or `core__knowledge_search`. (b) **Your own open contribution _branch_**: `GET /contributions?state=open` for the id, then **`GET /contributions/{id}/diff` to read the entries already on it.** Branch-local entries do **not** appear in `/knowledge?domain=` (it returns merged-`main` only) — so an agent who recalls the merged plane alone will re-discover, re-author, or outright deny knowledge it wrote minutes ago on its own branch. Read the branch before you write or before you answer "does X exist / is it linked." Cite the siblings you find; append rather than fork.
 3. **REFINE.** Found a related entry that's slightly off, stale, or bloated? **Sharpen it in place** via an `op: update` edit. Shorter + sharper + raises confidence. **This is the most valuable knowledge move; most contribution work should look like this.**
-4. **CITE.** Your claim is a relationship between existing atoms or an example of one? Add a `citation` edge — `supports`, `contradicts`, `extends`, `supersedes`. Or write a sibling atom that cites the parent. Never inline "companion to X" prose. **Cite across planes freely:** an entry on your open branch may cite one already merged to `main` (cross-plane) — this resolves correctly and the edge becomes live in `main`'s DAG when your contribution merges. (Before bug.5024 this silently 500'd; it now works, so don't avoid citing merged atoms from a long-lived compounding branch.)
+4. **CITE.** Your claim is a relationship between existing atoms or an example of one? Add a `citation` edge — `supports`, `contradicts`, `extends`, `supersedes`. Or write a sibling atom that cites the parent. Never inline "companion to X" prose. **Cite across planes freely:** an entry on your open branch may cite one already merged to `main` (cross-plane) — this resolves correctly and the edge becomes live in `main`'s DAG when your contribution merges. (Before bug.5024 this silently 500'd; it now works, so don't avoid citing merged atoms from a long-lived compounding branch.) **Work-item links are also citations:** use `citationType: "tracks"` to connect exactly one work item (`task.*`, `bug.*`, `spike.*`, `story.*`, or `subtask.*`) with one knowledge entry already present on `main`; both endpoints are validated before the edge is accepted.
 5. **WRITE ATOMIC.** No existing atom fits AND the claim earns its keep → file new entry. See routing below for which entry type / sub-skill. **Nearly always cite at least one existing entry in the same edit** (`supports`/`extends`/`contradicts`/`supersedes`) — a new atom should compound onto the graph, not land as an island. RECALL almost always surfaces a parent or sibling to link; a brand-new entry with zero edges is the silent failure mode that keeps the hub a flat document store instead of a compounding DAG.
 6. **EXTEND.** Anti-pattern. Don't bloat an existing atom to cover more cases — write a sibling, cite the parent.
 
@@ -153,6 +153,32 @@ curl -sS -X POST "$BASE/api/v1/knowledge/contributions/$CID/commits" \
 
 One POST can carry a **mixed-op batch** (`insert` + `update` + `deprecate`, up to 50) in a single commit when the changes belong together — that's one review for one coherent unit, not N branches.
 
+**Work-item↔knowledge tracking links.** Use a `cite` edit with
+`citationType: "tracks"` when a work item is the operational owner of a
+knowledge entry, or when a knowledge entry explains/proves a work item. The edge
+must connect exactly one work-item id and one merged knowledge id; branch-local
+knowledge rows are not accepted for `tracks` because work-item detail pages read
+the merged DAG.
+
+```bash
+curl -sS -X POST "$BASE/api/v1/knowledge/contributions/$CID/commits" \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{
+    "message": "link story.5017 to knowledge invariant",
+    "edits": [{
+      "op": "cite",
+      "citingId": "story.5017",
+      "citedId": "<merged-knowledge-id>",
+      "citationType": "tracks",
+      "context": "story.5017 implements and validates this knowledge invariant"
+    }]
+  }'
+```
+
+Do **not** add work-item link columns or duplicate the relationship in work
+metadata. The `citations` row is the source of truth and renders from both the
+knowledge and work-item detail surfaces after merge.
+
 **Two distinct "refine" cases — don't conflate them:**
 
 | You want to refine…                             | How                                                                                                                |
@@ -214,6 +240,7 @@ Don't set `confidencePct` on the request unless you have a defensible reason. In
 - **Registering a fresh agent key per contribution** — multiplies principals; reuse your one saved key.
 - Filing a new entry when RECALL would surface an existing match
 - **Filing a new atom with zero citation edges — the island failure.** A new entry should nearly always `cite` a parent/sibling RECALL surfaced (cross-plane to merged atoms works); islands don't compound and leave the hub a flat document store
+- **Linking work items outside `citations`** — work↔knowledge relationships use one `tracks` edge, not duplicated columns, tags, or prose.
 - Writing a `content` prose blob instead of structured markdown (headings / bold lead / table / list) — renders as an unscannable wall; see "Format the `content` field"
 - Reaching for `html` for ordinary human-facing content that a markdown table or list expresses fine — `html` is the rare visual escape hatch (SVG / chart), not the default for "a human reads it"
 - Filing a falsifiable prediction as `finding` to avoid EDO overhead — use `edo-loop` or stay silent
