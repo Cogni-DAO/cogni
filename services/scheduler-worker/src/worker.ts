@@ -8,6 +8,9 @@
  * Invariants:
  *   - Per WORKER_NEVER_CONTROLS_SCHEDULES: Does NOT depend on ScheduleControlPort
  *   - Per TEMPORAL_DETERMINISM: Workflows are bundled separately from activities
+ *   - Workflow bundle is built ONCE (bundleWorkflowCode) and shared across every
+ *     per-node Worker — never re-bundled per queue (O(nodes) webpack at boot
+ *     crashlooped the pod and took the fleet down, incident 2026-06-26)
  *   - Per QUEUE_PER_NODE_ISOLATION (task.0280 phase 2): one Temporal Worker per nodeId polling `scheduler-tasks-${nodeId}`. A failing node's queue growing does not starve other nodes. Required for chat.completions / ai.chat which submit from node-apps to `scheduler-tasks-${getNodeId()}` — stale scheduler-worker images that only poll the legacy queue will hang every user chat request.
  *   - All dependencies injected via ServiceContainer from bootstrap/container.ts
  *   - No concrete adapter imports — uses container for wiring
@@ -17,7 +20,11 @@
  */
 
 import { createRequire } from "node:module";
-import { NativeConnection, Worker } from "@temporalio/worker";
+import {
+  bundleWorkflowCode,
+  NativeConnection,
+  Worker,
+} from "@temporalio/worker";
 import { createGoalLoopActivities } from "./activities/goal-loop.js";
 import { createActivities } from "./activities/index.js";
 import { createReviewActivities } from "./activities/review.js";
@@ -152,6 +159,18 @@ export async function startSchedulerWorker(
   };
   const workflowsPath = require.resolve("@cogni/temporal-workflows/scheduler");
 
+  // Build the Workflow bundle ONCE and reuse it for every per-node Worker.
+  // Worker.create({ workflowsPath }) re-runs webpack on each call; with one
+  // Worker per node that is O(nodes) ~3MB compilations at boot — which blocked
+  // the event loop, starved the liveness probe, crashlooped the pod and (via
+  // the readiness coupling) took the whole fleet down (incident 2026-06-26).
+  // The bundle is identical across nodes (same workflow code), so it is built a
+  // single time here. Further optimization: move bundling to image-build time.
+  logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_STARTING, {
+    phase: "bundle_workflows",
+  });
+  const workflowBundle = await bundleWorkflowCode({ workflowsPath });
+
   // Per QUEUE_PER_NODE_ISOLATION: build the nodeId set from the endpoint map
   // (filtering to UUIDs, which are canonical; slug entries are convenience
   // aliases for URL lookup), create one Worker per node, and always include
@@ -190,7 +209,8 @@ export async function startSchedulerWorker(
         connection,
         namespace: env.TEMPORAL_NAMESPACE,
         taskQueue,
-        workflowsPath,
+        // Reuse the single pre-built bundle instead of re-bundling per queue.
+        workflowBundle,
         activities: allActivities,
       });
       const run = worker.run();

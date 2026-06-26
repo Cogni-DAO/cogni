@@ -62,11 +62,11 @@ gh run download --repo "$REPO" --name candidate-b-init-artifacts --dir .local
 kubectl --kubeconfig .local/candidate-b-kubeconfig.yaml -n argocd get applications      # all Healthy
 kubectl ... -n cogni-candidate-b get externalsecret                                     # all SecretSynced
 kubectl ... -n cogni-candidate-b get pods                                               # Running/Ready, real image digests
-curl https://canary-candidate-b.cognidao.org/readyz                                     # HTTP 200
-curl https://node-template-candidate-b.cognidao.org/readyz                              # HTTP 200
+curl https://canary-candidate-b.cognidao.org/readyz?deep=1                              # HTTP 200
+curl https://node-template-candidate-b.cognidao.org/readyz?deep=1                       # HTTP 200
 ```
 
-`/readyz` returning 200 is the bar — it transitively asserts the node consumes its OpenBao/ESO secrets (DB migrations run) **and** scheduler-worker is reachable. Cross-check Loki (`env="candidate-b"`) for `app started` at the deployed SHA.
+`/readyz?deep=1` returning 200 is the substrate bar — it transitively asserts the node consumes its OpenBao/ESO secrets (DB migrations run) **and** Temporal + scheduler-worker are reachable. (Plain `/readyz` — the k8s probe path — is intentionally non-fatal on Temporal/scheduler-worker so an async-substrate blip can't drain the fleet → 502; it alarms instead. Use `?deep=1` when you need to confirm the substrate is actually up.) Cross-check Loki (`env="candidate-b"`) for `app started` at the deployed SHA.
 
 ## Known perfectionist gaps in the e2e tooling
 
