@@ -9,7 +9,7 @@ read_when: "Designing node-template at repo root, deciding node package layout, 
 implements: []
 owner: cogni-dev
 created: 2026-06-05
-verified: 2026-06-05
+verified: 2026-06-25
 tags:
   - node-template
   - packages

@@ -4,12 +4,13 @@
 /**
  * Module: `@cogni/graph-execution-host/decorators/observability-executor`
  * Purpose: Decorator that wraps GraphExecutorPort with Langfuse observability.
- * Scope: Creates root trace with input, updates output on terminal, handles all 4 terminal states. Does not execute graphs directly (delegates to inner).
+ * Scope: Creates root trace with input + node attribution, updates output on terminal, handles all 4 terminal states. Does not execute graphs directly (delegates to inner).
  * Invariants:
  *   - LANGFUSE_OTEL_TRACE_CORRELATION: Uses ctx.traceId (OTel) as Langfuse trace ID
  *   - LANGFUSE_TERMINAL_ONCE_GUARD: Exactly one terminal outcome per trace
  *   - LANGFUSE_NON_NULL_IO: Non-null input at start, non-null output on terminal
  *   - LANGFUSE_SCRUB_BEFORE_SEND: All content scrubbed before Langfuse
+ *   - LANGFUSE_NODE_ATTRIBUTION: config.nodeId (injected app-side) on every trace as tag + metadata; warn-once if unwired
  *   - ERROR_NORMALIZATION_ONCE: Catch block uses normalizeErrorToExecutionCode()
  *   - PURE_LIBRARY: no env vars, no process lifecycle, no @opentelemetry/api dep
  * Side-effects: IO (Langfuse API calls via adapter)

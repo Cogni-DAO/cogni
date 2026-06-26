@@ -9,7 +9,7 @@ read_when: Designing how a dev/agent gains access to a node's logs/analytics/DB;
 implements: []
 owner: derekg1729
 created: 2026-06-16
-verified: 2026-06-16
+verified: 2026-06-25
 tags:
   - secrets
   - observability

@@ -8,7 +8,7 @@ summary: JSON logging with event registry, Prometheus metrics, and Alloy shippin
 read_when: Implementing logging, metrics, or debugging production issues
 owner: derekg1729
 created: 2026-02-05
-verified: 2026-02-11
+verified: 2026-06-25
 tags: [observability]
 ---
 
