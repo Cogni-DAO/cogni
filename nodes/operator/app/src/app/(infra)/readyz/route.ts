@@ -3,12 +3,13 @@
 
 /**
  * Module: `@app/readyz`
- * Purpose: HTTP endpoint providing readiness check with full validation (env, secrets, EVM RPC, Temporal).
- * Scope: Returns service readiness status; validates env, runtime secrets, EVM RPC connectivity, Temporal connectivity, and system tenant presence. Does not check DB connectivity beyond system tenant lookup.
- * Invariants: Always returns valid readyz schema; force-dynamic runtime; returns 503 only on env/secrets/Temporal/scheduler/tenant failure. EVM RPC is checked with TTL caching and treated as non-fatal (logged warning, still 200) so an upstream RPC blip can't drain the pod.
+ * Purpose: HTTP readiness endpoint. The default (k8s probe) path answers only "can this pod serve HTTP?" — local serving readiness: env, runtime secrets, system tenant.
+ * Scope: Validates env + runtime secrets + system tenant (fatal). Checks EVM RPC, Temporal, and scheduler-worker connectivity but treats them as NON-FATAL async substrate (logged, still 200). `?deep=1` restores hard substrate assertion for provisioning / stack-test smoke checks.
+ * Invariants: Always returns valid readyz schema; force-dynamic runtime. Default path returns 503 only on env/secrets/tenant failure; EVM RPC + Temporal + scheduler-worker are non-fatal (logged, still 200) so an async-substrate blip can't drain the fleet (incident 2026-06-26: scheduler-worker hiccup → fleet-wide 502). Temporal/scheduler-worker failures log at ERROR with a stable `event` + `severity:"critical"` so monitoring fires a mission-critical alert (all AI/chat work is dispatched through Temporal). `?deep=1` makes Temporal + scheduler-worker fatal (503).
  * Side-effects: IO (HTTP response, structured logging, network calls to RPC and Temporal)
  * Notes: Used by Docker HEALTHCHECK, deployment validation, K8s readiness probes.
  *        HTTP status is primary truth: 200 = ready, 503 = not ready.
+ *        Provisioning / smoke checks that must assert the substrate is up call `/readyz?deep=1`.
  *        Logs readiness failures for deployment debugging.
  * Links: `@contracts/meta.readyz.read.v1.contract`, src/shared/env/invariants.ts, src/app/(infra)/livez/route.ts
  * @public
@@ -82,9 +83,58 @@ function logReadinessFailure(
   }
 }
 
+/**
+ * Async-substrate connectivity check that is NON-FATAL to the k8s readiness
+ * probe by default. Temporal and scheduler-worker are async dispatch substrate,
+ * not synchronous serving dependencies — failing /readyz on their blip drains
+ * every node-app from its Service endpoints and causes a fleet-wide 502
+ * (incident 2026-06-26). Same rationale already applied to EVM RPC.
+ *
+ * They ARE mission-critical: all AI/chat work is dispatched through Temporal, so
+ * a sustained outage means AI is down. We therefore log failures at ERROR with a
+ * stable `event` + `severity:"critical"` so monitoring fires a critical alert,
+ * and the request paths that need the substrate return 503 at request time — we
+ * just never take the public site down with the probe.
+ *
+ * `deep` (from `?deep=1`) restores hard-fail semantics for provisioning /
+ * stack-test smoke checks that must assert the substrate is actually up.
+ */
+async function assertSubstrate(
+  check: () => Promise<void>,
+  opts: {
+    ctx: RequestContext;
+    deep: boolean;
+    event: string;
+    dependency: string;
+  }
+): Promise<void> {
+  try {
+    await check();
+  } catch (error) {
+    if (opts.deep) throw error; // explicit deep probe: hard-fail (503)
+    if (error instanceof InfraConnectivityError) {
+      opts.ctx.log.error(
+        {
+          event: opts.event,
+          severity: "critical",
+          reason: error.code,
+          dependency: opts.dependency,
+          message: error.message,
+        },
+        `readiness: ${opts.dependency} unreachable — MISSION-CRITICAL async substrate down (AI/chat is dispatched through Temporal). Returning ready: probe stays non-fatal so the fleet is not drained; the critical alert + request-time 503 cover it.`
+      );
+      return;
+    }
+    throw error; // unexpected error type → fall through to default 503 handling
+  }
+}
+
 export const GET = wrapRouteHandlerWithLogging(
   { routeId: "meta.readyz", auth: { mode: "none" } },
-  async (ctx): Promise<NextResponse> => {
+  async (ctx, request): Promise<NextResponse> => {
+    // `?deep=1` restores hard-fail substrate semantics for provisioning /
+    // stack-test smoke checks; the default (k8s probe) path is non-fatal.
+    const deep = new URL(request.url).searchParams.get("deep") === "1";
     try {
       const env = serverEnv();
       const container = getContainer();
@@ -121,13 +171,26 @@ export const GET = wrapRouteHandlerWithLogging(
         }
       }
 
-      // Test Temporal connectivity (5s budget, triggers lazy connection)
-      // This catches Temporal not running before stack tests execute
-      await assertTemporalConnectivity(container.scheduleControl, env);
-
-      // Test scheduler-worker connectivity (5s budget)
-      // This ensures the Temporal worker is polling before stack tests run
-      await assertSchedulerWorkerConnectivity(env);
+      // Async substrate: Temporal + scheduler-worker. NON-FATAL to the k8s
+      // probe by default (a blip must not drain the fleet → 502), but
+      // mission-critical: failures are logged at ERROR with a critical-severity
+      // event so monitoring alarms. `?deep=1` hard-fails (503) for provisioning
+      // / stack-test smoke checks that must confirm the substrate is up.
+      await assertSubstrate(
+        () => assertTemporalConnectivity(container.scheduleControl, env),
+        {
+          ctx,
+          deep,
+          event: "substrate.temporal.unreachable",
+          dependency: "temporal",
+        }
+      );
+      await assertSubstrate(() => assertSchedulerWorkerConnectivity(env), {
+        ctx,
+        deep,
+        event: "substrate.scheduler_worker.unreachable",
+        dependency: "scheduler-worker",
+      });
 
       // Verify system tenant billing account exists (per SYSTEM_TENANT_STARTUP_CHECK)
       await verifySystemTenant(container.serviceAccountService);
