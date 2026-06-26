@@ -3,12 +3,14 @@
 
 /**
  * Module: `@tests/contract/app/vcs.merge`
- * Purpose: Contract tests for POST /api/v1/vcs/merge — node-scoped + legacy monorepo lanes.
- * Scope: Verifies auth (401), RBAC (403 deny → grant happy path), VCS-not-configured (503),
- *   node-scoped repo resolution (catalog `source_repo`) + catalog_missing hard 404 (never retargets),
- *   and merge-gate coded errors. Fake VcsCapability + FakeAuthorizationAdapter.
+ * Purpose: Contract tests for POST /api/v1/vcs/merge — ONE node-scoped resolution path.
+ * Scope: Verifies auth (401), nodeId-required (400), RBAC (403 deny → grant happy path),
+ *   VCS-not-configured (503), repo resolution via the single `resolveNodeRepo` path (in-repo operator
+ *   → monorepo; remote-source → own repo) + catalog_missing hard 404 (never retargets), and merge-gate
+ *   coded errors. Fake VcsCapability + FakeAuthorizationAdapter.
  * Invariants:
- *   - NODE_SCOPED_OR_LEGACY: `nodeId` selects RBAC + node repo; absent → operator node + monorepo.
+ *   - NODE_SCOPED: `nodeId` is REQUIRED and selects RBAC + node; the operator (in-repo) resolves to
+ *     the monorepo. No `nodeId`-less / env-direct lane.
  *   - RBAC_IS_THE_GATE: `node.flight` authorizes the merge.
  *   - CONTRACTS_ARE_TRUTH: 200 response matches mergeOperation.output schema.
  * Side-effects: none
@@ -293,32 +295,26 @@ describe("POST /api/v1/vcs/merge", () => {
     expect(fakeVcs.mergePr).not.toHaveBeenCalled();
   });
 
-  it("legacy: no nodeId → operator-node RBAC + monorepo merge", async () => {
+  it("no nodeId → 400 (nodeId is required; there is no nodeId-less lane)", async () => {
     grant(OPERATOR_NODE_ID);
     const res = await post({ prNumber: 42 });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
     expect(mockResolveNodeRepo).not.toHaveBeenCalled();
-    expect(fakeVcs.mergePr).toHaveBeenCalledWith({
-      owner: "cogni-test-org",
-      repo: "cogni-monorepo",
-      prNumber: 42,
-      method: "squash",
-    });
+    expect(fakeVcs.mergePr).not.toHaveBeenCalled();
   });
 
-  it("operator by nodeId (slug): catalog_missing retargets to the monorepo and merges", async () => {
+  it("operator by nodeId (slug): resolves to the monorepo and merges", async () => {
     grant(OPERATOR_NODE_ID);
-    // The operator is the IN-REPO node — its catalog row has no `source_repo`, so
-    // resolveNodeRepo 404s. Unlike a fork node, this retargets to the monorepo (uniform
-    // with the run-ci + flight routes), so `{nodeId:operator}` is addressable like any node.
-    mockResolveNodeRepo.mockRejectedValue(
-      Object.assign(new Error("not found"), { code: "catalog_missing" })
-    );
+    // The operator is the IN-REPO node — resolveNodeRepo returns the parent monorepo (no
+    // source_repo), so `{nodeId:operator}` is addressable like any node, via the one path.
+    mockResolveNodeRepo.mockResolvedValue({
+      owner: "cogni-test-org",
+      repo: "cogni-monorepo",
+    });
     const res = await post({ prNumber: 42, nodeId: "operator" });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(mergeOperation.output.safeParse(body).success).toBe(true);
-    // Resolution was attempted with the operator slug, then retargeted to the monorepo.
     expect(mockResolveNodeRepo).toHaveBeenCalledWith({
       parentOwner: "cogni-test-org",
       parentRepo: "cogni-monorepo",
@@ -332,11 +328,12 @@ describe("POST /api/v1/vcs/merge", () => {
     });
   });
 
-  it("operator by nodeId (UUID): catalog_missing retargets to the monorepo and merges", async () => {
+  it("operator by nodeId (UUID): resolves to the monorepo and merges", async () => {
     grant(OPERATOR_NODE_ID);
-    mockResolveNodeRepo.mockRejectedValue(
-      Object.assign(new Error("not found"), { code: "catalog_missing" })
-    );
+    mockResolveNodeRepo.mockResolvedValue({
+      owner: "cogni-test-org",
+      repo: "cogni-monorepo",
+    });
     const res = await post({ prNumber: 42, nodeId: OPERATOR_NODE_ID });
     expect(res.status).toBe(200);
     expect(fakeVcs.mergePr).toHaveBeenCalledWith({

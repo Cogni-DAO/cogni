@@ -306,10 +306,10 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         try {
           const env = serverEnv();
           const deployPlane = createOperatorDeployPlane(env);
-          // Target the node's OWN repo (catalog `source_repo` via resolveNodeRepo), NOT
-          // `nodes.repoOwner/repoName` (which holds the submodule-PARENT monorepo). Same resolution
-          // the merge/run-ci routes use. `catalog_missing` (the operator node IS the monorepo) → the
-          // parent repo is the target. Without a configured parent there is no repo to grant on.
+          // Target the node's OWN repo via the resolveNodeRepo path the merge/run-ci routes use, NOT
+          // `nodes.repoOwner/repoName` (which holds the submodule-PARENT monorepo). An in-repo node
+          // (the operator) resolves to the parent monorepo; a remote-source node to its own
+          // `source_repo`. A genuinely-absent row (`catalog_missing`) defensively keeps the parent.
           let owner = env.NODE_SUBMODULE_PARENT_OWNER;
           let repo = env.NODE_SUBMODULE_PARENT_REPO;
           try {
@@ -323,7 +323,7 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
           } catch (error) {
             if ((error as { code?: string })?.code !== "catalog_missing")
               throw error;
-            // catalog_missing ⇒ keep the parent monorepo (operator-node lane).
+            // catalog_missing (a genuinely absent row) ⇒ defensively keep the parent monorepo.
           }
           if (!owner || !repo) {
             throw new Error(

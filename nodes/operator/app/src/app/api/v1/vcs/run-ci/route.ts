@@ -43,9 +43,6 @@ import { EVENT_NAMES, logEvent } from "@/shared/observability";
 
 export const runtime = "nodejs";
 
-/** The one in-repo node — its "own repo" is the operator monorepo (NODE_SUBMODULE_PARENT). */
-const OPERATOR_NODE_SLUG = "operator";
-
 export const POST = wrapRouteHandlerWithLogging(
   { routeId: "vcs.runCi", auth: { mode: "required", getSessionUser } },
   async (ctx, request, sessionUser) => {
@@ -127,6 +124,8 @@ export const POST = wrapRouteHandlerWithLogging(
         error instanceof Error ? error.message : "deploy plane not configured";
       return fail(503, "deploy_plane_config_missing", message, { prNumber });
     }
+    // ONE resolution path (resolveNodeRepo): an in-repo node (the operator, no catalog
+    // `source_repo`) resolves to the parent monorepo; a remote-source node to its own repo.
     let owner: string;
     let repo: string;
     try {
@@ -139,25 +138,18 @@ export const POST = wrapRouteHandlerWithLogging(
       repo = nodeRepo.repo;
     } catch (error) {
       const code = (error as { code?: string })?.code;
-      // IN-REPO node (the operator): its catalog row carries no `source_repo`, so
-      // resolveNodeRepo 404s. The operator's "own repo" IS the monorepo — run CI
-      // against NODE_SUBMODULE_PARENT, mirroring the merge route's monorepo lane.
-      if (code === "catalog_missing" && rbac.node.slug === OPERATOR_NODE_SLUG) {
-        owner = parentOwner;
-        repo = parentRepo;
-      } else if (code === "catalog_missing") {
+      if (code === "catalog_missing") {
         return fail(404, "catalog_missing", "node catalog entry not found", {
           prNumber,
           slug: rbac.node.slug,
         });
-      } else {
-        return fail(
-          503,
-          "merge_target_not_configured",
-          "node repo not resolvable",
-          { prNumber, slug: rbac.node.slug }
-        );
       }
+      return fail(
+        503,
+        "merge_target_not_configured",
+        "node repo not resolvable",
+        { prNumber, slug: rbac.node.slug }
+      );
     }
 
     // 5. Approve the held fork-PR runs (adapter approves only `pull_request` runs — safe).

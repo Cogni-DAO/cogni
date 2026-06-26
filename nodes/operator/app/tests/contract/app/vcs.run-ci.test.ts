@@ -240,12 +240,14 @@ describe("POST /api/v1/vcs/run-ci", () => {
     });
   });
 
-  it("operator monorepo lane: catalog_missing for the operator node falls back to NODE_SUBMODULE_PARENT", async () => {
+  it("operator: resolveNodeRepo returns the parent monorepo (in-repo node, one path)", async () => {
     dbState.byId.operator = { nodeId: NODE_ID, slug: "operator" };
     grant(NODE_ID);
-    mockResolveNodeRepo.mockRejectedValue(
-      Object.assign(new Error("not found"), { code: "catalog_missing" })
-    );
+    // In-repo operator resolves to the parent monorepo (no catalog_missing throw).
+    mockResolveNodeRepo.mockResolvedValue({
+      owner: "cogni-test-org",
+      repo: "cogni-monorepo",
+    });
     const res = await post({ nodeId: "operator", prNumber: 7 });
     expect(res.status).toBe(200);
     expect(fakeVcs.approveWorkflowRuns).toHaveBeenCalledWith({

@@ -639,9 +639,15 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
   }
 
   /**
-   * Resolve a node's own source repo from `infra/catalog/<slug>.yaml` `source_repo` (read via the
-   * App — the catalog is absent on the operator's runtime disk). Reuses the same catalog-read seam
-   * as `prepareNodeRefCandidateFlight`. Throws coded `catalog_missing` (404) when the row is absent.
+   * Resolve a node's own repo from `infra/catalog/<slug>.yaml` (read via the App — the catalog is
+   * absent on the operator's runtime disk). ONE resolution path for every node, using the SAME
+   * `source_repo`-PRESENCE discriminator as `promoteNode`/`prepareNodeRefCandidateFlight`:
+   *   - IN-REPO node (no `source_repo`, e.g. the operator): its repo IS the parent monorepo.
+   *     Returns `{ parentOwner, parentRepo }` so `{nodeId:operator}` resolves like any node — callers
+   *     no longer need a per-site `catalog_missing`→monorepo fallback.
+   *   - REMOTE-SOURCE node (fork): parse its own `source_repo`.
+   * `catalog_missing` (404) is reserved for a genuinely absent row (file missing / name mismatch),
+   * so a typo'd slug still hard-404s — NODE_SCOPED_NEVER_RETARGETS holds.
    */
   async resolveNodeRepo(
     input: ResolveNodeRepoInput
@@ -662,8 +668,10 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
       );
     }
 
-    const catalog = CatalogEntrySchema.safeParse(parseYaml(catalogText));
-    if (!catalog.success || catalog.data.name !== slug) {
+    const discriminator = PromoteDiscriminatorSchema.safeParse(
+      parseYaml(catalogText)
+    );
+    if (!discriminator.success || discriminator.data.name !== slug) {
       throw deployPlaneError(
         "catalog_missing",
         `node catalog entry not found for ${slug}`,
@@ -671,7 +679,13 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
       );
     }
 
-    return parseGithubRepoUrl(catalog.data.source_repo);
+    // IN-REPO node (operator): its repo is the parent monorepo.
+    if (discriminator.data.source_repo === undefined) {
+      return { owner: parentOwner, repo: parentRepo };
+    }
+
+    // REMOTE-SOURCE node (fork): resolve its own source repo.
+    return parseGithubRepoUrl(discriminator.data.source_repo);
   }
 
   /**
