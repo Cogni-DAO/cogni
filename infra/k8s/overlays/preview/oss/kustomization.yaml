@@ -13,7 +13,7 @@ namePrefix: oss-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/oss
-    digest: "sha256:13a3e7957f61e2d042949fe00c73979d02a15375612a7a15716fb548b6c52f6c"
+    digest: "sha256:081ab49508fd956b84e893f5d5762931c5afe83672f7c032e8ee157e9d53599b"
 
 patches:
   - target:
