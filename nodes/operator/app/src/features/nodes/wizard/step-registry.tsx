@@ -19,7 +19,7 @@ import { DaoStep } from "./steps/DaoStep.client";
 import { HandoffStep } from "./steps/HandoffStep.client";
 import { PaymentActivationStep } from "./steps/PaymentActivationStep.client";
 import { RepoStep } from "./steps/RepoStep.client";
-import { ActiveStep, FailedStep } from "./steps/SimpleSteps";
+import { FailedStep } from "./steps/SimpleSteps";
 import type { WizardStepComponent } from "./types";
 
 export interface WizardStepEntry {
@@ -34,6 +34,6 @@ export const WIZARD_STEP_REGISTRY: Record<NodeStatus, WizardStepEntry> = {
   published: { Component: HandoffStep, available: true },
   wallet_ready: { Component: PaymentActivationStep, available: true },
   payments_ready: { Component: PaymentActivationStep, available: true },
-  active: { Component: ActiveStep, available: true },
+  active: { Component: PaymentActivationStep, available: true },
   failed: { Component: FailedStep, available: true },
 };

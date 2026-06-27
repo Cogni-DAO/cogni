@@ -82,6 +82,9 @@ export default async function NodeDashboardPage({
     mintOwner: env.NODE_MINT_OWNER,
     publishPrUrl: node.publishPrUrl,
   });
+  const repoSpecUrl = nodeRepoUrl
+    ? `${nodeRepoUrl.replace(/\/$/, "")}/blob/main/.cogni/repo-spec.yaml`
+    : null;
   const knowledgeRemote = env.DOLTHUB_OWNER
     ? buildNodeKnowledgeRemote(node.slug, env.DOLTHUB_OWNER)
     : null;
@@ -147,6 +150,7 @@ export default async function NodeDashboardPage({
           nodeRepoUrl,
           knowledgeRepoUrl,
           daoUrl,
+          repoSpecUrl,
         }}
       />
 

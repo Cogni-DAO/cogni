@@ -4,11 +4,10 @@
 /**
  * Module: `@features/nodes/wizard/steps/PaymentActivationStep.client`
  * Purpose: Wizard-native payment activation for an external node.
- * Scope: Renders node identity, repo-spec audit links, Split deployment, and durable completion
- *   content inside the same node setup wizard shell. The connected wallet signs the on-chain
- *   createSplit transaction; the operator wallet remains the Split controller.
- * Side-effects: IO (wagmi transaction, PATCH node row on success, clipboard)
- * Links: src/features/nodes/wizard/step-registry.tsx, src/app/api/v1/nodes/[id]/route.ts
+ * Scope: Deploys the payment Split with the connected wallet, records it on the node row, then asks
+ *   the operator GitHub App to open the node-repo PR that writes payment config into `.cogni/repo-spec.yaml`.
+ * Side-effects: IO (wagmi transaction, PATCH node row, POST activation route, clipboard)
+ * Links: src/app/api/v1/nodes/[id]/activate-payments/route.ts, src/features/nodes/wizard/step-registry.tsx
  * @public
  */
 
@@ -32,7 +31,6 @@ import {
   Wallet,
   XCircle,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Address } from "viem";
@@ -53,37 +51,23 @@ import type { WizardStepProps } from "../types";
 const DEFAULT_MARKUP_FACTOR = 1.10803324099723;
 const DEFAULT_REVENUE_SHARE = 0;
 
-type ActivationPhase =
+type SplitPhase =
   | "IDLE"
   | "DEPLOYING"
   | "AWAITING_CONFIRMATION"
   | "SUCCESS"
   | "ERROR";
 
-function repoSpecHref(nodeRepoUrl: string | null): string | null {
-  if (!nodeRepoUrl) return null;
-  const base = nodeRepoUrl.replace(/\/$/, "");
-  return `${base}/blob/main/.cogni/repo-spec.yaml`;
+type RepoActivationPhase = "IDLE" | "OPENING" | "DONE" | "ERROR";
+
+interface ActivationResult {
+  readonly status: "pr_opened" | "no_changes";
+  readonly prNumber?: number;
+  readonly prUrl?: string;
 }
 
 function formatPercent(allocation: bigint): string {
   return `${Number(allocation) / 1e4}%`;
-}
-
-function buildRepoSpecFragment(splitAddress: string): string {
-  return `payments_in:
-  credits_topup:
-    provider: cogni-usdc-backend-v1
-    receiving_address: "${splitAddress}"
-    allowed_chains:
-      - Base
-    allowed_tokens:
-      - USDC
-    markup_factor: ${DEFAULT_MARKUP_FACTOR}
-    revenue_share: ${DEFAULT_REVENUE_SHARE}
-
-payments:
-  status: active`;
 }
 
 function buildPrivySetupPrompt(input: {
@@ -116,26 +100,18 @@ AI dev steps:
 Never log, commit, or paste secret values.`;
 }
 
-function buildCompletionPrompt(input: {
-  readonly nodeId: string;
+function buildFollowThroughPrompt(input: {
   readonly nodeSlug: string;
   readonly nodeRepoUrl: string | null;
-  readonly repoSpecUrl: string | null;
-  readonly splitAddress: string;
+  readonly activationPrUrl: string;
 }): string {
   return `You are finishing payment activation for my Cogni node.
 
 Node: ${input.nodeSlug}
-Node id: ${input.nodeId}
 Node repo: ${input.nodeRepoUrl ?? "open the node dashboard for the repo link"}
-Repo spec: ${input.repoSpecUrl ?? ".cogni/repo-spec.yaml in the node repo"}
-Split receiving address on Base: ${input.splitAddress}
+Activation PR: ${input.activationPrUrl}
 
-Update the node repo's .cogni/repo-spec.yaml with:
-
-${buildRepoSpecFragment(input.splitAddress)}
-
-Then open a PR, run the Cogni CI/flight sequence, validate candidate-a, and report the live test URL. Do not change secrets in git.`;
+Review the cogni-operator-authored payment activation PR, run the required node CI/flight sequence, merge it when green, then validate the node app on test with a small USDC credits/top-up payment. Do not add secrets to git.`;
 }
 
 function AddressRows({
@@ -173,15 +149,15 @@ function AddressRows({
 
 export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
   const { address: walletAddress } = useAccount();
-  const router = useRouter();
   const patchedRef = useRef(false);
 
-  const [phase, setPhase] = useState<ActivationPhase>("IDLE");
+  const [splitPhase, setSplitPhase] = useState<SplitPhase>("IDLE");
+  const [repoPhase, setRepoPhase] = useState<RepoActivationPhase>("IDLE");
   const [splitAddress, setSplitAddress] = useState<string | null>(null);
+  const [activationResult, setActivationResult] =
+    useState<ActivationResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [copied, setCopied] = useState<
-    "setup" | "repo-spec" | "handoff" | null
-  >(null);
+  const [copied, setCopied] = useState<"setup" | "handoff" | null>(null);
 
   const {
     writeContract,
@@ -197,17 +173,21 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
   const hasOperator = !!node.operatorWalletAddress;
   const hasTreasury = !!node.daoAddress;
   const isReady = hasOperator && hasTreasury;
-  const isInFlight = phase === "DEPLOYING" || phase === "AWAITING_CONFIRMATION";
-  const canSubmit =
+  const isInFlight =
+    splitPhase === "DEPLOYING" || splitPhase === "AWAITING_CONFIRMATION";
+  const effectiveSplitAddress = splitAddress ?? node.splitAddress;
+  const splitIsDeployed = !!effectiveSplitAddress;
+  const repoWriteIsDone = repoPhase === "DONE" || node.status === "active";
+  const canDeploySplit =
     isReady &&
-    phase === "IDLE" &&
+    splitPhase === "IDLE" &&
     node.status === "wallet_ready" &&
     !!walletAddress;
-  const repoSpecUrl = repoSpecHref(node.nodeRepoUrl);
-  const effectiveSplitAddress = splitAddress ?? node.splitAddress;
-  const isComplete =
-    phase === "SUCCESS" ||
-    (node.status === "payments_ready" && !!effectiveSplitAddress);
+  const canOpenActivationPr =
+    splitIsDeployed &&
+    !repoWriteIsDone &&
+    repoPhase !== "OPENING" &&
+    node.status !== "wallet_ready";
 
   const { operatorAllocation, treasuryAllocation } = calculateSplitAllocations(
     numberToPpm(DEFAULT_MARKUP_FACTOR),
@@ -221,28 +201,56 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
         nodeId: node.id,
         nodeSlug: node.slug,
         nodeRepoUrl: node.nodeRepoUrl,
-        repoSpecUrl,
+        repoSpecUrl: node.repoSpecUrl,
       }),
-    [node.id, node.slug, node.nodeRepoUrl, repoSpecUrl]
+    [node.id, node.slug, node.nodeRepoUrl, node.repoSpecUrl]
   );
 
-  const completionPrompt = effectiveSplitAddress
-    ? buildCompletionPrompt({
-        nodeId: node.id,
+  const followThroughPrompt = activationResult?.prUrl
+    ? buildFollowThroughPrompt({
         nodeSlug: node.slug,
         nodeRepoUrl: node.nodeRepoUrl,
-        repoSpecUrl,
-        splitAddress: effectiveSplitAddress,
+        activationPrUrl: activationResult.prUrl,
       })
     : null;
 
-  const repoSpecFragment = effectiveSplitAddress
-    ? buildRepoSpecFragment(effectiveSplitAddress)
-    : null;
+  const openActivationPr = useCallback(async () => {
+    setErrorMessage(null);
+    setRepoPhase("OPENING");
+    try {
+      const response = await fetch(
+        `/api/v1/nodes/${node.id}/activate-payments`,
+        { method: "POST" }
+      );
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const reason =
+          typeof body.reason === "string"
+            ? body.reason
+            : typeof body.error === "string"
+              ? body.error
+              : `HTTP ${response.status}`;
+        throw new Error(reason);
+      }
+
+      const activation = body.activation as ActivationResult | undefined;
+      setActivationResult(
+        activation ?? {
+          status: "no_changes",
+        }
+      );
+      setRepoPhase("DONE");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "payment activation PR failed"
+      );
+      setRepoPhase("ERROR");
+    }
+  }, [node.id]);
 
   const handleDeploy = useCallback(() => {
     if (
-      !canSubmit ||
+      !canDeploySplit ||
       !walletAddress ||
       !node.operatorWalletAddress ||
       !node.daoAddress
@@ -250,9 +258,11 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
       return;
     }
 
-    setPhase("DEPLOYING");
+    setSplitPhase("DEPLOYING");
     setErrorMessage(null);
     setSplitAddress(null);
+    setActivationResult(null);
+    setRepoPhase("IDLE");
 
     const operator = getAddress(node.operatorWalletAddress) as Address;
     const treasury = getAddress(node.daoAddress) as Address;
@@ -283,7 +293,7 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
       ],
     });
   }, [
-    canSubmit,
+    canDeploySplit,
     walletAddress,
     node.operatorWalletAddress,
     node.daoAddress,
@@ -293,13 +303,13 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
   ]);
 
   useEffect(() => {
-    if (txHash && phase === "DEPLOYING") {
-      setPhase("AWAITING_CONFIRMATION");
+    if (txHash && splitPhase === "DEPLOYING") {
+      setSplitPhase("AWAITING_CONFIRMATION");
     }
-  }, [txHash, phase]);
+  }, [txHash, splitPhase]);
 
   useEffect(() => {
-    if (receipt && phase === "AWAITING_CONFIRMATION") {
+    if (receipt && splitPhase === "AWAITING_CONFIRMATION") {
       let deployedSplitAddress: string | undefined;
       for (const log of receipt.logs) {
         try {
@@ -319,34 +329,36 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
 
       if (deployedSplitAddress) {
         setSplitAddress(deployedSplitAddress);
-        setPhase("SUCCESS");
+        setSplitPhase("SUCCESS");
       } else {
         setErrorMessage(
           "Could not extract the Split address from the receipt."
         );
-        setPhase("ERROR");
+        setSplitPhase("ERROR");
       }
     }
-  }, [receipt, phase]);
+  }, [receipt, splitPhase]);
 
   useEffect(() => {
-    if (writeError && phase === "DEPLOYING") {
+    if (writeError && splitPhase === "DEPLOYING") {
       setErrorMessage(writeError.message || "Split deployment failed.");
-      setPhase("ERROR");
+      setSplitPhase("ERROR");
     }
-  }, [writeError, phase]);
+  }, [writeError, splitPhase]);
 
   useEffect(() => {
-    if (receiptError && phase === "AWAITING_CONFIRMATION") {
+    if (receiptError && splitPhase === "AWAITING_CONFIRMATION") {
       setErrorMessage(
         receiptError.message || "Transaction confirmation failed."
       );
-      setPhase("ERROR");
+      setSplitPhase("ERROR");
     }
-  }, [receiptError, phase]);
+  }, [receiptError, splitPhase]);
 
   useEffect(() => {
-    if (phase !== "SUCCESS" || !splitAddress || patchedRef.current) return;
+    if (splitPhase !== "SUCCESS" || !splitAddress || patchedRef.current) {
+      return;
+    }
     patchedRef.current = true;
 
     void (async () => {
@@ -366,21 +378,18 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
           throw new Error(body || `HTTP ${response.status}`);
         }
 
-        router.refresh();
+        await openActivationPr();
       } catch (error) {
         const details = error instanceof Error ? error.message : String(error);
         setErrorMessage(
-          `Split deployed at ${splitAddress}, but the node dashboard update failed: ${details}`
+          `Split deployed at ${splitAddress}, but follow-through failed: ${details}`
         );
-        setPhase("ERROR");
+        setSplitPhase("ERROR");
       }
     })();
-  }, [node.id, phase, router, splitAddress, txHash]);
+  }, [node.id, openActivationPr, splitAddress, splitPhase, txHash]);
 
-  const copyText = async (
-    text: string,
-    label: "setup" | "repo-spec" | "handoff"
-  ) => {
+  const copyText = async (text: string, label: "setup" | "handoff") => {
     await navigator.clipboard.writeText(text);
     setCopied(label);
     window.setTimeout(() => setCopied(null), 2000);
@@ -388,13 +397,20 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
 
   const handleReset = () => {
     resetWrite();
-    setPhase("IDLE");
+    patchedRef.current = false;
+    setSplitPhase("IDLE");
+    setRepoPhase("IDLE");
     setSplitAddress(null);
+    setActivationResult(null);
     setErrorMessage(null);
   };
 
   return (
-    <StepSection title={isComplete ? "Payments ready" : "Activate payments"}>
+    <StepSection
+      title={
+        repoWriteIsDone ? "Payments activation PR ready" : "Activate payments"
+      }
+    >
       <div className="space-y-5 text-sm">
         <div className="grid gap-2 rounded-md border border-border bg-muted/30 p-4 sm:grid-cols-2">
           <p>
@@ -418,9 +434,9 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
           ) : (
             <span className="text-muted-foreground">Node repo unavailable</span>
           )}
-          {repoSpecUrl ? (
+          {node.repoSpecUrl ? (
             <a
-              href={repoSpecUrl}
+              href={node.repoSpecUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-primary hover:underline"
@@ -476,7 +492,7 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
           </div>
         ) : null}
 
-        {isReady && !isComplete ? (
+        {isReady && !splitIsDeployed ? (
           <div className="space-y-4">
             <HintText icon={<Info size={16} />}>
               The operator resolved these addresses from this node's registry
@@ -509,7 +525,7 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
             <Button
               type="button"
               onClick={handleDeploy}
-              disabled={!canSubmit}
+              disabled={!canDeploySplit}
               className="w-full gap-2"
             >
               {isInFlight ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -524,23 +540,23 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
           <div className="flex flex-col items-center gap-3 py-4">
             <Loader2 className="size-8 animate-spin text-primary" />
             <p className="text-muted-foreground">
-              {phase === "DEPLOYING"
+              {splitPhase === "DEPLOYING"
                 ? "Confirm the Base transaction in your wallet."
                 : "Waiting for the transaction to confirm on Base."}
             </p>
           </div>
         ) : null}
 
-        {isComplete && effectiveSplitAddress ? (
+        {splitIsDeployed ? (
           <div className="space-y-4">
             <div className="flex items-start gap-2">
               <CheckCircle className="mt-0.5 size-5 shrink-0 text-primary" />
               <div>
                 <p className="font-medium">Payment Split is deployed</p>
                 <p className="text-muted-foreground">
-                  The operator row is ready. The node repo still needs the
-                  payment config committed and flighted before users can test a
-                  real top-up in the node app.
+                  Next, cogni-operator opens a PR in the node repo that writes
+                  the Split and node wallet into{" "}
+                  <code>.cogni/repo-spec.yaml</code>.
                 </p>
               </div>
             </div>
@@ -560,58 +576,70 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
               ) : null}
             </div>
 
-            {repoSpecFragment ? (
-              <div className="rounded-md border border-border bg-muted/40 p-4">
-                <p className="mb-2 font-medium">
-                  Repo-spec block for the AI dev
+            {repoPhase === "OPENING" ? (
+              <div className="flex items-center gap-3 rounded-md border border-border bg-muted/40 p-4">
+                <Loader2 className="size-5 animate-spin text-primary" />
+                <p className="text-muted-foreground">
+                  Opening activation PR in the node repo...
                 </p>
-                <pre className="max-h-56 overflow-x-auto whitespace-pre-wrap break-words text-xs">
-                  {repoSpecFragment}
-                </pre>
               </div>
             ) : null}
 
-            <div className="grid gap-2 sm:grid-cols-2">
-              {repoSpecFragment ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => copyText(repoSpecFragment, "repo-spec")}
-                  className="gap-2"
-                >
-                  {copied === "repo-spec" ? (
-                    <CheckCircle className="size-4" />
-                  ) : (
-                    <Clipboard className="size-4" />
-                  )}
-                  {copied === "repo-spec" ? "Copied" : "Copy repo-spec block"}
-                </Button>
-              ) : null}
-              {completionPrompt ? (
-                <Button
-                  type="button"
-                  onClick={() => copyText(completionPrompt, "handoff")}
-                  className="gap-2"
-                >
-                  {copied === "handoff" ? (
-                    <CheckCircle className="size-4" />
-                  ) : (
-                    <Clipboard className="size-4" />
-                  )}
-                  {copied === "handoff" ? "Copied" : "Copy AI-dev handoff"}
-                </Button>
-              ) : null}
-            </div>
+            {repoWriteIsDone ? (
+              <div className="space-y-3 rounded-md border border-border bg-muted/40 p-4">
+                <p className="font-medium">
+                  {activationResult?.status === "pr_opened"
+                    ? "Activation PR opened"
+                    : "Payment repo-spec write-back is already handled"}
+                </p>
+                {activationResult?.prUrl ? (
+                  <Button asChild className="w-full sm:w-auto">
+                    <a
+                      href={activationResult.prUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      View activation PR
+                      <ExternalLink className="size-4" />
+                    </a>
+                  </Button>
+                ) : null}
+                <HintText icon={<Info size={16} />}>
+                  Merge and flight the activation PR before testing a real
+                  credits/top-up payment in the node app.
+                </HintText>
+              </div>
+            ) : null}
 
-            <p className="text-muted-foreground">
-              After the AI dev commits this to the node repo and the test
-              deployment appears below, open the node app's credits or top-up
-              page and make a small USDC test payment.
-            </p>
+            {canOpenActivationPr ? (
+              <Button
+                type="button"
+                onClick={openActivationPr}
+                className="w-full gap-2"
+              >
+                Open activation PR
+              </Button>
+            ) : null}
+
+            {followThroughPrompt ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => copyText(followThroughPrompt, "handoff")}
+                className="w-full gap-2"
+              >
+                {copied === "handoff" ? (
+                  <CheckCircle className="size-4" />
+                ) : (
+                  <Clipboard className="size-4" />
+                )}
+                {copied === "handoff" ? "Copied" : "Copy AI-dev follow-through"}
+              </Button>
+            ) : null}
           </div>
         ) : null}
 
-        {phase === "ERROR" ? (
+        {splitPhase === "ERROR" || repoPhase === "ERROR" ? (
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-destructive">
               <XCircle className="size-5" />
@@ -620,14 +648,28 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
               </span>
             </div>
             <p className="text-muted-foreground">{errorMessage}</p>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleReset}
-              className="w-full"
-            >
-              Try again
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              {repoPhase === "ERROR" && splitIsDeployed ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={openActivationPr}
+                  className="w-full"
+                >
+                  Try opening activation PR again
+                </Button>
+              ) : null}
+              {splitPhase === "ERROR" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleReset}
+                  className="w-full"
+                >
+                  Try Split deploy again
+                </Button>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>
