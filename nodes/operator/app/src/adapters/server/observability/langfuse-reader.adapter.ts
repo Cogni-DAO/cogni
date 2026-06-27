@@ -55,7 +55,11 @@ export class HttpLangfuseReader implements LangfuseReaderPort {
     }
 
     const json = (await res.json()) as LangfuseTracesResponse;
-    const rows = json.data ?? [];
+    // Defense-in-depth: Langfuse is queried with tags=<nodeId>, but the operator
+    // still enforces the node boundary on the response before returning data.
+    const rows = (json.data ?? []).filter((t) =>
+      (t.tags ?? []).includes(query.nodeId)
+    );
     return rows.map((t) => ({
       id: t.id,
       name: t.name ?? null,

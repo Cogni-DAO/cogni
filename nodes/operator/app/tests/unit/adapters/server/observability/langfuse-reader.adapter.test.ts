@@ -54,6 +54,7 @@ describe("HttpLangfuseReader", () => {
   });
 
   it("maps metadata.nodeId onto each trace summary", async () => {
+    const otherNodeId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
     const fetchSpy = mockFetch({
       data: [
         {
@@ -62,6 +63,13 @@ describe("HttpLangfuseReader", () => {
           name: "graph-execution",
           tags: ["langgraph", "langgraph:poet", NODE_ID],
           metadata: { nodeId: NODE_ID, runId: "r1" },
+        },
+        {
+          id: "trace-other-node",
+          timestamp: "2026-06-25T00:01:00Z",
+          name: "graph-execution",
+          tags: ["langgraph", "langgraph:poet", otherNodeId],
+          metadata: { nodeId: otherNodeId, runId: "r2" },
         },
       ],
     });
