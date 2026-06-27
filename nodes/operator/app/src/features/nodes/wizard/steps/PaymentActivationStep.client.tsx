@@ -100,20 +100,6 @@ AI dev steps:
 Never log, commit, or paste secret values.`;
 }
 
-function buildFollowThroughPrompt(input: {
-  readonly nodeSlug: string;
-  readonly nodeRepoUrl: string | null;
-  readonly activationPrUrl: string;
-}): string {
-  return `You are finishing payment activation for my Cogni node.
-
-Node: ${input.nodeSlug}
-Node repo: ${input.nodeRepoUrl ?? "open the node dashboard for the repo link"}
-Activation PR: ${input.activationPrUrl}
-
-Review the cogni-operator-authored payment activation PR, run the required node CI/flight sequence, merge it when green, then validate the node app on test with a small USDC credits/top-up payment. Do not add secrets to git.`;
-}
-
 function AddressRows({
   operatorWalletAddress,
   daoTreasuryAddress,
@@ -150,6 +136,7 @@ function AddressRows({
 export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
   const { address: walletAddress } = useAccount();
   const patchedRef = useRef(false);
+  const activationRequestedRef = useRef(false);
 
   const [splitPhase, setSplitPhase] = useState<SplitPhase>("IDLE");
   const [repoPhase, setRepoPhase] = useState<RepoActivationPhase>("IDLE");
@@ -178,16 +165,12 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
   const effectiveSplitAddress = splitAddress ?? node.splitAddress;
   const splitIsDeployed = !!effectiveSplitAddress;
   const repoWriteIsDone = repoPhase === "DONE" || node.status === "active";
+  const activationIsReady = node.status === "active";
   const canDeploySplit =
     isReady &&
     splitPhase === "IDLE" &&
     node.status === "wallet_ready" &&
     !!walletAddress;
-  const canOpenActivationPr =
-    splitIsDeployed &&
-    !repoWriteIsDone &&
-    repoPhase !== "OPENING" &&
-    node.status !== "wallet_ready";
 
   const { operatorAllocation, treasuryAllocation } = calculateSplitAllocations(
     numberToPpm(DEFAULT_MARKUP_FACTOR),
@@ -206,15 +189,11 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
     [node.id, node.slug, node.nodeRepoUrl, node.repoSpecUrl]
   );
 
-  const followThroughPrompt = activationResult?.prUrl
-    ? buildFollowThroughPrompt({
-        nodeSlug: node.slug,
-        nodeRepoUrl: node.nodeRepoUrl,
-        activationPrUrl: activationResult.prUrl,
-      })
-    : null;
-
   const openActivationPr = useCallback(async () => {
+    if (activationRequestedRef.current) {
+      return;
+    }
+    activationRequestedRef.current = true;
     setErrorMessage(null);
     setRepoPhase("OPENING");
     try {
@@ -241,6 +220,7 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
       );
       setRepoPhase("DONE");
     } catch (error) {
+      activationRequestedRef.current = false;
       setErrorMessage(
         error instanceof Error ? error.message : "payment activation PR failed"
       );
@@ -263,6 +243,7 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
     setSplitAddress(null);
     setActivationResult(null);
     setRepoPhase("IDLE");
+    activationRequestedRef.current = false;
 
     const operator = getAddress(node.operatorWalletAddress) as Address;
     const treasury = getAddress(node.daoAddress) as Address;
@@ -367,7 +348,6 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            event: { type: "payments_configured" },
             splitAddress,
             splitTxHash: txHash,
           }),
@@ -389,6 +369,25 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
     })();
   }, [node.id, openActivationPr, splitAddress, splitPhase, txHash]);
 
+  useEffect(() => {
+    if (
+      !isReady ||
+      !node.splitAddress ||
+      repoWriteIsDone ||
+      repoPhase !== "IDLE"
+    ) {
+      return;
+    }
+
+    void openActivationPr();
+  }, [
+    isReady,
+    node.splitAddress,
+    openActivationPr,
+    repoPhase,
+    repoWriteIsDone,
+  ]);
+
   const copyText = async (text: string, label: "setup" | "handoff") => {
     await navigator.clipboard.writeText(text);
     setCopied(label);
@@ -398,6 +397,7 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
   const handleReset = () => {
     resetWrite();
     patchedRef.current = false;
+    activationRequestedRef.current = false;
     setSplitPhase("IDLE");
     setRepoPhase("IDLE");
     setSplitAddress(null);
@@ -408,7 +408,11 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
   return (
     <StepSection
       title={
-        repoWriteIsDone ? "Payments activation PR ready" : "Activate payments"
+        activationIsReady
+          ? "Payments ready"
+          : repoWriteIsDone
+            ? "Payment activation in progress"
+            : "Activate payments"
       }
     >
       <div className="space-y-5 text-sm">
@@ -554,9 +558,10 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
               <div>
                 <p className="font-medium">Payment Split is deployed</p>
                 <p className="text-muted-foreground">
-                  Next, cogni-operator opens a PR in the node repo that writes
-                  the Split and node wallet into{" "}
-                  <code>.cogni/repo-spec.yaml</code>.
+                  The wizard is asking cogni-operator to write the Split and
+                  node wallet into <code>.cogni/repo-spec.yaml</code>. This node
+                  is not marked ready until the repo main branch and production
+                  deploy match that payment rail.
                 </p>
               </div>
             </div>
@@ -580,7 +585,7 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
               <div className="flex items-center gap-3 rounded-md border border-border bg-muted/40 p-4">
                 <Loader2 className="size-5 animate-spin text-primary" />
                 <p className="text-muted-foreground">
-                  Opening activation PR in the node repo...
+                  Opening the activation PR in the node repo...
                 </p>
               </div>
             ) : null}
@@ -588,9 +593,11 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
             {repoWriteIsDone ? (
               <div className="space-y-3 rounded-md border border-border bg-muted/40 p-4">
                 <p className="font-medium">
-                  {activationResult?.status === "pr_opened"
-                    ? "Activation PR opened"
-                    : "Payment repo-spec write-back is already handled"}
+                  {activationIsReady
+                    ? "Repo-spec and production deploy are verified"
+                    : activationResult?.status === "pr_opened"
+                      ? "Activation PR opened automatically"
+                      : "Payment repo-spec write-back is already handled"}
                 </p>
                 {activationResult?.prUrl ? (
                   <Button asChild className="w-full sm:w-auto">
@@ -605,36 +612,10 @@ export function PaymentActivationStep({ node }: WizardStepProps): ReactElement {
                   </Button>
                 ) : null}
                 <HintText icon={<Info size={16} />}>
-                  Merge and flight the activation PR before testing a real
-                  credits/top-up payment in the node app.
+                  The node remains in activation until the write-back lands on
+                  main and the production build serves the activated repo-spec.
                 </HintText>
               </div>
-            ) : null}
-
-            {canOpenActivationPr ? (
-              <Button
-                type="button"
-                onClick={openActivationPr}
-                className="w-full gap-2"
-              >
-                Open activation PR
-              </Button>
-            ) : null}
-
-            {followThroughPrompt ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => copyText(followThroughPrompt, "handoff")}
-                className="w-full gap-2"
-              >
-                {copied === "handoff" ? (
-                  <CheckCircle className="size-4" />
-                ) : (
-                  <Clipboard className="size-4" />
-                )}
-                {copied === "handoff" ? "Copied" : "Copy AI-dev follow-through"}
-              </Button>
             ) : null}
           </div>
         ) : null}

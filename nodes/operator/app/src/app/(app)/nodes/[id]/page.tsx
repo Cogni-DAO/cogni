@@ -76,6 +76,10 @@ export default async function NodeDashboardPage({
 
   const status = node.status as NodeStatus;
   const display = NODE_STATUS_DISPLAY[status];
+  const statusLabel =
+    node.splitAddress && status !== "active"
+      ? "Activating payments"
+      : display.label;
   const env = serverEnv();
   const nodeRepoUrl = nodeRepoUrlForSlug({
     slug: node.slug,
@@ -136,7 +140,7 @@ export default async function NodeDashboardPage({
       </Link>
 
       <NodeWizard
-        statusLabel={display.label}
+        statusLabel={statusLabel}
         node={{
           id: node.id,
           slug: node.slug,

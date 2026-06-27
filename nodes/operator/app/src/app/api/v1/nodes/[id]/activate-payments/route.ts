@@ -5,7 +5,7 @@
  * Module: `@app/api/v1/nodes/[id]/activate-payments`
  * Purpose: Open the payment-activation PR into the NODE'S OWN repo - write `node_wallet.address` +
  *   `payments_in.credits_topup.*` (95/5 at-cost) + `payments.status: active` into that repo's
- *   `.cogni/repo-spec.yaml` via the cogni-operator GitHub App. Advances `payments_ready` to `active`.
+ *   `.cogni/repo-spec.yaml` via the cogni-operator GitHub App.
  * Scope: Owner-gated. The Split is deployed client-side (wagmi) and its address PATCHed onto the
  *   node row BEFORE this call; this route is the missing write-back path - the wizard previously
  *   only hand-pasted YAML and never committed it to the node's repo (the gap this closes).
@@ -14,8 +14,10 @@
  *   - SINGLE_HOME: targets the node's OWN repo (`NODE_MINT_OWNER`/slug, built like `publish` - never
  *     `getGithubRepo()` which is hardcoded to the operator monorepo), writes ONLY `.cogni/repo-spec.yaml`.
  *   - WALLET_CUSTODY: operator never holds node keys; this only records addresses.
- *   - STATE_MACHINE_TOTAL, OWNER_GATING.
+ *   - OWNER_GATING.
  *   - IDEMPOTENT: re-running detects an already-active spec (`no_changes`) and returns the existing PR.
+ *   - NO_FALSE_READY: opening a PR is not readiness. Status advances only after repo-spec main and
+ *     production deployment are verified by a server-side follow-up.
  * Side-effects: IO (GitHub REST API, Postgres)
  * Links: src/adapters/server/vcs/github-repo-write.ts, src/app/api/v1/nodes/[id]/publish/route.ts, task.5083
  * @public
@@ -28,9 +30,8 @@ import { NextResponse } from "next/server";
 
 import { createNodeRepoWriter } from "@/bootstrap/capabilities/node-repo-write";
 import { resolveAppDb } from "@/bootstrap/container";
-import { transition } from "@/features/nodes/state-machine";
 import { getServerSessionUser } from "@/lib/auth/server";
-import { type NodeStatus, nodes } from "@/shared/db/nodes";
+import { nodes } from "@/shared/db/nodes";
 import { serverEnv } from "@/shared/env";
 
 export const runtime = "nodejs";
@@ -93,14 +94,12 @@ export async function POST(_request: Request, routeArgs: RouteParams) {
     return NextResponse.json({ node, alreadyActive: true });
   }
 
-  const t = transition(node.status as NodeStatus, {
-    type: "activation_published",
-  });
-  if (!t.ok) {
+  if (node.status !== "wallet_ready" && node.status !== "payments_ready") {
     return NextResponse.json(
       {
         error: "invalid state for payment activation",
-        reason: t.reason,
+        reason:
+          "payment activation can only run after the operator wallet exists",
         currentStatus: node.status,
       },
       { status: 409 }
@@ -139,18 +138,5 @@ export async function POST(_request: Request, routeArgs: RouteParams) {
     );
   }
 
-  // Advance to active. The PR landing + deploy is the AI dev's follow-through (like publish), but the
-  // operator-side milestone - the write-back is authored - is reached here.
-  const [updated] = await withTenantScope(
-    db,
-    userActor(session.id as UserId),
-    async (tx) =>
-      tx
-        .update(nodes)
-        .set({ status: t.nextStatus, updatedAt: new Date() })
-        .where(and(eq(nodes.id, id), eq(nodes.ownerUserId, session.id)))
-        .returning()
-  );
-
-  return NextResponse.json({ node: updated, activation: result });
+  return NextResponse.json({ node, activation: result });
 }
