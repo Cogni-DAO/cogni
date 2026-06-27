@@ -4,7 +4,7 @@
 /**
  * Module: `@app/(app)/nodes/payments/PaymentActivationPage.client`
  * Purpose: Client-side payment activation — deploy Split contract via user's connected wallet.
- * Scope: Reads operator wallet + DAO treasury from server props (repo-spec), deploys Split via wagmi. Does not handle Privy provisioning.
+ * Scope: Reads operator wallet + DAO treasury from server props, deploys Split via wagmi. Does not handle Privy provisioning.
  * Invariants: SPLIT_CONTROLLER_IS_ADMIN — user's wallet is the Split controller. Addresses from repo-spec, not user input.
  * Side-effects: IO (wagmi wallet transactions)
  * Links: docs/spec/node-formation.md
@@ -23,11 +23,14 @@ import {
 } from "@cogni/operator-wallet";
 import {
   AlertTriangle,
+  ArrowLeft,
   CheckCircle,
+  Clipboard,
   Info,
   Loader2,
   XCircle,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -45,6 +48,33 @@ import { Button, HintText, PageContainer, SectionCard } from "@/components";
 const DEFAULT_MARKUP_FACTOR = 1.10803324099723;
 const DEFAULT_REVENUE_SHARE = 0;
 
+function buildAiDevSetupPrompt(nodeId: string | null | undefined): string {
+  const nodeLine = nodeId
+    ? `Node id: ${nodeId}\nOperator activation page: /nodes/${nodeId}/payments`
+    : "Node id: ask the human for the node dashboard URL before changing files.";
+
+  return `You are activating payment rails for my Cogni node.
+
+${nodeLine}
+
+Goal: provision a node-owned Privy operator wallet, store its secrets for the node, write the public operator wallet address into the node repo-spec/operator registry, then return me to the operator payment activation page to deploy the Split contract.
+
+Human steps:
+1. Open the Privy dashboard and create or select the dedicated operator-wallet app for this node.
+2. Copy the app id, app secret, and wallet signing key into a local env file for the AI dev only. Do not paste secret values into chat.
+3. Let the AI dev run the repo's documented secret-add flow for the node and environment.
+
+AI dev steps:
+1. Read docs/guides/operator-wallet-setup.md and docs/guides/secrets-add-new.md.
+2. Add the node's PRIVY_APP_ID, PRIVY_APP_SECRET, and PRIVY_SIGNING_KEY to the node's candidate-a secret path.
+3. Provision or resolve the Privy-managed operator wallet.
+4. Update the node's .cogni/repo-spec.yaml with operator_wallet.address.
+5. Ensure the operator node registry row has operator_wallet_address for this node.
+6. Ask the human to reopen the operator payment activation page and deploy the Split contract.
+
+Stop before logging or committing any secret value.`;
+}
+
 type ActivationPhase =
   | "IDLE"
   | "DEPLOYING"
@@ -53,11 +83,11 @@ type ActivationPhase =
   | "ERROR";
 
 interface Props {
-  /** From repo-spec operator_wallet.address (legacy flow) or nodes.operator_wallet_address (wizard flow) — null if not configured */
+  /** From nodes.operator_wallet_address — null if not configured */
   operatorWalletAddress: string | null;
-  /** From repo-spec governance.dao_contract (legacy flow) or nodes.dao_address (wizard flow) — null if not configured */
+  /** From nodes.dao_address — null if not configured */
   daoTreasuryAddress: string | null;
-  /** When invoked via the external-node wizard (`?nodeId=...`), persist the Split address back to the node row on success. */
+  /** Persist the Split address back to the node row on success. */
   nodeId?: string | null;
 }
 
@@ -74,6 +104,7 @@ export function PaymentActivationPageClient({
   const [phase, setPhase] = useState<ActivationPhase>("IDLE");
   const [splitAddress, setSplitAddress] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [copiedSetupPrompt, setCopiedSetupPrompt] = useState(false);
 
   // Wagmi
   const {
@@ -92,6 +123,7 @@ export function PaymentActivationPageClient({
   const hasTreasury = !!daoTreasuryAddress;
   const isReady = hasOperator && hasTreasury;
   const canSubmit = isReady && confirmed && phase === "IDLE" && !!walletAddress;
+  const nodeDashboardHref = nodeId ? `/nodes/${nodeId}` : "/nodes";
 
   // Derive allocations
   const { operatorAllocation, treasuryAllocation } = calculateSplitAllocations(
@@ -212,7 +244,7 @@ export function PaymentActivationPageClient({
 
     void (async () => {
       try {
-        await fetch(`/api/v1/nodes/${nodeId}`, {
+        const response = await fetch(`/api/v1/nodes/${nodeId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -221,8 +253,19 @@ export function PaymentActivationPageClient({
             splitTxHash: txHash,
           }),
         });
-      } finally {
+
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(body || `HTTP ${response.status}`);
+        }
+
         router.push(`/nodes/${nodeId}`);
+      } catch (error) {
+        const details = error instanceof Error ? error.message : String(error);
+        setErrorMessage(
+          `Split deployed at ${splitAddress}, but the node dashboard update failed: ${details}`
+        );
+        setPhase("ERROR");
       }
     })();
   }, [nodeId, phase, splitAddress, txHash, router]);
@@ -233,6 +276,12 @@ export function PaymentActivationPageClient({
     setSplitAddress(null);
     setErrorMessage(null);
     setConfirmed(false);
+  };
+
+  const handleCopySetupPrompt = async () => {
+    await navigator.clipboard.writeText(buildAiDevSetupPrompt(nodeId));
+    setCopiedSetupPrompt(true);
+    window.setTimeout(() => setCopiedSetupPrompt(false), 2000);
   };
 
   const repoSpecFragment = splitAddress
@@ -257,6 +306,12 @@ payments:
   if (!isReady) {
     return (
       <PageContainer maxWidth="lg">
+        <Button asChild variant="ghost" className="mb-4 gap-2">
+          <Link href={nodeDashboardHref}>
+            <ArrowLeft className="size-4" />
+            Node dashboard
+          </Link>
+        </Button>
         <SectionCard title="Activate Payments">
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -267,24 +322,48 @@ payments:
             <div className="space-y-2 text-sm">
               {!hasTreasury && (
                 <p className="text-destructive">
-                  ✗ <code>governance.dao_contract</code> not found in repo-spec.
-                  Complete DAO formation at the <strong>Formation</strong> tab
-                  first.
+                  ✗ <code>dao_address</code> is missing for this node. Complete
+                  DAO formation before activating payment rails.
                 </p>
               )}
               {!hasOperator && (
                 <p className="text-destructive">
-                  ✗ <code>operator_wallet.address</code> not found in repo-spec.
-                  Provision a Privy wallet and add the address to{" "}
-                  <code>.cogni/repo-spec.yaml</code>.
+                  ✗ <code>operator_wallet_address</code> is missing for this
+                  node. Provision a node-owned Privy operator wallet, store its
+                  secrets for this node, and write the public wallet address to
+                  the node registry and <code>.cogni/repo-spec.yaml</code>.
                 </p>
               )}
             </div>
 
             <HintText icon={<Info size={16} />}>
-              See the operator wallet setup guide for Privy provisioning
-              instructions.
+              This node-scoped page reads the operator node registry row. The
+              node repo-spec should match it, but the root operator repo-spec is
+              not used as a fallback.
             </HintText>
+
+            {!hasOperator && (
+              <div className="space-y-3 rounded-md border bg-muted/40 p-4">
+                <p className="text-muted-foreground text-sm">
+                  Give this prompt to an AI developer with repo access. The
+                  human only needs to create/copy Privy values; the AI handles
+                  secrets, wallet provisioning, and repo-spec updates.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCopySetupPrompt}
+                  className="gap-2"
+                >
+                  {copiedSetupPrompt ? (
+                    <CheckCircle className="size-4" />
+                  ) : (
+                    <Clipboard className="size-4" />
+                  )}
+                  {copiedSetupPrompt ? "Copied" : "Copy AI-dev setup prompt"}
+                </Button>
+              </div>
+            )}
           </div>
         </SectionCard>
       </PageContainer>
@@ -294,13 +373,19 @@ payments:
   // --- Ready: show form ---
   return (
     <PageContainer maxWidth="lg">
+      <Button asChild variant="ghost" className="mb-4 gap-2">
+        <Link href={nodeDashboardHref}>
+          <ArrowLeft className="size-4" />
+          Node dashboard
+        </Link>
+      </Button>
       <SectionCard title="Activate Payments">
         <HintText icon={<Info size={16} />}>
           Deploy a revenue split contract on Base. Your connected wallet signs
           the transaction and becomes the Split controller.
         </HintText>
 
-        {/* Read-only addresses from repo-spec */}
+        {/* Read-only node registry addresses */}
         <div className="space-y-2 rounded-md border bg-muted/50 p-4 text-sm">
           <p>
             <span className="font-medium">Operator wallet:</span>{" "}
