@@ -61,7 +61,7 @@ PURE_LIBRARY package providing graph execution decorator infrastructure — bill
 
 ## Notes
 
-- Follow-up: add unit tests for ObservabilityGraphExecutorDecorator (most complex decorator, 4 terminal states)
+- Follow-up: extend ObservabilityGraphExecutorDecorator unit tests to the 4 terminal states (node-attribution covered in `observability-executor.decorator.spec.ts`)
 - Follow-up: export Message from @cogni/ai-core barrel to eliminate PreflightCreditCheckFn cast in factories
 
 ## Change Protocol
