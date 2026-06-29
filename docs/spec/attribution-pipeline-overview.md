@@ -22,6 +22,37 @@ tags: [governance, attribution, overview]
 
 Provide a single document that explains the full attribution pipeline end-to-end: from `repo-spec.yaml` configuration through activity ingestion, enrichment, allocation, admin review, and EIP-712 signed credit statements. Serve as the entry point for onboarding and for deciding where a change belongs.
 
+## DAO Ownership Token Distribution
+
+The first crypto-distribution primitive is an ownership token merkle manifest,
+not an automatic payout executor. It does not deploy or fund a MerkleDistributor
+contract yet. DAO formation now separates the DAO's long-run policy supply from
+the concrete genesis mint. Current P0 templates mint only a small, explicit
+genesis amount to a known holder; the remaining policy supply is future supply,
+not minted inventory, and cannot fund claims until a DAO-controlled emissions
+holder or funded distributor exists. It does not yet encode contributor,
+reserve, or ecosystem sub-allocations. After attribution epochs produce signed
+claimant allocations, those signed credit entitlements can be transformed into a
+deterministic token claim manifest:
+
+1. Group finalized claimant allocations by claimant key and resolved claim
+   address.
+2. Convert signed `credit_amount` entitlements into ERC20 base-unit amounts
+   against the distribution amount using integer largest-remainder rounding.
+3. Hash each claim in the selected distributor's claim shape and build proofs
+   with pinned OSS Merkle tooling; do not introduce custom distributor
+   contracts in the MVP path.
+4. Publish a scope-bound settlement manifest with `node_id`, `scope_id`,
+   `epochId`, `statementHash`, `merkleRoot`, `totalAmount`, funding metadata,
+   and per-claim proofs for a future MerkleDistributor contract or
+   operator-mediated claim route.
+
+This keeps today's ledger signing flow unchanged while giving the next iteration
+a stable bridge from signed attribution statements to token ownership claims.
+Until the distributor contract, funding transaction, and claim UI/API exist,
+`/gov/holdings` remains attribution-ledger ownership with placeholders for
+actual token distribution and attributed-vs-claimed diffs.
+
 ## Non-Goals
 
 - Schema definitions — see [attribution-ledger](./attribution-ledger.md)

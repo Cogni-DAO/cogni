@@ -218,10 +218,13 @@ Attribution credits (off-chain)
 **Settlement contracts:**
 
 - The settlement token is the Aragon `GovernanceERC20` created at node formation.
-- Node formation must move from founder bootstrap minting to a fixed-supply mint into a DAO-controlled emissions holder.
+- Current P0 formation mints only a template-computed genesis amount to the explicit initial holder and models the rest as future supply that is not yet minted. That proves Aragon formation and verification without pretending a distribution rail exists.
+- Future, unissued supply is not distributable inventory. The first live claim path must create DAO-controlled minted inventory first: either a fixed supply minted into an emissions holder/vault during formation or a later distribution-activation flow for nodes whose DAOs already exist.
+- The typed handoff model lives in `@cogni/aragon-osx` as `buildDaoTokenSettlementModel()`: it classifies current genesis-holder minting as `formation_probe_only` and only reaches `claimable` once DAO-controlled inventory, a finalized signed statement, a matching Merkle manifest, and matching distributor funding are all present.
+- Before Walk settlement can go live, repo-spec must carry `distributions.status: active`, `governance.token_contract`, and `governance.emissions_holder`. New nodes may get there during formation; existing DAO nodes get there through a separate activation/update flow.
 - Crawl budget policy remains off-chain accounting and governance policy. It is not the hard security boundary for token release.
 - In Walk, the source of truth for remaining supply is `emissionsHolder.balanceOf(token)` on-chain, not Postgres. Off-chain `remaining` becomes a reconciliation check.
-- Walk should prefer stock audited per-epoch Merkle claims. Bespoke on-chain release enforcement is a later hardening step.
+- Walk uses OSS primitives: OpenZeppelin Merkle Tree tooling for manifest/proof generation and a stock audited per-epoch distributor such as Uniswap MerkleDistributor for claims. Bespoke on-chain release or mint-on-claim contracts are out of scope unless a separate contract-selection spike proves they are required.
 - Merkle settlement consumes signed `creditAmount` entitlements from the finalized statement, not internal `finalUnits`.
 - USDC distributions remain a separate, governance-voted financial action.
 
@@ -241,6 +244,7 @@ Attribution credits (off-chain)
 | Need                | OSS                                              | Status                           |
 | ------------------- | ------------------------------------------------ | -------------------------------- |
 | Governance token    | Aragon GovernanceERC20 (from node formation)     | Walk                             |
+| Merkle tooling      | OpenZeppelin Merkle Tree                         | Crawl/Walk                       |
 | Merkle claims       | Uniswap MerkleDistributor (per-epoch, preferred) | Walk                             |
 | Governance          | OpenZeppelin Governor + TimelockController       | Run                              |
 | Streaming (alt)     | Sablier Lockup / Superfluid                      | Run (optional)                   |

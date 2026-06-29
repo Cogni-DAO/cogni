@@ -21,7 +21,7 @@ export const setupVerifyOperation = {
   id: "setup.verify.v1",
   summary: "Verify DAO formation transactions",
   description:
-    "Server derives addresses from tx receipts and verifies on-chain state (balanceOf, CogniSignal.DAO())",
+    "Server derives addresses from tx receipts and verifies on-chain state (genesis mint balance, CogniSignal.DAO())",
   input: z
     .object({
       chainId: z
@@ -41,7 +41,16 @@ export const setupVerifyOperation = {
         .int()
         .positive()
         .describe("Block number where CogniSignal was deployed (from receipt)"),
+      nodeId: z
+        .string()
+        .uuid()
+        .optional()
+        .describe("Optional node-registry id for log correlation only"),
       initialHolder: hexAddress.describe("Expected token recipient address"),
+      expectedTokenSupplyUnits: z
+        .string()
+        .regex(/^[1-9][0-9]*$/, "Invalid token supply units")
+        .describe("Expected 18-decimal genesis mint to initialHolder"),
     })
     .strict(), // SECURITY: Reject any client-supplied addresses (must derive from receipts)
   output: z.discriminatedUnion("verified", [
@@ -53,9 +62,6 @@ export const setupVerifyOperation = {
         plugin: hexAddress,
         signal: hexAddress,
       }),
-      repoSpecYaml: z
-        .string()
-        .describe("Ready to write to .cogni/repo-spec.yaml"),
     }),
     z.object({
       verified: z.literal(false),

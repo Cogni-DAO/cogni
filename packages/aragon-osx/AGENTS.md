@@ -33,12 +33,17 @@ Pure TypeScript package for Node Formation P0. Provides Aragon OSx encoding, add
 }
 ```
 
-**External deps:** `viem` (ABI encoding). No Node.js APIs, no browser APIs.
+**External deps:** `viem` (ABI encoding), `@openzeppelin/merkle-tree` (manifest proof generation). No Node.js APIs, no browser APIs.
 
 ## Public Surface
 
 - **Exports:**
   - `encodeTokenVotingSetup()` - ABI-encode TokenVoting plugin setup data
+  - `parseDaoTokenSupplyUnits()` - validate whole-token supplies and convert to 18-decimal base units
+  - `buildDaoTokenMerkleDistribution()` - build deterministic EVM-compatible token claim manifests
+  - `hashDaoTokenClaimLeaf()`, `verifyDaoTokenMerkleProof()` - claim leaf/proof helpers
+  - `buildDaoTokenSettlementModel()` - classify DAO token settlement readiness from inventory, signed statement, manifest, and funding refs
+  - `DAO_TOKENOMICS_TEMPLATES`, `resolveDaoTokenomics()` - typed DAO ownership token templates
   - `ARAGON_OSX_ADDRESSES` - Hardcoded OSx addresses per chainId
   - `getAragonAddresses()` - Lookup helper
   - `osx/events` - Event ABIs and topic constants
@@ -68,6 +73,7 @@ pnpm --filter @aragon-osx test
 
 - Pure functions only (no I/O, no side effects)
 - All exports must work in both browser and Node.js
+- Merkle manifests must use pinned OSS tree/proof tooling; do not hand-roll tree construction here.
 - Encoding parity with Foundry scripts enforced via test fixture (P0 deliverable)
 
 ## Dependencies

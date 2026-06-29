@@ -231,10 +231,12 @@ export function useDAOFormation(): UseDAOFormationReturn {
     (async () => {
       const result = await verifyFormation({
         chainId,
+        ...(config.nodeId ? { nodeId: config.nodeId } : {}),
         daoTxHash,
         signalTxHash,
         signalBlockNumber,
         initialHolder: config.initialHolder,
+        expectedGenesisMintUnits: config.genesisMintUnits,
       });
 
       if (attemptIdRef.current !== currentAttempt) return;
@@ -243,7 +245,6 @@ export function useDAOFormation(): UseDAOFormationReturn {
         dispatch({
           type: "VERIFY_SUCCESS",
           addresses: result.addresses,
-          repoSpecYaml: result.repoSpecYaml,
         });
       } else {
         dispatch({ type: "VERIFY_FAILED", errors: result.errors });

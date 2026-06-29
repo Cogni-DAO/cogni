@@ -11,15 +11,25 @@
  * @public
  */
 
-import type { HexAddress } from "@cogni/aragon-osx";
+import type {
+  DaoTokenomicsTemplateId,
+  Hex,
+  HexAddress,
+} from "@cogni/aragon-osx";
+
+export type TxHash = Hex;
 
 // ============================================================================
 // Types
 // ============================================================================
 
 export interface DAOFormationConfig {
+  nodeId?: string;
   tokenName: string;
   tokenSymbol: string;
+  tokenomicsTemplateId: DaoTokenomicsTemplateId;
+  policySupplyUnits: bigint;
+  genesisMintUnits: bigint;
   initialHolder: HexAddress;
 }
 
@@ -44,13 +54,12 @@ export type FormationPhase =
 export interface FormationState {
   phase: FormationPhase;
   config: DAOFormationConfig | null;
-  daoTxHash: HexAddress | null;
-  signalTxHash: HexAddress | null;
+  daoTxHash: TxHash | null;
+  signalTxHash: TxHash | null;
   signalBlockNumber: number | null;
   daoAddress: HexAddress | null;
   pluginAddress: HexAddress | null;
   addresses: VerifiedAddresses | null;
-  repoSpecYaml: string | null;
   errorMessage: string | null;
   /** True if user can retry from current state */
   recoverable: boolean;
@@ -64,20 +73,19 @@ export type FormationAction =
   | { type: "START_PREFLIGHT"; config: DAOFormationConfig }
   | { type: "PREFLIGHT_PASSED" }
   | { type: "PREFLIGHT_FAILED"; error: string }
-  | { type: "DAO_TX_SENT"; txHash: HexAddress }
+  | { type: "DAO_TX_SENT"; txHash: TxHash }
   | {
       type: "DAO_TX_CONFIRMED";
       daoAddress: HexAddress;
       pluginAddress: HexAddress;
     }
   | { type: "DAO_TX_FAILED"; error: string }
-  | { type: "SIGNAL_TX_SENT"; txHash: HexAddress }
+  | { type: "SIGNAL_TX_SENT"; txHash: TxHash }
   | { type: "SIGNAL_TX_CONFIRMED"; blockNumber: number }
   | { type: "SIGNAL_TX_FAILED"; error: string }
   | {
       type: "VERIFY_SUCCESS";
       addresses: VerifiedAddresses;
-      repoSpecYaml: string;
     }
   | { type: "VERIFY_FAILED"; errors: string[] }
   | { type: "RESET" };
@@ -95,7 +103,6 @@ export const initialFormationState: FormationState = {
   daoAddress: null,
   pluginAddress: null,
   addresses: null,
-  repoSpecYaml: null,
   errorMessage: null,
   recoverable: false,
 };
@@ -178,7 +185,6 @@ export function formationReducer(
         ...state,
         phase: "SUCCESS",
         addresses: action.addresses,
-        repoSpecYaml: action.repoSpecYaml,
       };
 
     case "VERIFY_FAILED":

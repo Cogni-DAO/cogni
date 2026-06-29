@@ -5,7 +5,7 @@
  * Module: `@tests/contract/setup/verify`
  * Purpose: Contract tests for DAO formation verification endpoint.
  * Scope: Tests /api/setup/verify security boundary and validation logic; does not make real RPC calls.
- * Invariants: Server NEVER trusts client-supplied addresses; only txHashes accepted.
+ * Invariants: Server NEVER trusts client-supplied addresses; nodeId is correlation-only.
  * Side-effects: none
  * Links: src/app/api/setup/verify/route.ts
  * @public
@@ -24,10 +24,28 @@ describe("setupVerifyOperation contract", () => {
         signalTxHash:
           "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
         signalBlockNumber: 12345678,
+        nodeId: "11111111-1111-4111-8111-111111111111",
         initialHolder: "0x1234567890123456789012345678901234567890",
+        expectedTokenSupplyUnits: "1000000000000000000000000",
       });
 
       expect(result.success).toBe(true);
+    });
+
+    it("rejects invalid optional nodeId correlation field", () => {
+      const result = setupVerifyOperation.input.safeParse({
+        chainId: 8453,
+        daoTxHash:
+          "0x1234567890123456789012345678901234567890123456789012345678901234",
+        signalTxHash:
+          "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+        signalBlockNumber: 12345678,
+        nodeId: "not-a-uuid",
+        initialHolder: "0x1234567890123456789012345678901234567890",
+        expectedTokenSupplyUnits: "1000000000000000000000000",
+      });
+
+      expect(result.success).toBe(false);
     });
 
     it("accepts valid SEPOLIA chainId (11155111)", () => {
@@ -39,6 +57,7 @@ describe("setupVerifyOperation contract", () => {
           "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
         signalBlockNumber: 12345678,
         initialHolder: "0x1234567890123456789012345678901234567890",
+        expectedTokenSupplyUnits: "1000000000000000000000000",
       });
 
       expect(result.success).toBe(true);
@@ -53,6 +72,7 @@ describe("setupVerifyOperation contract", () => {
           "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
         signalBlockNumber: 12345678,
         initialHolder: "0x1234567890123456789012345678901234567890",
+        expectedTokenSupplyUnits: "1000000000000000000000000",
       });
 
       expect(result.success).toBe(false);
@@ -70,6 +90,7 @@ describe("setupVerifyOperation contract", () => {
           "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
         signalBlockNumber: 12345678,
         initialHolder: "0x1234567890123456789012345678901234567890",
+        expectedTokenSupplyUnits: "1000000000000000000000000",
       });
 
       expect(result.success).toBe(false);
@@ -83,6 +104,7 @@ describe("setupVerifyOperation contract", () => {
           "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
         signalBlockNumber: 12345678,
         initialHolder: "0x1234567890123456789012345678901234567890",
+        expectedTokenSupplyUnits: "1000000000000000000000000",
       });
 
       expect(result.success).toBe(false);
@@ -100,11 +122,32 @@ describe("setupVerifyOperation contract", () => {
           "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
         signalBlockNumber: 12345678,
         initialHolder: "0xinvalid",
+        expectedTokenSupplyUnits: "1000000000000000000000000",
       });
 
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error.issues[0]?.message).toContain("Invalid address");
+      }
+    });
+
+    it("rejects invalid expected token supply units", () => {
+      const result = setupVerifyOperation.input.safeParse({
+        chainId: 8453,
+        daoTxHash:
+          "0x1234567890123456789012345678901234567890123456789012345678901234",
+        signalTxHash:
+          "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+        signalBlockNumber: 12345678,
+        initialHolder: "0x1234567890123456789012345678901234567890",
+        expectedTokenSupplyUnits: "0",
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0]?.message).toContain(
+          "Invalid token supply units"
+        );
       }
     });
 
@@ -116,6 +159,7 @@ describe("setupVerifyOperation contract", () => {
         signalTxHash:
           "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
         initialHolder: "0x1234567890123456789012345678901234567890",
+        expectedTokenSupplyUnits: "1000000000000000000000000",
       });
 
       expect(result.success).toBe(false);
@@ -130,6 +174,7 @@ describe("setupVerifyOperation contract", () => {
           "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
         signalBlockNumber: 12345678,
         initialHolder: "0x1234567890123456789012345678901234567890",
+        expectedTokenSupplyUnits: "1000000000000000000000000",
         daoAddress: "0xMALICIOUS0000000000000000000000000000000", // MUST be rejected
       };
 
@@ -151,6 +196,7 @@ describe("setupVerifyOperation contract", () => {
           "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
         signalBlockNumber: 12345678,
         initialHolder: "0x1234567890123456789012345678901234567890",
+        expectedTokenSupplyUnits: "1000000000000000000000000",
         pluginAddress: "0xMALICIOUS0000000000000000000000000000000",
       };
 
@@ -167,6 +213,7 @@ describe("setupVerifyOperation contract", () => {
           "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
         signalBlockNumber: 12345678,
         initialHolder: "0x1234567890123456789012345678901234567890",
+        expectedTokenSupplyUnits: "1000000000000000000000000",
         signalAddress: "0xMALICIOUS0000000000000000000000000000000",
       };
 
@@ -185,7 +232,6 @@ describe("setupVerifyOperation contract", () => {
           plugin: "0x9876543210987654321098765432109876543210",
           signal: "0xfedcbafedcbafedcbafedcbafedcbafedcbafedc",
         },
-        repoSpecYaml: 'governance:\n  chain_id: "8453"\n',
       };
 
       const result = setupVerifyOperation.output.safeParse(success);

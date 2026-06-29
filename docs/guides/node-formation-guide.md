@@ -53,13 +53,17 @@ Registration makes the operator DB-aware before any wallet transaction. Formatio
 
 Open `/nodes` in the application, choose a slug, and create the node row. The canonical per-node wizard page is `src/app/(app)/nodes/[id]/page.tsx`.
 
-### 2. Fill in Token Details (3 fields)
+### 2. Fill in Token Details
 
-| Field           | Example             | Description                                  |
-| --------------- | ------------------- | -------------------------------------------- |
-| `tokenName`     | "Cogni Governance"  | Human-readable name for the governance token |
-| `tokenSymbol`   | "COGNI"             | Short ticker symbol                          |
-| `initialHolder` | Your wallet address | Founder address — receives 1e18 tokens       |
+| Field                | Example             | Description                                                                      |
+| -------------------- | ------------------- | -------------------------------------------------------------------------------- |
+| `tokenName`          | "Cogni Governance"  | Human-readable name for the governance token                                     |
+| `tokenSymbol`        | "COGNI"             | Short ticker symbol                                                              |
+| `tokenomicsTemplate` | "1 owner · 1 token" | Ownership template for the genesis mint and future supply that is not minted yet |
+| `policySupply`       | 1,000,000           | Long-run whole-token policy supply                                               |
+| `initialHolder`      | Your wallet address | Address receiving the computed genesis mint                                      |
+
+P0 enables single-recipient templates. The `3 owners` and `N owners` templates are represented in typed code but stay disabled until the wizard collects multiple receiver wallets and the transaction builder passes receiver/amount arrays.
 
 ### 3. Preflight Validation (Automatic)
 
@@ -76,7 +80,7 @@ If any check fails, the wizard shows an error and blocks deployment.
 The wizard calls `DAOFactory.createDao()` with TokenVoting plugin and MintSettings. Your wallet signs the transaction. This deploys:
 
 - DAO contract
-- GovernanceERC20 token (mints 1e18 to `initialHolder`)
+- GovernanceERC20 token (mints the computed 18-decimal genesis amount to `initialHolder`)
 - TokenVoting plugin
 
 ### 5. Sign Transaction 2: Deploy CogniSignal
@@ -85,12 +89,15 @@ After TX 1 confirms, the wizard deploys `CogniSignal(daoAddress)`. The DAO addre
 
 ### 6. Server Verification (Automatic)
 
-The wizard submits `{ chainId, daoTxHash, signalTxHash, initialHolder }` to the server endpoint (`POST /api/setup/verify`). The server:
+The wizard submits `{ chainId, daoTxHash, signalTxHash, signalBlockNumber, initialHolder, expectedTokenSupplyUnits }` to the server endpoint (`POST /api/setup/verify`). The server:
 
 1. Derives ALL addresses from transaction receipts (never trusts client)
-2. Verifies `balanceOf(initialHolder) == 1e18`
-3. Verifies `CogniSignal.DAO() == daoAddress`
-4. Returns verified addresses
+2. Verifies `balanceOf(initialHolder) == expectedTokenSupplyUnits`
+3. Verifies `totalSupply() == expectedTokenSupplyUnits`
+4. Verifies `CogniSignal.DAO() == daoAddress`
+5. Returns verified addresses
+
+`expectedTokenSupplyUnits` is the template-computed genesis mint, not the full policy supply. The displayed future supply is policy math until governance defines concrete allocations and a DAO-controlled emissions holder or funded MerkleDistributor claim path is deployed and verified.
 
 ### 7. Persist Verified Addresses
 
@@ -123,7 +130,7 @@ After formation completes successfully:
 
 1. Check that the node row has `dao_address`, `plugin_address`, `signal_address`, `token_address`, `dao_tx_hash`, and `signal_tx_hash`
 2. Verify the DAO exists on the Aragon app for your chain
-3. Confirm token balance: `balanceOf(initialHolder)` should return `1000000000000000000` (1e18)
+3. Confirm token balance and total supply both equal the template-computed genesis mint multiplied by `1e18`
 
 ## Troubleshooting
 

@@ -205,9 +205,9 @@ The pattern is **co-write**: the existing Postgres operation continues to work, 
 
 1. Attribution finalization produces a signed `AttributionStatement`.
 2. Settlement resolves each finalized claimant to a wallet address.
-3. `computeMerkleTree()` derives leaves from statement `credit_amount` entitlements.
+3. OSS Merkle tooling derives leaves/proofs from statement `credit_amount` entitlements using the selected stock distributor's claim shape.
 4. The settlement token is the Aragon `GovernanceERC20` minted at node formation.
-5. DAO-controlled trusted execution publishes a per-epoch Merkle root and funds the distributor.
+5. DAO-controlled trusted execution funds a stock per-epoch distributor from DAO-controlled minted inventory, then publishes the manifest/root.
 6. Settlement publication stores a manifest linking `epochId`, `statementHash`, `merkleRoot`, `totalAmount`, `fundingTxHash`, `publisher`, and `publishedAt`.
 
 ### x402 Compatibility
@@ -234,6 +234,7 @@ The x402 transition deletes `credit_ledger` and `billing_accounts.balance_credit
 | Signed statement exceeds budget policy           | Walk: Safe signers verify. Run: contract reverts. TigerBeetle balance provides real-time budget visibility in all phases. |
 | Malicious maintainer changes settlement code     | Branch protection, required review, signed releases, reproducible artifacts.                                              |
 | Compromised operator publishes wrong root/amount | Safe/manual policy, limited publisher set, manifest review.                                                               |
+| Claims attempted from unissued supply            | Blocked by settlement readiness: claimable requires DAO-controlled minted inventory or a funded distributor.              |
 | Statement/root mismatch                          | Settlement manifest stores `statementHash`; root derived from signed statement.                                           |
 | Replay/duplicate publication                     | One settlement record per epoch + explicit operator review.                                                               |
 | Overfunding distributor                          | Funding amount = manifest `totalAmount`, reconciled against TigerBeetle balance.                                          |

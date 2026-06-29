@@ -515,6 +515,7 @@ export async function POST(request: Request, routeArgs: RouteParams) {
           pluginContract: node.pluginAddress,
           signalContract: node.signalAddress,
           knowledgeRemote,
+          ...(node.tokenAddress ? { tokenContract: node.tokenAddress } : {}),
         };
         let pr: { prNumber: number; prUrl: string };
         try {
