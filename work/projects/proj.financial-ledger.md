@@ -51,16 +51,16 @@ TigerBeetle is the transaction engine enforcing double-entry at the database lev
 
 **Goal:** Make the token and artifact model trustworthy before any live claims. Reuse the Aragon `GovernanceERC20` as the rewards token, update node formation to mint a fixed supply to a DAO-controlled emissions holder, and produce auditable settlement artifacts from finalized statements.
 
-| Deliverable                                                                                                                                            | Status      | Est | Work Item         |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- | --- | ----------------- |
-| **BUG: TB unreachable all envs — native client floods ~72M garbage lines/day to Grafana Cloud**                                                        | In Progress | 3   | `bug.0195`        |
-| TigerBeetle ledger + FinancialLedgerPort — 5-account MVP (credits + USDC), co-writes for AI spend + credit deposits                                    | In Review   | 3   | `task.0145`       |
-| Node formation update: mint fixed `GovernanceERC20` supply to a DAO-controlled emissions holder instead of founder bootstrap mint                      | Not Started | 2   | `task.0135`       |
-| `computeMerkleTree(statement)` pure function — takes finalized statement `credit_amount` entitlements + settlement policy → root + proofs per claimant | Not Started | 2   | (create at start) |
-| Settlement manifest store/view — persist `epochId`, `statementHash`, `merkleRoot`, `totalAmount`, `fundingTxHash`, `publisher`, `publishedAt`          | Not Started | 2   | (create at start) |
-| Recipient resolution gate — unresolved claimants block settlement eligibility                                                                          | Not Started | 2   | (create at start) |
-| Threat model + operational integrity controls for publish/fund flow                                                                                    | Not Started | 1   | (create at start) |
-| Compact lifecycle doc for token flow — formation mint → statement → manifest/root → funded distributor → claim                                         | Not Started | 1   | (create at start) |
+| Deliverable                                                                                                                                                                                          | Status      | Est | Work Item         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | ----------------- |
+| **BUG: TB unreachable all envs — native client floods ~72M garbage lines/day to Grafana Cloud**                                                                                                      | In Progress | 3   | `bug.0195`        |
+| TigerBeetle ledger + FinancialLedgerPort — 5-account MVP (credits + USDC), co-writes for AI spend + credit deposits                                                                                  | In Review   | 3   | `task.0145`       |
+| Node formation update: mint fixed `GovernanceERC20` supply to a DAO-controlled emissions holder instead of founder bootstrap mint                                                                    | Not Started | 2   | `task.0135`       |
+| OSS-backed Merkle manifest builder — takes finalized statement `credit_amount` entitlements + settlement policy → root + proofs per claimant, with parity vectors for the selected stock distributor | Not Started | 2   | (create at start) |
+| Settlement manifest store/view — persist `epochId`, `statementHash`, `merkleRoot`, `totalAmount`, `fundingTxHash`, `publisher`, `publishedAt`                                                        | Not Started | 2   | (create at start) |
+| Recipient resolution gate — unresolved claimants block settlement eligibility                                                                                                                        | Not Started | 2   | (create at start) |
+| Threat model + operational integrity controls for publish/fund flow                                                                                                                                  | Not Started | 1   | (create at start) |
+| Compact lifecycle doc for token flow — formation mint → statement → manifest/root → funded distributor → claim                                                                                       | Not Started | 1   | (create at start) |
 
 ### Walk (P1) — Trusted GovernanceERC20 Claims
 
@@ -193,6 +193,7 @@ Retained equity (P1) is par-value member capital — redeemable at face value on
 ### OSS reference implementations
 
 - **Uniswap MerkleDistributor** — battle-tested per-epoch claim contract. Our default MVP on-chain settlement primitive.
+- **OpenZeppelin Merkle Tree** — default off-chain tree/proof generator for manifests. It avoids maintaining bespoke tree logic while keeping contract-compatible leaves explicit.
 - **TigerBeetle** — purpose-built financial transactions database (Apache 2.0, Jepsen-verified). Our canonical ledger engine.
 - **Rotki** — crypto bookkeeping/tax assistant. Enrichment + validation, not canonical.
 - **Open Collective** — transaction pairing/grouping, expense→approval→payout flows. Reference for the posting/settlement layer.

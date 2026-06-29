@@ -414,10 +414,12 @@ export function DaoStep({ node }: WizardStepProps): ReactElement {
                   </div>
                 </div>
                 <div>
-                  <div className="text-muted-foreground">Planned, unminted</div>
+                  <div className="text-muted-foreground">
+                    Future, not minted
+                  </div>
                   <div className="font-mono font-semibold tabular-nums">
                     {TOKEN_SUPPLY_FORMATTER.format(
-                      resolvedTokenomics.unmintedPolicyBudgetWholeTokens
+                      resolvedTokenomics.futureSupplyNotMintedWholeTokens
                     )}
                   </div>
                 </div>

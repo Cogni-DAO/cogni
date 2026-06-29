@@ -6,7 +6,7 @@
  * Purpose: Pure DAO ownership-token settlement data model from formation inventory to Merkle claims.
  * Scope: Defines typed lifecycle/readiness helpers only; does not deploy contracts, read chain state, or persist manifests.
  * Invariants:
- * - TOKEN_SETTLEMENT_REQUIRES_CONTROLLED_INVENTORY: policy budget is not distributable inventory.
+ * - TOKEN_SETTLEMENT_REQUIRES_CONTROLLED_INVENTORY: unissued future supply is not distributable inventory.
  * - TOKEN_SETTLEMENT_STATEMENT_BOUND: claim manifests must bind to a finalized signed attribution statement.
  * - TOKEN_SETTLEMENT_FUNDING_MATCHES_ROOT: funding must match the manifest amount and root.
  * Side-effects: none

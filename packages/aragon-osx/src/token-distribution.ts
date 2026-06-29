@@ -3,9 +3,9 @@
 
 /**
  * Module: `@cogni/aragon-osx/token-distribution`
- * Purpose: Pure helpers for DAO ownership token supply parsing and EVM-compatible merkle claim manifests.
+ * Purpose: Pure helpers for DAO ownership token supply parsing and OSS-backed EVM-compatible merkle claim manifests.
  * Scope: Does not perform I/O or know about persistence. Deterministically converts signed
- *   statement credit entitlements into ERC20 claim amounts and keccak merkle proofs.
+ *   statement credit entitlements into ERC20 claim amounts and OpenZeppelin-built merkle proofs.
  * Invariants:
  * - TOKEN_DISTRIBUTION_DETERMINISTIC: same inputs produce identical leaves, proofs, and root.
  * - TOKEN_DISTRIBUTION_CONSERVES_AMOUNT: all positive-token distributions allocate exactly distributionAmount.
@@ -15,6 +15,7 @@
  * @public
  */
 
+import { SimpleMerkleTree } from "@openzeppelin/merkle-tree";
 import { encodePacked, isAddress, keccak256 } from "viem";
 
 import {
@@ -59,6 +60,8 @@ export interface DaoTokenMerkleLeaf {
 
 export interface DaoTokenMerkleDistribution {
   readonly kind: "cogni.dao_ownership_token_distribution.v0";
+  readonly merkleTreeLibrary: "openzeppelin/merkle-tree@1";
+  readonly claimContractPattern: "uniswap.merkle-distributor.v1";
   readonly distributionId: string;
   readonly nodeId: string;
   readonly scopeId: string;
@@ -128,14 +131,18 @@ export function buildDaoTokenMerkleDistribution(
     ),
   }));
 
-  const tree = buildMerkleTree(leavesWithoutProof.map((leaf) => leaf.leafHash));
+  const tree = SimpleMerkleTree.of(
+    leavesWithoutProof.map((leaf) => leaf.leafHash)
+  );
   const leaves = leavesWithoutProof.map((leaf, index) => ({
     ...leaf,
-    proof: buildMerkleProof(tree, index),
+    proof: tree.getProof(index) as Hex[],
   }));
 
   return {
     kind: "cogni.dao_ownership_token_distribution.v0",
+    merkleTreeLibrary: "openzeppelin/merkle-tree@1",
+    claimContractPattern: "uniswap.merkle-distributor.v1",
     distributionId: input.distributionId,
     nodeId: input.nodeId,
     scopeId: input.scopeId,
@@ -144,7 +151,7 @@ export function buildDaoTokenMerkleDistribution(
     tokenAddress: input.tokenAddress,
     distributionAmount: input.distributionAmount,
     totalAllocated: leaves.reduce((sum, leaf) => sum + leaf.amount, 0n),
-    merkleRoot: tree.at(-1)?.[0] ?? ZERO_ROOT,
+    merkleRoot: (tree.root ?? ZERO_ROOT) as Hex,
     leaves,
   };
 }
@@ -173,11 +180,7 @@ export function verifyDaoTokenMerkleProof(
   proof: readonly Hex[],
   merkleRoot: Hex
 ): boolean {
-  let computed = leafHash;
-  for (const sibling of proof) {
-    computed = hashMerklePair(computed, sibling);
-  }
-  return computed.toLowerCase() === merkleRoot.toLowerCase();
+  return SimpleMerkleTree.verify(merkleRoot, leafHash, [...proof]);
 }
 
 function groupAllocations(
@@ -273,47 +276,6 @@ function allocateTokenAmounts(
     amountFloor:
       allocation.amountFloor + (bonuses.has(allocation.claimantKey) ? 1n : 0n),
   }));
-}
-
-function buildMerkleTree(leaves: readonly Hex[]): Hex[][] {
-  if (leaves.length === 0) {
-    return [];
-  }
-
-  const levels: Hex[][] = [[...leaves]];
-  while ((levels.at(-1)?.length ?? 0) > 1) {
-    const level = levels.at(-1) as Hex[];
-    const next: Hex[] = [];
-    for (let i = 0; i < level.length; i += 2) {
-      const left = level[i] as Hex;
-      const right = level[i + 1];
-      next.push(right ? hashMerklePair(left, right) : left);
-    }
-    levels.push(next);
-  }
-  return levels;
-}
-
-function buildMerkleProof(tree: readonly Hex[][], leafIndex: number): Hex[] {
-  const proof: Hex[] = [];
-  let index = leafIndex;
-
-  for (let levelIndex = 0; levelIndex < tree.length - 1; levelIndex += 1) {
-    const level = tree[levelIndex] as readonly Hex[];
-    const siblingIndex = index % 2 === 0 ? index + 1 : index - 1;
-    const sibling = level[siblingIndex];
-    if (sibling) {
-      proof.push(sibling);
-    }
-    index = Math.floor(index / 2);
-  }
-
-  return proof;
-}
-
-function hashMerklePair(a: Hex, b: Hex): Hex {
-  const [left, right] = a.toLowerCase() <= b.toLowerCase() ? [a, b] : [b, a];
-  return keccak256(`${left}${right.slice(2)}` as Hex);
 }
 
 function validateManifestIdentity(

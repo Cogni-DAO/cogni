@@ -33,7 +33,7 @@ Pure TypeScript package for Node Formation P0. Provides Aragon OSx encoding, add
 }
 ```
 
-**External deps:** `viem` (ABI encoding). No Node.js APIs, no browser APIs.
+**External deps:** `viem` (ABI encoding), `@openzeppelin/merkle-tree` (manifest proof generation). No Node.js APIs, no browser APIs.
 
 ## Public Surface
 
@@ -73,6 +73,7 @@ pnpm --filter @aragon-osx test
 
 - Pure functions only (no I/O, no side effects)
 - All exports must work in both browser and Node.js
+- Merkle manifests must use pinned OSS tree/proof tooling; do not hand-roll tree construction here.
 - Encoding parity with Foundry scripts enforced via test fixture (P0 deliverable)
 
 ## Dependencies

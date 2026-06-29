@@ -70,6 +70,10 @@ describe("buildDaoTokenMerkleDistribution", () => {
       ],
     });
 
+    expect(distribution.merkleTreeLibrary).toBe("openzeppelin/merkle-tree@1");
+    expect(distribution.claimContractPattern).toBe(
+      "uniswap.merkle-distributor.v1"
+    );
     expect(distribution.totalAllocated).toBe(10n);
     expect(distribution.leaves.map((leaf) => leaf.claimantKey)).toEqual([
       "user:alice",
@@ -243,15 +247,15 @@ describe("resolveDaoTokenomics", () => {
     });
 
     expect(tokenomics.genesisMintWholeTokens).toBe(1);
-    expect(tokenomics.unmintedPolicyBudgetWholeTokens).toBe(999_999);
+    expect(tokenomics.futureSupplyNotMintedWholeTokens).toBe(999_999);
     expect(tokenomics.slices[0]).toMatchObject({
       label: "Genesis steward",
       wholeTokens: 1,
       mintedAtFormation: true,
     });
     expect(tokenomics.slices[1]).toMatchObject({
-      role: "unminted_policy_budget",
-      label: "Unminted policy budget",
+      role: "future_supply_unissued",
+      label: "Future supply, not minted",
       wholeTokens: 999_999,
       mintedAtFormation: false,
     });
@@ -269,13 +273,13 @@ describe("resolveDaoTokenomics", () => {
     });
 
     expect(tokenomics.genesisMintWholeTokens).toBe(200_000);
-    expect(tokenomics.unmintedPolicyBudgetWholeTokens).toBe(800_000);
+    expect(tokenomics.futureSupplyNotMintedWholeTokens).toBe(800_000);
     expect(tokenomics.slices.map((slice) => slice.wholeTokens)).toEqual([
       200_000, 800_000,
     ]);
     expect(tokenomics.slices[1]).toMatchObject({
-      role: "unminted_policy_budget",
-      label: "Unminted policy budget",
+      role: "future_supply_unissued",
+      label: "Future supply, not minted",
       mintedAtFormation: false,
     });
   });

@@ -78,7 +78,7 @@ Enable any founder to register a node, form a fully-verified Cogni DAO via walle
 
 2. **ARAGON_MINTED_TOKEN**: Use Aragon's GovernanceERC20 minted during DAO creation. No custom NonTransferableVotes deployment. Tokens are transferable.
 
-   The wizard distinguishes long-run policy supply from genesis mint. P0 mints only the enabled template's concrete genesis amount to an explicit holder. The remaining policy supply is an unminted policy budget; concrete contributor, reserve, or ecosystem allocation rules are not implied by the formation UI and are not represented as current on-chain inventory. Before live contributor distributions, the system must add a DAO-controlled emissions holder or MerkleDistributor claim path and verify that on-chain holder/distributor state.
+   The wizard distinguishes long-run policy supply from genesis mint. P0 mints only the enabled template's concrete genesis amount to an explicit holder. The remaining policy supply is future supply that is not minted yet; concrete contributor, reserve, or ecosystem allocation rules are not implied by the formation UI and are not represented as current on-chain inventory. Before live contributor distributions, the system must add a DAO-controlled emissions holder or funded MerkleDistributor claim path and verify that on-chain holder/distributor state.
 
 3. **NO_PRIVATE_KEY_ENV_VARS**: Formation transactions are signed via wallet UI (wagmi/rainbowkit), never by script-loaded secrets. Payment activation (child node CLI) uses `DEPLOYER_PRIVATE_KEY` for Split deployment — this is acceptable because it runs in the child node's own environment, not the shared operator repo.
 
@@ -190,7 +190,7 @@ Server derives addresses from receipts (never trusts client):
 4. Verify `balanceOf(initialHolder) == expectedTokenSupplyUnits`, `totalSupply() == expectedTokenSupplyUnits`, and `CogniSignal.DAO() == dao`
 5. Return verified addresses
 
-`expectedTokenSupplyUnits` is the computed genesis mint amount, not necessarily the long-run policy supply. Any unminted policy budget is not an on-chain reserve until a later distributor/emissions-holder flow exists.
+`expectedTokenSupplyUnits` is the computed genesis mint amount, not necessarily the long-run policy supply. Any future supply displayed by policy is not an on-chain reserve until a later distributor/emissions-holder flow exists.
 
 ### viem Encoding (TokenVoting Setup with Mint)
 

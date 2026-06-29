@@ -8,7 +8,7 @@
  * Invariants:
  * - TOKENOMICS_POLICY_SUPPLY_IS_NOT_GENESIS_FLOAT: templates distinguish long-run policy supply from tokens minted at DAO creation.
  * - TOKENOMICS_GENESIS_MINT_IS_CONCRETE: current formation mints only to explicit receiver addresses.
- * - TOKENOMICS_UNMINTED_BUDGET_IS_NOT_ONCHAIN: planned allocation buckets are policy math until a distributor/emissions holder is deployed.
+ * - TOKENOMICS_FUTURE_SUPPLY_IS_NOT_ONCHAIN: future supply is policy math until a distributor/emissions holder is deployed.
  * Side-effects: none
  * Links: docs/spec/node-formation.md
  * @public
@@ -31,7 +31,7 @@ export type DaoTokenomicsTemplateId =
 export type DaoTokenAllocationRole =
   | "genesis_steward"
   | "founding_council"
-  | "unminted_policy_budget";
+  | "future_supply_unissued";
 
 export interface DaoTokenomicsTemplate {
   readonly id: DaoTokenomicsTemplateId;
@@ -66,7 +66,7 @@ export interface ResolvedDaoTokenomics {
   readonly ownerCount: number;
   readonly policySupplyWholeTokens: number;
   readonly genesisMintWholeTokens: number;
-  readonly unmintedPolicyBudgetWholeTokens: number;
+  readonly futureSupplyNotMintedWholeTokens: number;
   readonly slices: readonly {
     readonly role: DaoTokenAllocationRole;
     readonly label: string;
@@ -82,7 +82,7 @@ export const DAO_TOKENOMICS_TEMPLATES = [
     label: "Single owner, one-token start",
     shortLabel: "1 owner · 1 token",
     description:
-      "Mint one governance token to the connected wallet; model the remaining policy budget for later contributor distributions.",
+      "Mint one governance token to the connected wallet; model future supply for later DAO-controlled emissions.",
     ownerShape: {
       kind: "fixed",
       defaultCount: 1,
@@ -95,8 +95,8 @@ export const DAO_TOKENOMICS_TEMPLATES = [
     },
     futureAllocationBps: [
       {
-        role: "unminted_policy_budget",
-        label: "Unminted policy budget",
+        role: "future_supply_unissued",
+        label: "Future supply, not minted",
         bps: 10_000,
       },
     ],
@@ -107,7 +107,7 @@ export const DAO_TOKENOMICS_TEMPLATES = [
     label: "Single owner, 20% bootstrap",
     shortLabel: "1 owner · 20%",
     description:
-      "Mint an explicit founder float now while modeling the remaining policy budget for contributors and DAO-controlled programs.",
+      "Mint an explicit founder float now while modeling future supply for later DAO-controlled emissions.",
     ownerShape: {
       kind: "fixed",
       defaultCount: 1,
@@ -120,8 +120,8 @@ export const DAO_TOKENOMICS_TEMPLATES = [
     },
     futureAllocationBps: [
       {
-        role: "unminted_policy_budget",
-        label: "Unminted policy budget",
+        role: "future_supply_unissued",
+        label: "Future supply, not minted",
         bps: 10_000,
       },
     ],
@@ -132,7 +132,7 @@ export const DAO_TOKENOMICS_TEMPLATES = [
     label: "Three-owner founding council",
     shortLabel: "3 owners · equal",
     description:
-      "Three founding wallets each receive one governance token; the remaining policy budget is left for contributor distributions.",
+      "Three founding wallets each receive one governance token; future supply is left unissued for later DAO-controlled emissions.",
     ownerShape: {
       kind: "fixed",
       defaultCount: 3,
@@ -145,8 +145,8 @@ export const DAO_TOKENOMICS_TEMPLATES = [
     },
     futureAllocationBps: [
       {
-        role: "unminted_policy_budget",
-        label: "Unminted policy budget",
+        role: "future_supply_unissued",
+        label: "Future supply, not minted",
         bps: 10_000,
       },
     ],
@@ -157,7 +157,7 @@ export const DAO_TOKENOMICS_TEMPLATES = [
     label: "N-owner contributor pool",
     shortLabel: "N owners · 10%",
     description:
-      "Mint a small initial contributor float across N wallets; model the majority as earned-claim policy budget.",
+      "Mint a small initial contributor float across N wallets; leave the majority unissued for later earned claims.",
     ownerShape: {
       kind: "variable",
       defaultCount: 5,
@@ -170,8 +170,8 @@ export const DAO_TOKENOMICS_TEMPLATES = [
     },
     futureAllocationBps: [
       {
-        role: "unminted_policy_budget",
-        label: "Unminted policy budget",
+        role: "future_supply_unissued",
+        label: "Future supply, not minted",
         bps: 10_000,
       },
     ],
@@ -229,7 +229,8 @@ export function resolveDaoTokenomics(params: {
   const genesisBps = Math.round(
     (genesisMintWholeTokens / policySupply) * BPS_DENOMINATOR
   );
-  const unmintedPolicyBudgetWholeTokens = policySupply - genesisMintWholeTokens;
+  const futureSupplyNotMintedWholeTokens =
+    policySupply - genesisMintWholeTokens;
   const configuredFutureBps = template.futureAllocationBps.reduce(
     (sum, slice) => sum + slice.bps,
     0
@@ -243,15 +244,15 @@ export function resolveDaoTokenomics(params: {
         (sum, previous) =>
           sum +
           Math.floor(
-            (unmintedPolicyBudgetWholeTokens * previous.bps) /
+            (futureSupplyNotMintedWholeTokens * previous.bps) /
               configuredFutureBps
           ),
         0
       );
     const wholeTokens = isLast
-      ? unmintedPolicyBudgetWholeTokens - allocatedBefore
+      ? futureSupplyNotMintedWholeTokens - allocatedBefore
       : Math.floor(
-          (unmintedPolicyBudgetWholeTokens * slice.bps) / configuredFutureBps
+          (futureSupplyNotMintedWholeTokens * slice.bps) / configuredFutureBps
         );
 
     return {
@@ -271,7 +272,7 @@ export function resolveDaoTokenomics(params: {
     ownerCount,
     policySupplyWholeTokens: policySupply,
     genesisMintWholeTokens,
-    unmintedPolicyBudgetWholeTokens,
+    futureSupplyNotMintedWholeTokens,
     slices: [
       {
         role:

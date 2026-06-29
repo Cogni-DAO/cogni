@@ -55,13 +55,13 @@ Open `/nodes` in the application, choose a slug, and create the node row. The ca
 
 ### 2. Fill in Token Details
 
-| Field                | Example             | Description                                                                 |
-| -------------------- | ------------------- | --------------------------------------------------------------------------- |
-| `tokenName`          | "Cogni Governance"  | Human-readable name for the governance token                                |
-| `tokenSymbol`        | "COGNI"             | Short ticker symbol                                                         |
-| `tokenomicsTemplate` | "1 owner · 1 token" | Ownership template for the genesis mint and planned, unminted policy budget |
-| `policySupply`       | 1,000,000           | Long-run whole-token policy supply                                          |
-| `initialHolder`      | Your wallet address | Address receiving the computed genesis mint                                 |
+| Field                | Example             | Description                                                                      |
+| -------------------- | ------------------- | -------------------------------------------------------------------------------- |
+| `tokenName`          | "Cogni Governance"  | Human-readable name for the governance token                                     |
+| `tokenSymbol`        | "COGNI"             | Short ticker symbol                                                              |
+| `tokenomicsTemplate` | "1 owner · 1 token" | Ownership template for the genesis mint and future supply that is not minted yet |
+| `policySupply`       | 1,000,000           | Long-run whole-token policy supply                                               |
+| `initialHolder`      | Your wallet address | Address receiving the computed genesis mint                                      |
 
 P0 enables single-recipient templates. The `3 owners` and `N owners` templates are represented in typed code but stay disabled until the wizard collects multiple receiver wallets and the transaction builder passes receiver/amount arrays.
 
@@ -97,7 +97,7 @@ The wizard submits `{ chainId, daoTxHash, signalTxHash, signalBlockNumber, initi
 4. Verifies `CogniSignal.DAO() == daoAddress`
 5. Returns verified addresses
 
-`expectedTokenSupplyUnits` is the template-computed genesis mint, not the full policy supply. The displayed unminted budget is policy math until governance defines concrete contributor, reserve, or ecosystem allocations and a DAO-controlled emissions holder or MerkleDistributor claim path is deployed and verified.
+`expectedTokenSupplyUnits` is the template-computed genesis mint, not the full policy supply. The displayed future supply is policy math until governance defines concrete allocations and a DAO-controlled emissions holder or funded MerkleDistributor claim path is deployed and verified.
 
 ### 7. Persist Verified Addresses
 
