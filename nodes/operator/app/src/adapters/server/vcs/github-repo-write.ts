@@ -194,8 +194,11 @@ const CONTAINER_PORT = 3200;
 const FOOTPRINT = {
   caddyfile: "infra/compose/edge/configs/Caddyfile.tmpl",
   ciYaml: ".github/workflows/ci.yaml",
-  argocdKustomization: "infra/k8s/argocd/appsets/kustomization.yaml",
 } as const;
+
+/** Per-env appsets kustomization path — the PER-ENV `appsets/<env>/kustomization.yaml` the slug folds into. */
+const appsetsKustomizationPath = (env: string): string =>
+  `infra/k8s/argocd/appsets/${env}/kustomization.yaml`;
 
 /**
  * Shared per-`(env, node)` ApplicationSet template — the SAME file `render-node-appset.sh` interpolates,
@@ -2132,8 +2135,9 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
 
     // per-node AppSets×3 — one ApplicationSet object per (env, slug) for structural LANE_ISOLATION
     // (bug.0378). New files from the shared template (byte-exact to render-node-appset.sh) land under
-    // infra/k8s/argocd/appsets/ (reconciled+pruned by the cogni-appsets app-of-apps), then folded into
-    // appsets/kustomization.yaml so the unit-job drift gate stays green.
+    // the PER-ENV infra/k8s/argocd/appsets/<env>/ dir (each reconciled+pruned by its own per-env
+    // cogni-<env>-appsets app-of-apps, story.5020), then folded into that env's appsets/<env>/
+    // kustomization.yaml so the unit-job drift gate stays green.
     const appsetTemplate = await this.readFileOnMain(
       octokit,
       owner,
@@ -2142,20 +2146,20 @@ export class GitHubRepoWriter implements OperatorDeployPlanePort {
     );
     for (const env of NODE_FORMATION_ENVS) {
       await addBlob(
-        `infra/k8s/argocd/appsets/${env}-${slug}-applicationset.yaml`,
+        `infra/k8s/argocd/appsets/${env}/${env}-${slug}-applicationset.yaml`,
         renderNodeAppset(appsetTemplate, slug, env)
       );
+      const argocdKustomization = await this.readFileOnMain(
+        octokit,
+        owner,
+        repo,
+        appsetsKustomizationPath(env)
+      );
+      await addBlob(
+        appsetsKustomizationPath(env),
+        insertAppsetKustomization(argocdKustomization, slug, env)
+      );
     }
-    const argocdKustomization = await this.readFileOnMain(
-      octokit,
-      owner,
-      repo,
-      FOOTPRINT.argocdKustomization
-    );
-    await addBlob(
-      FOOTPRINT.argocdKustomization,
-      insertAppsetKustomization(argocdKustomization, slug, NODE_FORMATION_ENVS)
-    );
 
     // Caddyfile / ci.yaml / lockfile — single-file splices over main.
     const caddyfile = await this.readFileOnMain(

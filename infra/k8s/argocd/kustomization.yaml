@@ -20,10 +20,16 @@ resources:
   - https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.4/manifests/install.yaml
   # ksops CMP plugin ConfigMap
   - ksops-cmp.yaml
-  # app-of-apps: continuously reconciles the per-(env, node) ApplicationSets under
-  # appsets/ with prune, so a catalog-removed node's AppSet is auto-pruned.
+  # PER-ENV app-of-apps: each continuously reconciles the per-node ApplicationSets
+  # under appsets/<env>/ with prune, so a catalog-removed node's AppSet is auto-pruned.
+  # All three are listed here for drift/completeness (mirroring how the per-(env, node)
+  # AppSets were once all listed), BUT each env's CLUSTER must only get ITS OWN
+  # app-of-apps — a single cluster running all three would fan every env's AppSets
+  # onto it. provision-env-vm.sh therefore applies only cogni-${DEPLOY_ENV}-appsets.
   # candidate-b is provisioned separately (provision-env.yml) and not included.
-  - cogni-appsets-application.yaml
+  - candidate-a-appsets-application.yaml
+  - preview-appsets-application.yaml
+  - production-appsets-application.yaml
 
 patches:
   # Add ksops sidecar to repo-server for SOPS/age secret decryption

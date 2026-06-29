@@ -1,12 +1,22 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 #
-# Argo CD Application — cogni-appsets (the per-(env, node) ApplicationSet app-of-apps).
+# Argo CD Application — cogni-production-appsets (the production per-node ApplicationSet app-of-apps).
 #
-# Continuously reconciles infra/k8s/argocd/appsets/ — the directory of GENERATED
-# per-(env, node) ApplicationSet objects (one per deployable node × env, see
-# scripts/ci/render-node-appset.sh). The bootstrap kustomization applies THIS
-# Application once; from then on Argo owns the AppSet layer.
+# Continuously reconciles infra/k8s/argocd/appsets/production/ — the directory of
+# GENERATED per-node ApplicationSet objects for the production env only (one per
+# deployable node, see scripts/ci/render-node-appset.sh). The production cluster's
+# bootstrap kustomization applies THIS Application once; from then on Argo owns
+# the production AppSet layer.
+#
+# Why PER-ENV (the foreign-env fan-out it prevents):
+#   A single all-envs app-of-apps sourced from appsets/ would fan EVERY env's
+#   AppSets (candidate-a + preview + production) onto whichever cluster ran it —
+#   each cluster would then materialize the other envs' Applications/pods. By
+#   scoping the source path to appsets/production/, this app-of-apps owns ONLY the
+#   production AppSets and can never fan a foreign env's AppSets onto the production
+#   cluster. The bootstrap apply (provision-env-vm.sh) installs only the matching
+#   cogni-${DEPLOY_ENV}-appsets, mirroring the prior per-(env, node) env-scoping.
 #
 # Why this exists (the decommission prune-gap it closes):
 #   The per-node AppSets used to be listed directly in the bootstrap
@@ -16,7 +26,7 @@
 #   orphaned and never pruned. With prune: true on a dir-sourced Application,
 #   Argo sees the file vanish from git and prunes the AppSet automatically.
 #
-# Scope: this app-of-apps owns ONLY the per-(env, node) AppSets under appsets/.
+# Scope: this app-of-apps owns ONLY the per-node AppSets under appsets/production/.
 #   It NEVER manages Argo's own install (install.yaml / ksops / substrate apps) —
 #   those stay in the bootstrap kustomization, applied out-of-band.
 #
@@ -28,7 +38,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: cogni-appsets
+  name: cogni-production-appsets
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -37,7 +47,7 @@ spec:
   source:
     repoURL: https://github.com/cogni-dao/cogni.git
     targetRevision: main
-    path: infra/k8s/argocd/appsets
+    path: infra/k8s/argocd/appsets/production
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
