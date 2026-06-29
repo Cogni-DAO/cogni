@@ -24,6 +24,7 @@
  * @public
  */
 
+import { CHAINS } from "@cogni/node-shared";
 import { NextResponse } from "next/server";
 import { type Address, createPublicClient, getAddress, http } from "viem";
 import { base, sepolia } from "viem/chains";
@@ -54,11 +55,12 @@ const clock = { now: () => new Date().toISOString() };
 
 // Map a NODE's chain id to its viem chain object. Distribution activation
 // verifies an ARBITRARY node's token/DAO, so the chain is selected from the
-// node row — NOT the operator's own governance config. Only BASE (8453) and
-// SEPOLIA (11155111) are supported on-chain.
+// node row — NOT the operator's own governance config. Only BASE and SEPOLIA
+// are supported on-chain. Chain ids come from the shared CHAINS registry (never
+// hardcode chain ids — eslint no-restricted-syntax).
 const VIEM_CHAINS_BY_ID: Record<number, typeof base | typeof sepolia> = {
-  8453: base,
-  11155111: sepolia,
+  [CHAINS.BASE.chainId]: base,
+  [CHAINS.SEPOLIA.chainId]: sepolia,
 };
 
 const ActivateDistributionsInput = z.object({
