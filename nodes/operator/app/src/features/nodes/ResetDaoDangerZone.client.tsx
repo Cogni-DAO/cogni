@@ -4,8 +4,10 @@
 /**
  * Module: `@features/nodes/ResetDaoDangerZone.client`
  * Purpose: Owner-only destructive control to reset a node's DAO record so a fresh DAO can be re-formed.
- * Scope: Renders a "Danger zone" card with a typed confirmation guard; POSTs to the owner-only
- *   reset-dao route and refreshes the server page on success so the wizard returns to the DAO step.
+ * Scope: Renders a compact "Danger zone" SectionCard (page-aligned with NodeAccess/NodeDeployments)
+ *   with a two-step reveal — a single destructive button first, then a typed confirmation guard +
+ *   final confirm/cancel. POSTs to the owner-only reset-dao route and refreshes the server page on
+ *   success so the wizard returns to the DAO step.
  * Side-effects: IO (POST reset-dao route, router.refresh)
  * Links: src/app/api/v1/nodes/[id]/reset-dao/route.ts, src/app/(app)/nodes/[id]/page.tsx
  * @public
@@ -13,19 +15,11 @@
 
 "use client";
 
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ReactElement, useState } from "react";
 
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Input,
-} from "@/components";
+import { Button, Input, SectionCard } from "@/components";
 
 interface Props {
   readonly nodeId: string;
@@ -35,11 +29,18 @@ interface Props {
 export function ResetDaoDangerZone({ nodeId, slug }: Props): ReactElement {
   const router = useRouter();
   const expected = `clear ${slug} dao`;
+  const [revealed, setRevealed] = useState(false);
   const [confirm, setConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const matches = confirm === expected;
+
+  const cancel = () => {
+    setRevealed(false);
+    setConfirm("");
+    setError(null);
+  };
 
   const handleReset = async () => {
     if (!matches || submitting) {
@@ -83,38 +84,53 @@ export function ResetDaoDangerZone({ nodeId, slug }: Props): ReactElement {
   };
 
   return (
-    <Card className="border-destructive/50">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-destructive">
-          <AlertTriangle className="size-5" />
-          Danger zone — reset DAO
-        </CardTitle>
-        <CardDescription>
-          Resetting clears this node's DAO record so you can re-form a fresh
-          DAO. It does not touch the deployment repo.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <Input
-          value={confirm}
-          onChange={(event) => setConfirm(event.target.value)}
-          placeholder={expected}
-          aria-label="Reset DAO confirmation"
-          spellCheck={false}
-          autoComplete="off"
-        />
-        {error ? <p className="text-destructive text-sm">{error}</p> : null}
+    <SectionCard title="Danger zone" className="mx-auto mt-4 w-full max-w-2xl">
+      <p className="text-muted-foreground text-sm">
+        Clears this node's DAO record so you can re-form a fresh DAO. Does not
+        touch the deployment repo.
+      </p>
+
+      {revealed ? (
+        <div className="space-y-3">
+          <Input
+            value={confirm}
+            onChange={(event) => setConfirm(event.target.value)}
+            placeholder={expected}
+            aria-label="Reset DAO confirmation"
+            spellCheck={false}
+            autoComplete="off"
+          />
+          {error ? <p className="text-destructive text-sm">{error}</p> : null}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleReset}
+              disabled={!matches || submitting}
+              className="gap-2"
+            >
+              {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
+              Confirm reset
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={cancel}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
         <Button
           type="button"
           variant="destructive"
-          onClick={handleReset}
-          disabled={!matches || submitting}
-          className="gap-2"
+          onClick={() => setRevealed(true)}
         >
-          {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
           Reset DAO
         </Button>
-      </CardContent>
-    </Card>
+      )}
+    </SectionCard>
   );
 }
