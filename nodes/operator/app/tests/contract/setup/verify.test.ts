@@ -5,7 +5,7 @@
  * Module: `@tests/contract/setup/verify`
  * Purpose: Contract tests for DAO formation verification endpoint.
  * Scope: Tests /api/setup/verify security boundary and validation logic; does not make real RPC calls.
- * Invariants: Server NEVER trusts client-supplied addresses; only txHashes accepted.
+ * Invariants: Server NEVER trusts client-supplied addresses; nodeId is correlation-only.
  * Side-effects: none
  * Links: src/app/api/setup/verify/route.ts
  * @public
@@ -24,11 +24,28 @@ describe("setupVerifyOperation contract", () => {
         signalTxHash:
           "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
         signalBlockNumber: 12345678,
+        nodeId: "11111111-1111-4111-8111-111111111111",
         initialHolder: "0x1234567890123456789012345678901234567890",
         expectedTokenSupplyUnits: "1000000000000000000000000",
       });
 
       expect(result.success).toBe(true);
+    });
+
+    it("rejects invalid optional nodeId correlation field", () => {
+      const result = setupVerifyOperation.input.safeParse({
+        chainId: 8453,
+        daoTxHash:
+          "0x1234567890123456789012345678901234567890123456789012345678901234",
+        signalTxHash:
+          "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+        signalBlockNumber: 12345678,
+        nodeId: "not-a-uuid",
+        initialHolder: "0x1234567890123456789012345678901234567890",
+        expectedTokenSupplyUnits: "1000000000000000000000000",
+      });
+
+      expect(result.success).toBe(false);
     });
 
     it("accepts valid SEPOLIA chainId (11155111)", () => {

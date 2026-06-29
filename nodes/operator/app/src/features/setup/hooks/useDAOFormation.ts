@@ -231,6 +231,7 @@ export function useDAOFormation(): UseDAOFormationReturn {
     (async () => {
       const result = await verifyFormation({
         chainId,
+        ...(config.nodeId ? { nodeId: config.nodeId } : {}),
         daoTxHash,
         signalTxHash,
         signalBlockNumber,

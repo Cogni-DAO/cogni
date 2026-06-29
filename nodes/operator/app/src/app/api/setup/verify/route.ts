@@ -111,6 +111,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           daoTxHash,
           signalTxHash,
           signalBlockNumber,
+          nodeId,
           initialHolder,
           expectedTokenSupplyUnits,
         } = parseResult.data;
@@ -366,6 +367,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             reqId: ctx.reqId,
             routeId: ctx.routeId,
             outcome: "success",
+            nodeId,
             chainId,
             durationMs: Math.round(performance.now() - startTime),
             errorCount: 0,
@@ -382,6 +384,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           reqId: ctx.reqId,
           routeId: ctx.routeId,
           outcome: "error",
+          nodeId,
           chainId,
           durationMs: Math.round(performance.now() - startTime),
           errorCount: errors.length,

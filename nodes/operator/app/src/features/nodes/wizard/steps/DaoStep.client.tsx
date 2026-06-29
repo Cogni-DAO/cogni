@@ -186,6 +186,7 @@ export function DaoStep({ node }: WizardStepProps): ReactElement {
     }
     if (!resolvedTokenomics) return;
     formation.startFormation({
+      nodeId: node.id,
       tokenName,
       tokenSymbol,
       tokenomicsTemplateId,

@@ -24,6 +24,7 @@ export type TxHash = Hex;
 // ============================================================================
 
 export interface DAOFormationConfig {
+  nodeId?: string;
   tokenName: string;
   tokenSymbol: string;
   tokenomicsTemplateId: DaoTokenomicsTemplateId;

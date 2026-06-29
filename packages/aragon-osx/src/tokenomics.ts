@@ -31,9 +31,7 @@ export type DaoTokenomicsTemplateId =
 export type DaoTokenAllocationRole =
   | "genesis_steward"
   | "founding_council"
-  | "future_contributors"
-  | "dao_reserve"
-  | "ecosystem";
+  | "unminted_policy_budget";
 
 export interface DaoTokenomicsTemplate {
   readonly id: DaoTokenomicsTemplateId;
@@ -96,8 +94,11 @@ export const DAO_TOKENOMICS_TEMPLATES = [
       wholeTokensPerFounder: 1,
     },
     futureAllocationBps: [
-      { role: "future_contributors", label: "Future contributors", bps: 8_000 },
-      { role: "dao_reserve", label: "DAO reserve", bps: 2_000 },
+      {
+        role: "unminted_policy_budget",
+        label: "Unminted policy budget",
+        bps: 10_000,
+      },
     ],
     enabledInWizard: true,
   },
@@ -118,9 +119,11 @@ export const DAO_TOKENOMICS_TEMPLATES = [
       bps: 2_000,
     },
     futureAllocationBps: [
-      { role: "future_contributors", label: "Future contributors", bps: 5_000 },
-      { role: "dao_reserve", label: "DAO reserve", bps: 2_000 },
-      { role: "ecosystem", label: "Ecosystem", bps: 1_000 },
+      {
+        role: "unminted_policy_budget",
+        label: "Unminted policy budget",
+        bps: 10_000,
+      },
     ],
     enabledInWizard: true,
   },
@@ -141,8 +144,11 @@ export const DAO_TOKENOMICS_TEMPLATES = [
       wholeTokensPerFounder: 1,
     },
     futureAllocationBps: [
-      { role: "future_contributors", label: "Future contributors", bps: 8_000 },
-      { role: "dao_reserve", label: "DAO reserve", bps: 2_000 },
+      {
+        role: "unminted_policy_budget",
+        label: "Unminted policy budget",
+        bps: 10_000,
+      },
     ],
     enabledInWizard: false,
   },
@@ -163,8 +169,11 @@ export const DAO_TOKENOMICS_TEMPLATES = [
       bps: 1_000,
     },
     futureAllocationBps: [
-      { role: "future_contributors", label: "Future contributors", bps: 7_000 },
-      { role: "dao_reserve", label: "DAO reserve", bps: 2_000 },
+      {
+        role: "unminted_policy_budget",
+        label: "Unminted policy budget",
+        bps: 10_000,
+      },
     ],
     enabledInWizard: false,
   },

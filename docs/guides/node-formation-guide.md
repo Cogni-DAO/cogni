@@ -97,7 +97,7 @@ The wizard submits `{ chainId, daoTxHash, signalTxHash, signalBlockNumber, initi
 4. Verifies `CogniSignal.DAO() == daoAddress`
 5. Returns verified addresses
 
-`expectedTokenSupplyUnits` is the template-computed genesis mint, not the full policy supply. Planned contributor, DAO reserve, and ecosystem buckets are policy math until a DAO-controlled emissions holder or MerkleDistributor claim path is deployed and verified.
+`expectedTokenSupplyUnits` is the template-computed genesis mint, not the full policy supply. The displayed unminted budget is policy math until governance defines concrete contributor, reserve, or ecosystem allocations and a DAO-controlled emissions holder or MerkleDistributor claim path is deployed and verified.
 
 ### 7. Persist Verified Addresses
 

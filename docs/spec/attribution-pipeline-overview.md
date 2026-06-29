@@ -29,8 +29,8 @@ not an automatic payout executor. It does not deploy or fund a MerkleDistributor
 contract yet. DAO formation now separates the DAO's long-run policy supply from
 the concrete genesis mint. Current P0 templates mint only a small, explicit
 genesis amount to a known holder; the remaining policy supply is an unminted
-policy budget for later DAO-controlled emissions, contributor claims, and
-ecosystem programs. After attribution epochs produce signed claimant
+policy budget for later governance-defined DAO-controlled emissions. It does
+not yet encode contributor, reserve, or ecosystem sub-allocations. After attribution epochs produce signed claimant
 allocations, those signed credit entitlements can be transformed into a
 deterministic token claim manifest:
 

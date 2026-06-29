@@ -249,6 +249,12 @@ describe("resolveDaoTokenomics", () => {
       wholeTokens: 1,
       mintedAtFormation: true,
     });
+    expect(tokenomics.slices[1]).toMatchObject({
+      role: "unminted_policy_budget",
+      label: "Unminted policy budget",
+      wholeTokens: 999_999,
+      mintedAtFormation: false,
+    });
     expect(
       tokenomics.slices
         .filter((slice) => !slice.mintedAtFormation)
@@ -265,8 +271,13 @@ describe("resolveDaoTokenomics", () => {
     expect(tokenomics.genesisMintWholeTokens).toBe(200_000);
     expect(tokenomics.unmintedPolicyBudgetWholeTokens).toBe(800_000);
     expect(tokenomics.slices.map((slice) => slice.wholeTokens)).toEqual([
-      200_000, 500_000, 200_000, 100_000,
+      200_000, 800_000,
     ]);
+    expect(tokenomics.slices[1]).toMatchObject({
+      role: "unminted_policy_budget",
+      label: "Unminted policy budget",
+      mintedAtFormation: false,
+    });
   });
 
   it("models future multi-owner templates without enabling them in the P0 wizard", () => {

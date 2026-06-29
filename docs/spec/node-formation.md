@@ -78,11 +78,11 @@ Enable any founder to register a node, form a fully-verified Cogni DAO via walle
 
 2. **ARAGON_MINTED_TOKEN**: Use Aragon's GovernanceERC20 minted during DAO creation. No custom NonTransferableVotes deployment. Tokens are transferable.
 
-   The wizard distinguishes long-run policy supply from genesis mint. P0 mints only the enabled template's concrete genesis amount to an explicit holder. The remaining policy supply is an unminted policy budget for future contributor claims, DAO reserve, and ecosystem programs; it is not represented as current on-chain inventory. Before live contributor distributions, the system must add a DAO-controlled emissions holder or MerkleDistributor claim path and verify that on-chain holder/distributor state.
+   The wizard distinguishes long-run policy supply from genesis mint. P0 mints only the enabled template's concrete genesis amount to an explicit holder. The remaining policy supply is an unminted policy budget; concrete contributor, reserve, or ecosystem allocation rules are not implied by the formation UI and are not represented as current on-chain inventory. Before live contributor distributions, the system must add a DAO-controlled emissions holder or MerkleDistributor claim path and verify that on-chain holder/distributor state.
 
 3. **NO_PRIVATE_KEY_ENV_VARS**: Formation transactions are signed via wallet UI (wagmi/rainbowkit), never by script-loaded secrets. Payment activation (child node CLI) uses `DEPLOYER_PRIVATE_KEY` for Split deployment — this is acceptable because it runs in the child node's own environment, not the shared operator repo.
 
-4. **SERVER_VERIFICATION_BOUNDARY**: Browser is untrusted. Server derives ALL addresses from tx receipts. Request contains only transaction coordinates, the expected holder, and the expected genesis mint: `{ chainId, daoTxHash, signalTxHash, signalBlockNumber, initialHolder, expectedTokenSupplyUnits }`.
+4. **SERVER_VERIFICATION_BOUNDARY**: Browser is untrusted. Server derives ALL addresses from tx receipts. Request contains only transaction coordinates, the expected holder, the expected genesis mint, and an optional node id for log correlation: `{ chainId, daoTxHash, signalTxHash, signalBlockNumber, nodeId?, initialHolder, expectedTokenSupplyUnits }`.
 
 5. **PACKAGE_ISOLATION**: `aragon-osx` cannot import `src/`, `services/`, or browser/node-specific APIs.
 
@@ -113,7 +113,7 @@ Enable any founder to register a node, form a fully-verified Cogni DAO via walle
 
 **Verify Request (to server):**
 
-- `chainId`, `daoTxHash`, `signalTxHash`, `signalBlockNumber`, `initialHolder`, `expectedTokenSupplyUnits`
+- `chainId`, `daoTxHash`, `signalTxHash`, `signalBlockNumber`, `nodeId?`, `initialHolder`, `expectedTokenSupplyUnits`
 - No addresses - server derives all from receipts
 
 **Verify Response (from server):**

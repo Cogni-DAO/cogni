@@ -41,6 +41,11 @@ export const setupVerifyOperation = {
         .int()
         .positive()
         .describe("Block number where CogniSignal was deployed (from receipt)"),
+      nodeId: z
+        .string()
+        .uuid()
+        .optional()
+        .describe("Optional node-registry id for log correlation only"),
       initialHolder: hexAddress.describe("Expected token recipient address"),
       expectedTokenSupplyUnits: z
         .string()

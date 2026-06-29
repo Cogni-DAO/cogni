@@ -44,6 +44,7 @@ export type VerifyResult =
  */
 export async function verifyFormation(params: {
   chainId: number;
+  nodeId?: string;
   daoTxHash: TxHash;
   signalTxHash: TxHash;
   signalBlockNumber: number;
@@ -56,6 +57,7 @@ export async function verifyFormation(params: {
       daoTxHash: params.daoTxHash,
       signalTxHash: params.signalTxHash,
       signalBlockNumber: params.signalBlockNumber,
+      ...(params.nodeId ? { nodeId: params.nodeId } : {}),
       initialHolder: params.initialHolder,
       expectedTokenSupplyUnits: params.expectedGenesisMintUnits.toString(),
     };
