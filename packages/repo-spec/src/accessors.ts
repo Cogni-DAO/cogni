@@ -45,6 +45,8 @@ export interface LedgerConfig {
       attributionPipeline: string;
       sourceRefs: string[];
       excludedLogins?: string[];
+      /** Ingest mode (WEBHOOK_ONLY_SOURCE); `webhook` → CollectSources skips polling. */
+      ingest?: "poll" | "webhook" | "both";
     }
   >;
   poolConfig: LedgerPoolConfig;
@@ -298,6 +300,7 @@ export function extractLedgerConfig(spec: RepoSpec): LedgerConfig | null {
       attributionPipeline: src.attribution_pipeline,
       sourceRefs: src.source_refs,
       excludedLogins: src.excluded_logins,
+      ...(src.ingest ? { ingest: src.ingest } : {}),
     };
   }
 
