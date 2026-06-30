@@ -19,7 +19,7 @@
  */
 
 import type { Database } from "@cogni/db-client";
-import { eq, or, type SQL } from "drizzle-orm";
+import { and, eq, or, type SQL, sql } from "drizzle-orm";
 
 import { nodes } from "@/shared/db/nodes";
 
@@ -50,6 +50,41 @@ export function nodeIdOrSlug(idOrSlug: string): SQL {
     return or(eq(nodes.id, idOrSlug), eq(nodes.slug, idOrSlug)) as SQL;
   }
   return eq(nodes.slug, idOrSlug);
+}
+
+/**
+ * Drizzle `WHERE` fragment matching the single node that OWNS a GitHub repo, by case-INSENSITIVE
+ * `(owner, name)`. GitHub echoes `repository.full_name` with varying casing, so the match MUST be
+ * over `lower(...)` on both sides — and the `nodes_repo_owner_name_lower_unique` index (ONE_REPO_ONE_NODE)
+ * makes that pair resolve to at most one node, which is the anti-theft authority for ingestion routing.
+ */
+export function nodeByRepo(owner: string, repo: string): SQL {
+  // and(...) is non-undefined here (two defined terms); assert for the SQL return type.
+  return and(
+    sql`lower(${nodes.repoOwner}) = lower(${owner})`,
+    sql`lower(${nodes.repoName}) = lower(${repo})`
+  ) as SQL;
+}
+
+/**
+ * Resolve the single node that owns a GitHub repo `(owner, repo)` to its canonical identity, case
+ * INSENSITIVELY. Pass a SERVICE-ROLE db (bypasses RLS) — webhook ingestion routes a receipt to the
+ * owning node's ledger before any session exists. Returns `null` when no node is registered for the
+ * repo (caller falls back to the operator node, keeping unregistered repos fail-safe). The
+ * `nodes_repo_owner_name_lower_unique` index guarantees the `.limit(1)` is the only matching row.
+ */
+export async function findNodeByRepo(
+  db: Database,
+  owner: string,
+  repo: string
+): Promise<ResolvedNodeRef | null> {
+  const rows = await db
+    .select({ id: nodes.id, slug: nodes.slug })
+    .from(nodes)
+    .where(nodeByRepo(owner, repo))
+    .limit(1);
+  const row = rows[0];
+  return row ? { nodeId: row.id, slug: row.slug } : null;
 }
 
 /**

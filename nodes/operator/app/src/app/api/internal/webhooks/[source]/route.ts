@@ -15,10 +15,11 @@
  */
 
 import { NextResponse } from "next/server";
+import { repoFullName } from "@/adapters/server/ingestion/github-webhook";
 import { dispatchCanonicalForkSync } from "@/app/_facades/deploy/canonical-fork-sync.server";
 import { dispatchNodePreviewPromote } from "@/app/_facades/deploy/node-preview-promote.server";
 import { dispatchPrReview } from "@/app/_facades/review/dispatch.server";
-import { getContainer } from "@/bootstrap/container";
+import { getContainer, resolveServiceDb } from "@/bootstrap/container";
 import { dispatchSignalExecution } from "@/features/governance/services/signal-dispatch";
 import {
   receiveWebhook,
@@ -26,6 +27,7 @@ import {
   WebhookSourceNotFoundError,
   WebhookVerificationError,
 } from "@/features/ingestion/services/webhook-receiver";
+import { findNodeByRepo } from "@/features/nodes/node-lookup";
 import { getNodeId } from "@/shared/config";
 import { serverEnv } from "@/shared/env";
 import { makeLogger } from "@/shared/observability";
@@ -58,6 +60,57 @@ function resolveWebhookSecret(
 
 interface RouteParams {
   params: Promise<{ source: string }>;
+}
+
+/**
+ * Resolve which node OWNS this webhook's repo, so its receipts land in THAT node's ledger.
+ *
+ * A webhook payload is exactly one repository, so we resolve ONCE per request. For `github`, parse
+ * the body, read `repository.full_name`, split into owner/name, and look up the owning node by repo
+ * (case-insensitive; the `nodes_repo_owner_name_lower_unique` index makes it single-valued — anti-theft
+ * by construction). When no node is registered for the repo — or for any non-github source — we FALL
+ * BACK to the operator node (`getNodeId()`), keeping unregistered repos fail-safe in the operator
+ * ledger (the prior behavior). Returns the resolved id plus enough context for observability.
+ */
+export async function resolveTargetNode(
+  source: string,
+  body: Buffer
+): Promise<{
+  readonly nodeId: string;
+  readonly repo: string | null;
+  readonly fallbackToOperator: boolean;
+}> {
+  const operatorNodeId = getNodeId();
+
+  if (source !== "github") {
+    return { nodeId: operatorNodeId, repo: null, fallbackToOperator: true };
+  }
+
+  let repo: string | null = null;
+  try {
+    const payload = JSON.parse(body.toString("utf-8")) as Record<
+      string,
+      unknown
+    >;
+    repo = repoFullName(payload);
+  } catch {
+    // Malformed body: receiveWebhook re-parses and raises WebhookPayloadParseError.
+    // Stay fail-safe on the operator ledger here.
+    return { nodeId: operatorNodeId, repo: null, fallbackToOperator: true };
+  }
+
+  const slash = repo?.indexOf("/") ?? -1;
+  if (!repo || slash <= 0) {
+    return { nodeId: operatorNodeId, repo, fallbackToOperator: true };
+  }
+
+  const owner = repo.slice(0, slash);
+  const name = repo.slice(slash + 1);
+  const owning = await findNodeByRepo(resolveServiceDb(), owner, name);
+
+  return owning
+    ? { nodeId: owning.nodeId, repo, fallbackToOperator: false }
+    : { nodeId: operatorNodeId, repo, fallbackToOperator: true };
 }
 
 /**
@@ -107,11 +160,16 @@ export async function POST(
   try {
     const container = getContainer();
 
+    // Route the receipt to the node that OWNS the repo (anti-theft via the unique repo→node map),
+    // falling back to the operator node for unregistered repos / non-github sources. Resolved ONCE —
+    // a webhook payload is one repository.
+    const target = await resolveTargetNode(source, bodyBuffer);
+
     const result = await receiveWebhook(
       {
         attributionStore: container.attributionStore,
         sourceRegistrations: container.webhookRegistrations,
-        nodeId: getNodeId(),
+        nodeId: target.nodeId,
       },
       { source, headers, body: bodyBuffer, secret }
     );
@@ -130,6 +188,12 @@ export async function POST(
         {
           event: "attribution.receipt_ingested",
           source,
+          // Multi-node ingestion routing proof (story.5023): which node OWNS these receipts, the repo
+          // they came from, and whether we fell back to the operator ledger. On candidate-a, Loki must
+          // show a non-operator nodeId here for a PR merged to a non-operator node's repo.
+          nodeId: target.nodeId,
+          repo: target.repo,
+          fallbackToOperator: target.fallbackToOperator,
           receiptCount: result.receipts.length,
           eventTypes: [...new Set(result.receipts.map((r) => r.eventType))],
           logins: [

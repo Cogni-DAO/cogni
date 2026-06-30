@@ -7,6 +7,10 @@
  * Scope: Wizard working state for operator-managed nodes. Existing inline nodes
  *   (operator/resy/canary/node-template) are NOT registered here — they live in `infra/catalog/*.yaml`.
  * Invariants: NODES_TABLE_SCOPE (external only), STATE_MACHINE_TOTAL, OWNER_GATING, NO_PRIVATE_KEYS,
+ *   ONE_REPO_ONE_NODE — a GitHub repo `(repo_owner, repo_name)` maps to at most one node, enforced by a
+ *   case-insensitive UNIQUE index on `(lower(repo_owner), lower(repo_name))`. This is the anti-theft
+ *   authority for webhook ingestion routing (findNodeByRepo): a receipt for repo R can only ever resolve
+ *   to R's single owning node, never be claimed by another node's ledger.
  *   OPERATOR_NODE_ROW_ID_IS_NODE_ID — `nodes.id` IS the operator's projection of the node's repo-spec
  *   `node_id` (the deployment-identity SSOT, docs/spec/identity-model.md). It is the OpenFGA `node:<id>`
  *   resource and the Loki `node` label, never an unrelated surrogate. Wizard creation's `defaultRandom()`
@@ -28,6 +32,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -97,5 +102,12 @@ export const nodes = pgTable(
     ),
     index("nodes_owner_user_id_idx").on(t.ownerUserId),
     index("nodes_status_idx").on(t.status),
+    // ONE_REPO_ONE_NODE: case-insensitive UNIQUE so one GitHub repo maps to exactly one node.
+    // GitHub echoes repository.full_name with varying owner/name casing, so the uniqueness — and the
+    // findNodeByRepo lookup that depends on it — MUST be over the lower()'d expressions, not raw text.
+    uniqueIndex("nodes_repo_owner_name_lower_unique").on(
+      sql`lower(${t.repoOwner})`,
+      sql`lower(${t.repoName})`
+    ),
   ]
 ).enableRLS();

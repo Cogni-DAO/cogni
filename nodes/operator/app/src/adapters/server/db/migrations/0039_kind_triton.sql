@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "nodes_repo_owner_name_lower_unique" ON "nodes" USING btree (lower("repo_owner"),lower("repo_name"));
