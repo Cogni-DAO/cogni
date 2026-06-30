@@ -35,10 +35,10 @@ import { z } from "zod";
 import type {
   CandidateFlightDispatchResult,
   CatalogForkTarget,
+  DeployPlanePort,
   MirrorCanonicalFilesInput,
   MirrorCanonicalFilesResult,
   NodePromoteResult,
-  OperatorDeployPlanePort,
   PreparedNodeRefCandidateFlight,
   PrepareNodeRefCandidateFlightInput,
   PromoteNodeInput,
@@ -501,7 +501,7 @@ export function rulesetGetToPutPayload(
   };
 }
 
-export class GitHubRepoWriter implements OperatorDeployPlanePort {
+export class GitHubRepoWriter implements DeployPlanePort {
   private readonly config: GitHubRepoWriterConfig;
   private readonly appAuth: ReturnType<typeof createAppAuth>;
 
