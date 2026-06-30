@@ -51,9 +51,7 @@ describe("MerkleDistributor ABI integrity", () => {
   it("exposes claim with the canonical Uniswap signature", () => {
     const claim = fn("claim");
     expect(claim.stateMutability).toBe("nonpayable");
-    expect(signature(claim)).toBe(
-      "claim(uint256,address,uint256,bytes32[])"
-    );
+    expect(signature(claim)).toBe("claim(uint256,address,uint256,bytes32[])");
     expect(claim.inputs?.map((i) => i.name)).toEqual([
       "index",
       "account",
