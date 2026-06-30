@@ -28,7 +28,11 @@
  *   - NON_LINEAR_ACTIVATION: does not depend on payment activation and can run for already-active
  *     existing DAOs with a node repo.
  * Side-effects: IO (GitHub REST API, Postgres)
- * Links: src/adapters/server/vcs/github-repo-write.ts, docs/spec/tokenomics.md, task.0135
+ * Surface: driven by the VISIBLE owner control `features/nodes/DistributionsCard.client.tsx` on the
+ *   node page (not a hidden API); owners click "Activate distributions". `node.flight` lets a
+ *   delegated agent exercise the same endpoint for candidate-a validation.
+ * Links: src/adapters/server/vcs/github-repo-write.ts, src/features/nodes/DistributionsCard.client.tsx,
+ *   docs/spec/tokenomics.md, task.0135
  * @public
  */
 

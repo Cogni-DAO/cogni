@@ -28,6 +28,7 @@ import {
 import { PageContainer } from "@/components";
 import { NodeAccess } from "@/features/nodes/access/NodeAccess";
 import { listAccessRequests } from "@/features/nodes/access-requests";
+import { DistributionsCard } from "@/features/nodes/DistributionsCard.client";
 import { NodeDeployments } from "@/features/nodes/deployments/NodeDeployments";
 import { FLIGHT_ENVS } from "@/features/nodes/flight-status";
 import { nodeRepoUrlForSlug } from "@/features/nodes/launch-pack";
@@ -200,6 +201,17 @@ export default async function NodeDashboardPage({
 
       {showDevelopers ? (
         <NodeAccess nodeId={node.id} requests={accessRequests} />
+      ) : null}
+
+      {/* Visible, owner-driven distribution activation — NOT a hidden API. The page query already
+          scopes to the owner, so reaching this page IS the owner gate. Surface it only when there
+          is a DAO and the node is far enough along to activate (mirrors the route's status gate). */}
+      {node.daoAddress != null && showDevelopers ? (
+        <DistributionsCard
+          nodeId={node.id}
+          slug={node.slug}
+          repoSpecUrl={repoSpecUrl}
+        />
       ) : null}
 
       {/* Owner-only destructive control. The page query already scopes to the owner
