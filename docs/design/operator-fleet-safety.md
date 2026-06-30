@@ -24,13 +24,22 @@ work_items:
 ## Status — live (2026-06-30) — THIS is the doc tracking the fleet-reliability work
 
 The keystone (a continuously-reconciled + **prunable** AppSet layer — the prerequisite
-for safe per-env decommission and load-shedding) is **merged and validated**. Capacity
-_enforcement_ (`ResourceQuota`) stays deferred until the env is right-sized — see
+for safe per-env decommission and load-shedding) is **merged**, but a /review-design on
+2026-06-30 exposed that it was only ever **live on candidate-a, via a manual `kubectl
+apply`**. Root cause: the per-env app-of-apps it adds were applied **once at provision**
+and never reconciled again — there was **no root Application owning `infra/k8s/argocd/`**
+("who reconciles the reconcilers"). So the keystone's continuous-reconcile/prune was never
+activated on preview/production (only the imperative reconcile-appset _path_ was exercised
+by flight there — not the app-of-apps). The **root app-of-apps** (#1913) closes this class:
+a per-env seed that continuously reconciles the control-plane layer, so a merged change
+self-delivers and the keystone's prune is finally live on all envs. Capacity _enforcement_
+(`ResourceQuota`) stays deferred until the env is right-sized — see
 [pm.candidate-a-quota-wedge](../postmortems/pm.candidate-a-quota-wedge.2026-06-29.md).
 
 | Rung                                                                                         | What                      | State                                                                                                                                                                                                                                                   |
 | -------------------------------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Keystone — per-env app-of-apps** (closes the decommission prune-gap; continuous reconcile) | #1893 (merged `9235e102`) | 🟢 **MERGED** · validated candidate-a (live app-of-apps, Synced/Healthy) **+ preview** (reconcile-appset operator+scheduler-worker succeeded via new path) · **prod validated** (reconcile-appset node-template + full pipeline green, run 28414887116) |
+| **Keystone — per-env app-of-apps** (closes the decommission prune-gap; continuous reconcile) | #1893 (merged `9235e102`) | 🟡 **MERGED, but live ONLY on candidate-a** (via manual apply). preview/prod: reconcile-appset _path_ validated by flight, but the app-of-apps itself was never activated (apply-once-at-provision) → its continuous-reconcile/prune is NOT live there. Activated everywhere by the root app-of-apps below. |
+| **Root app-of-apps** (per-env seed reconciling the control-plane layer; makes the keystone self-deliver on all envs) | #1913                     | 🟡 open · built + adversarially reviewed; candidate-a validation pending (must use `targetRevision=<branch>`, see §11)                                                                                                                                   |
 | CI/CD spec DRY (12→3 SSOT, −2k lines)                                                        | #1894                     | 🟡 open                                                                                                                                                                                                                                                 |
 | SLA #1 — honest capacity (kubelet `system-reserved` on RUNNING nodes)                        | provisioning              | 🔴 not applied (`alloc==cap`)                                                                                                                                                                                                                           |
 | SLA #2 — deterministic admission (`ResourceQuota` after right-size)                          | —                         | 🟡 deferred (would wedge an over-subscribed env)                                                                                                                                                                                                        |
@@ -47,7 +56,7 @@ _enforcement_ (`ResourceQuota`) stays deferred until the env is right-sized — 
 5. **One-action remediation** — load shed via operator-app per-env decommission (GitOps prune).
 6. **GitOps + observable** — no manual kubectl; capacity/health visible in the operator UI.
 
-**Critical path:** keystone ✅ → decommission verb → right-size candidate-a → kubelet honesty → `ResourceQuota` → `/readyz` decouple → fleet UI.
+**Critical path:** keystone (merged) → **root app-of-apps (#1913 — activates the keystone on all envs)** → decommission verb → right-size candidate-a → kubelet honesty → `ResourceQuota` → `/readyz` decouple → fleet UI.
 
 ## Outcome
 
@@ -252,12 +261,56 @@ decommission is fiction and capacity can never be reclaimed.
 | --- | --------------------------------------------------------------------------------- | -------------------- |
 | 1   | Revert #1886 bespoke predictor to baseline                                        | ✅ done              |
 | 2   | Revert the premature candidate-a quota slice (incident landmine) + this doc       | ◀ this PR           |
-| 3   | **app-of-apps over `infra/k8s/argocd/`** — continuous reconcile + AppSet prune    | 🎯 keystone, next PR |
+| 3a  | **per-env app-of-apps over `appsets/<env>/`** — continuous reconcile + AppSet prune | ✅ keystone #1893 (but apply-once-at-provision → live only on candidate-a; see §11) |
+| 3b  | **per-env ROOT app-of-apps over the control-plane layer** — makes 3a self-deliver  | 🎯 #1913 (§11)       |
 | 4   | `decommission-env` (typed verb + reverse DNS/Caddy + OpenFGA + UI) — needs #3     | ⏳ then              |
 | 5   | Right-size candidate-a (decommission non-essential nodes) + apply kubelet reserve | ⏳ then (uses #3/#4) |
 | 6   | Re-introduce admission (`ResourceQuota`) — ONLY after #5 makes the env honest     | ⏳ after right-size  |
 | 7   | preview/prod env quotas                                                           | ⏳ follow-up         |
 | 8   | Fleet UI v0                                                                       | ⏳ story.5013        |
+
+## 11. Root app-of-apps — who reconciles the reconcilers (#1913)
+
+**The gap (found via /review-design, 2026-06-30).** The keystone (#1893) added per-env
+app-of-apps `cogni-<env>-appsets` that continuously reconcile + prune `appsets/<env>/`. But
+those Applications were themselves **applied once at provision** (`bootstrap-k3s.yaml`,
+`provision-env-vm.sh`) and never reconciled again — there was **no root Argo Application
+owning `infra/k8s/argocd/`** (the registration layer). Consequence: the keystone merged to
+`main` but only went live on candidate-a, **via a manual `kubectl apply`** during validation;
+preview/production never activated. This silently contradicts ci-cd.md's "Argo owns
+reconciliation, git is the steering wheel" — at the control-plane layer, the steering wheel
+was a re-provision, not git. Any future control-plane change (a new app-of-apps, a substrate
+app, an Argo upgrade) had the same fate: invisible until the next full provision.
+
+**The fix.** A per-env **root seed** `cogni-<env>-control-plane`
+(`infra/k8s/argocd/control-plane/roots/`) that continuously reconciles
+`control-plane/<env>/` — that env's app-of-apps (moved there from the flat dir). Now the seed
+is the **only apply-once surface**; everything below it self-reconciles, so a merged
+control-plane change reaches the cluster with no re-provision, and the keystone's prune is
+finally live on every env. Provision applies the seed instead of the app-of-apps directly.
+
+Design calls (each load-bearing):
+
+- **Per-env scoped**, not one root over `infra/k8s/argocd/`. The flat kustomization lists all
+  three app-of-apps; a shared-source root would fan every env's app-of-apps (and pods) onto
+  every cluster — the exact fan-out the keystone fixed one layer down.
+- **directory-source + `recurse: false`** (the app-of-apps file is _moved_ into the per-env
+  dir), NOT a kustomize `../` reference — Argo's default `LoadRestrictionsRootOnly` fail-builds
+  a `../` outside the app path.
+- **Excludes Argo's own install** (`install.yaml` / ksops / patches stay in the bootstrap
+  kustomization) — a root must never self-manage the control plane.
+- **Excludes the `${FORK_REPO}`-templated substrate apps** (openbao / ESO / reloader) — Argo
+  can't do the provision-time shell substitution, so they stay apply-once (deferred). The
+  app-of-apps/seed use the literal `cogni-dao/cogni.git`, so the provision sed is a no-op.
+
+**Validation footgun (§11 → the candidate-a proof).** The seed's `targetRevision: main`, but
+pre-merge the moved file isn't on `main`. Applying the real seed to candidate-a now would make
+Argo reconcile an **empty** `control-plane/candidate-a/` from main → `prune: true` deletes the
+live app-of-apps → cascade to AppSets → pods → **fleet outage**. So validate with
+`targetRevision=<this branch>` (the candidate-flight model: prove the PR head, not main).
+Adoption of the live `cogni-candidate-a-appsets` is clean because the move is a 100% rename
+(identical spec). Clean up a validation seed with `kubectl delete … --cascade=orphan` so the
+live app-of-apps is left untouched.
 
 ## Related
 
