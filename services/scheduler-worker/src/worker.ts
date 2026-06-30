@@ -70,6 +70,97 @@ export function isCanonicalNodeId(nodeId: string): boolean {
 }
 
 /**
+ * True if an error thrown by `NativeConnection.connect` looks transient — a
+ * DNS / transport / reachability blip that a retry could clear — rather than a
+ * permanent misconfiguration. Matches broadly on error type/name and message:
+ * a single transient name-resolution failure resolving the Temporal
+ * ExternalName at boot must NOT be fatal (it crashlooped the pod and, on the
+ * shared k3s VM, storm-degraded co-located node-apps → fleet 502, incident
+ * 2026-06-30). When unsure, prefer retrying: transient transport errors at
+ * boot should retry rather than crashloop.
+ */
+export function isTransientConnectError(err: unknown): boolean {
+  const e = err as { name?: unknown; message?: unknown; code?: unknown } | null;
+  const name = typeof e?.name === "string" ? e.name : "";
+  const code = typeof e?.code === "string" ? e.code : "";
+  const message = typeof e?.message === "string" ? e.message : "";
+  // Temporal's native transport surfaces these as `TransportError`.
+  if (name === "TransportError") return true;
+  const haystack = `${name} ${code} ${message}`;
+  const TRANSIENT_MARKERS = [
+    "name resolution",
+    "dns error",
+    "ENOTFOUND",
+    "EAI_AGAIN",
+    "Temporary failure",
+    "ConnectError",
+    "Connection refused",
+    "UNAVAILABLE",
+  ];
+  return TRANSIENT_MARKERS.some((marker) =>
+    haystack.toLowerCase().includes(marker.toLowerCase())
+  );
+}
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Connect to Temporal with exponential backoff on transient
+ * connection/transport/DNS errors. A single transient name-resolution blip at
+ * boot must not be fatal — without this the pod crashloops on the same blip
+ * (~every 60s) and storms the shared k3s VM (incident 2026-06-30). Persistent
+ * (non-transient) failures rethrow immediately; transient failures rethrow only
+ * after attempts are exhausted, so k8s still restarts on genuinely-down
+ * Temporal — same outer behavior as before, but only after a real outage.
+ */
+async function connectWithRetry(
+  opts: Parameters<typeof NativeConnection.connect>[0],
+  logger: Logger
+): Promise<NativeConnection> {
+  const MAX_ATTEMPTS = 8;
+  const BASE_DELAY_MS = 2_000;
+  const FACTOR = 2;
+  const MAX_DELAY_MS = 15_000;
+
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      return await NativeConnection.connect(opts);
+    } catch (err) {
+      lastErr = err;
+      if (!isTransientConnectError(err) || attempt === MAX_ATTEMPTS) break;
+      const delayMs = Math.min(
+        BASE_DELAY_MS * FACTOR ** (attempt - 1),
+        MAX_DELAY_MS
+      );
+      logger.warn(
+        {
+          event: WORKER_EVENT_NAMES.LIFECYCLE_STARTING,
+          phase: "temporal_connect_retry",
+          attempt,
+          maxAttempts: MAX_ATTEMPTS,
+          delayMs,
+          err: (err as Error)?.message ?? String(err),
+        },
+        `Temporal connect failed (transient) — retrying in ${delayMs}ms (attempt ${attempt}/${MAX_ATTEMPTS})`
+      );
+      await sleep(delayMs);
+    }
+  }
+  logger.warn(
+    {
+      event: WORKER_EVENT_NAMES.LIFECYCLE_STARTING,
+      phase: "temporal_connect_exhausted",
+      maxAttempts: MAX_ATTEMPTS,
+      err: (lastErr as Error)?.message ?? String(lastErr),
+    },
+    "Exhausted Temporal connect retries — rethrowing (k8s will restart)"
+  );
+  throw lastErr;
+}
+
+/**
  * Starts one Temporal Worker per canonical nodeId in COGNI_NODE_ENDPOINTS,
  * plus one drain Worker on the legacy `env.TEMPORAL_TASK_QUEUE` for any
  * schedules that have not yet been rewritten to a per-node queue.
@@ -89,9 +180,13 @@ export async function startSchedulerWorker(
     phase: "temporal_connect",
   });
 
-  const connection = await NativeConnection.connect({
-    address: env.TEMPORAL_ADDRESS,
-  });
+  // Wrap connect in retry-with-backoff: a single transient DNS blip resolving
+  // the Temporal ExternalName at boot must not crashloop the pod (incident
+  // 2026-06-30). See connectWithRetry / isTransientConnectError above.
+  const connection = await connectWithRetry(
+    { address: env.TEMPORAL_ADDRESS },
+    logger
+  );
 
   const container = createContainer(env, logger);
 
