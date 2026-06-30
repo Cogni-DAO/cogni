@@ -145,12 +145,15 @@ export interface EpochContributorsView {
   attributionPipeline: string;
   contributors: {
     claimantKey: string;
-    claimantKind: string;
+    // Mirrors `composeEpochView` output (and the pre-refactor inline route shape) exactly:
+    // identity/user union, nullable displayName, numeric creditShare — do NOT widen to string,
+    // that diverges the wire payload from the operator-self route this helper now backs.
+    claimantKind: "user" | "identity";
     isLinked: boolean;
-    displayName: string;
+    displayName: string | null;
     claimantLabel: string;
     points: string;
-    share: string;
+    share: number;
     receiptCount: number;
   }[];
   totalPoints: string;
