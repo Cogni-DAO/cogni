@@ -9,7 +9,8 @@
 #      hand-maintained roster shipped: a catalog node with no edge route).
 #   3. catalog node_port == per-env overlay Service nodePort (the one coupling
 #      this design introduces; assert it can't drift into split-brain).
-#   4. The derived node DB inventory includes every catalog node.
+#   4. Caddy edge logs go to stdout so Alloy can ship them to Loki.
+#   5. The derived node DB inventory includes every catalog node.
 #
 # Run: bash scripts/ci/tests/render-caddyfile.test.sh
 set -euo pipefail
@@ -24,12 +25,12 @@ source "$REPO_ROOT/scripts/ci/lib/image-tags.sh"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "  ok — $*"; }
 
-echo "[1/4] Caddyfile.tmpl ↔ catalog drift gate"
+echo "[1/5] Caddyfile.tmpl ↔ catalog drift gate"
 bash scripts/ci/render-caddyfile.sh --check >/dev/null \
   || fail "render-caddyfile.sh --check: committed Caddyfile.tmpl is stale (run: pnpm gen:caddyfile)"
 pass "committed Caddyfile.tmpl matches the catalog"
 
-echo "[2/4] every type:node has an edge block (oss regression guard)"
+echo "[2/5] every type:node has an edge block (oss regression guard)"
 RENDERED="$(bash scripts/ci/render-caddyfile.sh)"
 for node in "${NODE_TARGETS[@]}"; do
   slug="$(printf '%s' "$node" | tr '[:lower:]-' '[:upper:]_')"
@@ -47,7 +48,7 @@ for node in "${NODE_TARGETS[@]}"; do
 done
 grep -q '{$OSS_DOMAIN' <<<"$RENDERED" || fail "oss block absent — the exact gap this task closes"
 
-echo "[3/4] catalog node_port == overlay Service nodePort (no split-brain)"
+echo "[3/5] catalog node_port == overlay Service nodePort (no split-brain)"
 for node in "${NODE_TARGETS[@]}"; do
   cat_port="$(node_port_for_target "$node")"
   for env in candidate-a candidate-b preview production; do
@@ -62,7 +63,14 @@ for node in "${NODE_TARGETS[@]}"; do
   done
 done
 
-echo "[4/4] catalog node DB inventory includes every type:node"
+echo "[4/5] Caddy edge logs ship to stdout for Loki"
+grep -q 'output stdout' <<<"$RENDERED" || fail "Caddyfile has no stdout log output"
+if grep -q '/data/logs/caddy' <<<"$RENDERED"; then
+  fail "Caddyfile still writes logs to /data/logs/caddy; Docker/Alloy cannot ship those file logs"
+fi
+pass "global and access logs use Docker-visible stdout"
+
+echo "[5/5] catalog node DB inventory includes every type:node"
 dbs="$(node_database_csv)"
 for node in "${NODE_TARGETS[@]}"; do
   expected_db="$(node_database_for_target "$node")"
