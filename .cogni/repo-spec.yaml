@@ -31,8 +31,8 @@ activity_ledger:
       attribution_pipeline: cogni-v0.0
       # source_refs is a selection-time, fail-open repo allowlist (SSOT for the
       # repos whose merged PRs earn attribution). Empty/missing → no filtering.
-      source_refs: ["cogni-test-org/test-cog"]
-      # source_refs: ["cogni-dao/cogni"]   # PROD value — swap on promotion to production
+      source_refs: ["cogni-dao/cogni"]
+      # source_refs: ["cogni-test-org/test-cog"]   # candidate-a test value — swap back for candidate-a attribution testing
       excluded_logins: ["Cogni-1729"]
 
 intent:
