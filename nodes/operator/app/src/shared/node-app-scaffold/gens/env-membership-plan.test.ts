@@ -256,11 +256,29 @@ describe("buildEnvDeltaPlan — REMOVE env (partial, non-candidate-a)", () => {
 });
 
 describe("buildEnvDeltaPlan — FULL DECOMMISSION", () => {
-  it("removing candidate-a deletes catalog + all overlays/appsets + caddy + scheduler", () => {
+  it("requires explicit decommission intent — a bare candidate-a remove is refused (422)", () => {
+    try {
+      buildEnvDeltaPlan({
+        slug: SLUG,
+        env: "candidate-a",
+        present: false, // no decommission:true → must NOT silently destroy the node
+        current: baseCurrent(["candidate-a", "preview", "production"]),
+      });
+      throw new Error("expected EnvPlanError");
+    } catch (err) {
+      expect(err).toBeInstanceOf(EnvPlanError);
+      const e = err as EnvPlanError;
+      expect(e.code).toBe("decommission_requires_intent");
+      expect(e.status).toBe(422);
+    }
+  });
+
+  it("removing candidate-a (decommission:true) deletes catalog + all overlays/appsets + caddy + scheduler", () => {
     const res = buildEnvDeltaPlan({
       slug: SLUG,
       env: "candidate-a",
       present: false,
+      decommission: true,
       current: baseCurrent(["candidate-a", "preview", "production"]),
     });
     expect(res.kind).toBe("decommission");
@@ -286,11 +304,12 @@ describe("buildEnvDeltaPlan — FULL DECOMMISSION", () => {
     }
   });
 
-  it("removing the LAST remaining env is also a full decommission", () => {
+  it("removing the LAST remaining env (decommission:true) is also a full decommission", () => {
     const res = buildEnvDeltaPlan({
       slug: SLUG,
       env: "candidate-a",
       present: false,
+      decommission: true,
       current: baseCurrent(["candidate-a"]),
     });
     expect(res.kind).toBe("decommission");
@@ -299,13 +318,15 @@ describe("buildEnvDeltaPlan — FULL DECOMMISSION", () => {
 
 describe("CANDIDATE_A_ALWAYS", () => {
   // Per the verb's contract, removing candidate-a is NEVER a partial trim — it is the full-decommission
-  // path (the node leaves the catalog, taking preview/production with it). So it does not 422; it
-  // decommissions. This pins that the node can never end up with envs-but-no-candidate-a.
-  it("removing candidate-a with other envs present decommissions (never a candidate-a-less node)", () => {
+  // path (the node leaves the catalog, taking preview/production with it). It therefore requires explicit
+  // `decommission:true` intent (the bare-remove refusal is covered above); WITH intent it decommissions to
+  // an empty set. This pins that the node can never end up with envs-but-no-candidate-a.
+  it("removing candidate-a (with intent) decommissions to an empty set (never a candidate-a-less node)", () => {
     const res = buildEnvDeltaPlan({
       slug: SLUG,
       env: "candidate-a",
       present: false,
+      decommission: true,
       current: baseCurrent(["candidate-a", "preview", "production"]),
     });
     expect(res.kind).toBe("decommission");

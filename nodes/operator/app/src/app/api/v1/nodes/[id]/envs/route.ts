@@ -67,9 +67,14 @@ export async function POST(request: Request, routeArgs: RouteParams) {
   } catch {
     return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
   }
-  const { env: targetEnv, present } = (body ?? {}) as {
+  const {
+    env: targetEnv,
+    present,
+    decommission,
+  } = (body ?? {}) as {
     env?: unknown;
     present?: unknown;
+    decommission?: unknown;
   };
   if (typeof targetEnv !== "string" || !VALID_ENVS.has(targetEnv)) {
     return NextResponse.json(
@@ -83,6 +88,15 @@ export async function POST(request: Request, routeArgs: RouteParams) {
   if (typeof present !== "boolean") {
     return NextResponse.json(
       { error: "invalid present", reason: "present must be a boolean" },
+      { status: 400 }
+    );
+  }
+  if (decommission !== undefined && typeof decommission !== "boolean") {
+    return NextResponse.json(
+      {
+        error: "invalid decommission",
+        reason: "decommission must be a boolean",
+      },
       { status: 400 }
     );
   }
@@ -137,6 +151,7 @@ export async function POST(request: Request, routeArgs: RouteParams) {
       slug: node.slug,
       env: targetEnv as (typeof NODE_FORMATION_ENVS)[number],
       present,
+      decommission: decommission as boolean | undefined,
     });
   } catch (err) {
     const status = (err as { status?: number })?.status;

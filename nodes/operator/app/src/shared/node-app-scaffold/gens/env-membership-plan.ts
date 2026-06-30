@@ -133,15 +133,28 @@ export function buildEnvDeltaPlan(input: {
   readonly slug: string;
   readonly env: NodeFormationEnv;
   readonly present: boolean;
+  /**
+   * Explicit confirmation that the caller intends a FULL node decommission (drop the catalog row, taking
+   * preview/production with it). Required whenever a remove resolves to a full decommission — removing
+   * candidate-a, or removing the last env. Without it such a remove is REFUSED (422 `decommission_requires_intent`)
+   * rather than silently destroying every env. Ignored on add / partial remove.
+   */
+  readonly decommission?: boolean;
   readonly current: EnvPlanCurrent;
 }): EnvDeltaResult {
-  const { slug, env, present, current } = input;
+  const { slug, env, present, decommission, current } = input;
   const currentEnvs = parseCatalogEnvs(current.catalog);
 
   if (present) {
     return planAdd({ slug, env, currentEnvs, current });
   }
-  return planRemove({ slug, env, currentEnvs, current });
+  return planRemove({
+    slug,
+    env,
+    currentEnvs,
+    decommission: decommission === true,
+    current,
+  });
 }
 
 function planAdd(args: {
@@ -218,9 +231,10 @@ function planRemove(args: {
   slug: string;
   env: NodeFormationEnv;
   currentEnvs: NodeFormationEnv[];
+  decommission: boolean;
   current: EnvPlanCurrent;
 }): EnvDeltaResult {
-  const { slug, env, currentEnvs, current } = args;
+  const { slug, env, currentEnvs, decommission, current } = args;
 
   // Idempotent: already absent → no PR.
   if (!currentEnvs.includes(env)) {
@@ -235,6 +249,17 @@ function planRemove(args: {
   // row (schema `minItems:1` / `contains: candidate-a`). Both converge on planDecommission below.
   const isFullDecommission = env === CANDIDATE_A || remaining.length === 0;
   if (isFullDecommission) {
+    // NOT silent: a full decommission (prod + preview vanish too) must be explicitly confirmed by the
+    // caller. A bare `{ env: "candidate-a", present: false }` is refused so a per-env "remove" toggle can
+    // never destroy the whole node by accident — the caller must pass `decommission: true` (the UI wires a
+    // distinct, confirmed "Decommission" action).
+    if (!decommission) {
+      throw new EnvPlanError(
+        "decommission_requires_intent",
+        `removing '${env}' from '${slug}' would decommission the whole node (CANDIDATE_A_ALWAYS takes preview/production too); pass decommission:true to confirm.`,
+        422
+      );
+    }
     return planDecommission({ slug, currentEnvs, current });
   }
 

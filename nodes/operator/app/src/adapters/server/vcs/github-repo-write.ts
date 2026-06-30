@@ -116,8 +116,14 @@ export interface OpenNodeEnvPrInput {
   readonly slug: string;
   /** The env to add (`present:true`) or remove (`present:false`). */
   readonly env: NodeFormationEnv;
-  /** true = add the env to the node's reach; false = remove it (candidate-a removal ⇒ full decommission). */
+  /** true = add the env to the node's reach; false = remove it. */
   readonly present: boolean;
+  /**
+   * Explicit confirmation of a FULL node decommission. Required when a remove resolves to dropping the
+   * whole node (removing candidate-a, or the last env) — without it such a remove is refused
+   * (422 `decommission_requires_intent`), so a per-env "remove" can never destroy prod by accident.
+   */
+  readonly decommission?: boolean;
 }
 
 /** Result of {@link GitHubRepoWriter.openNodeEnvPr}: a PR (opened or reused), or no-op when idempotent. */
@@ -1683,7 +1689,7 @@ export class GitHubRepoWriter implements DeployPlanePort {
    * `dnsSeam` call below.
    */
   async openNodeEnvPr(input: OpenNodeEnvPrInput): Promise<OpenNodeEnvPrResult> {
-    const { owner, repo, slug, env, present } = input;
+    const { owner, repo, slug, env, present, decommission } = input;
     const octokit = await this.getOctokit(owner, repo);
     const { baseCommitSha, baseTreeSha } = await this.resolveMainBase(
       octokit,
@@ -1718,7 +1724,7 @@ export class GitHubRepoWriter implements DeployPlanePort {
 
     let plan: ReturnType<typeof buildEnvDeltaPlan>;
     try {
-      plan = buildEnvDeltaPlan({ slug, env, present, current });
+      plan = buildEnvDeltaPlan({ slug, env, present, decommission, current });
     } catch (err) {
       if (err instanceof EnvPlanError) {
         throw deployPlaneError(err.code, err.message, err.status);
