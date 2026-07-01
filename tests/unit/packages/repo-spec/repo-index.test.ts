@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
-// SPDX-FileCopyrightText: 2026 Cogni-DAO
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
  * Module: `@tests/unit/packages/repo-spec/repo-index`
  * Purpose: Unit tests for the pure git-attribution routing index builder.
- * Scope: Pure function tests — case-folding, first-writer-wins collisions, blank-ref skipping.
+ * Scope: Pure function tests — case-folding, first-writer-wins collisions, blank-ref skipping; does not touch I/O or the DB.
  * Invariants: REFS_ARE_CASE_INSENSITIVE, FIRST_WRITER_WINS.
  * Side-effects: none
  * Links: packages/repo-spec/src/repo-index.ts

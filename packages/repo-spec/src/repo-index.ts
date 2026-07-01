@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
-// SPDX-FileCopyrightText: 2026 Cogni-DAO
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
  * Module: `@cogni/repo-spec/repo-index`
- * Purpose: Pure builder for the git-attribution routing index — maps each declared
- *   `owner/repo` source-ref (from a node's `activity_ledger.activity_sources.*.source_refs`)
- *   to the nodeId that owns it. This is the routing key for multi-node webhook attribution:
- *   the ONE cogni-operator GitHub App receives every repo's webhooks and each is routed to the
- *   node whose declared profile claims that repo.
- * Scope: Pure data transform — no I/O, no caching, no env. Worker-importable (task.5067 reuse:
- *   the scheduler-worker builds the same index to select which receipts belong to an epoch).
+ * Purpose: Builds the git-attribution routing index that maps each declared `owner/repo` source-ref to its owning nodeId.
+ *   The index is the routing key for multi-node webhook attribution: the ONE cogni-operator GitHub App receives every
+ *   repo's webhooks and each is routed to the node whose declared profile claims that repo.
+ * Scope: Pure data transform over declared source_refs; does not perform I/O, caching, or env access. Worker-importable
+ *   (task.5067 reuse: the scheduler-worker builds the same index to select which receipts belong to an epoch).
  * Invariants:
  *   - REFS_ARE_CASE_INSENSITIVE: GitHub `owner/repo` full-names are case-insensitive; keys are
  *     lowercased so `Cogni-DAO/cogni` and `cogni-dao/cogni` route identically.
