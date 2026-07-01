@@ -11,6 +11,7 @@
  * @public
  */
 
+import { TEST_SCOPE_ID } from "@cogni/repo-spec/testing";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -23,12 +24,21 @@ import {
 const PARENT_OWNER = "cogni-dao";
 const PARENT_REPO = "cogni";
 
-/** Minimal repo-spec YAML declaring one github source-ref. */
+/**
+ * A schema-valid repo-spec YAML declaring one github source-ref. This must satisfy the
+ * FULL `parseRepoSpec` zod schema (`governance` is required; `scope_id` must be a real UUID),
+ * because the resolver deliberately routes off `parseRepoSpec` → `extractLedgerConfig`
+ * (REPO_SPEC_AUTHORITY / ROUTE_BY_DECLARED_SOURCE_REFS). A spec that fails full validation is
+ * SKIPPED (PROFILE_SKIP_NEVER_THROWS) → the node never routes — exactly the shape a real,
+ * gate-validated node repo-spec always has.
+ */
 function specWithRefs(refs: string[]): string {
   return [
     "node_id: 00000000-0000-4000-8000-000000000000",
-    "scope_id: test-scope",
+    `scope_id: ${TEST_SCOPE_ID}`,
     "scope_key: test-key",
+    "governance:",
+    "  chain_id: '8453'",
     "activity_ledger:",
     "  epoch_length_days: 7",
     "  approvers: []",
