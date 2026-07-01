@@ -308,7 +308,7 @@ async function handleActivateDistributions(
   // operator's governance config. Select the viem chain from node.chainId.
   const nodeChainId = node.chainId;
   const viemChain = nodeChainId == null ? null : VIEM_CHAINS_BY_ID[nodeChainId];
-  if (!viemChain) {
+  if (nodeChainId == null || !viemChain) {
     return NextResponse.json(
       {
         error: "unsupported chain for distribution verification",
