@@ -26,10 +26,23 @@ const mockAttributionStore = {
   getDistributionClaimForAccount: vi.fn(),
 };
 
-// The bound wrapPublicRoute reads container.config.{rateLimitBypass,DEPLOY_ENVIRONMENT};
+// wrapPublicRoute + its logging wrapper read container.{log,clock,config};
 // the route reads container.attributionStore.
 vi.mock("@/bootstrap/container", () => ({
   getContainer: vi.fn(() => ({
+    log: {
+      child: vi.fn(() => ({
+        info: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      })),
+      info: vi.fn(),
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    },
+    clock: { now: vi.fn(() => new Date("2025-01-01T00:00:00Z")) },
     config: {
       rateLimitBypass: {
         enabled: true,
@@ -37,6 +50,7 @@ vi.mock("@/bootstrap/container", () => ({
         headerValue: "1",
       },
       DEPLOY_ENVIRONMENT: "test",
+      unhandledErrorPolicy: "rethrow",
     },
     attributionStore: mockAttributionStore,
   })),
