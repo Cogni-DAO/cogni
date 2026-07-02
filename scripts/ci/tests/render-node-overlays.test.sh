@@ -100,7 +100,27 @@ echo "[6/6] declarative decommission: orphan overlay dir → --check red, --writ
 # moving the catalog yaml aside. Its committed overlay dirs become orphans.
 # Restore the catalog row AND any pruned overlay dirs from git afterward so the
 # tree is left pristine regardless of assertion outcome.
-DISPOSABLE="games"
+#
+# Selected dynamically (not hardcoded) from the catalog so this fixture survives
+# node churn: any wizard-born node (has `source_repo`, is not the node-template
+# template, and has a committed candidate-a overlay dir) is a valid stand-in for
+# a decommissioned node. It must NOT be one of the protected hand-authored
+# overlays asserted below (operator/node-template/scheduler-worker).
+DISPOSABLE=""
+for cand in $(
+  for f in infra/catalog/*.yaml; do
+    [ -e "$f" ] || continue
+    [ -n "$(yq -r '.source_repo // ""' "$f")" ] || continue   # wizard-born only
+    name="$(yq -r '.name' "$f")"
+    [ "$name" != "node-template" ] || continue                # skip the template
+    printf '%s\n' "$name"
+  done | LC_ALL=C sort
+); do
+  case "$cand" in operator|node-template|scheduler-worker) continue;; esac
+  [ -d "infra/k8s/overlays/candidate-a/$cand" ] || continue   # must own overlay dirs
+  DISPOSABLE="$cand"; break
+done
+[ -n "$DISPOSABLE" ] || fail "test fixture: no disposable wizard-born node with overlay dirs found in the catalog"
 DCAT="infra/catalog/$DISPOSABLE.yaml"
 [ -f "$DCAT" ] || fail "test fixture: $DCAT not found (pick another disposable wizard node)"
 DTMP="$(mktemp)"
